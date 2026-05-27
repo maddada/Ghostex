@@ -5291,23 +5291,25 @@ final class ghostexRootView: NSView {
     payload["browserTabs"] = workspaceView.titlebarBrowserResourceTabs()
     if let openTargets = command.workspaceOpenTargets {
       let availability = openTargets.availability
-      payload["workspaceOpenTargets"] = [
-        "availability": [
-          "availableTargetIds": availability?.availableTargetIds ?? [],
-          "checkedAtMs": availability?.checkedAtMs ?? 0,
-          "resolvedAppNames": availability?.resolvedAppNames ?? [:],
-          "resolvedCommands": availability?.resolvedCommands ?? [:],
-        ],
-        "customTargets": openTargets.customTargets?.map { target in
-          [
-            "args": target.args ?? [],
-            "command": target.command,
-            "id": target.id,
-            "label": target.label,
-          ] as [String: Any]
-        } ?? [],
-        "hiddenTargetIds": openTargets.hiddenTargetIds ?? [],
+      let availabilityDict: [String: Any] = [
+        "availableTargetIds": availability?.availableTargetIds ?? [],
+        "checkedAtMs": availability?.checkedAtMs ?? 0,
+        "resolvedAppNames": availability?.resolvedAppNames ?? [:],
+        "resolvedCommands": availability?.resolvedCommands ?? [:],
       ]
+      let customTargetsList: [[String: Any]] = openTargets.customTargets?.map { target in
+        [
+          "args": target.args ?? [],
+          "command": target.command,
+          "id": target.id,
+          "label": target.label,
+        ] as [String: Any]
+      } ?? []
+      payload["workspaceOpenTargets"] = [
+        "availability": availabilityDict,
+        "customTargets": customTargetsList,
+        "hiddenTargetIds": openTargets.hiddenTargetIds ?? [],
+      ] as [String: Any]
     }
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload),

@@ -755,6 +755,11 @@ final class GhostexGhosttyApp {
       surfaceView(from: target)?.setTerminalTitle(action.action.set_title.title)
       return true
     case GHOSTTY_ACTION_PWD:
+      guard let surfaceView = surfaceView(from: target),
+            let pwdPtr = action.action.pwd.pwd,
+            let pwd = String(cString: pwdPtr, encoding: .utf8)
+      else { return true }
+      surfaceView.pwd = pwd
       return true
     case GHOSTTY_ACTION_CELL_SIZE:
       surfaceView(from: target)?.setCellSize(
@@ -2568,6 +2573,14 @@ final class TerminalWorkspaceView: NSView {
             title: title,
             sessionPersistenceName: sessionPersistenceName
           ))
+      }
+      .store(in: &session.cancellables)
+    surfaceView.$pwd
+      .removeDuplicates()
+      .compactMap { $0 }
+      .sink { [weak self] pwd in
+        guard !pwd.isEmpty else { return }
+        self?.sendEvent(.terminalCwdChanged(sessionId: command.sessionId, cwd: pwd))
       }
       .store(in: &session.cancellables)
     surfaceView.$bell
@@ -11858,24 +11871,24 @@ final class TerminalWorkspaceView: NSView {
       available: terminalRect.height,
       padding: actualPadding?.height,
       cell: cellSize.height)
-    let signature = [
-      roundedSignature(paneRect.size.width),
-      roundedSignature(paneRect.size.height),
-      roundedSignature(terminalRect.size.width),
-      roundedSignature(terminalRect.size.height),
-      roundedSignature(session.scrollView.bounds.size.width),
-      roundedSignature(session.scrollView.bounds.size.height),
-      roundedSignature(session.view.frame.size.width),
-      roundedSignature(session.view.frame.size.height),
-      String(surfaceSize?.columns ?? 0),
-      String(surfaceSize?.rows ?? 0),
-      String(estimatedColumns ?? 0),
-      String(estimatedRows ?? 0),
-      String(paddingAwareEstimatedColumns ?? 0),
-      String(paddingAwareEstimatedRows ?? 0),
-      String(surfaceSize?.width_px ?? 0),
-      String(surfaceSize?.height_px ?? 0),
-    ].joined(separator: "x")
+    var signatureParts: [String] = []
+    signatureParts.append(roundedSignature(paneRect.size.width))
+    signatureParts.append(roundedSignature(paneRect.size.height))
+    signatureParts.append(roundedSignature(terminalRect.size.width))
+    signatureParts.append(roundedSignature(terminalRect.size.height))
+    signatureParts.append(roundedSignature(session.scrollView.bounds.size.width))
+    signatureParts.append(roundedSignature(session.scrollView.bounds.size.height))
+    signatureParts.append(roundedSignature(session.view.frame.size.width))
+    signatureParts.append(roundedSignature(session.view.frame.size.height))
+    signatureParts.append(String(surfaceSize?.columns ?? 0))
+    signatureParts.append(String(surfaceSize?.rows ?? 0))
+    signatureParts.append(String(estimatedColumns ?? 0))
+    signatureParts.append(String(estimatedRows ?? 0))
+    signatureParts.append(String(paddingAwareEstimatedColumns ?? 0))
+    signatureParts.append(String(paddingAwareEstimatedRows ?? 0))
+    signatureParts.append(String(surfaceSize?.width_px ?? 0))
+    signatureParts.append(String(surfaceSize?.height_px ?? 0))
+    let signature = signatureParts.joined(separator: "x")
     if resizeLogSignatureBySessionId[session.sessionId] == signature {
       return
     }
@@ -13789,6 +13802,7 @@ final class GhostexGhosttySurfaceView: NSView {
   var onMouseDownFocus: ((GhostexGhosttySurfaceView, NSEvent) -> Void)?
   var onTextInputProbe: ((GhostexGhosttySurfaceView, Any, NSRange) -> Void)?
   @Published private(set) var title = ""
+  @Published var pwd: String?
   @Published private(set) var bell = false
   var onScrollbarChange: (() -> Void)?
   @Published var searchState: GhostexGhosttySearchState? {
