@@ -18142,6 +18142,11 @@ async function handleTerminalCwdChanged(
     return;
   }
 
+  // Respect the settings toggle.
+  if (!settings.autoPromoteChatToProject) {
+    return;
+  }
+
   const normalizedCwd = cwd.replace(/\/+$/, "");
   if (!normalizedCwd) {
     return;

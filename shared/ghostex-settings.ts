@@ -79,6 +79,13 @@ const MAX_GHOSTTY_SCROLLBACK_LIMIT_MB = 200;
 export type ghostexSettings = {
   actionCompletionSound: CompletionSoundSetting;
   /**
+   * CDXC:ChatPromotion 2026-05-26-18:30:
+   * When enabled, chat workspaces auto-promote to proper projects when the
+   * terminal navigates into a git repository. Disabling keeps chats as
+   * standalone workspaces regardless of terminal CWD.
+   */
+  autoPromoteChatToProject: boolean;
+  /**
    * CDXC:SidebarAgents 2026-05-19-10:05:
    * When enabled, built-in and custom agent launches inherit Accept All mode and
    * append each CLI's permission-bypass flag at runtime unless a specific agent
@@ -225,6 +232,7 @@ export const SIDEBAR_SETTINGS_PRESETS: ReadonlyArray<{
  */
 export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   actionCompletionSound: "shamisenreverb",
+  autoPromoteChatToProject: true,
   agentAcceptAllEnabled: false,
   agentManagerZoomPercent: DEFAULT_AGENT_MANAGER_ZOOM_PERCENT,
   /**
@@ -648,6 +656,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
   return {
     actionCompletionSound: clampCompletionSoundSetting(
       readString(source, "actionCompletionSound", DEFAULT_ghostex_SETTINGS.actionCompletionSound),
+    ),
+    autoPromoteChatToProject: readBoolean(
+      source,
+      "autoPromoteChatToProject",
+      DEFAULT_ghostex_SETTINGS.autoPromoteChatToProject,
     ),
     agentAcceptAllEnabled: readBoolean(
       source,

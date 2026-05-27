@@ -982,6 +982,11 @@ export function SettingsModal({
     ]),
     workspace: getSettingsSectionSearch(settingsSearchQuery, "Workspace", [
       {
+        key: "autoPromoteChatToProject",
+        subtitle: "Auto-promote chats to projects when terminal enters a git repo.",
+        title: "Auto-promote chats to projects",
+      },
+      {
         key: "workspacePaneGap",
         subtitle: "Control spacing between panes.",
         title: "Pane Gap",
@@ -1651,6 +1656,15 @@ export function SettingsModal({
 
             {mainSectionVisible("workspace", settingsSearch.workspace) ? (
             <SettingsSection sectionRef={workspaceSectionRef} title="Workspace">
+              {mainSettingVisible(settingsSearch.workspace, "autoPromoteChatToProject") ? (
+              <ToggleField
+                checked={draft.autoPromoteChatToProject}
+                description="Auto-promote chats to projects when terminal enters a git repo."
+                label="Auto-promote chats to projects"
+                {...getSettingModificationProps("autoPromoteChatToProject")}
+                onChange={(checked) => updateDraft("autoPromoteChatToProject", checked)}
+              />
+              ) : null}
               {mainSettingVisible(settingsSearch.workspace, "workspacePaneGap") ? (
               <SliderNumberField
                 description="Control spacing between panes."
