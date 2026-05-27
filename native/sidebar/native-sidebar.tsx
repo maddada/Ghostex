@@ -18119,6 +18119,117 @@ async function createNativePluginsBrowserChat(): Promise<void> {
   createNativeBrowserSession(PLUGINS_BROWSER_CHAT_URL);
 }
 
+/**
+ * CDXC:ChatPromotion 2026-05-26-18:30
+ * When a terminal's working directory changes and the session belongs to a
+ * chat workspace, check whether the new CWD is inside a git repository. If
+ * it is, promote the chat into a proper project workspace so the Code, Git,
+ * and Project tabs become functional.
+ *
+ * If a project already exists for the detected repository root, the chat's
+ * terminal sessions are migrated into the existing project and the empty chat
+ * workspace is removed.
+ */
+async function handleTerminalCwdChanged(
+  sidebarSessionId: string,
+  cwd: string,
+): Promise<void> {
+  const reference = resolveSidebarSessionReference(sidebarSessionId);
+  const project = reference.project;
+
+  // Only promote chats — proper projects already have their path set.
+  if (project.isChat !== true) {
+    return;
+  }
+
+  const normalizedCwd = cwd.replace(/\/+$/, "");
+  if (!normalizedCwd) {
+    return;
+  }
+
+  // Check if the CWD is inside a git repository.
+  let repoRoot: string;
+  try {
+    const result = await runNativeProcess("/usr/bin/env", ["git", "rev-parse", "--show-toplevel"], {
+      cwd: normalizedCwd,
+    });
+    if (result.exitCode !== 0) {
+      return;
+    }
+    repoRoot = result.stdout.trim().replace(/\/+$/, "");
+    if (!repoRoot) {
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  // Check whether a non-chat project already exists for this repo root.
+  const repoProjectId = createProjectId(repoRoot);
+  const existingProject = projects.find(
+    (candidate) =>
+      candidate.projectId === repoProjectId &&
+      candidate.isChat !== true &&
+      candidate.projectId !== project.projectId,
+  );
+
+  if (existingProject) {
+    // A project for this repo already exists — migrate all chat sessions into
+    // its first group, transfer their native id mappings, then remove the
+    // empty chat workspace without closing terminal surfaces.
+    const targetGroup = existingProject.workspace.groups[0];
+    if (!targetGroup) {
+      return;
+    }
+    for (const group of project.workspace.groups) {
+      for (const session of group.snapshot.sessions) {
+        targetGroup.snapshot = {
+          ...targetGroup.snapshot,
+          sessions: [...targetGroup.snapshot.sessions, session],
+        };
+        // Re-map the native session id from the chat's projectId prefix to the
+        // existing project's projectId prefix so native focus/close events
+        // continue to resolve correctly.
+        const oldNativeSessionId = nativeSessionIdBySidebarSessionId.get(session.sessionId);
+        if (oldNativeSessionId) {
+          sidebarSessionIdByNativeSessionId.delete(oldNativeSessionId);
+          nativeSessionIdBySidebarSessionId.delete(session.sessionId);
+          rememberNativeSessionMapping(existingProject.projectId, session.sessionId);
+        }
+      }
+    }
+    // Remove the chat from the projects list without closing its terminals.
+    disposeProjectEditorSurface(project.projectId);
+    projects = projects.filter((candidate) => candidate.projectId !== project.projectId);
+    removeProjectCommandsState(project.projectId);
+    writeStoredProjects("chatPromotionMigrateToExisting");
+    focusProject(existingProject.projectId);
+  } else {
+    // Promote the chat in-place. Keep the existing projectId so native session
+    // id mappings (which use projectId as a prefix) stay valid. Only update
+    // the display name, path, and isChat flag.
+    const repoName = projectNameFromPath(repoRoot);
+    projects = projects.map((candidate) =>
+      candidate.projectId === project.projectId
+        ? {
+            ...candidate,
+            isChat: false,
+            name: repoName,
+            path: repoRoot,
+          }
+        : candidate,
+    );
+    projects = orderNativeProjectsForSidebar(projects);
+    ensureProjectCommandsState(resolveNativeProjectCommandsOwnerId(project.projectId));
+    writeProjectCommandsStore();
+    writeStoredProjects("chatPromotionInPlace");
+    void refreshGitState();
+    void refreshProjectDiffStats(project.projectId);
+  }
+
+  publish();
+}
+
 async function openAgentsHubFileInDefaultEditor(filePath: string): Promise<void> {
   /**
    * CDXC:AgentsHub 2026-05-12-09:24
@@ -22398,6 +22509,13 @@ window.addEventListener("ghostex-native-host-event", (event) => {
   if (hostEvent.type === "sessionAttentionNotificationClicked") {
     handleNativeSessionAttentionNotificationClicked(
       sidebarSessionIdForNativeSession(hostEvent.sessionId),
+    );
+    return;
+  }
+  if (hostEvent.type === "terminalCwdChanged") {
+    void handleTerminalCwdChanged(
+      sidebarSessionIdForNativeSession(hostEvent.sessionId),
+      hostEvent.cwd,
     );
     return;
   }
