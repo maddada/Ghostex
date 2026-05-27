@@ -412,6 +412,7 @@ type NativeHostCommand =
       activeProjectEditorIsSleeping?: boolean;
 	      activeProjectEditorStatus?: ProjectEditorLoadStatus;
 	      activeProjectId?: string;
+      activeProjectIsChat?: boolean;
       activeProjectIconDataUrl?: string;
       activeProjectName?: string;
       activeProjectPath?: string;
@@ -21886,6 +21887,7 @@ function syncNativeLayout(options: { force?: boolean } = {}): void {
     appTitle: nativeAppTitleForProject(currentProject),
     debuggingMode: settings.debuggingMode,
     activeProjectId: currentProject.projectId,
+    activeProjectIsChat: currentProject.isChat === true,
     activeProjectIconDataUrl: resolveWorkspaceProjectIconDataUrl(currentProject),
     activeProjectEditorId:
       currentProjectEditorSurfaceState?.isOpen === true &&

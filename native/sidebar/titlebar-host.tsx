@@ -153,6 +153,7 @@ type TitlebarProjectState = {
   editorIsSleeping: boolean;
   editorStatus: ProjectEditorLoadStatus;
   git: SidebarGitState;
+  isChat?: boolean;
   projectEditorCompanionPaneHidden: boolean;
   projectIconDataUrl?: string | null;
   projectId?: string;
@@ -1093,6 +1094,7 @@ function App() {
           debuggingMode: state.debuggingMode ?? current.debuggingMode,
           diffStats: state.diffStats ?? current.diffStats,
           git: state.git ?? current.git,
+          isChat: state.isChat ?? current.isChat,
           browserTabs: state.browserTabs ?? current.browserTabs,
           projectEditorCompanionPaneHidden:
             state.projectEditorCompanionPaneHidden ?? current.projectEditorCompanionPaneHidden,
@@ -1435,12 +1437,14 @@ function App() {
                    * startup errors belong in the editor page instead of this
                    * segmented-control button.
                    */
+                  disabled: projectState.isChat === true,
                   icon: <IconCode aria-hidden="true" size={14} stroke={1.8} />,
                   label: "Code",
                   onSelect: openCodeMode,
                   value: "code",
                 },
                 {
+                  disabled: projectState.isChat === true,
                   icon: <IconBrandGithub aria-hidden="true" size={14} stroke={1.8} />,
                   label: "Git",
                   onSelect: openGitMode,
@@ -1453,6 +1457,7 @@ function App() {
                    * its coming-soon surface is a broader project workspace for
                    * automations, todos, docs, and more.
                    */
+                  disabled: projectState.isChat === true,
                   icon: <IconChecklist aria-hidden="true" size={14} stroke={1.8} />,
                   label: "Project",
                   onSelect: openTasksMode,
@@ -2363,6 +2368,7 @@ function TitlebarModeSwitcher({
 }: {
   activeMode: TitlebarMode;
   modes: Array<{
+    disabled?: boolean;
     icon: ReactNode;
     label: string;
     meta?: ReactNode;
@@ -2405,13 +2411,16 @@ function TitlebarModeSwitcher({
       */}
       {modes.map((mode) => {
         const isActive = mode.value === activeMode;
+        const isDisabled = mode.disabled === true && !isActive;
         return (
           <button
             aria-selected={isActive}
             className="titlebar-mode-tab"
             data-active={String(isActive)}
+            data-disabled={isDisabled ? "true" : undefined}
+            disabled={isDisabled}
             key={mode.value}
-            onClick={mode.onSelect}
+            onClick={isDisabled ? undefined : mode.onSelect}
             role="tab"
             style={{ transformStyle: "preserve-3d" }}
             type="button"
@@ -2827,6 +2836,12 @@ styleElement.textContent = `
   .titlebar-mode-tab:focus-visible {
     color: rgba(255,255,255,0.92);
     outline: none;
+  }
+  .titlebar-mode-tab[data-disabled="true"],
+  .titlebar-mode-tab:disabled {
+    color: rgba(255,255,255,0.25);
+    cursor: default;
+    pointer-events: none;
   }
   .titlebar-mode-tab[data-active="true"] {
     color: rgba(255,255,255,0.98);

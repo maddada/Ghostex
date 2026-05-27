@@ -476,6 +476,7 @@ struct SetActiveTerminalSet: Decodable {
   let activeProjectEditorIsSleeping: Bool?
   let activeProjectEditorStatus: String?
   let activeProjectId: String?
+  let activeProjectIsChat: Bool?
   let activeProjectIconDataUrl: String?
   let activeProjectName: String?
   let activeProjectPath: String?

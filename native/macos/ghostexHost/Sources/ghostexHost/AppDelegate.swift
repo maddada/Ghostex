@@ -5118,6 +5118,9 @@ final class ghostexRootView: NSView {
     if let activeProjectId = command.activeProjectId {
       payload["projectId"] = activeProjectId
     }
+    if let activeProjectIsChat = command.activeProjectIsChat {
+      payload["isChat"] = activeProjectIsChat
+    }
     payload["projectIconDataUrl"] = command.activeProjectIconDataUrl ?? NSNull()
     if let activeProjectName = command.activeProjectName {
       payload["projectName"] = activeProjectName
