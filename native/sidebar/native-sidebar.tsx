@@ -19399,7 +19399,7 @@ function projectEditorErrorMessageForMode(mode: ProjectEditorSurfaceMode): strin
   if (mode === "tasks") {
     return "Project did not finish loading within 10 seconds.";
   }
-  return "VS Code did not finish loading within 10 seconds.";
+  return "VS Code did not finish loading within 10 seconds. Make sure Accessibility is enabled in System Settings \u2192 Privacy & Security \u2192 Accessibility.";
 }
 
 function projectEditorLoadFailureMessageForMode(mode: ProjectEditorSurfaceMode): string {
@@ -19409,7 +19409,7 @@ function projectEditorLoadFailureMessageForMode(mode: ProjectEditorSurfaceMode):
   if (mode === "tasks") {
     return "Project failed to load.";
   }
-  return "VS Code failed to load.";
+  return "VS Code failed to load. Make sure Accessibility is enabled in System Settings \u2192 Privacy & Security \u2192 Accessibility.";
 }
 
 function projectEditorSurfaceTitleForMode(

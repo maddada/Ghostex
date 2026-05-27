@@ -6941,7 +6941,7 @@ final class TerminalWorkspaceView: NSView {
            the titlebar or project-header editor button is clicked; keep the
            pane in ghostex's project-scoped startup error state instead.
            */
-          let message = "VS Code did not finish loading within 10 seconds."
+          let message = "VS Code did not finish loading within 10 seconds. Make sure Accessibility is enabled in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
           session.hostView.setInitialLoadingOverlayError(message, reason: reason)
           self.sendEvent(
             .projectEditorLoadState(

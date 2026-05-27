@@ -1436,6 +1436,10 @@ function App() {
                    * diff stats moved to the sidebar project row, and editor
                    * startup errors belong in the editor page instead of this
                    * segmented-control button.
+                   *
+                   * CDXC:ChatPromotion 2026-05-26-19:00:
+                   * Code mode requires a real project path for code-server.
+                   * Disable the tab when the workspace is a chat.
                    */
                   disabled: projectState.isChat === true,
                   icon: <IconCode aria-hidden="true" size={14} stroke={1.8} />,
@@ -1444,7 +1448,16 @@ function App() {
                   value: "code",
                 },
                 {
-                  disabled: projectState.isChat === true,
+                  /**
+                   * CDXC:ChatPromotion 2026-05-26-19:00:
+                   * Git mode requires a git repo with a GitHub origin remote.
+                   * Disable the tab when there is no repo or when the remote
+                   * is not a GitHub URL.
+                   */
+                  disabled:
+                    projectState.isChat === true ||
+                    !projectState.git.isRepo ||
+                    !projectState.git.hasOriginRemote,
                   icon: <IconBrandGithub aria-hidden="true" size={14} stroke={1.8} />,
                   label: "Git",
                   onSelect: openGitMode,
