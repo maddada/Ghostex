@@ -37,6 +37,7 @@ const LOG_DIR = path.join(GHOSTEX_HOME, "logs");
 const CLI_DIR = path.join(GHOSTEX_HOME, "cli");
 const BRIDGE_TOKEN_PATH = path.join(CLI_DIR, "bridge-token");
 const SESSION_ALIAS_CACHE_PATH = path.join(CLI_DIR, "session-aliases.json");
+const SHARED_PROJECTS_PATH = path.join(GHOSTEX_HOME, "state", "native-sidebar-projects.json");
 const SHARED_SETTINGS_PATH = path.join(GHOSTEX_HOME, "state", "native-sidebar-settings.json");
 const GHOSTEX_AGENT_SKILL_INSTALL_ROOT = path.join(homedir(), "agents", "skills");
 const GHOSTEX_BROWSER_SKILL_NAME = "ghostex-browser-use";
@@ -163,9 +164,18 @@ const COMMANDS = new Map([
 
 if (isDirectCliEntryPoint()) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    if (cliArgsWantJson(process.argv.slice(2))) {
+      printJson({ error: message, ok: false });
+    } else {
+      console.error(message);
+    }
     process.exitCode = 1;
   });
+}
+
+function cliArgsWantJson(args) {
+  return args.some((arg) => arg === "--json" || arg === "-json" || arg.startsWith("--json="));
 }
 
 function isDirectCliEntryPoint() {
@@ -1353,26 +1363,53 @@ async function sendSidebarCliCommand(action, payload, flags = {}) {
   const socket = await connectBridge(port);
   try {
     return await new Promise((resolve, reject) => {
+      let settled = false;
       const timeoutMs = Number(flags.timeout ?? 15_000);
+      const settle = (callback, value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        callback(value);
+      };
       const timeout =
         timeoutMs > 0
           ? setTimeout(
               () => {
-                reject(new Error(`Timed out waiting for Ghostex sidebar CLI result (${action}).`));
+                settle(reject, new Error(`Timed out waiting for Ghostex sidebar CLI result (${action}).`));
               },
               timeoutMs,
             )
           : undefined;
+      const bridgeClosedError = () =>
+        new Error(
+          `Ghostex bridge closed before returning sidebar CLI result (${action}). This usually means the CLI token is stale because another Ghostex app instance refreshed ${BRIDGE_TOKEN_PATH} while an older instance still owns port ${port}. Quit all Ghostex copies, open one Ghostex app, then rerun the command.`,
+        );
+      addSocketListener(socket, "close", () => settle(reject, bridgeClosedError()), { once: true });
+      addSocketListener(
+        socket,
+        "error",
+        (error) =>
+          settle(
+            reject,
+            new Error(
+              `Ghostex bridge failed before returning sidebar CLI result (${action}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          ),
+        { once: true },
+      );
       addSocketMessageListener(socket, (data) => {
         const event = parseJson(String(data));
         if (event?.type !== "sidebarCliResult" || event.requestId !== requestId) {
           return;
         }
-        if (timeout) {
-          clearTimeout(timeout);
-        }
         const payload = parseJson(event.payloadJson) ?? { rawPayloadJson: event.payloadJson };
-        resolve({ ...payload, bridgeOk: event.ok });
+        settle(resolve, { ...payload, bridgeOk: event.ok });
       });
       socket.send(
         JSON.stringify({
@@ -2462,13 +2499,19 @@ async function sendMessageCommand(args) {
 }
 
 async function fetchSessionList(flags = {}, options = {}) {
-  const result = await sendSidebarCliCommand("listSessions", {}, flags);
+  let result;
+  try {
+    result = await sendSidebarCliCommand("listSessions", {}, flags);
+  } catch (error) {
+    result = await readPersistedSidebarSessionList(error);
+  }
   /**
    * CDXC:AndroidRemoteSessions 2026-05-17-21:03:
    * `ghostex sessions --json` is Android reconnect's inventory contract. A
-   * bridge transport failure must fail the CLI instead of returning an empty
-   * success-shaped session list, otherwise Android would show a misleading
-   * "No zmx sessions" state when Ghostex is unreachable.
+   * bridge transport failure must either fall back to real persisted sidebar
+   * state or fail the CLI; never return an empty success-shaped session list,
+   * otherwise Android would show a misleading "No sessions" state when Ghostex
+   * is unreachable.
    */
   if (isFailedCliResult(result)) {
     throw new Error(result.error ?? "Could not list Ghostex sessions.");
@@ -2482,6 +2525,131 @@ async function fetchSessionList(flags = {}, options = {}) {
     });
   }
   return { ...result, sessions };
+}
+
+async function readPersistedSidebarSessionList(cause, statePath = SHARED_PROJECTS_PATH) {
+  const causeMessage = cause instanceof Error ? cause.message : String(cause || "unknown error");
+  const text = await readFile(statePath, "utf8").catch((error) => {
+    throw new Error(`${causeMessage} Persisted sidebar state fallback unavailable: ${error.message}`);
+  });
+  const state = parseJson(text);
+  if (!state || typeof state !== "object") {
+    throw new Error(`${causeMessage} Persisted sidebar state fallback is not valid JSON.`);
+  }
+
+  const sessions = [];
+  const projects = Array.isArray(state.projects) ? state.projects : [];
+  for (const project of projects) {
+    if (!project || project.isRecentProject) {
+      continue;
+    }
+    const projectId = stringOrNull(project.projectId ?? project.id);
+    const projectName = stringOrNull(project.name ?? project.title ?? project.path);
+    const projectPath = stringOrNull(project.path ?? project.projectPath);
+    const groups = Array.isArray(project.workspace?.groups) ? project.workspace.groups : [];
+    for (const group of groups) {
+      const snapshot = group?.snapshot || {};
+      const groupId = stringOrNull(group.groupId ?? group.id);
+      const groupTitle = stringOrNull(group.title ?? group.name);
+      const visibleSessionIds = new Set(Array.isArray(snapshot.visibleSessionIds) ? snapshot.visibleSessionIds : []);
+      const focusedSessionId = stringOrNull(snapshot.focusedSessionId);
+      const rows = Array.isArray(snapshot.sessions) ? snapshot.sessions : [];
+      for (const session of rows) {
+        if (!session || (session.kind && session.kind !== "terminal")) {
+          continue;
+        }
+        const rawSessionId = stringOrNull(session.sessionId ?? session.id);
+        if (!rawSessionId) {
+          continue;
+        }
+        const provider = stringOrNull(
+          session.sessionPersistenceProvider ?? session.provider ?? session.persistenceProvider,
+        );
+        const providerSessionName = stringOrNull(
+          session.sessionPersistenceName ??
+            session.providerSessionName ??
+            session.persistenceName ??
+            session.sessionName ??
+            rawSessionId,
+        );
+        const activity = normalizePersistedSessionActivity(
+          session.restoreActivity ?? session.activity ?? session.sidebarActivity,
+        );
+        const attachCommand = buildPersistedSessionAttachCommand(provider, providerSessionName);
+        sessions.push({
+          activity,
+          agent: stringOrNull(session.agentName ?? session.agent),
+          alias: sessions.length + 1,
+          attachCommand,
+          fallbackSource: "persisted-sidebar-state",
+          groupId,
+          groupTitle,
+          isFavorite: Boolean(session.isFavorite),
+          isFocused: focusedSessionId === rawSessionId,
+          isLive: !session.isSleeping,
+          isVisible: visibleSessionIds.size === 0 || visibleSessionIds.has(rawSessionId),
+          lastInteractionAt: stringOrNull(
+            session.lastActivityAt ?? session.lastAccessedAt ?? session.lastStartedAt ?? session.createdAt,
+          ),
+          nativePaneState: session.nativePaneState || null,
+          projectId,
+          projectName,
+          projectPath,
+          provider,
+          providerSessionName,
+          providerSessionState: "unknown",
+          resumeCommand: attachCommand,
+          resumeFallbackCommand: attachCommand,
+          sessionId: buildCombinedProjectSessionId(projectId, rawSessionId) || rawSessionId,
+          status: session.isSleeping ? "sleep" : activity,
+          title: stringOrNull(session.title ?? session.name ?? rawSessionId),
+        });
+      }
+    }
+  }
+
+  return {
+    fallback: "persisted-sidebar-state",
+    fallbackPath: statePath,
+    fallbackReason: causeMessage,
+    ok: true,
+    sessions,
+  };
+}
+
+function stringOrNull(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizePersistedSessionActivity(value) {
+  const normalized = String(value ?? "").trim();
+  return ["attention", "idle", "working"].includes(normalized) ? normalized : "idle";
+}
+
+function buildCombinedProjectSessionId(projectId, sessionId) {
+  return projectId && sessionId
+    ? `combined-session:${encodeURIComponent(projectId)}:${encodeURIComponent(sessionId)}`
+    : null;
+}
+
+function buildPersistedSessionAttachCommand(provider, sessionName) {
+  if (!provider || !sessionName) {
+    return null;
+  }
+  if (provider === "zmx") {
+    return `zmx attach ${shellQuote(sessionName)}`;
+  }
+  if (provider === "tmux") {
+    return `tmux attach-session -t ${shellQuote(sessionName)}`;
+  }
+  if (provider === "zellij") {
+    return `zellij attach ${shellQuote(sessionName)}`;
+  }
+  return null;
 }
 
 async function writeSessionAliasCache(cache) {
@@ -3666,6 +3834,7 @@ export {
   parseRename,
   parseVsCodePathPosition,
   readAndroidReadinessSettings,
+  readPersistedSidebarSessionList,
   resolveListedSessions,
   resolveZehnLaunchFromRoot,
   usage,

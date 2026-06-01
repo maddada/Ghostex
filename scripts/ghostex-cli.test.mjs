@@ -24,6 +24,7 @@ import {
   parseRename,
   parseVsCodePathPosition,
   readAndroidReadinessSettings,
+  readPersistedSidebarSessionList,
   resolveListedSessions,
   resolveZehnLaunchFromRoot,
   usage,
@@ -636,6 +637,85 @@ describe("ghostex CLI Android remote-session contract", () => {
     await expect(resolveListedSessions("g-0527-090339", [sessions[0], sessions[0]])).resolves.toEqual(
       [sessions[0], sessions[0]],
     );
+  });
+
+  test("builds persisted sidebar fallback sessions with live-inventory-compatible fields", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "ghostex-persisted-sessions-"));
+    const statePath = path.join(tempDir, "native-sidebar-projects.json");
+    try {
+      await writeFile(
+        statePath,
+        JSON.stringify({
+          projects: [
+            {
+              name: "Project A",
+              path: "/Users/madda/project-a",
+              projectId: "project-a",
+              workspace: {
+                groups: [
+                  {
+                    groupId: "group-main",
+                    snapshot: {
+                      focusedSessionId: "session-1",
+                      sessions: [
+                        {
+                          agentName: "codex",
+                          createdAt: "2026-05-31T08:00:00.000Z",
+                          kind: "terminal",
+                          restoreActivity: "working",
+                          sessionId: "session-1",
+                          sessionPersistenceName: "g-0531-080000",
+                          sessionPersistenceProvider: "zmx",
+                          title: "Ship mobile fallback",
+                        },
+                        {
+                          createdAt: "2026-05-31T08:05:00.000Z",
+                          isSleeping: true,
+                          kind: "terminal",
+                          sessionId: "session-2",
+                          title: "Sleeping session",
+                        },
+                      ],
+                      visibleSessionIds: ["session-1"],
+                    },
+                    title: "Main",
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+
+      const result = await readPersistedSidebarSessionList(new Error("bridge down"), statePath);
+
+      expect(result.ok).toBe(true);
+      expect(result.fallback).toBe("persisted-sidebar-state");
+      expect(result.sessions).toHaveLength(2);
+      expect(result.sessions[0]).toMatchObject({
+        activity: "working",
+        alias: 1,
+        groupId: "group-main",
+        isFocused: true,
+        projectId: "project-a",
+        provider: "zmx",
+        providerSessionName: "g-0531-080000",
+        sessionId: "combined-session:project-a:session-1",
+        status: "working",
+      });
+      expect(result.sessions[0].attachCommand).toBe("zmx attach 'g-0531-080000'");
+      expect(result.sessions[1]).toMatchObject({
+        activity: "idle",
+        alias: 2,
+        groupId: "group-main",
+        isFocused: false,
+        isVisible: false,
+        status: "sleep",
+      });
+      await expect(resolveListedSessions("1", result.sessions)).resolves.toEqual([result.sessions[0]]);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
   });
 
   test("formats compact session rows without field labels", () => {
