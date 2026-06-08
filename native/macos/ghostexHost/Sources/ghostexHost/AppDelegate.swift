@@ -5336,6 +5336,8 @@ final class ghostexRootView: NSView {
     }
   private var sidebarWidth: CGFloat
   private var sidebarSide: SidebarSide = .left
+  private var lastPublishedSettingsSidebarWidth: CGFloat?
+  private var lastPublishedSettingsCommandsPanelHeight: CGFloat?
 
   /**
    CDXC:NativeWorkspaceChrome 2026-04-26-00:47
@@ -8532,12 +8534,17 @@ final class ghostexRootView: NSView {
      The sidebar webview's excluded hit-test strip must match the fixed native
      divider paint width so dragging continues to resize the sidebar after the
      webview starts painting under that transparent divider.
+
+     CDXC:NativeSidebarChrome 2026-06-08-07:43:
+     The transparent divider's resize cursor must survive root layout refreshes. Invalidate the divider cursor rect whenever its frame is reassigned so AppKit recomputes cursor ownership for the moved native handle instead of leaving the neighboring WebKit or workspace cursor active.
      */
     sidebarView.frame = sidebarVisualFrame
     sidebarView.resizeHitExclusionSide = sidebarSide
     sidebarView.resizeHitExclusionWidth = sidebarResizeHitWidth
     divider.frame = frames.divider
+    window?.invalidateCursorRects(for: divider)
     workspaceView.frame = frames.workspace
+    publishCurrentSettingsLayoutIfNeeded()
     workspaceInteractionShieldView.frame = frames.workspace
     terminalPaneDropOverlayView.frame = frames.workspace
     modalHostView.frame = frames.modalHost
@@ -8970,6 +8977,32 @@ final class ghostexRootView: NSView {
 
   private func persistSidebarWidth() {
     nativeSettingsStore.persistSidebarWidth(sidebarWidth)
+  }
+
+  private func publishCurrentSettingsLayoutIfNeeded() {
+    let currentSidebarWidth = sidebarWidth.rounded()
+    let currentCommandsPanelHeight = workspaceView.currentCommandsPanelDefaultHeightPoints().rounded()
+    guard currentSidebarWidth.isFinite, currentSidebarWidth > 0,
+      currentCommandsPanelHeight.isFinite, currentCommandsPanelHeight > 0
+    else {
+      return
+    }
+    let didSidebarWidthChange =
+      lastPublishedSettingsSidebarWidth.map { abs($0 - currentSidebarWidth) >= 1 } ?? true
+    let didCommandsPanelHeightChange =
+      lastPublishedSettingsCommandsPanelHeight.map { abs($0 - currentCommandsPanelHeight) >= 1 } ?? true
+    guard didSidebarWidthChange || didCommandsPanelHeightChange else {
+      return
+    }
+    /**
+     CDXC:SidebarChrome 2026-06-08-07:48:
+     Settings "Set current" needs live AppKit chrome measurements, not persisted defaults. Publish only rounded dimensions and only when they change so the modal can copy current sidebar width and command-pane height without adding another persistence path.
+     */
+    lastPublishedSettingsSidebarWidth = currentSidebarWidth
+    lastPublishedSettingsCommandsPanelHeight = currentCommandsPanelHeight
+    sendHostEvent(.nativeChromeLayoutChanged(
+      sidebarWidthPx: Double(currentSidebarWidth),
+      commandsPanelHeightPx: Double(currentCommandsPanelHeight)))
   }
 
   private static func describeFrame(_ frame: CGRect) -> [String: Double] {
@@ -10269,6 +10302,7 @@ final class PaneResizeHandleView: NSView {
   var onDragEnded: (() -> Void)?
   var onDoubleClick: (() -> Void)?
   private var lastDragWindowX: CGFloat = 0
+  private var cursorTrackingArea: NSTrackingArea?
 
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
@@ -10286,6 +10320,41 @@ final class PaneResizeHandleView: NSView {
     addCursorRect(bounds, cursor: .resizeLeftRight)
   }
 
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let cursorTrackingArea {
+      removeTrackingArea(cursorTrackingArea)
+    }
+    let trackingArea = NSTrackingArea(
+      rect: .zero,
+      options: [.activeInKeyWindow, .cursorUpdate, .inVisibleRect, .mouseEnteredAndExited, .mouseMoved],
+      owner: self,
+      userInfo: nil
+    )
+    cursorTrackingArea = trackingArea
+    addTrackingArea(trackingArea)
+  }
+
+  /**
+   CDXC:NativeSidebarChrome 2026-06-08-07:43:
+   Sidebar resize hover must keep the left-right resize cursor for the whole transparent native handle. WebKit and sibling native chrome can overwrite cursor-rect state after layout, so the handle reasserts cursor ownership from tracking-area cursor updates and pointer movement instead of relying only on addCursorRect.
+   */
+  private func setResizeCursor() {
+    NSCursor.resizeLeftRight.set()
+  }
+
+  override func cursorUpdate(with event: NSEvent) {
+    setResizeCursor()
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    setResizeCursor()
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    setResizeCursor()
+  }
+
   /**
    CDXC:NativeSidebarChrome 2026-04-26-07:27
    The resize hit target stays wide enough to drag comfortably, but the
@@ -10297,6 +10366,7 @@ final class PaneResizeHandleView: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
+    setResizeCursor()
     if event.clickCount >= 2 {
       onDoubleClick?()
       return
@@ -10315,10 +10385,12 @@ final class PaneResizeHandleView: NSView {
     let currentWindowX = event.locationInWindow.x
     let deltaX = currentWindowX - lastDragWindowX
     lastDragWindowX = currentWindowX
+    setResizeCursor()
     onDrag?(deltaX)
   }
 
   override func mouseUp(with event: NSEvent) {
+    setResizeCursor()
     onDragEnded?()
   }
 }

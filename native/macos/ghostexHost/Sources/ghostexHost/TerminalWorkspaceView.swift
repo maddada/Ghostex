@@ -7392,6 +7392,14 @@ final class TerminalWorkspaceView: NSView {
     return min(max(value, minimumHeight), maximumHeight)
   }
 
+  func currentCommandsPanelDefaultHeightPoints() -> CGFloat {
+    /**
+     CDXC:CommandsPanel 2026-06-08-07:48:
+     Settings "Set current" must copy the live command-pane height in pixels into Command Pane Default Height. Use the same clamped ratio geometry as visible command-pane layout so hidden panels still report the height they will restore to.
+     */
+    return clampedCommandsPanelHeight(bounds.height * commandsPanelHeightRatio)
+  }
+
   private func collapsedCommandsPanelHeight() -> CGFloat {
     Self.commandPanelTitleBarHeight + commandPanelVerticalOuterInset() * 2
   }
@@ -10963,7 +10971,9 @@ final class TerminalWorkspaceView: NSView {
     needsLayout = true
     layoutSubtreeIfNeeded()
     scheduleZmxPersistenceTerminalRefreshAfterResize(reason: "commandsPanelResizeReset")
-    sendEvent(.commandsPanelHeightRatioChanged(heightRatio: Double(commandsPanelHeightRatio)))
+    sendEvent(.commandsPanelHeightRatioChanged(
+      heightRatio: Double(commandsPanelHeightRatio),
+      heightPx: Double(currentCommandsPanelDefaultHeightPoints())))
   }
 
   @discardableResult
@@ -10990,7 +11000,9 @@ final class TerminalWorkspaceView: NSView {
     commandsPanelResizeDrag = nil
     needsLayout = true
     layoutSubtreeIfNeeded()
-    sendEvent(.commandsPanelHeightRatioChanged(heightRatio: Double(commandsPanelHeightRatio)))
+    sendEvent(.commandsPanelHeightRatioChanged(
+      heightRatio: Double(commandsPanelHeightRatio),
+      heightPx: Double(currentCommandsPanelDefaultHeightPoints())))
     NSCursor.resizeUpDown.set()
     return true
   }

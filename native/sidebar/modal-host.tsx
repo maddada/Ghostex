@@ -1737,6 +1737,7 @@ function AppModalHost() {
     (state) => state.hud.projectSettingsProjects ?? [],
   );
   const customThemeColor = useSidebarStore((state) => state.hud.customThemeColor);
+  const currentLayout = useSidebarStore((state) => state.hud.currentLayout);
   const theme = useSidebarStore((state) => state.hud.theme);
   const [gitCommitPromptAgentId, setGitCommitPromptAgentId] = useState(() =>
     readPromptAgentModalOverride("gitCommit"),
@@ -2254,6 +2255,7 @@ function AppModalHost() {
         initialSection={settingsInitialSection}
         initialSearchQuery={settingsInitialSearchQuery}
         initialTab={settingsInitialTab}
+        currentLayout={currentLayout}
         isOpen={isSettingsRenderable}
         onChange={(nextSettings) => {
           vscode.postMessage({

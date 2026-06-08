@@ -429,6 +429,11 @@ export type SidebarCommandSessionIndicator = {
 export type SidebarHudState = {
   activeSessionsSortMode: SidebarActiveSessionsSortMode;
   /**
+   * CDXC:SidebarChrome 2026-06-08-07:48:
+   * Settings needs live native chrome dimensions so "Set current" can copy the current sidebar width and command-pane height into the existing default reset settings. These are numeric layout measurements only, not user content or persisted settings.
+   */
+  currentLayout?: SidebarCurrentLayoutState;
+  /**
    * CDXC:AgentHooks 2026-06-07-08:51:
    * Tips & Tricks and Settings consume gxserver-owned hook status from shared HUD state so every client can warn about unreliable agent statuses without probing local hook files or owning installer logic.
    */
@@ -487,6 +492,11 @@ export type SidebarHudState = {
   visibleCount: VisibleSessionCount;
   visibleSlotLabels: string[];
   viewMode: TerminalViewMode;
+};
+
+export type SidebarCurrentLayoutState = {
+  commandsPanelHeightPx?: number;
+  sidebarWidthPx?: number;
 };
 
 export type SidebarHydrateMessage = {

@@ -454,8 +454,14 @@ export type NativeGhosttyHostEvent =
       type: "terminalRestoreBlocked";
     }
   | {
+      heightPx?: number;
       heightRatio: number;
       type: "commandsPanelHeightRatioChanged";
+    }
+  | {
+      commandsPanelHeightPx: number;
+      sidebarWidthPx: number;
+      type: "nativeChromeLayoutChanged";
     }
   | {
       sessionId: string;

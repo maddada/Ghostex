@@ -1230,7 +1230,8 @@ enum HostEvent: Encodable {
   case firstPromptAutoRenameCancelled(sessionId: String)
   case nativeSessionSurfaceMissing(sessionId: String)
   case terminalRestoreBlocked(sessionId: String, reason: String, cwd: String)
-  case commandsPanelHeightRatioChanged(heightRatio: Double)
+  case commandsPanelHeightRatioChanged(heightRatio: Double, heightPx: Double)
+  case nativeChromeLayoutChanged(sidebarWidthPx: Double, commandsPanelHeightPx: Double)
   case terminalError(sessionId: String, message: String)
   case terminalTextResult(requestId: String, sessionId: String, ok: Bool, text: String?, error: String?)
   case persistenceSessionState(
@@ -1263,6 +1264,9 @@ enum HostEvent: Encodable {
     case cwd
     case foregroundPid
     case hidden
+    case commandsPanelHeightPx
+    case sidebarWidthPx
+    case heightPx
     case heightRatio
     case message
     case protocolVersion
@@ -1438,9 +1442,14 @@ enum HostEvent: Encodable {
       try container.encode(sessionId, forKey: .sessionId)
       try container.encode(reason, forKey: .reason)
       try container.encode(cwd, forKey: .cwd)
-    case .commandsPanelHeightRatioChanged(let heightRatio):
+    case .commandsPanelHeightRatioChanged(let heightRatio, let heightPx):
       try container.encode("commandsPanelHeightRatioChanged", forKey: .type)
       try container.encode(heightRatio, forKey: .heightRatio)
+      try container.encode(heightPx, forKey: .heightPx)
+    case .nativeChromeLayoutChanged(let sidebarWidthPx, let commandsPanelHeightPx):
+      try container.encode("nativeChromeLayoutChanged", forKey: .type)
+      try container.encode(sidebarWidthPx, forKey: .sidebarWidthPx)
+      try container.encode(commandsPanelHeightPx, forKey: .commandsPanelHeightPx)
     case .terminalError(let sessionId, let message):
       try container.encode("terminalError", forKey: .type)
       try container.encode(sessionId, forKey: .sessionId)

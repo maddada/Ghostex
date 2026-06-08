@@ -82,6 +82,7 @@ import {
   type SidebarAgentHookStatusItem,
   type SidebarGhostexCliStatusMessage,
   type SidebarGhostexFolderStatsMessage,
+  type SidebarCurrentLayoutState,
   type SidebarOSIntegrationStatusMessage,
   type SidebarProjectSettingsItem,
   type SidebarTheme,
@@ -314,7 +315,6 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
   sidebar: [
     "sidebarSettingsPreset",
     "sidebarSide",
-    "sidebarDefaultWidthPx",
     "sidebarTheme",
     "sessionStatusIndicatorSize",
     "agentManagerZoomPercent",
@@ -347,6 +347,7 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
   workspace: [
     "workspaceActivePaneBorderColor",
     "workspaceBackgroundColor",
+    "sidebarDefaultWidthPx",
     "commandsPanelDefaultHeightPx",
     "debuggingMode",
   ],
@@ -474,6 +475,7 @@ export type SettingsModalProps = {
   initialSection?: MainSettingsInitialSectionId;
   initialSearchQuery?: string;
   initialTab?: SettingsModalTab;
+  currentLayout?: SidebarCurrentLayoutState;
   isOpen: boolean;
   presentation?: SettingsModalPresentation;
   onChange: (settings: ghostexSettings) => void;
@@ -519,6 +521,7 @@ export function SettingsModal({
   initialSection,
   initialSearchQuery,
   initialTab = "settings",
+  currentLayout,
   isOpen,
   onChange,
   onClose,
@@ -1037,11 +1040,6 @@ export function SettingsModal({
         title: "Side",
       },
       {
-        key: "sidebarDefaultWidthPx",
-        subtitle: "Width restored when double-clicking the sidebar resize handle.",
-        title: "Default Width",
-      },
-      {
         key: "sidebarTheme",
         options: SIDEBAR_THEME_SETTING_OPTIONS,
         subtitle: "Choose the sidebar color scheme.",
@@ -1269,6 +1267,11 @@ export function SettingsModal({
         key: "workspaceBackgroundColor",
         subtitle: "Color shown behind terminal panes.",
         title: "Terminal Background",
+      },
+      {
+        key: "sidebarDefaultWidthPx",
+        subtitle: "Width restored when double-clicking the sidebar resize handle.",
+        title: "Sidebar Default Width",
       },
       {
         key: "commandsPanelDefaultHeightPx",
@@ -1538,6 +1541,26 @@ export function SettingsModal({
   ) => {
     applySettingsDebounced({ ...(pendingSettingsRef.current ?? draft), [key]: value });
   };
+  const currentSidebarDefaultWidthPx = normalizeCurrentSettingValue(
+    currentLayout?.sidebarWidthPx,
+    MIN_SIDEBAR_DEFAULT_WIDTH_PX,
+    MAX_SIDEBAR_DEFAULT_WIDTH_PX,
+  );
+  const currentCommandsPanelDefaultHeightPx = normalizeCurrentSettingValue(
+    currentLayout?.commandsPanelHeightPx,
+    MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
+    MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
+  );
+  const setCurrentSidebarDefaultWidth = () => {
+    if (currentSidebarDefaultWidthPx !== undefined) {
+      updateDraft("sidebarDefaultWidthPx", currentSidebarDefaultWidthPx);
+    }
+  };
+  const setCurrentCommandsPanelDefaultHeight = () => {
+    if (currentCommandsPanelDefaultHeightPx !== undefined) {
+      updateDraft("commandsPanelDefaultHeightPx", currentCommandsPanelDefaultHeightPx);
+    }
+  };
   const activeSidebarSettingsPresetId = getSidebarSettingsPresetId(
     pendingSettingsRef.current ?? draft,
   );
@@ -1798,25 +1821,6 @@ export function SettingsModal({
                 value={draft.sidebarSide}
               />
               ) : null}
-              {mainSettingVisible(settingsSearch.sidebar, "sidebarDefaultWidthPx") ? (
-              <>
-                {/*
-                 * CDXC:SidebarChrome 2026-06-05-04:40:
-                 * This setting changes only the explicit double-click reset target for the sidebar resize handle. App restart must keep restoring the last persisted sidebar width from native/Electron chrome state.
-                 */}
-                <SliderNumberField
-                  description="Used when double-clicking the sidebar resize handle. App restart still restores your last manually set sidebar width."
-                  label="Default Width"
-                  {...getSettingModificationProps("sidebarDefaultWidthPx")}
-                  max={MAX_SIDEBAR_DEFAULT_WIDTH_PX}
-                  min={MIN_SIDEBAR_DEFAULT_WIDTH_PX}
-                  onCommit={(value) => updateDraft("sidebarDefaultWidthPx", value)}
-                  onChange={(value) => updateDraftDebounced("sidebarDefaultWidthPx", value)}
-                  step={1}
-                  value={draft.sidebarDefaultWidthPx}
-                />
-              </>
-              ) : null}
               {mainSettingVisible(settingsSearch.sidebar, "sidebarTheme") ? (
               <StaticNoteField
                 description="Dark Gray is active. Themes are coming back soon."
@@ -2009,7 +2013,39 @@ export function SettingsModal({
                 value={draft.workspaceBackgroundColor}
               />
               ) : null}
+              {mainSettingVisible(settingsSearch.workspace, "sidebarDefaultWidthPx") ? (
+              <>
+                {/*
+                 * CDXC:SidebarChrome 2026-06-08-07:44:
+                 * Workspace settings place Sidebar Default Width immediately above Command Pane Default Height so users tune the two native chrome reset sizes together. This setting changes only the explicit double-click reset target for the sidebar resize handle; app restart must keep restoring the last persisted sidebar width from native/Electron chrome state.
+                 *
+                 * CDXC:SidebarChrome 2026-06-08-07:48:
+                 * "Set current" copies the live native sidebar width into the default reset setting without changing the separate restart restore width.
+                 */}
+                <SliderNumberField
+                  description="Used when double-clicking the sidebar resize handle. App restart still restores your last manually set sidebar width."
+                  label="Sidebar Default Width"
+                  {...getSettingModificationProps("sidebarDefaultWidthPx")}
+                  max={MAX_SIDEBAR_DEFAULT_WIDTH_PX}
+                  min={MIN_SIDEBAR_DEFAULT_WIDTH_PX}
+                  onCommit={(value) => updateDraft("sidebarDefaultWidthPx", value)}
+                  onChange={(value) => updateDraftDebounced("sidebarDefaultWidthPx", value)}
+                  step={1}
+                  trailingAction={{
+                    disabled: currentSidebarDefaultWidthPx === undefined,
+                    label: "Set current",
+                    onClick: setCurrentSidebarDefaultWidth,
+                  }}
+                  value={draft.sidebarDefaultWidthPx}
+                />
+              </>
+              ) : null}
               {mainSettingVisible(settingsSearch.workspace, "commandsPanelDefaultHeightPx") ? (
+              <>
+                {/*
+                 * CDXC:CommandsPanel 2026-06-08-07:48:
+                 * "Set current" copies the current command-pane pixel height into the default height used for future opens and resize-rail double-click resets.
+                 */}
               <SliderNumberField
                 description="Used when opening the command pane (F12 or sidebar) and when double-clicking its top resize rail."
                 label="Command Pane Default Height"
@@ -2019,8 +2055,14 @@ export function SettingsModal({
                 onCommit={(value) => updateDraft("commandsPanelDefaultHeightPx", value)}
                 onChange={(value) => updateDraftDebounced("commandsPanelDefaultHeightPx", value)}
                 step={1}
+                trailingAction={{
+                  disabled: currentCommandsPanelDefaultHeightPx === undefined,
+                  label: "Set current",
+                  onClick: setCurrentCommandsPanelDefaultHeight,
+                }}
                 value={draft.commandsPanelDefaultHeightPx}
               />
+              </>
               ) : null}
               {mainSettingVisible(settingsSearch.workspace, "debuggingMode") ? (
               <ToggleField
@@ -6110,6 +6152,7 @@ function SliderNumberField({
   onCommit,
   onResetToDefault,
   step,
+  trailingAction,
   value,
 }: {
   description?: string;
@@ -6119,6 +6162,11 @@ function SliderNumberField({
   onChange: (value: number) => void;
   onCommit: (value: number) => void;
   step: number;
+  trailingAction?: {
+    disabled?: boolean;
+    label: string;
+    onClick: () => void;
+  };
   value: number;
 } & SettingModificationProps) {
   const id = useId();
@@ -6171,7 +6219,14 @@ function SliderNumberField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_4.75rem] items-center gap-3">
+      <div
+        className={cn(
+          "grid items-center gap-3",
+          trailingAction
+            ? "grid-cols-[minmax(0,1fr)_4.75rem_auto]"
+            : "grid-cols-[minmax(0,1fr)_4.75rem]",
+        )}
+      >
         <Slider
           aria-label={label}
           max={max}
@@ -6194,9 +6249,31 @@ function SliderNumberField({
           type="number"
           value={inputText}
         />
+        {trailingAction ? (
+          <Button
+            className="h-10 px-3 text-sm"
+            disabled={trailingAction.disabled}
+            onClick={trailingAction.onClick}
+            type="button"
+            variant="secondary"
+          >
+            {trailingAction.label}
+          </Button>
+        ) : null}
       </div>
     </SettingRow>
   );
+}
+
+function normalizeCurrentSettingValue(
+  value: number | undefined,
+  min: number,
+  max: number,
+): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return clampNumber(Math.round(value), min, max);
 }
 
 function clampNumber(value: number, min: number, max: number): number {

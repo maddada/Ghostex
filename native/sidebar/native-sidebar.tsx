@@ -70,6 +70,7 @@ import {
   type SidebarDaemonSessionsStateMessage,
   type SidebarT3SessionItem,
   type SidebarHydrateMessage,
+  type SidebarCurrentLayoutState,
   type SidebarPreviousSessionItem,
   type SidebarRecentProject,
   type SidebarSessionGroup,
@@ -827,7 +828,12 @@ type NativeHostEvent =
   | { sessionId: string; type: "firstPromptAutoRenameCancelled" }
   | { sessionId: string; type: "nativeSessionSurfaceMissing" }
   | { cwd: string; reason: "missingCwd" | string; sessionId: string; type: "terminalRestoreBlocked" }
-  | { heightRatio: number; type: "commandsPanelHeightRatioChanged" }
+  | { heightPx?: number; heightRatio: number; type: "commandsPanelHeightRatioChanged" }
+  | {
+      commandsPanelHeightPx: number;
+      sidebarWidthPx: number;
+      type: "nativeChromeLayoutChanged";
+    }
   | { message: string; sessionId: string; type: "terminalError" }
   | {
       error?: string;
@@ -1222,6 +1228,7 @@ let commands: SidebarCommandButton[] = [];
  * exists crashes startup and leaves the native shell with a blank sidebar.
  */
 let settings = readStoredSettings();
+let currentNativeLayout: SidebarCurrentLayoutState = {};
 let scratchPadContent = readScratchPadContent();
 let pinnedPrompts = readPinnedPrompts();
 let activeSessionsSortMode = readActiveSessionsSortMode();
@@ -8821,6 +8828,28 @@ function normalizeCommandsPanelHeightRatio(
   );
 }
 
+function normalizeCurrentLayoutPx(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return Math.round(value);
+}
+
+function updateCurrentNativeLayout(patch: SidebarCurrentLayoutState): boolean {
+  const nextLayout: SidebarCurrentLayoutState = {
+    ...currentNativeLayout,
+    ...patch,
+  };
+  if (
+    nextLayout.sidebarWidthPx === currentNativeLayout.sidebarWidthPx &&
+    nextLayout.commandsPanelHeightPx === currentNativeLayout.commandsPanelHeightPx
+  ) {
+    return false;
+  }
+  currentNativeLayout = nextLayout;
+  return true;
+}
+
 function createInitialProject(): NativeProject {
   return {
     commandsPanel: createProjectCommandsPanelState(),
@@ -15358,6 +15387,7 @@ function buildSidebarMessage(): SidebarHydrateMessage {
         getNativeSidebarCommandSessionIndicators(commands),
       ),
       agentHookStatus: latestNativeAgentHookStatus,
+      currentLayout: currentNativeLayout,
       customThemeColor: normalizeWorkspaceThemeColor(project.themeColor),
       projectSettingsProjects: createSidebarProjectSettingsProjects(),
       recentProjects: createSidebarRecentProjects(),
@@ -37443,11 +37473,28 @@ window.addEventListener("ghostex-native-host-event", (event) => {
     return;
   }
   if (hostEvent.type === "commandsPanelHeightRatioChanged") {
+    const currentHeightPx = normalizeCurrentLayoutPx(hostEvent.heightPx);
+    if (currentHeightPx !== undefined) {
+      updateCurrentNativeLayout({ commandsPanelHeightPx: currentHeightPx });
+    }
     updateActiveProjectCommandsPanel((panel) => ({
       ...panel,
       heightRatio: hostEvent.heightRatio,
     }));
     publish();
+    return;
+  }
+  if (hostEvent.type === "nativeChromeLayoutChanged") {
+    const sidebarWidthPx = normalizeCurrentLayoutPx(hostEvent.sidebarWidthPx);
+    const commandsPanelHeightPx = normalizeCurrentLayoutPx(hostEvent.commandsPanelHeightPx);
+    if (
+      updateCurrentNativeLayout({
+        ...(sidebarWidthPx !== undefined ? { sidebarWidthPx } : {}),
+        ...(commandsPanelHeightPx !== undefined ? { commandsPanelHeightPx } : {}),
+      })
+    ) {
+      publish();
+    }
     return;
   }
   if (hostEvent.type === "paneTabSelected") {
