@@ -235,6 +235,16 @@ function isDirectCliEntryPoint() {
 }
 
 async function main() {
+  /**
+   * CDXC:CliModuleInitOrder 2026-06-12-13:45:
+   * main() is invoked from the top-level entrypoint block above, which runs
+   * mid-module-evaluation. Command paths that throw synchronously (for example
+   * sendGxserverCliAction's GxserverCliUnsupportedError default) hit the
+   * temporal dead zone for classes declared later in this file and crash with
+   * "Cannot access ... before initialization". Defer one macrotask so command
+   * dispatch always starts after the whole module has evaluated.
+   */
+  await new Promise((resolve) => setImmediate(resolve));
   const argv = process.argv.slice(2);
   /**
    * CDXC:GhostexTui 2026-05-24-19:18:
