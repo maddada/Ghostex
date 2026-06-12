@@ -384,7 +384,7 @@ cask "ghostex" do
   desc "Workspace and session UI for agent terminals"
   homepage "https://github.com/maddada/ghostex"
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "ghostex.app"
   binary "#{appdir}/ghostex.app/Contents/Resources/CLI/ghostex"

@@ -216,7 +216,7 @@
 
 ## 3.22.0 - 2026-05-29
 
-- Fixed Homebrew installs on newer macOS releases by keeping the Ghostex cask minimum requirement at macOS Ventura (`>= :ventura`) instead of an exact Ventura match that blocked installation on later systems.
+- Fixed Homebrew installs on newer macOS releases by keeping the Ghostex cask minimum requirement at macOS Ventura.
 - Improved the titlebar update button tooltip so it opens to the side and no longer sits under the promoted sidebar layer.
 
 ## 3.21.0 - 2026-05-29

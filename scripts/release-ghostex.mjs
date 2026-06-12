@@ -1445,21 +1445,17 @@ async function updateHomebrew(version, artifacts, options) {
    generator inserts the gx preflight block. Auto-fix those before the strict
    style check so a successful GitHub release is not blocked by formatting.
 
-   CDXC:ReleaseAutomation 2026-05-29-20:59:
-   Preserve explicit `depends_on macos: ">= :ventura"` syntax for older
-   Homebrew clients that can treat the symbol shorthand as exact Ventura.
-
    CDXC:HomebrewRelease 2026-06-10-09:47:
    Homebrew's API install path can fail on macOS beta host identifiers before it
    reads the freshly pushed tap cask. Disable install-from-API for style/info/fetch
    validation and treat unrelated brew update failures as non-blocking once the
    Ghostex cask validates directly.
    */
-  await run(`HOMEBREW_NO_INSTALL_FROM_API=1 brew style --fix --except-cops Homebrew/OSDependsOn ${shellQuote(config.caskPath)}`, { cwd: tapDir });
-  await run(`HOMEBREW_NO_INSTALL_FROM_API=1 brew style --except-cops Homebrew/OSDependsOn ${shellQuote(config.caskPath)}`, { cwd: tapDir });
+  await run(`HOMEBREW_NO_INSTALL_FROM_API=1 brew style --fix ${shellQuote(config.caskPath)}`, { cwd: tapDir });
+  await run(`HOMEBREW_NO_INSTALL_FROM_API=1 brew style ${shellQuote(config.caskPath)}`, { cwd: tapDir });
   cask = await readFile(caskFile, "utf8");
-  if (!cask.includes('depends_on macos: ">= :ventura"')) {
-    throw new ReleaseError("Ghostex cask must require macOS Ventura or newer with explicit >= syntax.");
+  if (!cask.includes("depends_on macos: :ventura")) {
+    throw new ReleaseError("Ghostex cask must require macOS Ventura or newer.");
   }
   if (!cask.includes("depends_on arch: :arm64")) {
     throw new ReleaseError("Ghostex cask must be arm64-only for future macOS releases.");
@@ -1489,7 +1485,7 @@ async function updateHomebrew(version, artifacts, options) {
       `sha256 "${arm.sha256}"`,
       'url "https://github.com/maddada/Ghostex/releases/download/v#{version}/ghostex-#{version}-arm64.dmg"',
       "depends_on arch: :arm64",
-      'depends_on macos: ">= :ventura"',
+      "depends_on macos: :ventura",
     ]) {
       if (!liveCask.includes(required)) {
         throw new ReleaseError(`Live Homebrew cask is missing required stanza: ${required}`);
@@ -1514,9 +1510,8 @@ async function updateHomebrew(version, artifacts, options) {
  *
  * CDXC:MacRelease 2026-05-29-20:59:
  * The cask must require macOS Ventura as a minimum floor, matching the Sparkle
- * 13.0 appcast requirement. Keep the explicit string form because older
- * Homebrew clients can parse the symbol shorthand as exact Ventura and block
- * newer macOS releases such as 26.x before Homebrew can install Ghostex.
+ * 13.0 appcast requirement. Use Homebrew's symbolic macOS syntax so tap and
+ * install do not emit deprecated string-comparison warnings.
  *
  * CDXC:CliInstall 2026-06-07-13:53:
  * CLI resources now live under Contents/Resources/CLI. Normalize both old
@@ -1556,7 +1551,7 @@ function normalizeGhostexCliCask(cask) {
       /\n  # CDXC:CliBranding 2026-05-26-15:11: Install gx only when another tool does not already own that command name\.\n(?:  # CDXC:CliInstall 2026-06-07-13:53: Homebrew links the app-owned CLI from(?: Contents\/Resources\/CLI, matching direct DMG auto-linking\.|(?:\n  # Contents\/Resources\/CLI, matching direct DMG auto-linking\.))\n)?  preflight do[\s\S]*?\n  end(?=\n\n  zap trash:|\n  binary "#\{appdir\}\/ghostex\.app\/Contents\/Resources\/(?:Web\/cli|CLI)\/gx")/g,
       "",
     )
-    .replace(/^  depends_on macos: :ventura$/m, '  depends_on macos: ">= :ventura"')
+    .replace(/^  depends_on macos: ">= :ventura"$/m, "  depends_on macos: :ventura")
     .replace(/^  binary "#\{appdir\}\/ghostex\.app\/Contents\/Resources\/Web\/cli\/gtx"\n/gm, "")
     .replace(/^  binary "#\{appdir\}\/ghostex\.app\/Contents\/Resources\/Web\/cli\/gx"\n/gm, "")
     .replace(/^  binary "#\{appdir\}\/ghostex\.app\/Contents\/Resources\/CLI\/gx"\n/gm, "");
@@ -1579,8 +1574,8 @@ function normalizeGhostexCliCask(cask) {
   if (!next.includes(gxBinary) || next.includes("/Resources/Web/cli")) {
     throw new ReleaseError("Failed to normalize Ghostex cask CLI binary aliases.");
   }
-  if (!next.includes('depends_on macos: ">= :ventura"')) {
-    throw new ReleaseError("Ghostex cask must require macOS Ventura or newer with explicit >= syntax.");
+  if (!next.includes("depends_on macos: :ventura")) {
+    throw new ReleaseError("Ghostex cask must require macOS Ventura or newer.");
   }
   return next;
 }
@@ -1592,8 +1587,8 @@ function normalizeArm64OnlyCask(cask) {
 
   if (!next.includes("  depends_on arch: :arm64\n")) {
     next = next.replace(
-      /^  depends_on macos: ">= :ventura"\n/m,
-      '  depends_on arch: :arm64\n  depends_on macos: ">= :ventura"\n',
+      /^  depends_on macos: :ventura\n/m,
+      "  depends_on arch: :arm64\n  depends_on macos: :ventura\n",
     );
   }
 
