@@ -11,15 +11,11 @@ body.native-sidebar-body #root {
 }
 
 /*
-CDXC:SidebarHover 2026-06-10-23:44:
-Native AppKit reports the effective sidebar pointer boundary because WKWebView
-can keep stale CSS :hover after mouse exit. When native says the pointer is
-outside, disable root hit testing so existing hover selectors stop matching
-without rewriting every sidebar hover rule.
+CDXC:TooltipLifecycle 2026-06-13-02:30:
+Native pointer-leave only dismisses open sidebar tooltips and clears stale row
+hover visuals. Do not disable #root hit testing from that state; doing so blocks
+the pointer movement that needs to restore hover tooltips without a click.
 */
-body.native-sidebar-body[data-native-pointer-inside="false"] #root {
-  pointer-events: none;
-}
 
 .native-sidebar-shell {
   display: grid;

@@ -371,6 +371,7 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
   workspace: [
     "workspaceActivePaneBorderColor",
     "workspaceBackgroundColor",
+    "clickToWakeSleepingSessions",
     "commandsPanelDefaultHeightPx",
     "debuggingMode",
   ],
@@ -1340,6 +1341,11 @@ export function SettingsModal({
         title: "Terminal Background",
       },
       {
+        key: "clickToWakeSleepingSessions",
+        subtitle: "Select sleeping pane tabs without waking them until the empty pane is clicked.",
+        title: "Click to Wake Sleeping Panes",
+      },
+      {
         key: "commandsPanelDefaultHeightPx",
         subtitle: "Height used when opening the command pane and when double-clicking its top resize rail.",
         title: "Command Pane Default Height",
@@ -2145,6 +2151,15 @@ export function SettingsModal({
                 {...getSettingModificationProps("workspaceBackgroundColor")}
                 onChange={(value) => updateDraft("workspaceBackgroundColor", value)}
                 value={draft.workspaceBackgroundColor}
+              />
+              ) : null}
+              {mainSettingVisible(settingsSearch.workspace, "clickToWakeSleepingSessions") ? (
+              <ToggleField
+                checked={draft.clickToWakeSleepingSessions}
+                description="Selecting a sleeping pane tab shows a black placeholder; click the pane body to wake the session."
+                label="Click to wake sleeping panes"
+                {...getSettingModificationProps("clickToWakeSleepingSessions")}
+                onChange={(checked) => updateDraft("clickToWakeSleepingSessions", checked)}
               />
               ) : null}
               {mainSettingVisible(settingsSearch.workspace, "commandsPanelDefaultHeightPx") ? (
@@ -4839,7 +4854,7 @@ function AgentsSettingsTab({
              */}
             {promptAgentOptions.length > 0 ? (
               <SelectField
-                description="Choose the agent used by Git helper prompts, Prompt to Search, project board Start Work, and the default worktree first-prompt selection."
+                description="Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection."
                 isModified={defaultPromptAgentId !== DEFAULT_ghostex_SETTINGS.defaultPromptAgentId}
                 label="Default Prompt Agent"
                 onChange={onDefaultPromptAgentIdChange}
@@ -4857,7 +4872,7 @@ function AgentsSettingsTab({
             )}
             {/*
              * CDXC:GxserverSessionTitle 2026-06-04-08:24:
-             * First-prompt session-title generation needs its own agent selector instead of reusing Default Prompt Agent, because title generation is a gxserver-owned background job while prompt-launch defaults affect Git helpers, search prompts, project-board prompts, and worktree starts.
+             * First-prompt session-title generation needs its own agent selector instead of reusing Default Prompt Agent, because title generation is a gxserver-owned background job while prompt-launch defaults affect Git helpers, project-board prompts, and worktree starts.
              *
              * CDXC:GxserverSessionTitle 2026-06-04-22:44:
              * Show the disabled command preview directly under the selector so users can inspect the exact Codex, Cursor CLI, Claude, Grok Build, or Custom command template before Ghostex sends a background title-generation prompt.
@@ -6455,7 +6470,7 @@ function SettingsSection({
     <div className="settings-section-anchor" ref={sectionRef}>
       <Card
         className={cn(
-          "relative mt-5 overflow-visible pt-8",
+          "relative mt-5 overflow-visible pb-[25px] pt-8",
           actions && "settings-section-with-actions",
         )}
         size="sm"
@@ -6475,6 +6490,10 @@ function SettingsSection({
       {/* CDXC:Settings 2026-04-27-01:01: The title pill cannot use shadcn
           CardHeader because its container-query size containment makes
           max-content resolve to the padding width instead of the text width. */}
+      {/* CDXC:Settings 2026-06-12-21:00: Settings section cards need exactly
+          25px of total bottom space between their last row and the card border,
+          matching the compact bordered card style used by Agent Hooks and
+          adjacent grouped settings sections. */}
       <div className="settings-section-title-pill">
         <CardTitle className="settings-section-title-pill-text">{title}</CardTitle>
       </div>

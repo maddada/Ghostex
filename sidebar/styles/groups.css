@@ -1571,14 +1571,19 @@
 /*
  * CDXC:ProjectHeaders 2026-06-12-06:22:
  * Project rows should not dim when another project is active, and the active
- * project should not keep a persistent header background or bold title. Prefix
- * the active project title with a visual bullet while keeping project header
+ * project should not keep a persistent header background. Keep project header
  * backgrounds hover/focus-only.
+ *
+ * CDXC:ProjectHeaders 2026-06-12-20:21:
+ * Active project rows should not add a bullet marker. Make the active project
+ * title the active state by rendering it full white and one font-weight step
+ * above the normal 500-weight project title.
  */
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .group[data-project-group="true"][data-active="true"]
-  .group-title::before {
-  content: "• ";
+  .group-title {
+  color: #ffffff;
+  font-weight: 600;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]

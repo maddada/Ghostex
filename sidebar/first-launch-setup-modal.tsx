@@ -168,6 +168,7 @@ const FIRST_LAUNCH_PROMPT_AGENT_OPTIONS = DEFAULT_SIDEBAR_AGENTS.filter(
     agent.agentId !== "t3" && (!("hiddenByDefault" in agent) || agent.hiddenByDefault !== true),
 ).map((agent) => ({ label: agent.name, value: agent.agentId }));
 const FIRST_LAUNCH_SIDEBAR_PRESET_ORDER: readonly SidebarSettingsPresetId[] = [
+  "recommended",
   "minimal",
   "codex",
   "detailed",
@@ -707,9 +708,9 @@ type FirstLaunchHookStatusGroup = {
  * CDXC:FirstLaunchPreferences 2026-05-29-15:31:
  * First launch should include a compact defaults page for the highest-impact
  * settings before optional integrations. The page writes to the same persisted
- * settings model as Settings: sidebar preset in Minimal / Codex / Detailed
- * order, default prompt agent, lid-close keep-awake, Accept All, macOS attention
- * notifications, and completion sound.
+ * settings model as Settings: sidebar preset in Recommended / Minimal / Codex /
+ * Detailed order, default prompt agent, lid-close keep-awake, Accept All, macOS
+ * attention notifications, and completion sound.
  *
  * CDXC:FirstLaunchPreferences 2026-05-31-07:10:
  * ZMU-71: "Keep awake when lid is closed" maps to keepAwakePreventLidSleep on
@@ -732,6 +733,11 @@ type FirstLaunchHookStatusGroup = {
  * in Settings before their first automatic title job runs. Keep the first-time
  * modal wired to the shared Settings fields so Codex, Cursor, Claude, Grok
  * Build, and Custom stay consistent across onboarding and Settings.
+ *
+ * CDXC:FirstLaunchPreferences 2026-06-13-03:28:
+ * The first-launch sidebar-style row must put Recommended on the left and use
+ * the shared default settings so new installs open with Recommended selected.
+ * Keep Minimal, Codex, and Detailed after it for the existing density ramp.
  */
 export function FirstLaunchSetupModal({
   agentHookStatus,

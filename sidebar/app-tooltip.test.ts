@@ -7,10 +7,14 @@ import {
 } from "./app-tooltip";
 
 const originalWindow = globalThis.window;
+const originalDocument = globalThis.document;
 
 describe("sidebar tooltip drag suppression", () => {
   beforeEach(() => {
     (globalThis as typeof globalThis & { window: EventTarget }).window = new EventTarget();
+    (globalThis as typeof globalThis & { document: { body: { dataset: Record<string, string> } } }).document = {
+      body: { dataset: {} },
+    };
     setSidebarTooltipsSuppressedForDrag(false);
   });
 
@@ -20,6 +24,11 @@ describe("sidebar tooltip drag suppression", () => {
       delete (globalThis as typeof globalThis & { window?: Window }).window;
     } else {
       globalThis.window = originalWindow;
+    }
+    if (originalDocument === undefined) {
+      delete (globalThis as typeof globalThis & { document?: Document }).document;
+    } else {
+      globalThis.document = originalDocument;
     }
   });
 
@@ -33,6 +42,7 @@ describe("sidebar tooltip drag suppression", () => {
     setSidebarTooltipsSuppressedForDrag(true);
 
     expect(areSidebarTooltipsSuppressed()).toBe(true);
+    expect(document.body.dataset.sidebarTooltipsSuppressed).toBe("true");
     expect(events).toEqual(["dismiss", "changed"]);
 
     setSidebarTooltipsSuppressedForDrag(true);
@@ -40,6 +50,7 @@ describe("sidebar tooltip drag suppression", () => {
 
     setSidebarTooltipsSuppressedForDrag(false);
     expect(areSidebarTooltipsSuppressed()).toBe(false);
+    expect(document.body.dataset.sidebarTooltipsSuppressed).toBeUndefined();
     expect(events).toEqual(["dismiss", "changed", "changed"]);
   });
 });

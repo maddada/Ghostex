@@ -12,6 +12,18 @@ export const SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT =
 
 let sidebarTooltipSuppressedForDrag = false;
 
+function setSidebarTooltipSuppressionBodyFlag(suppressed: boolean) {
+  const body = typeof document === "undefined" ? undefined : document.body;
+  if (!body) {
+    return;
+  }
+  if (suppressed) {
+    body.dataset.sidebarTooltipsSuppressed = "true";
+    return;
+  }
+  delete body.dataset.sidebarTooltipsSuppressed;
+}
+
 export function dismissSidebarTooltips() {
   window.dispatchEvent(new Event(SIDEBAR_TOOLTIP_DISMISS_EVENT));
 }
@@ -21,6 +33,7 @@ export function areSidebarTooltipsSuppressed() {
 }
 
 export function setSidebarTooltipsSuppressedForDrag(suppressed: boolean) {
+  setSidebarTooltipSuppressionBodyFlag(suppressed);
   if (sidebarTooltipSuppressedForDrag === suppressed) {
     return;
   }
@@ -28,6 +41,11 @@ export function setSidebarTooltipsSuppressedForDrag(suppressed: boolean) {
   /*
    * CDXC:SidebarDragTooltips 2026-06-02-20:22:
    * Sidebar project/session drag should not spawn hover tooltips under the pointer. Suppress both Radix and local session title tooltips for the duration of sidebar drag operations, and close any tooltip that was already open when the drag started.
+   *
+   * CDXC:TooltipLifecycle 2026-06-13-02:30:
+   * Drag is the only flow that should block tooltip creation. Keep the CSS body
+   * flag in this helper so native pointer-leave can dismiss visible tooltips
+   * without leaving pseudo-tooltips disabled after hover returns.
    */
   if (suppressed) {
     dismissSidebarTooltips();
@@ -41,6 +59,7 @@ type AppTooltipProps = ComponentProps<typeof Tooltip> & {
   collisionPadding?: ComponentProps<typeof TooltipContent>["collisionPadding"];
   content: ReactNode;
   contentClassName?: string;
+  side?: ComponentProps<typeof TooltipContent>["side"];
   contentStyle?: ComponentProps<typeof TooltipContent>["style"];
   sideOffset?: number;
 };
@@ -58,6 +77,7 @@ export function AppTooltip({
   collisionPadding,
   content,
   contentClassName,
+  side,
   contentStyle,
   sideOffset = 8,
   ...tooltipProps
@@ -114,6 +134,11 @@ export function AppTooltip({
    * switching, external clicks, or fast exits into another native surface. Keep
    * AppTooltip controllable through a shared dismiss event so all Radix tooltip
    * instances close immediately and stay closed until the trigger opens again.
+   *
+   * CDXC:TitlebarTooltips 2026-06-13-02:59:
+   * The macOS titlebar uses the same AppTooltip wrapper as the sidebar, but its
+   * compact chrome sometimes needs side-positioned labels. Forward side to
+   * TooltipContent without changing the sidebar's default bottom placement.
    */
   return (
     <Tooltip {...tooltipRootProps} onOpenChange={setOpen} open={open}>
@@ -122,6 +147,7 @@ export function AppTooltip({
         align={align}
         className={contentClassName}
         collisionPadding={collisionPadding}
+        side={side}
         sideOffset={sideOffset}
         style={contentStyle}
       >

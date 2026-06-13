@@ -143,6 +143,10 @@ export function createRenderedSidebarSessionSlots(
       continue;
     }
 
+    if (element.getAttribute("data-visible") === "false") {
+      continue;
+    }
+
     if (element.getClientRects && element.getClientRects().length === 0) {
       continue;
     }

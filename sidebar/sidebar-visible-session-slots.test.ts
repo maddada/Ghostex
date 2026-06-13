@@ -10,10 +10,12 @@ import {
 } from "./sidebar-visible-session-slots";
 
 function renderedSlotElement({
+  dataVisible = true,
   hidden = false,
   sleeping = false,
   sessionId,
 }: {
+  dataVisible?: boolean;
   hidden?: boolean;
   sleeping?: boolean;
   sessionId: string;
@@ -26,6 +28,9 @@ function renderedSlotElement({
       }
       if (name === "data-sleeping") {
         return String(sleeping);
+      }
+      if (name === "data-visible") {
+        return dataVisible ? "true" : "false";
       }
       return null;
     },
@@ -88,6 +93,7 @@ describe("createRenderedSidebarSessionSlotIds", () => {
       createRenderedSidebarSessionSlotIds([
         renderedSlotElement({ sessionId: "visible-session-1" }),
         renderedSlotElement({ hidden: true, sessionId: "collapsed-session" }),
+        renderedSlotElement({ dataVisible: false, sessionId: "filtered-session" }),
         renderedSlotElement({ sessionId: "visible-session-2" }),
       ]),
     ).toEqual(["visible-session-1", "visible-session-2"]);

@@ -864,7 +864,19 @@ html:has(body.app-modal-host-native-window-body) {
    * The modal needs more horizontal room now that each history row keeps the
    * project name on the right before Last Active instead of floating it above
    * the title. Keep it 30% wider than the previous 420px picker.
+   *
+   * CDXC:PreviousSessions 2026-06-13-02:00:
+   * The browse-only Previous Sessions modal should use tighter chrome on every
+   * edge after the footer actions were removed. Keep the bottom inset smallest,
+   * remove the now-empty footer grid row, and align the top-right close button
+   * with the tag filter button so the search and session list can occupy the
+   * full content width. The close button should use the same 32px transparent
+   * toolbar treatment as the tag filter control.
    */
+  --previous-sessions-modal-padding-bottom: 8px;
+  --previous-sessions-modal-padding-top: 14px;
+  --previous-sessions-modal-padding-x: 14px;
+  --previous-sessions-close-button-top: 10px;
   --reference-session-agent-icon-size: 13px;
   --reference-session-icon-size: 15px;
   --reference-session-leading-inset: 10px;
@@ -872,12 +884,19 @@ html:has(body.app-modal-host-native-window-body) {
   --reference-session-trailing-inset: 10px;
   --reference-session-trailing-slot-width: 44px;
   background: var(--app-background);
-  gap: 14px;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  grid-template-rows: auto auto minmax(0, 1fr);
   max-height: 80vh;
   max-width: min(546px, 100%);
   overflow: hidden;
+  padding: var(--previous-sessions-modal-padding-top)
+    var(--previous-sessions-modal-padding-x)
+    var(--previous-sessions-modal-padding-bottom);
   width: min(546px, 100%);
+}
+
+.app-modal-host-body .confirm-modal-root:has(.previous-sessions-modal) {
+  padding: 8px;
 }
 
 .app-modal-host-body .previous-sessions-modal {
@@ -890,8 +909,8 @@ html:has(body.app-modal-host-native-window-body) {
    * Widen only enough to support right-side project metadata plus Last Active
    * without turning the picker into a broad management dialog.
    */
-  max-width: min(546px, calc(100vw - 32px));
-  width: min(546px, calc(100vw - 32px));
+  max-width: min(546px, calc(100vw - 16px));
+  width: min(546px, calc(100vw - 16px));
 }
 
 .app-modal-host-native-window-body .previous-sessions-modal {
@@ -902,7 +921,7 @@ html:has(body.app-modal-host-native-window-body) {
    * the fitted window height instead of the old 80vh cap, which centered a
    * smaller React modal inside an oversized native window.
    */
-  max-height: calc(100vh - 24px);
+  max-height: calc(100vh - 16px);
 }
 
 .app-modal-host-body .pinned-prompts-modal,
@@ -1391,7 +1410,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-toolbar {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
 }
@@ -1418,9 +1437,9 @@ html:has(body.app-modal-host-native-window-body) {
   width: 100%;
 }
 
+.previous-sessions-close-button,
 .previous-sessions-favorites-toggle {
   align-items: center;
-  align-self: stretch;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -1439,6 +1458,19 @@ html:has(body.app-modal-host-native-window-body) {
   width: 32px;
 }
 
+.previous-sessions-close-button {
+  right: var(--previous-sessions-modal-padding-x);
+  top: var(--previous-sessions-close-button-top);
+}
+
+.previous-sessions-modal .confirm-modal-header-with-close {
+  padding-right: 40px;
+}
+
+.previous-sessions-favorites-toggle {
+  align-self: stretch;
+}
+
 .previous-sessions-find-button {
   align-items: center;
   align-self: stretch;
@@ -1447,9 +1479,9 @@ html:has(body.app-modal-host-native-window-body) {
    * Footer actions are normal visible sidebar-style buttons: content width,
    * right aligned, and never dimmed in their resting state.
    *
-   * CDXC:PreviousSessions 2026-05-30-03:58:
-   * Prompt to Search and Search by Text share the same quiet dark treatment so
-   * neither action visually dominates the footer.
+   * CDXC:PinnedPrompts 2026-06-13-01:09:
+   * Previous Sessions no longer renders footer launch buttons, but Pinned
+   * Prompts still reuses this footer button treatment for Add Prompt.
    */
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
@@ -1483,6 +1515,8 @@ html:has(body.app-modal-host-native-window-body) {
   outline: none;
 }
 
+.previous-sessions-close-button:hover,
+.previous-sessions-close-button:focus-visible,
 .previous-sessions-favorites-toggle:hover,
 .previous-sessions-favorites-toggle:focus-visible {
   background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
@@ -1583,7 +1617,7 @@ html:has(body.app-modal-host-native-window-body) {
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding-right: 2px;
+  padding-right: 0;
 }
 
 .previous-sessions-day-group {

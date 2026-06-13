@@ -144,6 +144,7 @@ export type SortableSessionCardProps = {
   forcedDropPosition?: "before" | "after";
   groupId: string;
   index: number;
+  isProjectSessionListOverflowRow?: boolean;
   isSearchSelected?: boolean;
   onFocusRequested?: (groupId: string, sessionId: string) => void;
   sessionIdsBelow?: readonly string[];
@@ -288,6 +289,7 @@ export function SortableSessionCard({
   forcedDropPosition,
   groupId,
   index,
+  isProjectSessionListOverflowRow = false,
   isSearchSelected = false,
   onFocusRequested,
   sessionIdsBelow = [],
@@ -440,7 +442,11 @@ export function SortableSessionCard({
   const sortable = useSortable({
     accept: "session",
     data: createSessionDragData(groupId, session.sessionId),
-    disabled: dragDisabled || isBrowserSession || contextMenuPosition !== undefined,
+    disabled:
+      isProjectSessionListOverflowRow ||
+      dragDisabled ||
+      isBrowserSession ||
+      contextMenuPosition !== undefined,
     feedback: "clone",
     group: groupId,
     id: sessionId,
@@ -450,7 +456,7 @@ export function SortableSessionCard({
     type: "session",
   });
   const isSessionReorderDisabled =
-    !session || dropDisabled || contextMenuPosition !== undefined;
+    isProjectSessionListOverflowRow || !session || dropDisabled || contextMenuPosition !== undefined;
   const beforeDropTarget = useDroppable({
     accept: "session",
     data: createSessionDropTargetData({
@@ -1539,6 +1545,12 @@ export function SortableSessionCard({
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (isProjectSessionListOverflowRow) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
       event.preventDefault();
       event.stopPropagation();
@@ -1578,6 +1590,7 @@ export function SortableSessionCard({
             isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover,
           )}
           data-lifecycle-state={lifecycleState}
+          data-project-session-list-overflow={String(isProjectSessionListOverflowRow)}
           data-pinned={String(session.isPinned === true)}
           data-tagged={String(Boolean(currentSessionTag))}
           data-running={String(lifecycleState === "running")}
@@ -1597,6 +1610,7 @@ export function SortableSessionCard({
           />
           <article
             aria-current={session.isFocused ? "page" : undefined}
+            aria-hidden={isProjectSessionListOverflowRow ? true : undefined}
             aria-label={sessionAccessibleLabel}
             className="session"
             data-activity={session.activity}
@@ -1614,6 +1628,7 @@ export function SortableSessionCard({
             data-focused={String(session.isFocused)}
             data-group-connector={String(showGroupConnector)}
             data-lifecycle-state={lifecycleState}
+            data-project-session-list-overflow={String(isProjectSessionListOverflowRow)}
             data-agent-icon-hover-only={String(hideSessionAgentIconUntilHover)}
             data-browser-favicon-hover-only={String(
               isBrowserSession && Boolean(session.faviconDataUrl) && hideBrowserFaviconUntilHover,
@@ -1658,6 +1673,12 @@ export function SortableSessionCard({
               });
             }}
             onAuxClick={(event) => {
+              if (isProjectSessionListOverflowRow) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+
               if (event.button !== 1) {
                 return;
               }
@@ -1667,6 +1688,11 @@ export function SortableSessionCard({
             }}
             onClick={(event) => {
               event.stopPropagation();
+
+              if (isProjectSessionListOverflowRow) {
+                event.preventDefault();
+                return;
+              }
 
               if (event.metaKey) {
                 event.preventDefault();
@@ -1679,18 +1705,24 @@ export function SortableSessionCard({
             onDoubleClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (isProjectSessionListOverflowRow) {
+                return;
+              }
               requestFocusMode();
             }}
             onContextMenu={(event: ReactMouseEvent<HTMLElement>) => {
               event.preventDefault();
               event.stopPropagation();
+              if (isProjectSessionListOverflowRow) {
+                return;
+              }
               openContextMenu(event.clientY);
             }}
             onKeyDown={handleKeyDown}
             ref={setSessionCardElement}
             role="button"
             style={sessionAnchorStyle}
-            tabIndex={0}
+            tabIndex={isProjectSessionListOverflowRow ? -1 : 0}
           >
             <SessionFloatingAgentIcon
               agentIcon={session.agentIcon}

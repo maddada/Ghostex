@@ -23,6 +23,7 @@ import {
   SESSION_PERSISTENCE_PROVIDER_OPTIONS,
   SESSION_STATUS_INDICATOR_SIZE_OPTIONS,
   SIDEBAR_SETTINGS_PRESET_SETTINGS,
+  SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,
 } from "./ghostex-settings";
@@ -126,7 +127,7 @@ describe("normalizeghostexSettings", () => {
   test("normalizes the session title generation agent settings", () => {
     /*
     CDXC:GxserverSessionTitle 2026-06-04-08:24:
-    Settings exposes a separate first-prompt title generator choice so users can switch Codex, Cursor, Claude, Grok Build, or a custom command without changing the broader default prompt agent used by Git, board, worktree, or search prompts.
+    Settings exposes a separate first-prompt title generator choice so users can switch Codex, Cursor, Claude, Grok Build, or a custom command without changing the broader default prompt agent used by Git, board, or worktree prompts.
     */
     expect(DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent).toBe("codex");
     expect(normalizeghostexSettings({})).toMatchObject({
@@ -183,17 +184,18 @@ describe("normalizeghostexSettings", () => {
 
   test("normalizes the project session Show less count", () => {
     /*
-    CDXC:ProjectSessionLists 2026-06-10-13:39:
-    Settings owns how many project sessions remain visible after Show less. Keep the historical six-row default while allowing larger explicit counts such as ten.
+    CDXC:ProjectSessionLists 2026-06-13-01:06:
+    Settings owns how many project sessions remain visible after Show less. Use ten as the current default while continuing to clamp explicit user counts.
     */
     expect(DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount).toBe(
       DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
     );
+    expect(DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT).toBe(10);
     expect(normalizeghostexSettings({})).toMatchObject({
       projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
     });
-    expect(normalizeghostexSettings({ projectSessionListCollapsedCount: 10 })).toMatchObject({
-      projectSessionListCollapsedCount: 10,
+    expect(normalizeghostexSettings({ projectSessionListCollapsedCount: 6 })).toMatchObject({
+      projectSessionListCollapsedCount: 6,
     });
     expect(normalizeghostexSettings({ projectSessionListCollapsedCount: 0 })).toMatchObject({
       projectSessionListCollapsedCount: MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
@@ -231,17 +233,24 @@ describe("normalizeghostexSettings", () => {
     });
   });
 
-  test("defaults sidebar UI settings to the Codex preset", () => {
+  test("defaults sidebar UI settings to the Recommended preset", () => {
     /**
-     * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
-     * Codex is the default sidebar preset for normalized settings. It hides
-     * hover-only agent icons, project-header git stats, floating badges, and
-     * menu bar badges while keeping browser favicons, close controls, and Last
-     * Active timestamps visible.
+     * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
+     * Recommended is the default sidebar preset for normalized settings and the
+     * leftmost Settings preset button. It keeps agent icons hover-only while
+     * showing detailed sidebar status chrome.
      */
-    expect(DEFAULT_ghostex_SETTINGS).toMatchObject(SIDEBAR_SETTINGS_PRESET_SETTINGS.codex);
-    expect(normalizeghostexSettings({})).toMatchObject(SIDEBAR_SETTINGS_PRESET_SETTINGS.codex);
-    expect(getSidebarSettingsPresetId(DEFAULT_ghostex_SETTINGS)).toBe("codex");
+    expect(DEFAULT_ghostex_SETTINGS).toMatchObject(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended);
+    expect(normalizeghostexSettings({})).toMatchObject(
+      SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended,
+    );
+    expect(getSidebarSettingsPresetId(DEFAULT_ghostex_SETTINGS)).toBe("recommended");
+    expect(SIDEBAR_SETTINGS_PRESETS.map((preset) => preset.id)).toEqual([
+      "recommended",
+      "codex",
+      "minimal",
+      "detailed",
+    ]);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideBrowserFaviconUntilHover).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal.hideBrowserFaviconUntilHover).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed.hideBrowserFaviconUntilHover).toBe(false);
@@ -400,6 +409,12 @@ describe("normalizeghostexSettings", () => {
     });
     expect(normalizeghostexSettings({ workspacePaneGap: 24 })).toMatchObject({
       workspacePaneGap: 0,
+    });
+    expect(normalizeghostexSettings({})).toMatchObject({
+      clickToWakeSleepingSessions: true,
+    });
+    expect(normalizeghostexSettings({ clickToWakeSleepingSessions: false })).toMatchObject({
+      clickToWakeSleepingSessions: false,
     });
   });
 
@@ -578,17 +593,16 @@ describe("normalizeghostexSettings", () => {
      * Medium is the default because it is 50% of the current approved X-Large
      * indicator size. Settings must expose all named scale points so users can
      * return to the larger visual or choose smaller indicators later.
-     * CDXC:SessionStatusIndicators 2026-05-09-17:30
-     * Floating and menu bar status badges are hidden in the default Codex
-     * preset, while Detailed can still reveal either surface without coupling
-     * visibility to indicator size.
+     * CDXC:SessionStatusIndicators 2026-06-13-01:06:
+     * Floating and menu bar status badges are visible in the default Recommended
+     * preset while remaining independent from the selected indicator size.
      */
-    expect(DEFAULT_ghostex_SETTINGS.hideFloatingSessionStatusIndicators).toBe(true);
-    expect(DEFAULT_ghostex_SETTINGS.hideMenuBarSessionStatusIndicators).toBe(true);
+    expect(DEFAULT_ghostex_SETTINGS.hideFloatingSessionStatusIndicators).toBe(false);
+    expect(DEFAULT_ghostex_SETTINGS.hideMenuBarSessionStatusIndicators).toBe(false);
     expect(DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize).toBe("medium");
     expect(normalizeghostexSettings({})).toMatchObject({
-      hideFloatingSessionStatusIndicators: true,
-      hideMenuBarSessionStatusIndicators: true,
+      hideFloatingSessionStatusIndicators: false,
+      hideMenuBarSessionStatusIndicators: false,
       sessionStatusIndicatorSize: "medium",
     });
     expect(

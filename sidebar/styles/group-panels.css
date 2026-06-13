@@ -345,6 +345,14 @@
   pointer-events: none;
 }
 
+.group-sessions-shell[data-project-session-list-clipped="true"] {
+  /*
+   * CDXC:ProjectSessionLists 2026-06-12-23:53:
+   * Show less keeps overflow session rows mounted so the project expand/collapse max-height transition can hide them smoothly. Clip only this header-toggle state because normal expanded project bodies allow visible overflow for anchored status affordances.
+   */
+  overflow: hidden;
+}
+
 .sidebar-collapse-content {
   min-height: 0;
 }
@@ -1165,11 +1173,10 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
 }
 
 /*
- * CDXC:SidebarTooltips 2026-05-25-07:16:
- * CSS pseudo-tooltips keep following browser :hover state when WKWebView misses
- * a leave event during app switches or fast exits. The native sidebar root sets
- * this body flag whenever sidebar hover ownership is lost, hiding pseudo and
- * local tooltip surfaces until pointer movement re-enters the sidebar document.
+ * CDXC:TooltipLifecycle 2026-06-13-02:30:
+ * This body flag is drag-only tooltip suppression. Native pointer-leave should
+ * dismiss visible tooltips through events, not set a persistent CSS flag that
+ * prevents later hover from showing a tooltip until the user clicks.
  */
 body[data-sidebar-tooltips-suppressed="true"] .reference-sidebar-hover-action-tooltip::after,
 body[data-sidebar-tooltips-suppressed="true"]

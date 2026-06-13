@@ -335,7 +335,7 @@ button,
 
  CDXC:SettingsNavigation 2026-05-27-10:44: Do not draw a vertical divider between the section table of contents and the settings body on Settings or Hotkeys tabs.
 
- CDXC:SettingsNavigation 2026-06-12-04:13: The Settings tabs and search field should end 27px from the modal's right edge while Ghostty terminal controls live inside the main Settings page.
+ CDXC:SettingsNavigation 2026-06-13: The Settings tabs and search field should align with the content body's right edge (20px inset, matching the px-5 settings body padding) instead of stopping short of it.
 */
 .ghostex-settings-shadcn.settings-modal-dialog {
   container-name: settings-modal;
@@ -347,7 +347,7 @@ button,
 }
 
 .ghostex-settings-shadcn.settings-modal-dialog .ghostex-modal-heading-bar {
-  padding-right: 27px;
+  padding-right: 1.25rem;
 }
 
 @media (max-width: 760px) {
@@ -691,15 +691,27 @@ button,
 /*
  CDXC:FirstLaunchPreferences 2026-05-29-15:31
  The first-launch defaults page should expose the highest-impact settings in
- one compact step: sidebar style ordered Minimal / Codex / Detailed, default
- agent, first-prompt title-generation agent, lid-close keep-awake, Accept All,
- attention notifications, and completion sound. These controls write to the
- normal Settings model instead of keeping onboarding-only state.
+ one compact step: sidebar style ordered Recommended / Minimal / Codex /
+ Detailed, default agent, first-prompt title-generation agent, lid-close
+ keep-awake, Accept All, attention notifications, and completion sound. These
+ controls write to the normal Settings model instead of keeping onboarding-only
+ state.
 
  CDXC:FirstLaunchPreferences 2026-06-04-21:02
  The first-time defaults modal must include the same title-generation agent
  selector as Settings, including a Custom command input, before automatic
  first-prompt session naming can run.
+
+ CDXC:FirstLaunchPreferences 2026-06-13-03:28
+ The sidebar-style control adds Recommended as the leftmost and default first-run
+ choice, so the preset grid uses four equal columns on desktop before stacking
+ into one column on narrow modal widths.
+
+ CDXC:FirstLaunchPreferences 2026-06-13-05:27
+ The first-time defaults modal checkbox affordances should read as square
+ controls rather than native macOS rounded checkboxes. Keep this custom shape
+ scoped to onboarding preference tiles so other Settings checkboxes retain their
+ existing styling.
 */
 .ghostex-settings-shadcn .first-launch-setup-preferences {
   align-content: start;
@@ -784,7 +796,7 @@ button,
 .ghostex-settings-shadcn .first-launch-setup-preset-options {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preset-button {
@@ -869,9 +881,39 @@ button,
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox {
-  accent-color: var(--primary);
+  appearance: none;
+  background: color-mix(in srgb, var(--background) 85%, var(--foreground) 4%);
+  border: 2px solid color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  border-radius: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  flex: none;
   height: 1.125rem;
+  margin: 0;
+  position: relative;
   width: 1.125rem;
+}
+
+.ghostex-settings-shadcn .first-launch-setup-checkbox:checked {
+  background: var(--foreground);
+  border-color: var(--foreground);
+}
+
+.ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after {
+  border: solid var(--background);
+  border-width: 0 2px 2px 0;
+  content: "";
+  height: 9px;
+  left: 5px;
+  position: absolute;
+  top: 1px;
+  transform: rotate(45deg);
+  width: 5px;
+}
+
+.ghostex-settings-shadcn .first-launch-setup-checkbox:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-benefit + .first-launch-setup-benefit {

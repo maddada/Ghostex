@@ -68,6 +68,38 @@ export function getVisibleProjectSessionIds({
   return sessionIds.slice(0, normalizedCollapsedCount);
 }
 
+export function getProjectSessionListCollapsedHeight({
+  lastVisibleSessionId,
+  sessionListElement,
+}: {
+  lastVisibleSessionId: string | undefined;
+  sessionListElement: HTMLElement | null | undefined;
+}): number | undefined {
+  if (!sessionListElement) {
+    return undefined;
+  }
+
+  if (!lastVisibleSessionId) {
+    return 0;
+  }
+
+  /**
+   * CDXC:ProjectSessionLists 2026-06-12-23:53:
+   * Show more and Show less should use the same measured max-height motion as project expand/collapse. Measure the bottom of the last user-visible session row so Show less can clip the still-mounted overflow rows smoothly instead of removing them before the collapse animation can run.
+   */
+  const sessionElement = Array.from(
+    sessionListElement.querySelectorAll<HTMLElement>("[data-sidebar-session-id]"),
+  ).find((element) => element.dataset.sidebarSessionId === lastVisibleSessionId);
+  const rowElement = sessionElement?.closest<HTMLElement>(".session-frame") ?? sessionElement;
+  if (!rowElement) {
+    return undefined;
+  }
+
+  const listBounds = sessionListElement.getBoundingClientRect();
+  const rowBounds = rowElement.getBoundingClientRect();
+  return Math.max(0, Math.ceil(rowBounds.bottom - listBounds.top));
+}
+
 export function readProjectSessionListCollapsedState(
   storage: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined"
     ? undefined

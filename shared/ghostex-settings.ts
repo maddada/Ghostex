@@ -78,7 +78,7 @@ export const MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX = 600;
 export const DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX = 235;
 export const MIN_SIDEBAR_DEFAULT_WIDTH_PX = 150;
 export const MAX_SIDEBAR_DEFAULT_WIDTH_PX = 520;
-export const DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 6;
+export const DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 10;
 export const MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 1;
 export const MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 50;
 export const SESSION_TITLE_GENERATION_AGENT_OPTIONS: ReadonlyArray<{
@@ -156,9 +156,9 @@ export type ghostexSettings = {
   agentManagerZoomPercent: number;
   /**
    * CDXC:PromptAgents 2026-05-28-07:15:
-   * Automated prompt flows such as Git helper prompts, Find Session, project
-   * board Start Work, and worktree first prompts need one user-selected default
-   * agent instead of hardcoding Codex in each launcher.
+   * Automated prompt flows such as Git helper prompts, project board Start Work,
+   * and worktree first prompts need one user-selected default agent instead of
+   * hardcoding Codex in each launcher.
    */
   defaultPromptAgentId: string;
   /**
@@ -166,7 +166,7 @@ export type ghostexSettings = {
    * First-prompt session-title generation is gxserver-owned, but Settings owns
    * which headless agent command should produce those titles. Keep this scoped
    * away from Default Prompt Agent so changing title generation does not alter
-   * Git prompts, worktree starts, project-board prompts, or search prompts.
+   * Git prompts, worktree starts, or project-board prompts.
    *
    * CDXC:GxserverSessionTitle 2026-06-04-22:44:
    * The selector includes Grok Build and its Composer 2.5 command preview, so
@@ -259,8 +259,8 @@ export type ghostexSettings = {
    */
   sidebarDefaultWidthPx: number;
   /**
-   * CDXC:ProjectSessionLists 2026-06-10-13:39:
-   * The project header Show less action keeps a configurable number of project sessions visible. Default to the historical six-row cap, but normalize a wider Settings range so users can keep ten or more rows visible before switching back to Show more.
+   * CDXC:ProjectSessionLists 2026-06-13-01:06:
+   * The project header Show less action keeps a configurable number of project sessions visible. Default to ten visible sessions so active projects stay scannable before switching back to Show more.
    */
   projectSessionListCollapsedCount: number;
   sidebarTheme: SidebarThemeSetting;
@@ -299,6 +299,14 @@ export type ghostexSettings = {
   hotkeys: ghostexHotkeySettings;
   workspaceActivePaneBorderColor: string;
   workspaceBackgroundColor: string;
+  /**
+   * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+   * Sleeping native pane tabs should select their original split pane without
+   * starting Ghostty immediately. Keep click-to-wake enabled by default so
+   * users can inspect stable black placeholders and wake only by clicking the
+   * pane body.
+   */
+  clickToWakeSleepingSessions: boolean;
   customWorkspaceOpenTargets: CustomWorkspaceOpenTarget[];
   workspaceOpenTargetAvailability: WorkspaceOpenTargetAvailability;
   workspaceOpenTargetHiddenIds: string[];
@@ -338,6 +346,9 @@ export type SidebarSettingsPresetSettings = Pick<ghostexSettings, SidebarSetting
  *
  * CDXC:SidebarSettingsPresets 2026-06-12-07:10:
  * Recommended matches Detailed chrome but keeps session agent icons hover-only so dense sidebars stay readable without losing icon access on demand.
+ *
+ * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
+ * Recommended is the first-run sidebar preset and the leftmost Settings preset button. Defaults should expose detailed sidebar status chrome while keeping agent identity hover-only.
  */
 export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
   codex: {
@@ -387,14 +398,14 @@ export const SIDEBAR_SETTINGS_PRESETS: ReadonlyArray<{
   label: string;
   settings: SidebarSettingsPresetSettings;
 }> = [
-  { id: "codex", label: "Codex", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex },
-  { id: "minimal", label: "Minimal", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal },
-  { id: "detailed", label: "Detailed", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed },
   {
     id: "recommended",
     label: "Recommended",
     settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended,
   },
+  { id: "codex", label: "Codex", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex },
+  { id: "minimal", label: "Minimal", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal },
+  { id: "detailed", label: "Detailed", settings: SIDEBAR_SETTINGS_PRESET_SETTINGS.detailed },
 ];
 
 export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
@@ -462,11 +473,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * when they want project names to stay visually quiet. This is independent
    * from the existing changed-file count preference.
    *
-   * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
-   * Codex is the default sidebar preset, so new settings hide project-header
-   * git stats unless the user selects Detailed or changes the setting directly.
+   * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
+   * Recommended is the default sidebar preset, so new settings show project-header
+   * git stats while keeping the changed-file count off unless the user enables it.
    */
-  hideProjectHeaderDiffStats: SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideProjectHeaderDiffStats,
+  hideProjectHeaderDiffStats:
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats,
   /**
    * CDXC:ProjectDiffStats 2026-05-15-14:33:
    * Project-header git stats should hide the changed-file count by default and
@@ -497,12 +509,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Agent identity remains configurable in Settings through an explicit
    * hover-only mode for quieter session lists.
    *
-   * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
-   * Codex and Minimal presets hide session agent icons until hover; Detailed is
-   * the explicit preset for always-visible session identity chrome.
+   * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
+   * Recommended is the first-run preset and keeps session agent icons hover-only
+   * while showing detailed sidebar status chrome.
    */
   hideSessionAgentIconUntilHover:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideSessionAgentIconUntilHover,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover,
   /**
    * CDXC:BrowserPanes 2026-05-28-07:38:
    * Browser page favicons are page identity, not agent chrome. Keep them
@@ -510,14 +522,14 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * hover-only, while Minimal can hide favicons until hover for a quieter list.
    */
   hideBrowserFaviconUntilHover:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideBrowserFaviconUntilHover,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideBrowserFaviconUntilHover,
   /**
    * CDXC:SidebarSessions 2026-05-09-17:00
    * Session-card close controls should be available out of the box. Users can
    * still turn the hover chrome off from Settings when they want quieter cards.
    */
   showCloseButtonOnSessionCards:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.showCloseButtonOnSessionCards,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showCloseButtonOnSessionCards,
   /**
    * CDXC:SidebarSessions 2026-05-15-08:57
    * Session-card Last Active timestamps stay visible by default for existing
@@ -526,7 +538,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * project-header git diff stats.
    */
   hideLastActiveTimeOnSessionCards:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideLastActiveTimeOnSessionCards,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards,
   showSessionCloseContextMenuAction: false,
   showSessionCommandCopyActions: false,
   showSessionDetailsCopyAction: false,
@@ -591,14 +603,14 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   showMacOSAttentionNotifications: true,
   /**
    * CDXC:SessionStatusIndicators 2026-05-09-17:30
-   * Floating and menu bar desktop status badges are hidden by the default
-   * Codex preset. Keep separate hide toggles so Detailed can reveal either
+   * Floating and menu bar desktop status badges are visible under the default
+   * Recommended preset. Keep separate hide toggles so users can hide either
    * surface without coupling their visibility.
    */
   hideFloatingSessionStatusIndicators:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideFloatingSessionStatusIndicators,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideFloatingSessionStatusIndicators,
   hideMenuBarSessionStatusIndicators:
-    SIDEBAR_SETTINGS_PRESET_SETTINGS.codex.hideMenuBarSessionStatusIndicators,
+    SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators,
   petOverlayEnabled: false,
   selectedPetId: DEFAULT_PET_ID,
   /**
@@ -727,6 +739,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Black is the fallback workspace background when Ghostty has no readable terminal background. Native layout sync treats this default as automatic so the macOS workarea can use the loaded Ghostty `background` color instead of forcing a separate app gray.
    */
   workspaceBackgroundColor: "#000000",
+  clickToWakeSleepingSessions: true,
   /**
    * CDXC:TitlebarOpenIn 2026-05-11-00:22
    * The titlebar Open In menu is configurable: built-in editor targets can be
@@ -1335,8 +1348,8 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       ),
     ),
     /**
-     * CDXC:ProjectSessionLists 2026-06-10-13:39:
-     * Missing settings must preserve the old six-session Show less behavior, while explicit numeric values tune how many project sessions remain visible before the header toggle offers Show more.
+     * CDXC:ProjectSessionLists 2026-06-13-01:06:
+     * Missing settings should use the current ten-session Show less behavior, while explicit numeric values tune how many project sessions remain visible before the header toggle offers Show more.
      */
     projectSessionListCollapsedCount: clampProjectSessionListCollapsedCount(
       readNumber(
@@ -1538,6 +1551,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     workspaceBackgroundColor:
       readString(source, "workspaceBackgroundColor", DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor)
         .trim() || DEFAULT_ghostex_SETTINGS.workspaceBackgroundColor,
+    clickToWakeSleepingSessions: readBoolean(
+      source,
+      "clickToWakeSleepingSessions",
+      DEFAULT_ghostex_SETTINGS.clickToWakeSleepingSessions,
+    ),
     /**
      * CDXC:TitlebarOpenIn 2026-05-11-00:22
      * Settings owns which titlebar Open In targets are shown. Normalize on read

@@ -74,6 +74,7 @@ import type { WebviewApi } from "./webview-api";
 import { openAppModal } from "./app-modal-host-bridge";
 import {
   PROJECT_SESSION_LIST_COLLAPSED_CHANGED_EVENT,
+  getProjectSessionListCollapsedHeight,
   getVisibleProjectSessionIds,
   readProjectSessionListCollapsedState,
   writeProjectSessionListCollapsedState,
@@ -103,9 +104,15 @@ const GROUP_CONTROL_MENU_MARGIN_PX = 12;
 const GROUP_AGENT_MENU_WIDTH_PX = 220;
 const PROJECT_HEADER_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
 const PROJECT_HEADER_TOOLTIP_TRIGGER_OFFSET_PX = 8;
-const GROUP_DRAG_HOLD_DELAY_MS = 130;
+/**
+ * CDXC:ProjectReorder 2026-06-13-05:19:
+ * macOS sidebar project-header reorder should require a slightly longer hold
+ * than session-card dragging so normal header clicks and small pointer moves
+ * do not activate project drag too soon.
+ */
+const GROUP_DRAG_HOLD_DELAY_MS = 250;
 const GROUP_DRAG_HOLD_TOLERANCE_PX = 12;
-const TOUCH_GROUP_DRAG_HOLD_DELAY_MS = 180;
+const TOUCH_GROUP_DRAG_HOLD_DELAY_MS = 320;
 const TOUCH_GROUP_DRAG_HOLD_TOLERANCE_PX = 12;
 const PROJECT_EDITOR_DISPLAY_MAX_FILES = 99;
 const DISABLED_GROUP_DND_AX_ATTRIBUTES = [
@@ -806,6 +813,8 @@ export function SessionGroupSection({
   const [projectSessionListCollapsedState, setProjectSessionListCollapsedState] = useState(
     readProjectSessionListCollapsedState,
   );
+  const [projectSessionListCollapsedHeight, setProjectSessionListCollapsedHeight] =
+    useState<number>();
   const { collapsibleStyle, contentRef } = useCollapsibleHeight<HTMLDivElement>();
   const menuRef = useRef<HTMLDivElement>(null);
   const controlMenuRef = useRef<HTMLDivElement>(null);
@@ -857,6 +866,10 @@ export function SessionGroupSection({
   const isChatCollection = group?.isChatCollection === true;
   const projectContext = group?.projectContext;
   const projectSessionListStorageId = projectContext?.editor.projectId ?? group?.groupId;
+  const isProjectSessionListCollapsed =
+    Boolean(projectContext) &&
+    projectSessionListStorageId !== undefined &&
+    projectSessionListCollapsedState[projectSessionListStorageId] === true;
   /**
    * CDXC:SidebarLayout 2026-05-13-08:11
    * Project groups stay draggable while session drag targets are disabled in
@@ -889,6 +902,67 @@ export function SessionGroupSection({
           DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount,
       ),
   );
+  const visibleSessionIds = getVisibleProjectSessionIds({
+    collapsedCount: projectSessionListCollapsedCount,
+    isCollapsed: isProjectSessionListCollapsed,
+    isProjectGroup: Boolean(projectContext),
+    isToggleEnabled: enableProjectSessionListToggle,
+    sessionIds: orderedSessionIds,
+  });
+  const shouldShowProjectSessionListToggle =
+    Boolean(projectContext) &&
+    !isCollapsed &&
+    enableProjectSessionListToggle &&
+    orderedSessionIds.length > projectSessionListCollapsedCount;
+  const renderedSessionIds = shouldShowProjectSessionListToggle ? orderedSessionIds : visibleSessionIds;
+  const projectSessionListLastVisibleSessionId =
+    visibleSessionIds.length > 0 ? visibleSessionIds[visibleSessionIds.length - 1] : undefined;
+  const projectSessionListRenderedSessionIdsKey = renderedSessionIds.join("\u0000");
+  const shouldClipProjectSessionList =
+    shouldShowProjectSessionListToggle && isProjectSessionListCollapsed;
+
+  useLayoutEffect(() => {
+    if (!shouldClipProjectSessionList) {
+      return;
+    }
+
+    const element = contentRef.current;
+    if (!element) {
+      return;
+    }
+
+    let animationFrameId = 0;
+
+    const updateCollapsedHeight = () => {
+      setProjectSessionListCollapsedHeight(
+        getProjectSessionListCollapsedHeight({
+          lastVisibleSessionId: projectSessionListLastVisibleSessionId,
+          sessionListElement: element,
+        }),
+      );
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrameId);
+      animationFrameId = window.requestAnimationFrame(updateCollapsedHeight);
+    };
+
+    updateCollapsedHeight();
+    const observer = new ResizeObserver(() => {
+      scheduleUpdate();
+    });
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [
+    contentRef,
+    projectSessionListLastVisibleSessionId,
+    projectSessionListRenderedSessionIdsKey,
+    shouldClipProjectSessionList,
+  ]);
   const postGroupDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     if (!debuggingMode) {
       return;
@@ -959,17 +1033,6 @@ export function SessionGroupSection({
   const groupSessions = orderedSessionIds
     .map((sessionId) => sessionsById[sessionId])
     .filter((session): session is NonNullable<typeof session> => session !== undefined);
-  const isProjectSessionListCollapsed =
-    Boolean(projectContext) &&
-    projectSessionListStorageId !== undefined &&
-    projectSessionListCollapsedState[projectSessionListStorageId] === true;
-  const visibleSessionIds = getVisibleProjectSessionIds({
-    collapsedCount: projectSessionListCollapsedCount,
-    isCollapsed: isProjectSessionListCollapsed,
-    isProjectGroup: Boolean(projectContext),
-    isToggleEnabled: enableProjectSessionListToggle,
-    sessionIds: orderedSessionIds,
-  });
   const shouldRenderPinnedSessionDropGaps =
     allowPinnedSessionReorder && showSessionDropPositionIndicators && orderedSessionIds.length > 0;
   const pinnedSessionDropGapKey = shouldRenderPinnedSessionDropGaps
@@ -982,11 +1045,7 @@ export function SessionGroupSection({
   const visibleGroupSessions = visibleSessionIds
     .map((sessionId) => sessionsById[sessionId])
     .filter((session): session is NonNullable<typeof session> => session !== undefined);
-  const shouldShowProjectSessionListToggle =
-    Boolean(projectContext) &&
-    !isCollapsed &&
-    enableProjectSessionListToggle &&
-    orderedSessionIds.length > projectSessionListCollapsedCount;
+  const visibleSessionIdSet = new Set(visibleSessionIds);
   const projectSessionListToggleLabel = isProjectSessionListCollapsed ? "Show more" : "Show less";
   const shouldScrubDisabledGroupDndAccessibility = isChatCollection || draggingDisabled;
   const sessionSummary = getGroupSessionSummary(groupSessions);
@@ -1033,6 +1092,13 @@ export function SessionGroupSection({
   const groupHeaderStyle = projectThemeStyle
     ? ({ ...groupHeaderAnchorStyle, ...projectThemeStyle } as CSSProperties)
     : groupHeaderAnchorStyle;
+  const sessionsShellStyle =
+    shouldClipProjectSessionList && projectSessionListCollapsedHeight !== undefined
+      ? ({
+          ...(collapsibleStyle ?? {}),
+          "--sidebar-collapse-content-height": `${projectSessionListCollapsedHeight}px`,
+        } as CSSProperties)
+      : collapsibleStyle;
 
   const isGroupDropTarget =
     sortable.isDropTarget ||
@@ -2119,7 +2185,8 @@ export function SessionGroupSection({
           aria-hidden={isCollapsed}
           className="group-sessions-shell sidebar-collapse-shell"
           data-collapsed={String(isCollapsed)}
-          style={collapsibleStyle}
+          data-project-session-list-clipped={String(shouldClipProjectSessionList)}
+          style={sessionsShellStyle}
         >
           <div
             className="group-sessions sidebar-collapse-content"
@@ -2145,53 +2212,78 @@ export function SessionGroupSection({
             ) : null}
             {orderedSessionIds.length > 0 ? (
               <>
-                {visibleSessionIds.map((sessionId, sessionIndex) => (
-                  <Fragment key={sessionId}>
-                    {shouldRenderPinnedSessionDropGaps ? (
-                      <div
-                        aria-hidden
-                        className="pinned-session-drop-gap"
-                        data-active={String(
-                          pinnedSessionDropGapKey === getSessionDropGapKeyBefore(sessionId),
-                        )}
-                        data-edge={sessionIndex === 0 ? "start" : undefined}
+                {renderedSessionIds.map((sessionId, sessionIndex) => {
+                  const isProjectSessionListOverflowRow =
+                    shouldClipProjectSessionList && !visibleSessionIdSet.has(sessionId);
+                  const visibleSessionIndex = isProjectSessionListOverflowRow
+                    ? -1
+                    : visibleSessionIds.indexOf(sessionId);
+                  const sessionIdsBelow =
+                    visibleSessionIndex >= 0 ? visibleSessionIds.slice(visibleSessionIndex + 1) : [];
+
+                  return (
+                    <Fragment key={sessionId}>
+                      {shouldRenderPinnedSessionDropGaps ? (
+                        <div
+                          aria-hidden
+                          className="pinned-session-drop-gap"
+                          data-active={String(
+                            pinnedSessionDropGapKey === getSessionDropGapKeyBefore(sessionId),
+                          )}
+                          data-edge={sessionIndex === 0 ? "start" : undefined}
+                        />
+                      ) : null}
+                      <SortableSessionCard
+                        completionFlashNonce={completionFlashNonceBySessionId?.[sessionId] ?? 0}
+                        dragDisabled={
+                          isProjectSessionListOverflowRow ||
+                          draggingDisabled ||
+                          (sessionDraggingDisabled &&
+                            !(
+                              allowPinnedSessionReorder &&
+                              sessionsById[sessionId]?.isPinned === true
+                            ))
+                        }
+                        dropDisabled={
+                          isProjectSessionListOverflowRow ||
+                          draggingDisabled ||
+                          (sessionDraggingDisabled && !allowPinnedSessionReorder)
+                        }
+                        groupId={group.groupId}
+                        forcedDropPosition={
+                          allowPinnedSessionReorder || isProjectSessionListOverflowRow
+                            ? undefined
+                            : pinnedSessionDropIndicator?.kind === "session" &&
+                                pinnedSessionDropIndicator.groupId === group.groupId &&
+                                pinnedSessionDropIndicator.sessionId === sessionId
+                              ? pinnedSessionDropIndicator.position
+                              : undefined
+                        }
+                        index={sessionIndex}
+                        isProjectSessionListOverflowRow={isProjectSessionListOverflowRow}
+                        isSearchSelected={
+                          !isProjectSessionListOverflowRow &&
+                          selectedSearchSessionId === sessionId
+                        }
+                        onFocusRequested={onFocusRequested}
+                        sessionIdsBelow={sessionIdsBelow}
+                        sessionId={sessionId}
+                        showGroupDropTargetChrome={
+                          !allowPinnedSessionReorder && !isProjectSessionListOverflowRow
+                        }
+                        showGroupConnector={
+                          showSessionGroupConnector && !isProjectSessionListOverflowRow
+                        }
+                        showDropPositionIndicator={
+                          showSessionDropPositionIndicators &&
+                          !allowPinnedSessionReorder &&
+                          !isProjectSessionListOverflowRow
+                        }
+                        vscode={vscode}
                       />
-                    ) : null}
-                    <SortableSessionCard
-                      completionFlashNonce={completionFlashNonceBySessionId?.[sessionId] ?? 0}
-                      dragDisabled={
-                        draggingDisabled ||
-                        (sessionDraggingDisabled &&
-                          !(allowPinnedSessionReorder && sessionsById[sessionId]?.isPinned === true)
-                        )
-                      }
-                      dropDisabled={
-                        draggingDisabled || (sessionDraggingDisabled && !allowPinnedSessionReorder)
-                      }
-                      groupId={group.groupId}
-                      forcedDropPosition={
-                        allowPinnedSessionReorder
-                          ? undefined
-                          : pinnedSessionDropIndicator?.kind === "session" &&
-                              pinnedSessionDropIndicator.groupId === group.groupId &&
-                              pinnedSessionDropIndicator.sessionId === sessionId
-                            ? pinnedSessionDropIndicator.position
-                            : undefined
-                      }
-                      index={sessionIndex}
-                      isSearchSelected={selectedSearchSessionId === sessionId}
-                      onFocusRequested={onFocusRequested}
-                      sessionIdsBelow={visibleSessionIds.slice(sessionIndex + 1)}
-                      sessionId={sessionId}
-                      showGroupDropTargetChrome={!allowPinnedSessionReorder}
-                      showGroupConnector={showSessionGroupConnector}
-                      showDropPositionIndicator={
-                        showSessionDropPositionIndicators && !allowPinnedSessionReorder
-                      }
-                      vscode={vscode}
-                    />
-                  </Fragment>
-                ))}
+                    </Fragment>
+                  );
+                })}
                 {shouldRenderPinnedSessionDropGaps ? (
                   <div
                     aria-hidden
