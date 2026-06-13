@@ -16,29 +16,63 @@
 <!-- CDXC:Distribution 2026-06-10-21:05: Release notes for 4.1.5 must cover bundled-runtime hook reliability, Claude wake recovery for migrated sessions, sidebar sleep semantics, project-board Beads prefix alignment, Chromium zoom controls, Show less/Close menu settings, remote edit entry points, stale zmx wake activity suppression, and arm64-only macOS distribution without implementation-only bullets. -->
 <!-- CDXC:Distribution 2026-06-12-10:48: Release notes for 4.10.0 must summarize user-facing changes since the latest public 4.1.5 release, including native workspace/titlebar reliability, pane restore stability, CLI wrapper install safety, agent/mobile status updates, settings/sidebar polish, and packaged runtime validation while excluding implementation-only release mechanics. -->
 <!-- CDXC:Distribution 2026-06-12-12:13: The final 4.10.0 release notes also need the late native chrome and App Shots work: titlebar sidebar collapse, Resources daemon/recovery controls, tighter native modal sizing, App Shots targeting any focused/recent agent, and live-process identity repair for path-based agent executables. -->
+<!-- CDXC:Distribution 2026-06-12-20:17: The last five GitHub release bodies need shorter top-level bullets so every changelog detail remains present while the public release notes are easier to scan. -->
 
 ## 4.10.0 - 2026-06-12
 
-- Native workspace panes, direct project-tab titlebars, app modal windows, and toast routing are better integrated with the macOS host, reducing click-routing misses and titlebar/sidebar focus churn.
-- Passive sidebar terminal restore and workspace-pane materialization preserve split layouts instead of merging restored panes while the sidebar catches up.
-- Project Board and GitHub mode focus are steadier during passive refreshes, and directly mounted project tab titlebars route clicks to the intended workspace surface.
-- Worktree deletion can clean up related branch metadata from the UI, while prompt-editor capability routing and terminal Escape reporting reduce stale agent attention after dismissed work.
-- The titlebar adds a compact sidebar collapse button beside the project name, hides empty Tips unread sections, and makes Resources recovery clearer with Restart plus Reload App when gxserver is off.
-- Add Worktree, Git Commit, and other native child-window modals have tighter macOS sizing and padding so compact dialogs stay compact while commit review gains room on the right diff side.
-- The `ghostex` and `gx` CLI commands use gxserver session inventory, add a sidebar toggle, and install as wrapper commands outside `Ghostex.app` so macOS policy assessment does not kill direct app-bundled script execution.
-- Agent support expands with Kiro CLI and OMP hook sidecars, mobile session status ingestion, Claude bare `/rename` staging for first-prompt titles, path-based live-process identity repair, and a default Accept All mode setting.
-- App Shots now stage captured desktop context in the focused or recent live agent session instead of being Codex-only, and create the configured default prompt-agent session only when no agent target is available.
-- Sidebar and settings polish includes a collapse command/hotkey, Copy Session Details, Ghostty settings folded into the main settings sections, and Agent Hub file contents loaded only when opened.
-- Android, iOS, Electron, TUI, and zehn integrations are refreshed for gxserver status, shared app toasts, status colors, grouped history search, and iOS refresh indicators that stay tied to active refresh requests.
-- Packaged macOS runtime validation now checks the bundled code-server Node 22 runtime, ripgrep, T3 Code native helpers, Beads, and source-map pruning without executing sealed native modules during validation.
+- Native workspace panes are better integrated with the macOS host, reducing click-routing misses.
+- Direct project-tab titlebars, app modal windows, and toast routing are better integrated with the macOS host, reducing titlebar/sidebar focus churn.
+- Passive sidebar terminal restore preserves split layouts while the sidebar catches up.
+- Workspace-pane materialization preserves restored split layouts instead of merging panes while the sidebar catches up.
+- Project Board focus is steadier during passive refreshes.
+- GitHub mode focus is steadier during passive refreshes.
+- Directly mounted project tab titlebars route clicks to the intended workspace surface.
+- Worktree deletion can clean up related branch metadata from the UI.
+- Prompt-editor capability routing reduces stale agent attention after dismissed work.
+- Terminal Escape reporting reduces stale agent attention after dismissed work.
+- The titlebar adds a compact sidebar collapse button beside the project name.
+- Empty Tips unread sections stay hidden.
+- Resources recovery is clearer with Restart plus Reload App when gxserver is off.
+- Add Worktree, Git Commit, and other native child-window modals have tighter macOS sizing and padding.
+- Compact dialogs stay compact while commit review gains room on the right diff side.
+- The `ghostex` and `gx` CLI commands use gxserver session inventory.
+- The `ghostex` and `gx` CLI commands add a sidebar toggle.
+- The `ghostex` and `gx` CLI commands install as wrapper commands outside `Ghostex.app` so macOS policy assessment does not kill direct app-bundled script execution.
+- Agent support expands with Kiro CLI.
+- Agent support expands with OMP hook sidecars.
+- Agent support expands with mobile session status ingestion.
+- Agent support expands with Claude bare `/rename` staging for first-prompt titles.
+- Agent support expands with path-based live-process identity repair.
+- Agent support expands with a default Accept All mode setting.
+- App Shots now stage captured desktop context in the focused or recent live agent session instead of being Codex-only.
+- App Shots create the configured default prompt-agent session only when no agent target is available.
+- Sidebar and settings polish adds a collapse command and hotkey.
+- Sidebar and settings polish adds Copy Session Details.
+- Ghostty settings are folded into the main settings sections.
+- Agent Hub file contents load only when opened.
+- Android, iOS, Electron, TUI, and zehn integrations are refreshed for gxserver status.
+- Android, iOS, Electron, TUI, and zehn integrations are refreshed for shared app toasts.
+- Android, iOS, Electron, TUI, and zehn integrations are refreshed for status colors.
+- Android, iOS, Electron, TUI, and zehn integrations are refreshed for grouped history search.
+- iOS refresh indicators stay tied to active refresh requests.
+- Packaged macOS runtime validation checks the bundled code-server Node 22 runtime.
+- Packaged macOS runtime validation checks ripgrep, T3 Code native helpers, Beads, and source-map pruning.
+- Packaged macOS runtime validation no longer executes sealed native modules during validation.
 
 ## 4.1.5 - 2026-06-10
 
-- Installed agent hooks, gxserver resume lookup, native sidebar state helpers, and Electron command-pane updates now run through Ghostex-owned bundled runtimes instead of `/usr/bin/python3` or user-installed Node interpreters, so hook sidecars and command status updates keep working on machines without Python.
-- Claude sessions migrated from Ghostex 3.6 can wake more reliably because gxserver repair backfills transcript paths and saved resume commands, and wake resolves Claude's real session id before running `claude --resume` instead of trusting a sidebar title.
-- Context-menu Sleep no longer parks a row as sleeping while the zmx provider is still alive; Wake and intentional close flows still show immediate sleeping feedback until the host snapshot confirms the same state.
-- Project board ticket creation reconciles each project's Beads issue prefix before mutations, and local board actions send both project id and project path so gxserver can reject stale URL/id mismatches.
-- The sidebar adds a configurable Show less row count, a Close menu visibility setting, and remote-session edit entry points for quicker day-to-day session management.
+- Installed agent hooks now run through Ghostex-owned bundled runtimes instead of `/usr/bin/python3` or user-installed Node interpreters.
+- gxserver resume lookup, native sidebar state helpers, and Electron command-pane updates now run through Ghostex-owned bundled runtimes.
+- Hook sidecars and command status updates keep working on machines without Python.
+- Claude sessions migrated from Ghostex 3.6 can wake more reliably because gxserver repair backfills transcript paths and saved resume commands.
+- Wake resolves Claude's real session id before running `claude --resume` instead of trusting a sidebar title.
+- Context-menu Sleep no longer parks a row as sleeping while the zmx provider is still alive.
+- Wake and intentional close flows still show immediate sleeping feedback until the host snapshot confirms the same state.
+- Project board ticket creation reconciles each project's Beads issue prefix before mutations.
+- Local board actions send both project id and project path so gxserver can reject stale URL/id mismatches.
+- The sidebar adds a configurable Show less row count.
+- The sidebar adds a Close menu visibility setting.
+- The sidebar adds remote-session edit entry points for quicker day-to-day session management.
 - Chromium-embedded panes support standard zoom in, zoom out, and reset shortcuts from the toolbar.
 - Waking zmx sessions no longer replays stale working/attention activity from the pre-sleep snapshot.
 - Project and Kanban flows require Ghostex's bundled Beads CLI and ignore unrelated `bd` binaries already on PATH.
@@ -46,39 +80,82 @@
 
 ## 4.1.0 - 2026-06-09
 
-- Remote machines can now save SSH passwords in macOS Keychain, use them for SSH/SCP/tunnel connections without storing raw passwords in settings, and show clearer saved-password state and authentication guidance.
-- Agent hook and session-state updates now reject cross-wired agent identities, reducing cases where one agent terminal could inherit another row's title, status, completion state, or resume identity.
-- Ctrl+G prompt editing and Monaco prompt-editor dismissal return focus to the correct terminal more reliably, including sessions launched through gxserver global references.
-- Sidebar presentation updates apply smaller live patches for session groups and HUD chrome, reducing sidebar refresh churn and terminal focus steals while sessions are added, removed, reordered, or updated.
-- Session context menus are safer and cleaner: Copy Resume and Copy Attach Command are hidden by default behind an explicit setting, and Sleep Below / Close Below now target the rendered rows beneath the clicked card across project groups.
-- Remote sections, Recent Projects search, active sidebar search, titlebar resource copy, command icons, tag menus, drag handles, and sidebar panel spacing received visual polish for denser daily use.
-- The Ghostex TUI now uses a neutral gray-blue default theme, clearer Help/Hotkeys and Quit Ghostex labels, and broader built-in agent labels so restored desktop sessions are easier to recognize from the terminal switcher.
-- Embedded code-server packaging is more reliable across Apple Silicon and Intel builds, including target-architecture ripgrep materialization and authenticated GitHub artifact fetches during release builds.
+- Remote machines can now save SSH passwords in macOS Keychain.
+- Remote machines can use saved SSH passwords for SSH, SCP, and tunnel connections without storing raw passwords in settings.
+- Remote machines show clearer saved-password state and authentication guidance.
+- Agent hook updates now reject cross-wired agent identities.
+- Session-state updates now reject cross-wired agent identities.
+- Cross-wired identity protection reduces cases where one agent terminal could inherit another row's title, status, completion state, or resume identity.
+- Ctrl+G prompt editing returns focus to the correct terminal more reliably.
+- Monaco prompt-editor dismissal returns focus to the correct terminal more reliably.
+- Prompt-editor focus repair includes sessions launched through gxserver global references.
+- Sidebar presentation updates apply smaller live patches for session groups.
+- Sidebar presentation updates apply smaller live patches for HUD chrome.
+- Smaller sidebar live patches reduce refresh churn and terminal focus steals while sessions are added, removed, reordered, or updated.
+- Session context menus hide Copy Resume by default behind an explicit setting.
+- Session context menus hide Copy Attach Command by default behind an explicit setting.
+- Sleep Below and Close Below now target the rendered rows beneath the clicked card across project groups.
+- Remote sections received visual polish for denser daily use.
+- Recent Projects search received visual polish for denser daily use.
+- Active sidebar search received visual polish for denser daily use.
+- Titlebar resource copy received visual polish for denser daily use.
+- Command icons, tag menus, drag handles, and sidebar panel spacing received visual polish for denser daily use.
+- The Ghostex TUI now uses a neutral gray-blue default theme.
+- The Ghostex TUI has clearer Help/Hotkeys and Quit Ghostex labels.
+- The Ghostex TUI has broader built-in agent labels so restored desktop sessions are easier to recognize from the terminal switcher.
+- Embedded code-server packaging is more reliable across Apple Silicon and Intel builds.
+- Embedded code-server packaging includes target-architecture ripgrep materialization.
+- Embedded code-server packaging includes authenticated GitHub artifact fetches during release builds.
 - The Android download badge now points at the 4.1.0 release APK.
 
 ## 4.0.3 - 2026-06-08
 
-- Remote session and group clicks now open a local Ghostty terminal that SSH-attaches to the selected remote session with the stable `ghostex attach` contract, while Copy Attach Command still copies the SSH command for external terminals.
+- Remote session and group clicks now open a local Ghostty terminal that SSH-attaches to the selected remote session with the stable `ghostex attach` contract.
+- Copy Attach Command still copies the SSH command for external terminals.
 - Remote attach carrier terminals stay hidden from the local Quick section, so focus and active styling remain on the owning remote machine row.
-- Remote machine setup and gxserver request failures now show more actionable stage-specific messages for SSH, install, token, tunnel, streaming, and transport problems instead of raw loopback or WebKit errors.
-- Remote settings are easier to scan, with compact saved-machine cards, inline Tailscale setup help, and clearer optional SSH identity-file guidance.
-- The Quick section header can launch the selected agent directly, with the same agent picker used by project headers and new Quick agent chats kept projectless.
-- The titlebar now disables GitHub mode when the active project has no GitHub remote and disables GitHub/Kanban mode for Quick sessions.
-- Embedded code-server editor panes now use Ghostex-owned bundled settings by default, start with the Dark 2026 theme on new profiles, and keep local VS Code settings as an explicit opt-in.
-- Sparkle update checks repeat quietly while Ghostex is running, the titlebar update button can appear on first render, and update download/extraction progress windows stay hidden while the release notes and relaunch prompts remain available.
+- Remote machine setup failures now show more actionable stage-specific messages for SSH, install, token, tunnel, streaming, and transport problems instead of raw loopback or WebKit errors.
+- gxserver request failures now show more actionable stage-specific messages for SSH, install, token, tunnel, streaming, and transport problems instead of raw loopback or WebKit errors.
+- Remote settings are easier to scan with compact saved-machine cards.
+- Remote settings include inline Tailscale setup help.
+- Remote settings include clearer optional SSH identity-file guidance.
+- The Quick section header can launch the selected agent directly.
+- The Quick section header uses the same agent picker as project headers.
+- New Quick agent chats stay projectless.
+- The titlebar now disables GitHub mode when the active project has no GitHub remote.
+- The titlebar now disables GitHub and Kanban mode for Quick sessions.
+- Embedded code-server editor panes now use Ghostex-owned bundled settings by default.
+- Embedded code-server editor panes start with the Dark 2026 theme on new profiles.
+- Embedded code-server editor panes keep local VS Code settings as an explicit opt-in.
+- Sparkle update checks repeat quietly while Ghostex is running.
+- The titlebar update button can appear on first render.
+- Update download and extraction progress windows stay hidden while the release notes and relaunch prompts remain available.
 - The native sidebar/workarea divider keeps its resize cursor and visible separator aligned during hover and live resizing.
-- Installed macOS app bundles are smaller because release packaging prunes duplicate Beads payloads, wrong-architecture node-pty prebuilds, and T3 Code source maps before notarization.
+- Installed macOS app bundles are smaller because release packaging prunes duplicate Beads payloads before notarization.
+- Installed macOS app bundles are smaller because release packaging prunes wrong-architecture node-pty prebuilds before notarization.
+- Installed macOS app bundles are smaller because release packaging prunes T3 Code source maps before notarization.
 
 ## 4.0.2 - 2026-06-08
 
-- Installed macOS builds now package the full embedded code-server runtime, reuse its Node 22 binary for gxserver, include the bundled Beads CLI, and validate that packaged runtime during release builds.
-- Source tab packaging is more reliable because the embedded VS Code runtime carries its ripgrep helper files and cleans up temporary build metadata after packaging.
-- Terminal image paste can convert clipboard images into previewable Markdown links with Cmd+V or Ctrl+V, and Settings -> Terminal Behavior now includes a Paste previewable images toggle for users who want normal clipboard behavior.
-- gxserver presentation updates now carry stable attention event IDs, so macOS can play completion sounds and notifications once for fresh attention events without replaying them during startup or stream recovery.
-- Command-pane completions keep using the action completion sound path and write status updates through per-process temp files, reducing missed completion sounds during concurrent status updates.
-- T3 Code runtime startup is coalesced while Project Editor panes are retargeting, reducing duplicate startup probes and layout churn when opening, closing, or switching embedded T3 panes.
+- Installed macOS builds now package the full embedded code-server runtime.
+- Installed macOS builds reuse the embedded code-server Node 22 binary for gxserver.
+- Installed macOS builds include the bundled Beads CLI.
+- Installed macOS builds validate the packaged runtime during release builds.
+- Source tab packaging is more reliable because the embedded VS Code runtime carries its ripgrep helper files.
+- Source tab packaging cleans up temporary build metadata after packaging.
+- Terminal image paste can convert clipboard images into previewable Markdown links with Cmd+V or Ctrl+V.
+- Settings -> Terminal Behavior now includes a Paste previewable images toggle for users who want normal clipboard behavior.
+- gxserver presentation updates now carry stable attention event IDs.
+- macOS can play completion sounds and notifications once for fresh attention events.
+- Completion sounds and notifications do not replay during startup or stream recovery.
+- Command-pane completions keep using the action completion sound path.
+- Command-pane completions write status updates through per-process temp files.
+- Command-pane completions reduce missed completion sounds during concurrent status updates.
+- T3 Code runtime startup is coalesced while Project Editor panes are retargeting.
+- T3 Code runtime startup reduces duplicate startup probes.
+- T3 Code runtime startup reduces layout churn when opening, closing, or switching embedded T3 panes.
 - Git agent workflows no longer pin duplicate persistent "running" toasts when the visible agent terminal already shows the workflow progress.
-- Ghostex Android auto-scroll now follows new output only when the terminal is already near the bottom, so users can scroll through history without selecting text first.
+- Ghostex Android auto-scroll now follows new output only from the actual live bottom row.
+- Scrolling up even one row keeps history anchored without selecting text first.
 
 ## 4.0.1 - 2026-06-08
 
