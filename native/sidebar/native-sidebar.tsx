@@ -2705,6 +2705,12 @@ async function refreshGxserverStartupSnapshot(reason: string): Promise<boolean> 
       `startupSnapshot:${reason}`,
     );
     const gxserverSharedStateSync = syncSidebarSharedStateFromGxserverSnapshot(snapshot);
+    const stalePrune = snapshot.presentation
+      ? pruneStaleGxserverLocalSessionsFromPresentation(
+          snapshot.presentation,
+          `startupSnapshot:${reason}`,
+        )
+      : undefined;
     if (snapshot.presentation) {
       applyGxserverPresentationSessionsToNativePaneChrome(snapshot.presentation.sessions, "startup-snapshot");
     }
@@ -2719,6 +2725,7 @@ async function refreshGxserverStartupSnapshot(reason: string): Promise<boolean> 
       },
       reason,
       serverId: snapshot.health.serverId,
+      stalePrune,
     });
     startGxserverPresentationSubscription();
     publish();
@@ -2932,6 +2939,132 @@ function pruneLocalFirstPresentationHides(snapshot: GxserverPresentationSnapshot
   }
 }
 
+type StaleGxserverLocalSessionPruneResult = {
+  commandSessionCount: number;
+  projectCount: number;
+  workspaceSessionCount: number;
+};
+
+function pruneStaleGxserverLocalSessionsFromPresentation(
+  presentation: GxserverPresentationSnapshot,
+  reason: string,
+): StaleGxserverLocalSessionPruneResult {
+  const presentationSessionKeys = new Set(
+    presentation.sessions.map((session) =>
+      localFirstPresentationSessionKey(session.projectId, session.sessionId),
+    ),
+  );
+  let commandSessionCount = 0;
+  let projectCount = 0;
+  let workspaceSessionCount = 0;
+  const prunedSessions: Array<{ projectId: string; sessionId: string }> = [];
+  const nextProjects = projects.map((project) => {
+    if (!GXSERVER_CANONICAL_PROJECT_ID_PATTERN.test(project.projectId)) {
+      return project;
+    }
+    const shouldPruneSession = (session: SessionRecord): boolean =>
+      session.kind === "terminal" &&
+      isCanonicalGxserverProjectSession(project.projectId, session.sessionId) &&
+      !presentationSessionKeys.has(
+        localFirstPresentationSessionKey(project.projectId, session.sessionId),
+      );
+    let nextWorkspace = project.workspace;
+    let nextProject = project;
+    const staleWorkspaceSessionIds = project.workspace.groups.flatMap((group) =>
+      group.snapshot.sessions.filter(shouldPruneSession).map((session) => session.sessionId),
+    );
+    for (const sessionId of staleWorkspaceSessionIds) {
+      nextWorkspace = removeSessionInSimpleWorkspace(nextWorkspace, sessionId).snapshot;
+      prunedSessions.push({ projectId: project.projectId, sessionId });
+    }
+    if (staleWorkspaceSessionIds.length > 0) {
+      workspaceSessionCount += staleWorkspaceSessionIds.length;
+      nextProject = { ...nextProject, workspace: nextWorkspace };
+    }
+
+    const staleCommandSessionIds = project.commandsPanel.sessions
+      .filter(shouldPruneSession)
+      .map((session) => session.sessionId);
+    if (staleCommandSessionIds.length > 0) {
+      const staleCommandSessionIdSet = new Set(staleCommandSessionIds);
+      commandSessionCount += staleCommandSessionIds.length;
+      for (const sessionId of staleCommandSessionIds) {
+        prunedSessions.push({ projectId: project.projectId, sessionId });
+      }
+      nextProject = {
+        ...nextProject,
+        commandsPanel: normalizeLiveCommandsPanelState(
+          {
+            ...nextProject.commandsPanel,
+            sessions: nextProject.commandsPanel.sessions.filter(
+              (session) => !staleCommandSessionIdSet.has(session.sessionId),
+            ),
+          },
+          { defaultHeightPx: settings.commandsPanelDefaultHeightPx },
+        ),
+      };
+    }
+
+    if (
+      staleWorkspaceSessionIds.length > 0 ||
+      staleCommandSessionIds.length > 0
+    ) {
+      projectCount += 1;
+    }
+    return nextProject;
+  });
+
+  if (prunedSessions.length === 0) {
+    return { commandSessionCount: 0, projectCount: 0, workspaceSessionCount: 0 };
+  }
+
+  /*
+  CDXC:GxserverPresentation 2026-06-13-12:05:
+  Native pane tabs are a local placement cache, but canonical P/G terminal
+  identity belongs to gxserver. After every authoritative presentation snapshot
+  or delta, remove local terminal records whose gxserver row is no longer
+  presented so AppKit cannot render a wakeable sleeping tab that would resume a
+  deleted session or visually fall through to another tab.
+  */
+  projects = nextProjects;
+  for (const { projectId, sessionId } of prunedSessions) {
+    clearStaleGxserverLocalSessionRuntime(projectId, sessionId, reason);
+  }
+  writeStoredProjects(`pruneStaleGxserverLocalSessions:${reason}`);
+  appendSidebarRefreshDebugLog("nativeSidebar.gxserver.staleLocalSessionsPruned", {
+    commandSessionCount,
+    projectCount,
+    reason,
+    workspaceSessionCount,
+  });
+  return { commandSessionCount, projectCount, workspaceSessionCount };
+}
+
+function clearStaleGxserverLocalSessionRuntime(
+  projectId: string,
+  sessionId: string,
+  reason: string,
+): void {
+  const nativeSessionId = forgetNativeSessionMappingForProject(projectId, sessionId);
+  clearNativeSidebarCommandSessionBySessionId(sessionId);
+  terminalStateById.delete(sessionId);
+  forgetRemoteAttachLocalSessionForSidebarSession(createCombinedProjectSessionId(projectId, sessionId));
+  clearSettledTerminalTitleSync(sessionId);
+  forgetProviderSessionState(projectId, sessionId);
+  pendingNativeTerminalStartupTextBySessionId.delete(sessionId);
+  nativeActivitySuppressedUntilBySessionId.delete(sessionId);
+  nativeWorkingStartedAtBySessionId.delete(sessionId);
+  clearNativeSessionAttentionTracking(sessionId);
+  nativeAttentionNotificationLastSentAtBySessionId.delete(sessionId);
+  clearDelayedSendTimer(sessionId, projectId);
+  postNative({ sessionId: nativeSessionId, type: "closeTerminal" });
+  appendSidebarRefreshDebugLog("nativeSidebar.gxserver.staleLocalSessionRuntimeCleared", {
+    projectId,
+    reason,
+    sessionId,
+  });
+}
+
 function applyGxserverPresentationSnapshot(snapshot: GxserverPresentationSnapshot, reason: string): void {
   if (!gxserverStartupSnapshot) {
     return;
@@ -2942,6 +3075,10 @@ function applyGxserverPresentationSnapshot(snapshot: GxserverPresentationSnapsho
     ...gxserverStartupSnapshot,
     presentation: nextSnapshot,
   };
+  const stalePrune = pruneStaleGxserverLocalSessionsFromPresentation(
+    nextSnapshot,
+    `snapshot:${reason}`,
+  );
   applyGxserverPresentationSessionsToNativePaneChrome(nextSnapshot.sessions, reason);
   appendSidebarRefreshDebugLog("nativeSidebar.gxserver.presentationSnapshot.applied", {
     groupCount: nextSnapshot.groups.length,
@@ -2949,6 +3086,7 @@ function applyGxserverPresentationSnapshot(snapshot: GxserverPresentationSnapsho
     reason,
     revision: nextSnapshot.revision,
     sessionCount: nextSnapshot.sessions.length,
+    stalePrune,
   });
   publish();
 }
@@ -2978,6 +3116,10 @@ function applyGxserverPresentationDelta(delta: GxserverPresentationDelta, revisi
     presentation: nextPresentation,
     projects: nextProjects,
   };
+  const stalePrune = pruneStaleGxserverLocalSessionsFromPresentation(
+    nextPresentation,
+    `delta:${delta.type}`,
+  );
   const gxserverProjectCacheSync =
     delta.type === "projectAdded" || delta.type === "projectUpdated"
       ? syncSidebarSharedProjectCacheFromGxserverProjects(
@@ -2997,6 +3139,7 @@ function applyGxserverPresentationDelta(delta: GxserverPresentationDelta, revisi
     gxserverProjectCacheSync,
     revision,
     sessionCount: nextPresentation.sessions.length,
+    stalePrune,
   });
   if (!lastPublishedSidebarMessage) {
     publish();
@@ -23127,8 +23270,8 @@ function runNativeHotkeyAction(actionId: ghostexHotkeyActionId, source: "dom" | 
       return;
     case "openCommandPalette":
       /**
-       * CDXC:CommandPalette 2026-05-15-20:38:
-       * Native Cmd+K should reveal the full-window app-modal command palette
+       * CDXC:CommandPalette 2026-06-13-10:26:
+       * Native Cmd+Shift+P should reveal the full-window app-modal command palette
        * from terminal focus without opening the Commands panel or depending on
        * a sidebar-local DOM render path.
        */

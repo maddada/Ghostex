@@ -70,7 +70,11 @@ export function applySessionStateEvent(
     agentSessionPath: params.agentSessionPath,
     startupText: params.startupText,
   });
-  const launchAgentMismatch = resolveSessionLaunchAgentMismatch(session, observedIdentity.agentId);
+  const identityUpdateSource = params.identityUpdateSource ?? "passive";
+  const launchAgentMismatch =
+    identityUpdateSource === "live-process"
+      ? undefined
+      : resolveSessionLaunchAgentMismatch(session, observedIdentity.agentId);
   if (launchAgentMismatch) {
     /*
     CDXC:GxserverSessionIdentity 2026-06-09-21:59:
@@ -86,7 +90,6 @@ export function applySessionStateEvent(
   const currentIdentity = resolveStoredSessionIdentity(session);
   const resolvedIdentity = mergeObservedSessionIdentity(observedIdentity, currentIdentity);
   let identityConflict: GxserverSessionIdentityConflict | undefined;
-  const identityUpdateSource = params.identityUpdateSource ?? "passive";
   const identity = resolveAllowedSessionIdentity({
     currentIdentity,
     currentSession: session,
@@ -117,6 +120,7 @@ export function applySessionStateEvent(
     currentIdentity,
     identity,
     runtimeSettings: session.runtimeSettings,
+    source: identityUpdateSource,
   });
   runtimeSettings = {
     ...runtimeSettings,
@@ -167,6 +171,7 @@ export function applySessionStateEvent(
     runtimeSettings.agentId !== session.runtimeSettings.agentId ||
     runtimeSettings.agentSessionId !== session.runtimeSettings.agentSessionId ||
     runtimeSettings.agentSessionPath !== session.runtimeSettings.agentSessionPath ||
+    runtimeSettings.launchAgentId !== session.runtimeSettings.launchAgentId ||
     runtimeSettings.firstPromptTitleGenerationAgent !==
       session.runtimeSettings.firstPromptTitleGenerationAgent ||
     runtimeSettings.firstPromptTitleGenerationCommand !==
@@ -318,6 +323,7 @@ function applySessionIdentityRuntimeSettings(input: {
   currentIdentity: GxserverResolvedSessionIdentity;
   identity: GxserverResolvedSessionIdentity;
   runtimeSettings: Record<string, unknown>;
+  source: GxserverSessionIdentityUpdateSource;
 }): Record<string, unknown> {
   const runtimeSettings = { ...input.runtimeSettings };
   const currentAgentId = normalizeAgentId(input.currentIdentity.agentId);
@@ -327,6 +333,13 @@ function applySessionIdentityRuntimeSettings(input: {
   const activityOwnerChanged = Boolean(nextAgentId && activityAgentId && activityAgentId !== nextAgentId);
   if (input.identity.agentId) {
     runtimeSettings.agentName = input.identity.agentId;
+  }
+  if (input.source === "live-process" && nextAgentId) {
+    /*
+    CDXC:GxserverSessionIdentity 2026-06-13-09:08:
+    A real live process switch inside a terminal must be able to move a session from Codex to Claude or back. Once gxserver observes the actual agent executable, update the launch lock so later hooks reinforce the live process instead of resurrecting stale startup metadata.
+    */
+    runtimeSettings.launchAgentId = nextAgentId;
   }
   if (input.identity.agentSessionId) {
     runtimeSettings.agentSessionId = input.identity.agentSessionId;

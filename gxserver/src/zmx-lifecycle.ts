@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type {
   GxserverProviderKillResult,
   GxserverProviderLifecycleState,
@@ -10,10 +10,10 @@ import type {
   GxserverZmxSessionName,
 } from "../protocol/index.js";
 import {
-  parseAgentResumeIdentity,
+  normalizeCodexSessionId,
+  normalizeText,
   type GxserverResolvedSessionIdentity,
 } from "./session-presentation/identity.js";
-import { inferAgentIdFromCommand } from "./session-presentation/launch-identity.js";
 
 export interface GxserverZmxCommandResult {
   exitCode: number;
@@ -796,6 +796,53 @@ interface GxserverProcessRow {
   ppid: number;
 }
 
+interface GxserverProcessIdentityCandidate {
+  confidence: number;
+  depth: number;
+  identity: GxserverZmxProcessIdentity;
+}
+
+interface GxserverProcessIdentityObservation {
+  confidence: number;
+  identity: GxserverZmxProcessIdentity;
+}
+
+const GXSERVER_PROCESS_COMMAND_PREFIX_TOKEN_LIMIT = 12;
+const GXSERVER_DIRECT_AGENT_PROCESS_CONFIDENCE = 300;
+const GXSERVER_WRAPPED_AGENT_PROCESS_CONFIDENCE = 275;
+const GXSERVER_AGENT_SESSION_ID_CONFIDENCE_BONUS = 25;
+const GXSERVER_AGENT_PROCESS_WRAPPER_EXECUTABLES = new Set(["bun", "node"]);
+const GXSERVER_AGENT_PROCESS_HELPER_EXECUTABLES = new Set([
+  "gte",
+  "node_repl",
+  "prompt-editor",
+  "skycomputeruseclient",
+]);
+const GXSERVER_AGENT_PROCESS_HELPER_COMMAND_MARKERS = [
+  "skycomputeruseclient",
+  "/node_repl",
+  " node_repl",
+];
+const GXSERVER_AGENT_PROCESS_EXECUTABLES = new Map<string, string>([
+  ["agy", "antigravity"],
+  ["amp", "amp"],
+  ["claude", "claude"],
+  ["codebuddy", "codebuddy"],
+  ["codex", "codex"],
+  ["copilot", "copilot"],
+  ["cursor-agent", "cursor"],
+  ["droid", "droid"],
+  ["gemini", "gemini"],
+  ["grok", "grok"],
+  ["hermes", "hermes-agent"],
+  ["kiro-cli", "kiro"],
+  ["omp", "omp"],
+  ["opencode", "opencode"],
+  ["pi", "pi"],
+  ["qodercli", "qoder"],
+  ["rovodev", "rovodev"],
+]);
+
 function parseProcessRows(psOutput: string): GxserverProcessRow[] {
   const rows: GxserverProcessRow[] = [];
   for (const line of psOutput.split(/\r?\n/gu)) {
@@ -830,7 +877,7 @@ function resolveProcessTreeAgentIdentity(
   const rowsByPid = new Map<number, GxserverProcessRow>(
     processes.map((processRow) => [processRow.pid, processRow] as const),
   );
-  const candidates: Array<{ depth: number; identity: GxserverZmxProcessIdentity }> = [];
+  const candidates: GxserverProcessIdentityCandidate[] = [];
   const queue: Array<{ depth: number; pid: number }> = [{ depth: 0, pid: rootPid }];
   const seen = new Set<number>();
   for (let index = 0; index < queue.length; index += 1) {
@@ -841,9 +888,9 @@ function resolveProcessTreeAgentIdentity(
     seen.add(item.pid);
     const row = rowsByPid.get(item.pid);
     if (row) {
-      const identity = resolveProcessCommandAgentIdentity(row.command);
-      if (identity?.agentId) {
-        candidates.push({ depth: item.depth, identity });
+      const observation = resolveProcessCommandAgentIdentity(row.command);
+      if (observation?.identity.agentId) {
+        candidates.push({ depth: item.depth, ...observation });
       }
     }
     for (const child of childrenByParentPid.get(item.pid) ?? []) {
@@ -851,19 +898,220 @@ function resolveProcessTreeAgentIdentity(
     }
   }
   candidates.sort((left, right) => {
+    const confidence = scoreProcessIdentityCandidate(right) - scoreProcessIdentityCandidate(left);
+    if (confidence) {
+      return confidence;
+    }
     const idScore = Number(Boolean(right.identity.agentSessionId)) - Number(Boolean(left.identity.agentSessionId));
     return idScore || right.depth - left.depth;
   });
   return candidates[0]?.identity;
 }
 
-function resolveProcessCommandAgentIdentity(command: string): GxserverZmxProcessIdentity | undefined {
-  const resumeIdentity = parseAgentResumeIdentity(command);
-  if (resumeIdentity.agentId) {
-    return resumeIdentity;
+function scoreProcessIdentityCandidate(candidate: GxserverProcessIdentityCandidate): number {
+  return candidate.confidence + (candidate.identity.agentSessionId ? GXSERVER_AGENT_SESSION_ID_CONFIDENCE_BONUS : 0);
+}
+
+function resolveProcessCommandAgentIdentity(command: string): GxserverProcessIdentityObservation | undefined {
+  const tokens = splitProcessCommandPrefix(command, GXSERVER_PROCESS_COMMAND_PREFIX_TOKEN_LIMIT);
+  if (tokens.length === 0 || shouldIgnoreProcessCommandForAgentIdentity(command, tokens)) {
+    return undefined;
   }
-  const agentId = inferAgentIdFromCommand(command);
-  return agentId ? { agentId } : undefined;
+  /*
+  CDXC:GxserverSessionIdentity 2026-06-13-09:08:
+  Live zmx process identity must come from actual agent executables, not full descendant command text. Codex helper clients can include serialized prompts containing words such as "claude"; matching those payloads relabels Codex sessions for every client.
+  */
+  return (
+    resolveAgentProcessInvocation(tokens, 0, GXSERVER_DIRECT_AGENT_PROCESS_CONFIDENCE) ??
+    resolveWrappedAgentProcessInvocation(tokens)
+  );
+}
+
+function shouldIgnoreProcessCommandForAgentIdentity(command: string, tokens: readonly string[]): boolean {
+  const executableName = normalizeProcessExecutableName(tokens[0]);
+  if (executableName && GXSERVER_AGENT_PROCESS_HELPER_EXECUTABLES.has(executableName)) {
+    return true;
+  }
+  const lowerCommand = command.toLowerCase();
+  return GXSERVER_AGENT_PROCESS_HELPER_COMMAND_MARKERS.some((marker) => lowerCommand.includes(marker));
+}
+
+function resolveWrappedAgentProcessInvocation(tokens: readonly string[]): GxserverProcessIdentityObservation | undefined {
+  const executableName = normalizeProcessExecutableName(tokens[0]);
+  if (executableName === "env") {
+    const invocationIndex = findEnvWrappedCommandIndex(tokens);
+    if (invocationIndex !== undefined) {
+      return resolveAgentProcessInvocation(tokens, invocationIndex, GXSERVER_WRAPPED_AGENT_PROCESS_CONFIDENCE);
+    }
+  }
+  if (!executableName || !GXSERVER_AGENT_PROCESS_WRAPPER_EXECUTABLES.has(executableName)) {
+    return undefined;
+  }
+  for (let index = 1; index < Math.min(tokens.length, 8); index += 1) {
+    const observation = resolveAgentProcessInvocation(tokens, index, GXSERVER_WRAPPED_AGENT_PROCESS_CONFIDENCE);
+    if (observation) {
+      return observation;
+    }
+  }
+  return undefined;
+}
+
+function resolveAgentProcessInvocation(
+  tokens: readonly string[],
+  executableIndex: number,
+  confidence: number,
+): GxserverProcessIdentityObservation | undefined {
+  const agentId = inferAgentIdFromProcessExecutable(tokens, executableIndex);
+  if (!agentId) {
+    return undefined;
+  }
+  const agentSessionId = extractAgentProcessSessionId(agentId, tokens, executableIndex);
+  return {
+    confidence,
+    identity: {
+      agentId,
+      ...(agentSessionId ? { agentSessionId } : {}),
+    },
+  };
+}
+
+function inferAgentIdFromProcessExecutable(tokens: readonly string[], executableIndex: number): string | undefined {
+  const executableName = normalizeProcessExecutableName(tokens[executableIndex]);
+  if (!executableName) {
+    return undefined;
+  }
+  if (
+    executableName === "acli" &&
+    normalizeProcessToken(tokens[executableIndex + 1]) === "rovodev" &&
+    normalizeProcessToken(tokens[executableIndex + 2]) === "run"
+  ) {
+    return "rovodev";
+  }
+  return GXSERVER_AGENT_PROCESS_EXECUTABLES.get(executableName);
+}
+
+function extractAgentProcessSessionId(
+  agentId: string,
+  tokens: readonly string[],
+  executableIndex: number,
+): string | undefined {
+  const args = tokens.slice(executableIndex + 1);
+  if (agentId === "codex") {
+    for (let index = 0; index < args.length - 1; index += 1) {
+      const token = normalizeProcessToken(args[index]);
+      if (token === "resume" || token === "fork") {
+        return normalizeAgentProcessSessionId(agentId, args[index + 1]);
+      }
+    }
+    return undefined;
+  }
+  if (agentId === "claude" || agentId === "cursor") {
+    return readAgentProcessFlagValue(agentId, args, "--resume");
+  }
+  if (agentId === "opencode") {
+    return readAgentProcessFlagValue(agentId, args, "--session") ?? readAgentProcessFlagValue(agentId, args, "-s");
+  }
+  if (agentId === "pi" || agentId === "omp") {
+    return readAgentProcessFlagValue(agentId, args, "--session");
+  }
+  if (agentId === "kiro") {
+    return readAgentProcessFlagValue(agentId, args, "--resume-id");
+  }
+  return undefined;
+}
+
+function readAgentProcessFlagValue(
+  agentId: string,
+  args: readonly string[],
+  flag: string,
+): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === flag) {
+      return normalizeAgentProcessSessionId(agentId, args[index + 1]);
+    }
+    if (arg?.startsWith(`${flag}=`)) {
+      return normalizeAgentProcessSessionId(agentId, arg.slice(flag.length + 1));
+    }
+  }
+  return undefined;
+}
+
+function normalizeAgentProcessSessionId(agentId: string, value: unknown): string | undefined {
+  const normalized = normalizeText(value)?.replace(/[;&|]+$/u, "");
+  if (!normalized) {
+    return undefined;
+  }
+  return agentId === "codex" ? (normalizeCodexSessionId(normalized) ?? normalized) : normalized;
+}
+
+function findEnvWrappedCommandIndex(tokens: readonly string[]): number | undefined {
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token || token.startsWith("-") || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(token)) {
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function splitProcessCommandPrefix(command: string, maxTokens: number): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+  for (const char of command) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/u.test(char)) {
+      if (current) {
+        tokens.push(current);
+        if (tokens.length >= maxTokens) {
+          return tokens;
+        }
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current && tokens.length < maxTokens) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+function normalizeProcessExecutableName(token: unknown): string | undefined {
+  const normalized = normalizeProcessToken(token);
+  if (!normalized) {
+    return undefined;
+  }
+  return basename(normalized).replace(/\.(?:cjs|cmd|exe|js|mjs|ts)$/u, "");
+}
+
+function normalizeProcessToken(token: unknown): string | undefined {
+  const text = normalizeText(token)?.toLowerCase();
+  return text?.replace(/^["'`]+|["'`]+$/gu, "");
 }
 
 export function buildGxserverZmxChildEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {

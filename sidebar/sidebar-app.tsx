@@ -12,6 +12,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconCheck,
+  IconCommand,
   IconCopy,
   IconDownload,
   IconEdit,
@@ -2818,11 +2819,11 @@ export function SidebarApp({
 
   const openCommandPalette = () => {
     /**
-     * CDXC:CommandPalette 2026-05-16-20:51:
-     * Cmd+K should open the full-window app-modal command palette, matching
-     * Settings instead of rendering a dialog inside the narrow sidebar. Close
-     * transient sidebar drawers first so the centered palette is the only
-     * active command surface.
+     * CDXC:CommandPalette 2026-06-13-10:26:
+     * Cmd+Shift+P should open the full-window app-modal command palette,
+     * matching Settings instead of rendering a dialog inside the narrow
+     * sidebar. Close transient sidebar drawers first so the centered palette is
+     * the only active command surface.
      */
     setIsOverflowMenuOpen(false);
     setIsPinnedPromptsOpen(false);
@@ -3296,11 +3297,15 @@ export function SidebarApp({
   };
 
   const topControlOptions = {
+    commandPaletteMenuLabel: getCommandPaletteOverflowMenuLabel(
+      normalizeghostexHotkeySettings(settings?.hotkeys).openCommandPalette ?? "",
+    ),
     isOverflowMenuOpen,
     isPetOverlayEnabled: settings?.petOverlayEnabled === true,
     isPinnedPromptsOpen,
     isScratchPadOpen,
     onMoveSidebar: moveSidebar,
+    onOpenCommandPalette: openCommandPalette,
     onOpenDiscord: openDiscord,
     onOpenHelp: openWorkspaceWelcome,
     onOpenHotkeys: openHotkeys,
@@ -5040,12 +5045,58 @@ function getScratchPadMenuLabel(isScratchPadOpen: boolean): string {
   return isScratchPadOpen ? "Hide Scratch Pad" : "Scratch Pad";
 }
 
+function getCommandPaletteOverflowMenuLabel(hotkey: string): string {
+  const hotkeyLabel = formatOverflowMenuTextHotkey(hotkey);
+  return hotkeyLabel ? `Commands [${hotkeyLabel}]` : "Commands";
+}
+
+function formatOverflowMenuTextHotkey(hotkey: string): string {
+  const normalizedHotkey = normalizeHotkeyText(hotkey);
+  if (!normalizedHotkey) {
+    return "";
+  }
+  return normalizedHotkey
+    .split(" ")
+    .map((chord) =>
+      chord
+        .split("+")
+        .map(formatOverflowMenuTextHotkeyPart)
+        .join("+"),
+    )
+    .join(" ");
+}
+
+function formatOverflowMenuTextHotkeyPart(part: string): string {
+  switch (part) {
+    case "cmd":
+      return "CMD";
+    case "ctrl":
+      return "CTRL";
+    case "alt":
+      return "ALT";
+    case "shift":
+      return "SHIFT";
+    case "up":
+      return "UP";
+    case "right":
+      return "RIGHT";
+    case "down":
+      return "DOWN";
+    case "left":
+      return "LEFT";
+    default:
+      return part.toUpperCase();
+  }
+}
+
 type RenderSidebarTopControlsOptions = {
+  commandPaletteMenuLabel: string;
   isOverflowMenuOpen: boolean;
   isPetOverlayEnabled: boolean;
   isPinnedPromptsOpen: boolean;
   isScratchPadOpen: boolean;
   onMoveSidebar: () => void;
+  onOpenCommandPalette: () => void;
   onOpenDiscord: () => void;
   onOpenHelp: () => void;
   onOpenHotkeys: () => void;
@@ -5059,11 +5110,13 @@ type RenderSidebarTopControlsOptions = {
 };
 
 function renderFloatingOverflowMenu({
+  commandPaletteMenuLabel,
   isOverflowMenuOpen,
   isPetOverlayEnabled,
   isPinnedPromptsOpen,
   isScratchPadOpen,
   onMoveSidebar: _onMoveSidebar,
+  onOpenCommandPalette,
   onOpenDiscord,
   onOpenHelp,
   onOpenHotkeys,
@@ -5138,7 +5191,27 @@ function renderFloatingOverflowMenu({
                  * The Wake/Sleep Pet action moved from the native titlebar into
                  * this New Session-adjacent overflow menu, keeping the titlebar
                  * focused on workspace mode, resources, actions, and Open In.
+                 *
+                 * CDXC:CommandPalette 2026-06-13-10:42:
+                 * The sidebar overflow menu should make Commands the first
+                 * menu item and include the current command-palette hotkey in
+                 * text form so users can discover the app-wide command surface
+                 * and its configured shortcut from the sidebar's More control.
                  */}
+                <button
+                  className="session-context-menu-item"
+                  onClick={onOpenCommandPalette}
+                  role="menuitem"
+                  type="button"
+                >
+                  <IconCommand
+                    aria-hidden="true"
+                    className="session-context-menu-icon"
+                    size={14}
+                    stroke={1.8}
+                  />
+                  {commandPaletteMenuLabel}
+                </button>
                 <button
                   aria-checked={isPetOverlayEnabled}
                   className="session-context-menu-item"

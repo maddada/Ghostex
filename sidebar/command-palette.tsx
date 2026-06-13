@@ -233,8 +233,8 @@ export function CommandPalette({
       title="Command Palette"
       onOpenChange={onOpenChange}
     >
-      {/* CDXC:CommandPalette 2026-05-15-20:38:
-          Cmd+K opens a shadcn Base-style command palette that lists the
+      {/* CDXC:CommandPalette 2026-06-13-10:26:
+          Cmd+Shift+P opens a shadcn Base-style command palette that lists the
           current Ghostex hotkey actions plus the project Actions available
           from the active sidebar context. Hotkeys are right-aligned with
           CommandShortcut so discoverability stays inside the command surface.
@@ -262,9 +262,7 @@ export function CommandPalette({
           still using shared configurable hotkey definitions.
 
           CDXC:AddRepository 2026-05-29-11:45:
-          Clone Repository should be available from Cmd+K as a Ghostex built-in
-          command and open the same full-window clone modal as the Projects
-          header button, without going through configurable project actions. */}
+          Clone Repository should be available from the command palette as a Ghostex built-in command and open the same full-window clone modal as the Projects header button, without going through configurable project actions. */}
       <Command>
         {/*
          * CDXC:CommandPalette 2026-06-11-09:14:

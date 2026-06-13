@@ -54,4 +54,53 @@ describe("gxserver presentation local panes", () => {
     expect(localPaneProjection).toContain("!presentationSessionIds.has(session.sessionId)");
     expect(localPaneProjection).toContain("sessionId: createCombinedProjectSessionId(project.projectId, session.sessionId)");
   });
+
+  test("prunes stale canonical terminal panes against gxserver presentation", () => {
+    /*
+    CDXC:GxserverPresentation 2026-06-13-12:05:
+    Canonical P/G terminal tabs must not be rendered from stale local paneLayout
+    after gxserver stops presenting the row. Source coverage keeps startup,
+    snapshot, and delta presentation paths wired to the local prune before the
+    native layout sync can publish a wakeable placeholder for a deleted row.
+    */
+    const pruneSource = sourceBetween(
+      nativeSidebarSource,
+      "function pruneStaleGxserverLocalSessionsFromPresentation",
+      "function clearStaleGxserverLocalSessionRuntime",
+    );
+    expect(pruneSource).toContain("GXSERVER_CANONICAL_PROJECT_ID_PATTERN.test(project.projectId)");
+    expect(pruneSource).toContain("isCanonicalGxserverProjectSession(project.projectId, session.sessionId)");
+    expect(pruneSource).toContain("removeSessionInSimpleWorkspace(nextWorkspace, sessionId)");
+    expect(pruneSource).toContain("normalizeLiveCommandsPanelState");
+    expect(pruneSource).toContain("writeStoredProjects(`pruneStaleGxserverLocalSessions:${reason}`)");
+
+    const runtimeCleanupSource = sourceBetween(
+      nativeSidebarSource,
+      "function clearStaleGxserverLocalSessionRuntime",
+      "function applyGxserverPresentationSnapshot",
+    );
+    expect(runtimeCleanupSource).toContain("forgetNativeSessionMappingForProject(projectId, sessionId)");
+    expect(runtimeCleanupSource).toContain('postNative({ sessionId: nativeSessionId, type: "closeTerminal" })');
+
+    const startupSnapshotSource = sourceBetween(
+      nativeSidebarSource,
+      "async function refreshGxserverStartupSnapshot",
+      "function startGxserverPresentationSubscription",
+    );
+    expect(startupSnapshotSource).toContain("pruneStaleGxserverLocalSessionsFromPresentation");
+
+    const presentationSnapshotSource = sourceBetween(
+      nativeSidebarSource,
+      "function applyGxserverPresentationSnapshot",
+      "function applyGxserverPresentationDelta",
+    );
+    expect(presentationSnapshotSource).toContain("pruneStaleGxserverLocalSessionsFromPresentation");
+
+    const presentationDeltaSource = sourceBetween(
+      nativeSidebarSource,
+      "function applyGxserverPresentationDelta",
+      "function applyGxserverPresentationSessionsToNativePaneChrome",
+    );
+    expect(presentationDeltaSource).toContain("pruneStaleGxserverLocalSessionsFromPresentation");
+  });
 });

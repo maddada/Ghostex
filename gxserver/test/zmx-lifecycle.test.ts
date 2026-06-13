@@ -230,6 +230,47 @@ test("zmx process identity parser classifies path-based Codex descendants withou
   });
 });
 
+test("zmx process identity parser ignores helper payload text that mentions another agent", () => {
+  const sessionName = "S90-P3lv0-G8cl2" as GxserverZmxSessionName;
+  const identities = parseZmxSessionProcessIdentities({
+    psOutput: `
+23572     1 -zsh
+23754 23572 node /Users/person/.local/share/mise/installs/node/24.14.1/bin/codex --yolo
+23755 23754 /Users/person/.local/share/mise/installs/node/24.14.1/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex --yolo
+34225 23755 /Users/person/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient turn-ended {"input-messages":["compare codex hotkeys with claude code"]}
+`.trim(),
+    sessionNames: [sessionName],
+    zmxListOutput: `  name=${sessionName}\tpid=23572\tclients=1\tcreated=1781317239\tstart_dir=/repo`,
+  });
+
+  /*
+  CDXC:GxserverSessionIdentity 2026-06-13-09:08:
+  Codex helper clients may serialize user prompts and assistant summaries into their process argv. Agent detection must ignore that payload text so words like "claude" inside a completed Codex turn cannot relabel the active zmx session.
+  */
+  assert.deepEqual(identities.get(sessionName), {
+    agentId: "codex",
+  });
+});
+
+test("zmx process identity parser keeps the real agent when helper payload contains a resume command", () => {
+  const sessionName = "S90-P3lv0-G9cla" as GxserverZmxSessionName;
+  const claudeSessionId = "9970b270-b39f-4d63-a764-fa8d88083995";
+  const identities = parseZmxSessionProcessIdentities({
+    psOutput: `
+41000     1 -zsh
+41020 41000 /Users/person/.local/bin/claude --resume ${claudeSessionId}
+41030 41020 /Users/person/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient turn-ended {"last-assistant-message":"codex resume 019ebec8-0f6d-7e51-824c-981a501916fc"}
+`.trim(),
+    sessionNames: [sessionName],
+    zmxListOutput: `  name=${sessionName}\tpid=41000\tclients=1\tcreated=1781317239\tstart_dir=/repo`,
+  });
+
+  assert.deepEqual(identities.get(sessionName), {
+    agentId: "claude",
+    agentSessionId: claudeSessionId,
+  });
+});
+
 test("sleep and close kill commands use bundled zmx directly", () => {
   const command = buildZmxKillCommand({
     sessionName: "S1a-P3a91-G8v20",

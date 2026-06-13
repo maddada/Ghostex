@@ -93,7 +93,8 @@ describe("chromium browser source", () => {
     expect(browserFindBarSource).toContain("textField.isSelectable = true");
     expect(browserFindBarSource).toContain("window?.fieldEditor(true, for: textField)");
     expect(browserFindBarSource).toContain("window?.makeFirstResponder(editor)");
-    expect(browserFindBarSource).toContain("override func hitTest(_ point: NSPoint) -> NSView?");
+    expect(browserFindBarSource).not.toContain("override func hitTest(_ point: NSPoint) -> NSView?");
+    expect(browserFindBarSource).toContain("focusSearchField(reason: \"barMouseDown\", selectAll: false)");
     expect(browserFindLayoutSource).toContain("let horizontalMargin: CGFloat = 26");
     expect(browserFindLayoutSource).toContain("let verticalMargin: CGFloat = 8");
     expect(browserFindLayoutSource).toContain("x: webFrame.maxX - width - horizontalMargin");

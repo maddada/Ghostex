@@ -13,6 +13,7 @@ const sidebarStylesSource = readFileSync(
   new URL("../../sidebar/styles.css", import.meta.url),
   "utf8",
 );
+const modalHostSource = readFileSync(new URL("./modal-host.tsx", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -256,7 +257,7 @@ describe("native app modal window source", () => {
     );
     expect(dispatchNativeHotkey).toContain('activeNativeAppModalKind == "commandPalette"');
     expect(dispatchNativeHotkey).toContain(
-      'nativeAppModalWindowController?.currentModalKind == "commandPalette"',
+      'commandPaletteNativeAppModalWindowController?.currentModalKind ?? ""',
     );
 
     const webChromeHotkeyGuard = sourceBetween(
@@ -284,5 +285,104 @@ describe("native app modal window source", () => {
     expect(appModalWindowController).toContain("self.closeFromOutsideMouseDown()");
     expect(appModalWindowController).toContain('onClosed("outsideMouseDown", closedModal)');
     expect(appModalWindowController).toContain("removeOutsideEventMonitor()");
+  });
+
+  test("prewarms and reuses the macOS Command Palette native window", () => {
+    /*
+    CDXC:CommandPalette 2026-06-13-09:53:
+    Command Palette should prewarm a hidden native child-window modal host after launch and reuse that loaded WKWebView for the configured command-palette hotkey, without evicting the separate Monaco prompt-editor prewarm host.
+    */
+    expect(appDelegateSource).toContain("root.scheduleAppModalPrewarmsAfterLaunch()");
+    expect(appDelegateSource).toContain(
+      'private static let commandPalettePrewarmRequestId = "ghostex-command-palette-prewarm"',
+    );
+    expect(appDelegateSource).toContain("private var commandPaletteNativeAppModalWindowController");
+    expect(appDelegateSource).toContain("private func prewarmCommandPaletteIfNeeded()");
+    expect(appDelegateSource).toContain('"modal": "commandPalette"');
+    expect(appDelegateSource).toContain('"prewarm": true');
+    expect(appDelegateSource).toContain('"requestId": Self.commandPalettePrewarmRequestId');
+    expect(appDelegateSource).toContain("finishCommandPalettePrewarm()");
+    expect(appDelegateSource).toContain('hostId: "commandPalette"');
+
+    const appModalWindowController = sourceBetween(
+      appDelegateSource,
+      "private final class AppModalWindowController",
+      "private final class TitlebarDropdownPanelController",
+    );
+    expect(appModalWindowController).toContain(
+      'modal == "floatingPromptEditor" || modal == "commandPalette"',
+    );
+    expect(appModalWindowController).toContain("func hideReusableModal(");
+    expect(appModalWindowController).toContain("func isVisibleModal(_ modal: String) -> Bool");
+    expect(appModalWindowController).toContain(
+      'window.__ghostex_APP_MODAL_HOST_ID__ = \\(encodedHostId);',
+    );
+    expect(appModalWindowController).toContain("hideReusableModal(modal: \"commandPalette\"");
+
+    expect(modalHostSource).toContain("activeModalRequestId");
+    expect(modalHostSource).toContain("presentedMessage.requestId = activeModalRequestId");
+    expect(modalHostSource).toContain("nativeWindowHostId: window.__ghostex_APP_MODAL_HOST_ID__");
+  });
+
+  test("does not treat a hidden reusable Command Palette host as already open", () => {
+    /*
+    CDXC:CommandPalette 2026-06-13-10:31:
+    The configured command-palette hotkey must open the palette when the reusable command-palette WKWebView is hidden after prewarm or close. Only a visible command-palette child window should take the repeat-hotkey close path.
+    */
+    const commandPaletteOpenCheck = sourceBetween(
+      appDelegateSource,
+      "private func isCommandPaletteNativeModalOpenOrPending() -> Bool",
+      "private func shouldHandleHotkeyWhileWebChromeOwnsFocus",
+    );
+    expect(commandPaletteOpenCheck).toContain('isVisibleModal("commandPalette") == true');
+    expect(commandPaletteOpenCheck).toContain('activeNativeAppModalKind == "commandPalette", !isVisible');
+    expect(commandPaletteOpenCheck).toContain("activeNativeAppModalKind = nil");
+    expect(commandPaletteOpenCheck).toContain("return isVisible");
+  });
+
+  test("presents Command Palette through its dedicated native window controller", () => {
+    /*
+    CDXC:CommandPalette 2026-06-13-10:58:
+    Cmd+K should show the Command Palette after React reports presented from the dedicated command-palette modal host. The native bridge must route that acknowledgement by modal kind instead of always presenting the primary app-modal controller.
+    */
+    const presentedHandler = sourceBetween(
+      appDelegateSource,
+      'case "presented":',
+      'case "close":',
+    );
+    expect(presentedHandler).toContain("activeNativeAppModalKind = modal");
+    expect(presentedHandler).toContain("appModalWindowController(for: modal)?.presentIfCurrent(modal: modal)");
+    expect(presentedHandler).not.toContain("nativeAppModalWindowController?.presentIfCurrent(modal: modal)");
+  });
+
+  test("keeps the prewarmed rich prompt editor mounted for the first Ctrl+G", () => {
+    /*
+    CDXC:PromptEditor 2026-06-13-11:09:
+    Ctrl+G rich prompt editor prewarm must keep the hidden native child-window host and mounted Monaco editor alive so the first real prompt open swaps the buffer and focuses immediately instead of recreating Monaco.
+    */
+    const finishPrewarm = sourceBetween(
+      appDelegateSource,
+      "private func finishFloatingPromptEditorPrewarm()",
+      "private func cleanupFloatingPromptEditorPrewarmTempFile()",
+    );
+    expect(finishPrewarm).toContain('sendReactClose: false');
+
+    const monacoRequestEffect = sourceBetween(
+      modalHostSource,
+      'appendPromptEditorDebugLog("react.monaco.loadStart"',
+      "  useEffect(() => {\n    editorRef.current?.layout();",
+    );
+    expect(monacoRequestEffect).toContain("const existingEditor = editorRef.current");
+    expect(monacoRequestEffect).toContain("existingEditor.setValue(editor.initialText)");
+    expect(monacoRequestEffect).toContain('appendPromptEditorDebugLog("react.monaco.reusedAndFocused"');
+    expect(monacoRequestEffect).toContain("retainedEditor: true");
+
+    const closedLifecycle = sourceBetween(
+      modalHostSource,
+      'appendPromptEditorDebugLog("react.lifecycle.closed"',
+      'appendPromptEditorDebugLog("react.lifecycle.opened"',
+    );
+    expect(closedLifecycle).toContain("editorRef.current?.dispose()");
+    expect(closedLifecycle).toContain("editorRef.current = null");
   });
 });

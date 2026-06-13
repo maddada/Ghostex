@@ -99,14 +99,15 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: "openCommandPalette", kind: "openCommandPalette" },
     /**
-     * CDXC:CommandPalette 2026-05-15-20:38:
-     * Cmd+K is the discoverable command palette shortcut. It must live in the
-     * shared hotkey model so terminal-focused AppKit dispatch and sidebar DOM
-     * dispatch both open the same shadcn command surface.
+     * CDXC:CommandPalette 2026-06-13-10:26:
+     * Cmd+Shift+P is the default command-palette shortcut for the macOS app. It
+     * must live in the shared hotkey model so terminal-focused AppKit dispatch
+     * and sidebar DOM dispatch both open the same shadcn command surface.
      */
-    defaultKey: "cmd+k",
+    defaultKey: "cmd+shift+p",
     description: "Open the Ghostex command palette.",
     id: "openCommandPalette",
+    retiredDefaultKeys: ["cmd+k"],
     title: "Open Command Palette",
   },
   {

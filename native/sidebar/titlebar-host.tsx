@@ -78,6 +78,7 @@ import {
   KEEP_AWAKE_DURATION_OPTIONS,
   normalizeghostexSettings,
   type KeepAwakeDurationMinutes,
+  type SidebarSide,
   type SessionPersistenceProvider,
 } from "../../shared/ghostex-settings";
 import {
@@ -246,6 +247,7 @@ type TitlebarProjectState = {
   petOverlayEnabled: boolean;
   resourceGroups: TitlebarResourceGroup[];
   sidebarCollapsed: boolean;
+  sidebarSide: SidebarSide;
   sidebarActions: TitlebarSidebarActionsSettings;
   showProjectEditorDiffFileCount: boolean;
   sessionPersistenceProvider: SessionPersistenceProvider;
@@ -364,6 +366,7 @@ type ResolvedOpenTarget =
 declare global {
   interface Window {
     __ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__?: boolean;
+    __ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__?: boolean;
     __ghostex_TITLEBAR_PANEL_KIND__?: string;
     __ghostex_PENDING_TITLEBAR_PROJECT_STATE__?: Partial<TitlebarProjectState>;
     __ghostex_TITLEBAR__?: {
@@ -371,6 +374,7 @@ declare global {
       setActiveProjectState: (state: Partial<TitlebarProjectState>) => void;
       setNativeDropdownOpen: (kind: TitlebarDropdownPanelKind | undefined) => void;
       setNativePointerInside: (isInside: boolean) => void;
+      setWindowFocused: (isFocused: boolean) => void;
     };
   }
 }
@@ -553,15 +557,15 @@ const initialTitlebarDropdownPanelKind = readTitlebarDropdownPanelKind();
  * The dropdown should teach users early that the sidebar is highly customizable.
  * Keep this as the second built-in tip so it appears immediately after the command-palette hint for users who have not marked it read.
  *
- * CDXC:TipsAndTricks 2026-06-10-22:15:
- * The first tip should introduce Cmd K as the universal entry point for app actions, not only pane moves.
+ * CDXC:TipsAndTricks 2026-06-13-10:26:
+ * The first tip should introduce Cmd Shift P as the universal entry point for app actions, not only pane moves.
  */
 const TITLEBAR_TIPS: TitlebarTip[] = [
   {
     body: "Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.",
     icon: "command",
     id: "command-palette-all-actions",
-    title: "Press Cmd K anywhere to open the Command Palette",
+    title: "Press Cmd Shift P anywhere to open the Command Palette",
   },
   {
     body: "Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.",
@@ -776,6 +780,17 @@ function setTitlebarNativePointerInside(isInside: boolean): void {
    * tooltips must rely on normal CSS hover and local tooltip state instead.
    */
   document.body.dataset.nativePointerInside = isInside ? "true" : "false";
+}
+
+function setTitlebarWindowFocused(isFocused: boolean): void {
+  /*
+   * CDXC:SidebarCollapse 2026-06-13-10:57:
+   * The traffic-light-side sidebar collapse dot must dim to #313131 whenever
+   * the macOS window is not key. AppKit owns that state; React only stores the
+   * bridge boolean on the document for CSS.
+   */
+  window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__ = isFocused;
+  document.body.dataset.windowFocused = isFocused ? "true" : "false";
 }
 
 function suppressTitlebarTooltipsFromDom(): void {
@@ -1636,6 +1651,8 @@ function App() {
     () => readStoredKeepAwakeRuntime(),
   );
   const [resourceProcesses, setResourceProcesses] = useState<ResourceProcess[]>([]);
+  const sidebarCollapseChevronPointsRight =
+    projectState.sidebarSide === "right" ? !projectState.sidebarCollapsed : projectState.sidebarCollapsed;
   /*
    * CDXC:TitlebarResources 2026-06-11-18:13:
    * The native Resources child panel should not render zero-memory or missing-session rows while the first `ps` snapshot is still loading.
@@ -2124,6 +2141,7 @@ function App() {
         closeTitlebarDropdownPanel();
       },
       setNativePointerInside: setTitlebarNativePointerInside,
+      setWindowFocused: setTitlebarWindowFocused,
       setNativeDropdownOpen,
       setActiveProjectState: (state) => {
         setProjectState((current) => mergeTitlebarProjectState(current, state));
@@ -2144,8 +2162,12 @@ function App() {
         updateAvailable: window.__ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__,
       });
     }
+    if (typeof window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__ === "boolean") {
+      setTitlebarWindowFocused(window.__ghostex_PENDING_TITLEBAR_WINDOW_FOCUSED__);
+    }
     return () => {
       delete window.__ghostex_TITLEBAR__;
+      delete document.body.dataset.windowFocused;
     };
   }, [closeTitlebarDropdownPanel]);
 
@@ -2935,8 +2957,14 @@ function App() {
          * CDXC:SidebarCollapse 2026-06-12-10:57:
          * Users need a traffic-light-sized titlebar button immediately
          * before the project identity to collapse or expand the entire
-         * native sidebar. The chevron points left while expanded and
-         * right while collapsed so it always indicates the next action.
+         * native sidebar. For the default left sidebar, the chevron points
+         * left while expanded and right while collapsed so it indicates the
+         * next action.
+         *
+         * CDXC:SidebarCollapse 2026-06-13-11:05:
+         * When the sidebar is on the right, invert the chevron direction from
+         * the left-sidebar default. The icon should point toward the actual
+         * collapse or expand motion for the current sidebar side.
          *
          * CDXC:SidebarCollapse 2026-06-12-11:10:
          * The update affordance belongs to the right of this collapse
@@ -2945,25 +2973,29 @@ function App() {
          * use a 10px chevron so the glyph reads clearly inside the 14px dot.
          *
          * CDXC:SidebarCollapse 2026-06-12-21:03:
-         * The visible collapse affordance is now 15x15px, while the actual
-         * titlebar hit target is a 33x33px square that extends 9px around
-         * the small dot without painting that larger area.
+         * The visible collapse affordance is tiny while the actual titlebar hit
+         * target is a 33x33px square that extends invisible space around the
+         * small dot without painting that larger area.
          *
          * CDXC:SidebarCollapse 2026-06-13-10:53:
          * The hover tooltip for this button must contain only the assigned Toggle
          * Sidebar hotkey so the tiny titlebar affordance stays terse.
          *
          * CDXC:SidebarCollapse 2026-06-13-01:00:
-         * Move only the visible 15x15 dot 2px lower. The 33x33 hit target stays
-         * fixed so clicking and native hit-region routing remain stable.
+         * Move only the visible dot 2px lower. The 33x33 hit target stays fixed
+         * so clicking and native hit-region routing remain stable.
+         *
+         * CDXC:SidebarCollapse 2026-06-13-09:24:
+         * The visible dot should be 14x14px again so it matches the macOS
+         * traffic-light buttons while retaining the expanded invisible hit area.
          *
          * CDXC:SidebarCollapse 2026-06-13-02:59:
          * Use the same AppTooltip wrapper as sidebar controls for the hotkey
          * label; keep the titlebar-specific wrapper responsible only for right
          * placement beside the traffic-light-side button.
-         */}
+        */}
         <span className="titlebar-sidebar-collapse-button-visual">
-          {projectState.sidebarCollapsed ? (
+          {sidebarCollapseChevronPointsRight ? (
             <IconChevronRight aria-hidden="true" size={10} stroke={2.4} />
           ) : (
             <IconChevronLeft aria-hidden="true" size={10} stroke={2.4} />
@@ -3643,6 +3675,7 @@ function mergeTitlebarProjectState(
     petOverlayEnabled: state.petOverlayEnabled ?? current.petOverlayEnabled,
     resourceGroups: state.resourceGroups ?? current.resourceGroups,
     sidebarActions: state.sidebarActions ?? current.sidebarActions,
+    sidebarSide: state.sidebarSide ?? current.sidebarSide,
     sessionPersistenceProvider:
       state.sessionPersistenceProvider ?? current.sessionPersistenceProvider,
     toggleSidebarHotkeyLabel:
@@ -3686,6 +3719,7 @@ function createInitialProjectState(bootstrap: Record<string, unknown>): Titlebar
     petOverlayEnabled: settings.petOverlayEnabled,
     resourceGroups: [],
     sidebarCollapsed: bootstrap.sidebarCollapsed === true,
+    sidebarSide: bootstrap.sidebarSide === "right" ? "right" : settings.sidebarSide,
     sidebarActions: {
       commands: [],
     },
@@ -5394,24 +5428,41 @@ styleElement.textContent = `
      * but the gray fill must not have an outline around it.
      *
      * CDXC:SidebarCollapse 2026-06-12-21:03:
-     * The visible dot should be 15x15px, but pointer hit testing should use a
-     * 33x33px square that includes 9px of invisible space on every side.
+     * The visible dot is intentionally smaller than its pointer hit target. Use
+     * a 33x33px hit square that includes invisible space around the dot.
      *
      * CDXC:SidebarCollapse 2026-06-13-10:53:
      * Keep the 33x33px hit target inside the 35px titlebar vertically. Only
-     * offset the target left so the 15px dot stays in its traffic-light-side
+     * offset the target left so the dot stays in its traffic-light-side
      * visual slot while clicks still work across the expanded target.
      *
      * CDXC:SidebarCollapse 2026-06-13-02:59:
      * The assigned hotkey renders through AppTooltip, matching sidebar controls
      * instead of a titlebar-only data-tooltip pseudo-element.
+     *
+     * CDXC:SidebarCollapse 2026-06-13-09:18:
+     * The visible collapse dot should be white with an almost-black chevron
+     * inside it, while the invisible 33px hit target and no-outline treatment
+     * stay unchanged.
+     *
+     * CDXC:SidebarCollapse 2026-06-13-09:22:
+     * Visual review changed the dot from white to #4699d9 and the chevron from
+     * almost black to white.
+     *
+     * CDXC:SidebarCollapse 2026-06-13-09:24:
+     * The visible dot should be 14x14px so it matches the other macOS traffic
+     * light buttons. Keep the 33px hit target, blue fill, and white chevron.
+     *
+     * CDXC:SidebarCollapse 2026-06-13-10:57:
+     * When AppKit says the window is not focused, keep the same visible 14px
+     * dot and 33px hit target but paint the dot #313131.
      */
     align-items: center;
     background: transparent !important;
     border: 0 !important;
     border-radius: 0;
     box-shadow: none;
-    color: rgba(255,255,255,0.86) !important;
+    color: #ffffff !important;
     display: inline-flex;
     flex: 0 0 33px;
     height: 33px !important;
@@ -5426,22 +5477,27 @@ styleElement.textContent = `
   .titlebar-sidebar-collapse-button:hover,
   .titlebar-sidebar-collapse-button:focus-visible {
     background: transparent !important;
-    color: rgba(255,255,255,0.96) !important;
+    color: #ffffff !important;
     outline: none;
   }
   .titlebar-sidebar-collapse-button-visual {
     align-items: center;
-    background: rgba(255,255,255,0.16);
+    background: #4699d9;
     border-radius: 999px;
     display: inline-flex;
-    height: 15px;
+    height: 14px;
     justify-content: center;
     transform: translateY(2px);
-    width: 15px;
+    width: 14px;
   }
   .titlebar-sidebar-collapse-button:hover .titlebar-sidebar-collapse-button-visual,
   .titlebar-sidebar-collapse-button:focus-visible .titlebar-sidebar-collapse-button-visual {
-    background: rgba(255,255,255,0.24);
+    background: #5aa7e1;
+  }
+  body[data-window-focused="false"] .titlebar-sidebar-collapse-button-visual,
+  body[data-window-focused="false"] .titlebar-sidebar-collapse-button:hover .titlebar-sidebar-collapse-button-visual,
+  body[data-window-focused="false"] .titlebar-sidebar-collapse-button:focus-visible .titlebar-sidebar-collapse-button-visual {
+    background: #313131;
   }
   .titlebar-sidebar-collapse-button svg {
     height: 10px;

@@ -26,6 +26,14 @@ export function resolveSessionLaunchAgentId(session: GxserverSessionDomainState)
   if (launchPlanAgentId) {
     return launchPlanAgentId;
   }
+  /*
+  CDXC:GxserverSessionIdentity 2026-06-13-09:08:
+  Startup text such as `codex --yolo` is launch-owned identity evidence even when no structured launch plan was stored. Use it as the passive-event lock so stale hooks cannot relabel a gxserver-started agent session before live process evidence refreshes every client.
+  */
+  const startupTextAgentId = inferAgentIdFromCommand(session.launchSettings.startupText);
+  if (startupTextAgentId) {
+    return startupTextAgentId;
+  }
   if (hasForkSource(session)) {
     return inferAgentIdFromCommand(session.runtimeSettings.agentCommand);
   }

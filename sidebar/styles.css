@@ -259,8 +259,8 @@ button,
 }
 
 /*
- CDXC:CommandPalette 2026-05-15-20:38:
- The Cmd+K command palette uses shadcn Command composition with a compact
+ CDXC:CommandPalette 2026-06-13-10:26:
+ The Cmd+Shift+P command palette uses shadcn Command composition with a compact
  centered surface. It must show command names, descriptions, and right-aligned
  shortcut labels without inheriting legacy sidebar button chrome.
 

@@ -31,10 +31,6 @@ describe("native pane tab titlebar hit testing", () => {
       "override func hitTest(_ point: NSPoint) -> NSView?",
       appDelegateSource.indexOf("final class ghostexRootView"),
     );
-    const resizePrepassIndex = appDelegateSource.indexOf(
-      "if let resizeHandleHitView = workspaceResizeHandleHitView(at: point)",
-      rootHitTestIndex,
-    );
     const titlebarPrepassIndex = appDelegateSource.indexOf(
       "if let paneTitleBarHitView = workspacePaneTitleBarHitView(at: point)",
       rootHitTestIndex,
@@ -50,8 +46,8 @@ describe("native pane tab titlebar hit testing", () => {
     );
 
     expect(rootHitTestIndex).toBeGreaterThan(-1);
-    expect(resizePrepassIndex).toBeGreaterThan(rootHitTestIndex);
-    expect(titlebarPrepassIndex).toBeGreaterThan(resizePrepassIndex);
+    expect(appDelegateSource).not.toContain("workspaceResizeHandleHitView(at point: NSPoint)");
+    expect(titlebarPrepassIndex).toBeGreaterThan(rootHitTestIndex);
     expect(titlebarPrepassIndex).toBeLessThan(superHitIndex);
     expect(titlebarHelperSource).toContain("workspaceView.paneTitleBarHitView(at: workspacePoint)");
     expect(titlebarHelperSource).toContain('NativePaneTabDragReproLog.append(event: "nativePaneTabs.root.hitTest.titleBarPrepass"');
@@ -76,7 +72,7 @@ describe("native pane tab titlebar hit testing", () => {
     const sidebarWebViewSource = sourceSection(
       appDelegateSource,
       "final class SidebarWebView: WKWebView",
-      "final class SidebarModalBackdropView",
+      "final class ghostexRootView",
     );
     const layoutSource = sourceSection(
       appDelegateSource,
@@ -93,6 +89,9 @@ describe("native pane tab titlebar hit testing", () => {
     expect(layoutSource).not.toContain("visualSidebarFrame");
     expect(layoutSource).not.toContain("resizeHitExclusion");
     expect(appDelegateSource).not.toContain("sidebarResizeEdgeExtension");
+    expect(appDelegateSource).not.toContain("final class SidebarModalBackdropView");
+    expect(appDelegateSource).not.toContain("NonInteractiveChromeLineView");
+    expect(appDelegateSource).toContain("private let workareaTitlebarBorderLayer = CALayer()");
     expect(appDelegateSource).not.toContain("private func visualSidebarFrame");
     expect(terminalWorkspaceSource).not.toContain("sidebarResizeEdgeExtensionWidth");
     expect(sidebarWebViewSource).not.toContain("override func hitTest(_ point: NSPoint) -> NSView?");
@@ -145,7 +144,7 @@ describe("native pane tab titlebar hit testing", () => {
     expect(eventGuardSource).toContain("case .leftMouseDown, .leftMouseDragged, .leftMouseUp:");
   });
 
-  test("routes workspace pane titlebars before embedded child hit testing", () => {
+  test("routes workspace pane titlebars before embedded child hit testing without resize prepass", () => {
     /**
      * CDXC:NativePaneTabClicks 2026-06-12-04:28:
      * The 04:18 repro showed top-band mouseDown/mouseUp reaching the pane
@@ -168,6 +167,8 @@ describe("native pane tab titlebar hit testing", () => {
     );
 
     expect(workspaceHitTestIndex).toBeGreaterThan(-1);
+    expect(terminalWorkspaceSource).not.toContain("func resizeHandleHitView(at point: NSPoint)");
+    expect(terminalWorkspaceSource).not.toContain("if let resizeHandleHitView = resizeHandleHitView(at: point)");
     expect(titleBarRouteIndex).toBeGreaterThan(workspaceHitTestIndex);
     expect(titleBarRouteIndex).toBeLessThan(superHitIndex);
     expect(helperSource).toContain("private func paneTitleBarEventTarget(at point: NSPoint)");
@@ -246,26 +247,48 @@ describe("native pane tab titlebar hit testing", () => {
     expect(titleBarSource).toContain("pendingReroutedTitleBarTarget = nil");
   });
 
-  test("routes normal pane titlebar bands before embedded content hit testing", () => {
+  test("keeps pane titlebar and content as normal sibling regions", () => {
     /**
-     * CDXC:NativePaneTabClicks 2026-06-12-04:08:
-     * Normal workspace panes must use the same simple ownership rule as popped
-     * out panes: points inside the titlebar band go to the titlebar first, before
-     * Ghostty, CEF, or WKWebView content can win mouseDown/mouseUp.
+     * CDXC:NativePaneTabClicks 2026-06-13-09:52:
+     * Normal workspace panes should not need a container-level hitTest override.
+     * Titlebar and content frames are strict siblings, while visual borders are
+     * layers, so AppKit can dispatch normal child hits without full-frame overlay
+     * views intercepting clicks.
      */
     const containerIndex = terminalWorkspaceSource.indexOf("private final class TerminalPaneLeafContainerView");
-    const hitTestIndex = terminalWorkspaceSource.indexOf("override func hitTest(_ point: NSPoint) -> NSView?", containerIndex);
-    const superHitIndex = terminalWorkspaceSource.indexOf("return super.hitTest(point)", hitTestIndex);
+    const containerSource = sourceSection(
+      terminalWorkspaceSource,
+      "private final class TerminalPaneLeafContainerView",
+      "private final class SleepingPanePlaceholderContentView",
+    );
+    const mountTerminalSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func mountTerminalPaneContainer(for session: TerminalSession)",
+      "private func mountWebPaneContainer(for session: WebPaneSession)",
+    );
+    const setFrameSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func setFrame(",
+      "private func commandPanelTitleBarActions()",
+    );
+    const setWebFrameSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func setWebPaneFrame(",
+      "private func scheduleDeferredWebPaneLayout",
+    );
 
     expect(containerIndex).toBeGreaterThan(-1);
-    expect(hitTestIndex).toBeGreaterThan(containerIndex);
-    expect(superHitIndex).toBeGreaterThan(hitTestIndex);
-    expect(terminalWorkspaceSource).toContain("weak var titleBarHitTestView: NSView?");
-    expect(terminalWorkspaceSource).toContain("session.containerView.titleBarHitTestView = session.titleBarView");
-    expect(terminalWorkspaceSource).toContain("titleBarHitTestView ?? subviews.first { $0 is TerminalSessionTitleBarView }");
-    expect(terminalWorkspaceSource).toContain("titleBarView.frame.contains(point)");
-    expect(terminalWorkspaceSource).toContain("return titleBarView.hitTest(convert(point, to: titleBarView))");
-    expect(terminalWorkspaceSource.indexOf("titleBarView.frame.contains(point)", hitTestIndex)).toBeLessThan(superHitIndex);
+    expect(containerSource).not.toContain("override func hitTest(_ point: NSPoint) -> NSView?");
+    expect(containerSource).toContain("func resolvedTitleBarView() -> TerminalSessionTitleBarView?");
+    expect(terminalWorkspaceSource).not.toContain("titleBarHitTestView");
+    expect(mountTerminalSource.indexOf("mount(session.titleBarView, in: session.containerView)")).toBeLessThan(
+      mountTerminalSource.indexOf("mount(session.scrollView, in: session.containerView)"),
+    );
+    expect(mountTerminalSource).toContain("installPaneBorderLayer(session.borderView, in: session.containerView)");
+    expect(setFrameSource).toContain("session.titleBarView.frame = titleBarRect");
+    expect(setFrameSource).toContain("session.scrollView.frame = availableTerminalRect");
+    expect(setWebFrameSource).toContain("session.titleBarView.frame = titleBarRect");
+    expect(setWebFrameSource).toContain("session.hostView.frame = contentRect");
   });
 
   test("returns concrete tab controls and blocks tab-strip child fallback", () => {
@@ -484,6 +507,8 @@ describe("native pane tab titlebar hit testing", () => {
     expect(functionSource).toContain("let railY = min(");
     expect(functionSource).toContain("max(commandPanelBounds.maxY, bounds.minY)");
     expect(functionSource).toContain("y: railY");
+    expect(functionSource).toContain("addSubview(commandsPanelResizeHandleView, positioned: .above, relativeTo: nil)");
+    expect(functionSource).toContain("orderResizeHandlesToFront(reason: \"syncCommandsPanelResizeHandle\")");
     expect(functionSource).not.toContain("commandPanelBounds.maxY - railHeight / 2");
   });
 
@@ -548,8 +573,26 @@ describe("native pane tab titlebar hit testing", () => {
     const workspaceHandleSource = sourceSection(
       terminalWorkspaceSource,
       "final class TerminalWorkspacePaneResizeHandleView: NSView",
-      "final class TerminalPaneBorderView",
+      "final class TerminalPaneBorderLayer",
     );
+    const terminalPaneBorderLayerIndex = terminalWorkspaceSource.indexOf(
+      "final class TerminalPaneBorderLayer: CAShapeLayer",
+    );
+    const terminalPaneBorderLayerSource = terminalWorkspaceSource.slice(terminalPaneBorderLayerIndex);
+    expect(terminalWorkspaceSource).toContain("final class TerminalPaneBorderLayer: CAShapeLayer");
+    expect(terminalWorkspaceSource).not.toContain("final class TerminalPaneBorderView");
+    expect(terminalPaneBorderLayerIndex).toBeGreaterThan(-1);
+    expect(terminalPaneBorderLayerSource).toContain("strokeColor = nextColor");
+    expect(terminalPaneBorderLayerSource).toContain(
+      "lineWidth = nextColor == nil ? 0 : currentBorderWidth()",
+    );
+    expect(terminalPaneBorderLayerSource).toContain("shadowPath = nil");
+    expect(terminalPaneBorderLayerSource).not.toContain("shadowPath = nextPath");
+    expect(workspaceHandleSource).not.toContain("override func hitTest(_ point: NSPoint) -> NSView?");
+    expect(terminalWorkspaceSource).not.toContain("workspaceResizeHandleHitView");
+    expect(terminalWorkspaceSource).not.toContain("resizeHandleHitView(at point: NSPoint)");
+    expect(terminalWorkspaceSource).toContain("addSubview(handleView, positioned: .above, relativeTo: nil)");
+    expect(terminalWorkspaceSource).toContain("orderResizeHandlesToFront(reason: \"syncPaneResizeHandleViews\")");
     const workspaceHandleMouseExitedSource = sourceSection(
       workspaceHandleSource,
       "override func mouseExited(with event: NSEvent)",
@@ -558,7 +601,7 @@ describe("native pane tab titlebar hit testing", () => {
     const workspaceHandleMouseUpSource = sourceSection(
       terminalWorkspaceSource,
       "override func mouseUp(with event: NSEvent)",
-      "final class TerminalPaneBorderView",
+      "final class TerminalPaneBorderLayer",
       workspaceHandleIndex,
     );
     const rootLayoutSource = sourceSection(

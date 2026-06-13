@@ -2139,7 +2139,7 @@ final class TerminalWorkspaceView: NSView {
     let scrollView: GhostexGhosttySurfaceHostView
     let searchBarView: TerminalSearchBarView
     let titleBarView: TerminalSessionTitleBarView
-    let borderView: TerminalPaneBorderView
+    let borderView: TerminalPaneBorderLayer
     let persistenceLabelView: TerminalPanePersistenceLabelView
     let delayedSendLabelView: TerminalPaneDelayedSendLabelView
     let firstPromptTitleOverlayView: TerminalPaneFirstPromptTitleOverlayView
@@ -2165,7 +2165,7 @@ final class TerminalWorkspaceView: NSView {
     let browserProfileID: UUID?
     let webView: WKWebView?
     let titleBarView: TerminalSessionTitleBarView
-    let borderView: TerminalPaneBorderView
+    let borderView: TerminalPaneBorderLayer
 
     var browserContentView: NSView {
       chromiumView ?? webView ?? hostView
@@ -2189,7 +2189,7 @@ final class TerminalWorkspaceView: NSView {
   }
 
   private struct SleepingPanePlaceholderSession {
-    let borderView: TerminalPaneBorderView
+    let borderView: TerminalPaneBorderLayer
     let containerView: TerminalPaneLeafContainerView
     let contentView: SleepingPanePlaceholderContentView
     let sessionId: String
@@ -2549,7 +2549,7 @@ final class TerminalWorkspaceView: NSView {
   private let commandsPanelChromeView = CommandsPanelChromeView()
   private let commandsPanelReservedBottomBarView = CommandsPanelChromeView(frame: .zero)
   private let commandsPanelCollapsedRightMarginView = NSView(frame: .zero)
-  private let commandsPanelTopSeparatorView = CommandsPanelSeparatorView()
+  private let commandsPanelTopSeparatorLayer = CALayer()
   private let commandsPanelResizeHandleView = TerminalWorkspacePaneResizeHandleView()
   private var projectEditorCompanionSessionId: String?
   private var projectEditorCompanionIsVisible = false
@@ -2557,18 +2557,18 @@ final class TerminalWorkspaceView: NSView {
   private var projectEditorCompanionWidthRatio = TerminalWorkspaceView.defaultProjectEditorCompanionWidthRatio
   private var projectEditorCompanionResizeDrag: ProjectEditorCompanionResizeDrag?
   private var projectEditorCompanionResizeWorkspaceBounds: CGRect = .zero
-  private let projectEditorCompanionRightSeparatorView = WorkspacePaneSeparatorView()
+  private let projectEditorCompanionRightSeparatorLayer = CALayer()
   private let projectEditorCompanionResizeHandleView = TerminalWorkspacePaneResizeHandleView()
   private let persistProjectEditorCompanionWidthRatio: (CGFloat) -> Void
-  private var workspacePaneSeparatorViews: [WorkspacePaneSeparatorView] = []
+  private var workspacePaneSeparatorLayers: [CALayer] = []
   private var paneResizeHandleViews: [TerminalWorkspacePaneResizeHandleView] = []
   private var paneHeaderDrag: PaneHeaderDrag?
   private weak var windowRoutedPaneTitleBar: TerminalSessionTitleBarView?
   private var paneTabDragCaptureEventMonitor: Any?
   private var paneTabDragHiddenBrowserContentViews: [ObjectIdentifier: NSView] = [:]
-  private var paneHeaderDragGhostView: TerminalPaneHeaderDragGhostView?
-  private var paneHeaderDragTargetView: TerminalPaneHeaderDragTargetView?
-  private var paneTabReorderTargetView: TerminalPaneTabReorderTargetView?
+  private var paneHeaderDragGhostLayer: TerminalPaneHeaderDragGhostLayer?
+  private var paneHeaderDragTargetLayer: TerminalPaneHeaderDragTargetLayer?
+  private var paneTabReorderTargetLayer: TerminalPaneTabReorderTargetLayer?
   private var cefNativeDragSourceRelease: CEFNativeDragSourceRelease?
   private var cefNativeDragSourceReleaseEventMonitor: Any?
   private var cefNativeDragHoverTimer: Timer?
@@ -2793,8 +2793,10 @@ final class TerminalWorkspaceView: NSView {
     commandsPanelCollapsedRightMarginView.wantsLayer = true
     commandsPanelCollapsedRightMarginView.layer?.backgroundColor = NSColor.black.cgColor
     commandsPanelCollapsedRightMarginView.isHidden = true
-    commandsPanelTopSeparatorView.isHidden = true
-    projectEditorCompanionRightSeparatorView.isHidden = true
+    configureWorkspaceSeparatorLayer(commandsPanelTopSeparatorLayer)
+    commandsPanelTopSeparatorLayer.isHidden = true
+    configureWorkspaceSeparatorLayer(projectEditorCompanionRightSeparatorLayer)
+    projectEditorCompanionRightSeparatorLayer.isHidden = true
     commandsPanelResizeHandleView.configure(direction: .vertical, cursor: .resizeUpDown)
     commandsPanelResizeHandleView.onMouseDown = { [weak self] event in
       _ = self?.beginCommandsPanelResize(with: event)
@@ -3720,8 +3722,7 @@ final class TerminalWorkspaceView: NSView {
     titleBarView.onTabActionRequested = { [weak self] tabSessionId, action in
       self?.handlePaneTabActionRequested(sessionId: tabSessionId, action: action)
     }
-    let borderView = TerminalPaneBorderView()
-    borderView.translatesAutoresizingMaskIntoConstraints = false
+    let borderView = TerminalPaneBorderLayer()
     let persistenceLabelView = TerminalPanePersistenceLabelView()
     persistenceLabelView.translatesAutoresizingMaskIntoConstraints = false
     persistenceLabelView.setProvider(sessionPersistenceProvider, sessionName: sessionPersistenceName)
@@ -4303,8 +4304,7 @@ final class TerminalWorkspaceView: NSView {
     titleBarView.onTabActionRequested = { [weak self] tabSessionId, action in
       self?.handlePaneTabActionRequested(sessionId: tabSessionId, action: action)
     }
-    let borderView = TerminalPaneBorderView()
-    borderView.translatesAutoresizingMaskIntoConstraints = false
+    let borderView = TerminalPaneBorderLayer()
     let containerView = TerminalPaneLeafContainerView()
     containerView.translatesAutoresizingMaskIntoConstraints = true
     /**
@@ -7226,10 +7226,39 @@ final class TerminalWorkspaceView: NSView {
   }
 
   private func hideWorkspacePaneSeparatorViews() {
-    for separatorView in workspacePaneSeparatorViews {
-      separatorView.isHidden = true
-      separatorView.frame = .zero
+    for separatorLayer in workspacePaneSeparatorLayers {
+      separatorLayer.isHidden = true
+      separatorLayer.frame = .zero
     }
+  }
+
+  private func configureWorkspaceSeparatorLayer(_ separatorLayer: CALayer) {
+    /*
+     CDXC:NativeLayout 2026-06-13-09:33:
+     Workspace pane separators are visual-only one-pixel chrome. Keep them as
+     layers owned by TerminalWorkspaceView so default AppKit dispatch sees only
+     the real pane content and resize-handle views.
+     */
+    separatorLayer.backgroundColor = NSColor(
+      srgbRed: 0x1E / 255.0,
+      green: 0x1E / 255.0,
+      blue: 0x1E / 255.0,
+      alpha: 1.0
+    ).cgColor
+    separatorLayer.actions = [
+      "bounds": NSNull(),
+      "hidden": NSNull(),
+      "position": NSNull(),
+    ]
+  }
+
+  private func installWorkspaceVisualLayer(_ visualLayer: CALayer) {
+    wantsLayer = true
+    guard let rootLayer = layer, visualLayer.superlayer !== rootLayer else {
+      return
+    }
+    visualLayer.removeFromSuperlayer()
+    rootLayer.addSublayer(visualLayer)
   }
 
   private func syncWorkspacePaneSeparatorViews() {
@@ -7237,26 +7266,27 @@ final class TerminalWorkspaceView: NSView {
      CDXC:WorkspacePaneSeparators 2026-06-09-17:46:
      Normal workspace split panes need a 1px #1e1e1e visual divider between pane surfaces. Derive separator geometry from paneResizeHits so the line stays centered in the same reserved AppKit divider rail that owns resizing, without widening hit targets or overlapping pane content.
      */
-    while workspacePaneSeparatorViews.count < paneResizeHits.count {
-      let separatorView = WorkspacePaneSeparatorView()
-      workspacePaneSeparatorViews.append(separatorView)
+    while workspacePaneSeparatorLayers.count < paneResizeHits.count {
+      let separatorLayer = CALayer()
+      configureWorkspaceSeparatorLayer(separatorLayer)
+      workspacePaneSeparatorLayers.append(separatorLayer)
     }
-    for (index, separatorView) in workspacePaneSeparatorViews.enumerated() {
+    for (index, separatorLayer) in workspacePaneSeparatorLayers.enumerated() {
       guard index < paneResizeHits.count else {
-        separatorView.isHidden = true
-        separatorView.frame = .zero
+        separatorLayer.isHidden = true
+        separatorLayer.frame = .zero
         continue
       }
       let frame = workspacePaneSeparatorFrame(for: paneResizeHits[index])
       guard !frame.isNull, !frame.isEmpty else {
-        separatorView.isHidden = true
-        separatorView.frame = .zero
+        separatorLayer.isHidden = true
+        separatorLayer.frame = .zero
         continue
       }
-      separatorView.frame = frame
-      separatorView.isHidden = false
-      separatorView.layer?.zPosition = 9_900
-      addSubview(separatorView, positioned: .above, relativeTo: nil)
+      installWorkspaceVisualLayer(separatorLayer)
+      separatorLayer.frame = frame
+      separatorLayer.isHidden = false
+      separatorLayer.zPosition = 9_900
     }
   }
 
@@ -7301,8 +7331,8 @@ final class TerminalWorkspaceView: NSView {
     commandsPanelReservedBottomBarView.frame = .zero
     commandsPanelCollapsedRightMarginView.isHidden = true
     commandsPanelCollapsedRightMarginView.frame = .zero
-    commandsPanelTopSeparatorView.isHidden = true
-    commandsPanelTopSeparatorView.frame = .zero
+    commandsPanelTopSeparatorLayer.isHidden = true
+    commandsPanelTopSeparatorLayer.frame = .zero
   }
 
   private func syncCommandsPanelChrome(
@@ -7339,24 +7369,21 @@ final class TerminalWorkspaceView: NSView {
 
      CDXC:WorkspacePaneSeparators 2026-06-09-17:59:
      Pane boundary lines should use #1e1e1e across normal workspace splits and command-panel boundaries so resize surfaces have a consistent one-pixel divider without changing the resize rail hit target.
-     */
+    */
     guard commandPanelBounds.width > 0, commandPanelBounds.height > 0 else {
-      commandsPanelTopSeparatorView.isHidden = true
-      commandsPanelTopSeparatorView.frame = .zero
+      commandsPanelTopSeparatorLayer.isHidden = true
+      commandsPanelTopSeparatorLayer.frame = .zero
       return
     }
     let separatorHeight: CGFloat = 1
-    commandsPanelTopSeparatorView.frame = CGRect(
+    commandsPanelTopSeparatorLayer.frame = CGRect(
       x: commandPanelBounds.minX,
       y: max(bounds.minY, commandPanelBounds.maxY - separatorHeight),
       width: commandPanelBounds.width,
       height: separatorHeight)
-    commandsPanelTopSeparatorView.isHidden = false
-    commandsPanelTopSeparatorView.layer?.zPosition = 10_400
-    if commandsPanelTopSeparatorView.superview !== self {
-      addSubview(commandsPanelTopSeparatorView, positioned: .above, relativeTo: nil)
-    }
-    addSubview(commandsPanelTopSeparatorView, positioned: .above, relativeTo: commandsPanelChromeView)
+    commandsPanelTopSeparatorLayer.isHidden = false
+    commandsPanelTopSeparatorLayer.zPosition = 10_400
+    installWorkspaceVisualLayer(commandsPanelTopSeparatorLayer)
   }
 
   private func syncCommandsPanelReservedBottomBar(height: CGFloat) {
@@ -7616,14 +7643,13 @@ final class TerminalWorkspaceView: NSView {
       session.containerView.removeFromSuperview()
       addSubview(session.containerView)
     }
-    session.containerView.titleBarHitTestView = session.titleBarView
     mount(session.titleBarView, in: session.containerView)
     mount(session.scrollView, in: session.containerView)
     mount(session.searchBarView, in: session.containerView)
     mount(session.persistenceLabelView, in: session.containerView)
     mount(session.delayedSendLabelView, in: session.containerView)
     mount(session.firstPromptTitleOverlayView, in: session.containerView)
-    mount(session.borderView, in: session.containerView)
+    installPaneBorderLayer(session.borderView, in: session.containerView)
   }
 
   private func mountWebPaneContainer(for session: WebPaneSession) {
@@ -7637,10 +7663,9 @@ final class TerminalWorkspaceView: NSView {
       session.containerView.removeFromSuperview()
       addSubview(session.containerView)
     }
-    session.containerView.titleBarHitTestView = session.titleBarView
     mount(session.titleBarView, in: session.containerView)
     mount(session.hostView, in: session.containerView)
-    mount(session.borderView, in: session.containerView)
+    installPaneBorderLayer(session.borderView, in: session.containerView)
   }
 
   private func mountSleepingPanePlaceholderContainer(for session: SleepingPanePlaceholderSession) {
@@ -7648,10 +7673,9 @@ final class TerminalWorkspaceView: NSView {
       session.containerView.removeFromSuperview()
       addSubview(session.containerView)
     }
-    session.containerView.titleBarHitTestView = session.titleBarView
     mount(session.titleBarView, in: session.containerView)
     mount(session.contentView, in: session.containerView)
-    mount(session.borderView, in: session.containerView)
+    installPaneBorderLayer(session.borderView, in: session.containerView)
   }
 
   private func mount(_ view: NSView, in containerView: TerminalPaneLeafContainerView) {
@@ -7662,6 +7686,48 @@ final class TerminalWorkspaceView: NSView {
     containerView.addSubview(view)
   }
 
+  private func installPaneBorderLayer(
+    _ borderLayer: TerminalPaneBorderLayer,
+    in containerView: TerminalPaneLeafContainerView
+  ) {
+    /**
+     CDXC:NativePaneChrome 2026-06-13-09:52:
+     Pane borders are visual status chrome and must not be AppKit hit-test participants.
+     Install them as exact-frame layers on the pane container so they stay visually above the pane without becoming a full-frame overlay view.
+     */
+    containerView.wantsLayer = true
+    guard let rootLayer = containerView.layer else {
+      return
+    }
+    guard borderLayer.superlayer !== rootLayer else {
+      return
+    }
+    borderLayer.removeFromSuperlayer()
+    rootLayer.addSublayer(borderLayer)
+  }
+
+  private func installWorkspacePaneBorderLayer(_ borderLayer: TerminalPaneBorderLayer) {
+    wantsLayer = true
+    guard let rootLayer = layer else {
+      return
+    }
+    guard borderLayer.superlayer !== rootLayer else {
+      return
+    }
+    borderLayer.removeFromSuperlayer()
+    rootLayer.addSublayer(borderLayer)
+  }
+
+  private func paneBorderFrameInWorkspace(
+    borderLayer: TerminalPaneBorderLayer,
+    containerView: TerminalPaneLeafContainerView
+  ) -> CGRect {
+    if borderLayer.superlayer === layer {
+      return borderLayer.frame
+    }
+    return containerView.convert(borderLayer.frame, to: self)
+  }
+
   private func updateOuterBottomPaneBorderCorner() {
     /**
      CDXC:NativePaneChrome 2026-05-07-15:13
@@ -7669,18 +7735,27 @@ final class TerminalWorkspaceView: NSView {
      preserve a rounded active/done border corner in native AppKit layout.
      Apply this after split/grid frames are assigned so the rule follows pane
      reorders, split resizing, web panes, terminal panes, and sidebar side.
+
+     CDXC:NativePaneChrome 2026-06-13-10:21
+     Visible border state carries the owning container view so workspace-frame
+     conversion stays correct when borders are hosted by either pane containers
+     or the workspace layer. Keep loops consuming the full tuple shape.
      */
-    var visibleBorders: [(sessionId: String, borderView: TerminalPaneBorderView)] = []
+    var visibleBorders: [(sessionId: String, borderView: TerminalPaneBorderLayer, containerView: TerminalPaneLeafContainerView)] = []
     for (sessionId, session) in sessions where activeSessionIds.contains(sessionId) {
-      visibleBorders.append((sessionId: sessionId, borderView: session.borderView))
+      visibleBorders.append((sessionId: sessionId, borderView: session.borderView, containerView: session.containerView))
     }
     for (sessionId, session) in webPaneSessions where activeSessionIds.contains(sessionId) {
-      visibleBorders.append((sessionId: sessionId, borderView: session.borderView))
+      visibleBorders.append((sessionId: sessionId, borderView: session.borderView, containerView: session.containerView))
     }
 
     let roundedSessionId = visibleBorders.max { left, right in
-      let leftFrame = left.borderView.convert(left.borderView.bounds, to: self)
-      let rightFrame = right.borderView.convert(right.borderView.bounds, to: self)
+      let leftFrame = paneBorderFrameInWorkspace(
+        borderLayer: left.borderView,
+        containerView: left.containerView)
+      let rightFrame = paneBorderFrameInWorkspace(
+        borderLayer: right.borderView,
+        containerView: right.containerView)
       let leftOuterX = sidebarSide == .left ? leftFrame.maxX : -leftFrame.minX
       let rightOuterX = sidebarSide == .left ? rightFrame.maxX : -rightFrame.minX
       if abs(leftOuterX - rightOuterX) > 0.5 {
@@ -7693,8 +7768,8 @@ final class TerminalWorkspaceView: NSView {
     }?.sessionId
 
     let roundedCorner: TerminalPaneRoundedBottomCorner = sidebarSide == .left ? .right : .left
-    for (sessionId, borderView) in visibleBorders {
-      borderView.setRoundedBottomCorner(sessionId == roundedSessionId ? roundedCorner : .none)
+    for visibleBorder in visibleBorders {
+      visibleBorder.borderView.setRoundedBottomCorner(visibleBorder.sessionId == roundedSessionId ? roundedCorner : .none)
     }
   }
 
@@ -8326,16 +8401,21 @@ final class TerminalWorkspaceView: NSView {
     /**
      CDXC:ProjectEditorCompanion 2026-06-09-17:46:
      Source, Browser, and Kanban companion panes need a 1px #1e1e1e line on the companion pane's right edge. Draw it as a native, non-interactive separator below the resize handle so the visual boundary does not change resize hit geometry.
+
+     CDXC:NativeLayout 2026-06-13-09:33:
+     The companion right separator is visual-only. Keep it as a workspace-owned
+     CALayer instead of a click-through NSView so it cannot participate in AppKit
+     hit testing while sitting near editor or terminal content.
      */
     guard !frame.isNull, !frame.isEmpty else {
-      projectEditorCompanionRightSeparatorView.isHidden = true
-      projectEditorCompanionRightSeparatorView.frame = .zero
+      projectEditorCompanionRightSeparatorLayer.isHidden = true
+      projectEditorCompanionRightSeparatorLayer.frame = .zero
       return
     }
-    projectEditorCompanionRightSeparatorView.frame = frame
-    projectEditorCompanionRightSeparatorView.isHidden = false
-    projectEditorCompanionRightSeparatorView.layer?.zPosition = 10_550
-    addSubview(projectEditorCompanionRightSeparatorView, positioned: .above, relativeTo: nil)
+    installWorkspaceVisualLayer(projectEditorCompanionRightSeparatorLayer)
+    projectEditorCompanionRightSeparatorLayer.frame = frame
+    projectEditorCompanionRightSeparatorLayer.isHidden = false
+    projectEditorCompanionRightSeparatorLayer.zPosition = 10_550
   }
 
   private func syncProjectEditorCompanionTitleBarControls(activeSessionId: String?) {
@@ -8381,8 +8461,8 @@ final class TerminalWorkspaceView: NSView {
     projectEditorCompanionResizeDrag = nil
     let shouldRefreshCursor = projectEditorCompanionResizeHandleView.needsCursorRefreshBeforeRemoval()
     syncProjectEditorCompanionTitleBarControls(activeSessionId: nil)
-    projectEditorCompanionRightSeparatorView.isHidden = true
-    projectEditorCompanionRightSeparatorView.frame = .zero
+    projectEditorCompanionRightSeparatorLayer.isHidden = true
+    projectEditorCompanionRightSeparatorLayer.frame = .zero
     projectEditorCompanionResizeHandleView.cancelResizeHoverIndicator()
     projectEditorCompanionResizeHandleView.isHidden = true
     projectEditorCompanionResizeHandleView.frame = .zero
@@ -10321,34 +10401,21 @@ final class TerminalWorkspaceView: NSView {
    CDXC:NativeWorkspaceHitTesting 2026-06-11-23:48:
    The main workspace must not route clicks by cached pane geometry. Let AppKit's native child-view hierarchy deliver terminal content, tab buttons, browser/editor surfaces, and resize rails directly; each resize rail is a real sibling NSView above pane containers.
 
-   CDXC:NativeWorkspaceHitTesting 2026-06-12-03:10:
-   The 03:06 companion resize repro showed tracking-area hover reaching the concrete rail while mouseDown hit CEF/Ghostty content. Keep rails at their real five-point frames and make those visible handle views win workspace hit testing before embedded surfaces, without reviving cached pane-geometry click routing.
-
    CDXC:NativePaneTabClicks 2026-06-12-04:28:
    The 04:18 repro showed fresh builds still sending top-band clicks to
    TerminalPaneLeafContainerView while tab-hover geometry stayed correct.
    Resolve pane titlebar hits from the workspace's actual visible container
    z-order before asking embedded Ghostty/browser children, so native tabs get
    a direct mouse stream without cached pane-geometry routing.
+
+   CDXC:NativePaneResize 2026-06-13-09:52:
+   Pane resize rails are exact topmost sibling NSViews. Do not special-case them in workspace hit testing; normal AppKit traversal should pick those rail views directly.
    */
   override func hitTest(_ point: NSPoint) -> NSView? {
-    if let resizeHandleHitView = resizeHandleHitView(at: point) {
-      return resizeHandleHitView
-    }
     if let titleBarHitView = paneTitleBarHitView(at: point) {
       return titleBarHitView
     }
     return super.hitTest(point)
-  }
-
-  func resizeHandleHitView(at point: NSPoint) -> NSView? {
-    for (_, handleView) in visibleResizeHandleViews().reversed() {
-      let handlePoint = convert(point, to: handleView)
-      if let hitView = handleView.hitTest(handlePoint) {
-        return hitView
-      }
-    }
-    return nil
   }
 
   func paneTitleBarHitView(at point: NSPoint) -> NSView? {
@@ -10418,7 +10485,7 @@ final class TerminalWorkspaceView: NSView {
         !containerView.isHidden,
         containerView.alphaValue > 0,
         containerView.window != nil,
-        let titleBarView = containerView.resolvedTitleBarHitTestView() as? TerminalSessionTitleBarView,
+        let titleBarView = containerView.resolvedTitleBarView(),
         !titleBarView.isHidden,
         titleBarView.alphaValue > 0
       else {
@@ -11794,21 +11861,19 @@ final class TerminalWorkspaceView: NSView {
   private func beginPaneHeaderDragFeedback(for sessionId: String, at point: CGPoint) {
     logStalePaneDragFeedbackIfMounted(reason: "beginPaneHeaderDragFeedback")
     hideBrowserContentDuringPaneTabDragIfNeeded()
-    let ghostView = paneHeaderDragGhostView ?? TerminalPaneHeaderDragGhostView()
-    paneHeaderDragGhostView = ghostView
-    if ghostView.superview !== self {
-      addSubview(ghostView)
-    }
-    ghostView.configure(
+    let ghostLayer = paneHeaderDragGhostLayer ?? TerminalPaneHeaderDragGhostLayer()
+    paneHeaderDragGhostLayer = ghostLayer
+    installPaneDragFeedbackLayer(ghostLayer.layer)
+    ghostLayer.configure(
       title: paneHeaderDisplayTitle(for: sessionId),
       favicon: paneHeaderFavicon(for: sessionId),
       agentIconDataUrl: sessionAgentIconDataUrls[sessionId],
       agentIconColorHex: sessionAgentIconColors[sessionId],
       maxWidth: Self.paneHeaderDragGhostMaxWidth
     )
-    ghostView.layer?.zPosition = Self.paneHeaderDragFeedbackZPosition
-    ghostView.alphaValue = 0.92
-    ghostView.isHidden = false
+    ghostLayer.layer.zPosition = Self.paneHeaderDragFeedbackZPosition
+    ghostLayer.layer.opacity = 0.92
+    ghostLayer.layer.isHidden = false
     updatePaneHeaderDragFeedback(for: sessionId, at: point, eventTimestamp: nil)
   }
 
@@ -11818,12 +11883,12 @@ final class TerminalWorkspaceView: NSView {
     eventTimestamp: TimeInterval?
   ) {
     let ghostOrigin = paneHeaderDragGhostOrigin(
-      for: paneHeaderDragGhostView?.frame.size ?? .zero,
+      for: paneHeaderDragGhostLayer?.size ?? .zero,
       cursorPoint: point)
-    if let ghostView = paneHeaderDragGhostView {
+    if let ghostLayer = paneHeaderDragGhostLayer {
       setPaneDragFeedbackFrame(
-        CGRect(origin: ghostOrigin, size: ghostView.frame.size),
-        for: ghostView)
+        CGRect(origin: ghostOrigin, size: ghostLayer.size),
+        for: ghostLayer.layer)
     }
     let tabReorderTarget = paneTabReorderDropTarget(at: point, sourceSessionId: sourceSessionId)
     if let tabReorderTarget {
@@ -11885,12 +11950,12 @@ final class TerminalWorkspaceView: NSView {
 
   private func endPaneHeaderDragFeedback(restoresCursor: Bool = true) {
     restoreBrowserContentAfterPaneTabDrag()
-    paneHeaderDragGhostView?.removeFromSuperview()
-    paneHeaderDragGhostView = nil
-    paneHeaderDragTargetView?.removeFromSuperview()
-    paneHeaderDragTargetView = nil
-    paneTabReorderTargetView?.removeFromSuperview()
-    paneTabReorderTargetView = nil
+    paneHeaderDragGhostLayer?.layer.removeFromSuperlayer()
+    paneHeaderDragGhostLayer = nil
+    paneHeaderDragTargetLayer?.layer.removeFromSuperlayer()
+    paneHeaderDragTargetLayer = nil
+    paneTabReorderTargetLayer?.layer.removeFromSuperlayer()
+    paneTabReorderTargetLayer = nil
     _ = restoresCursor
   }
 
@@ -11944,9 +12009,9 @@ final class TerminalWorkspaceView: NSView {
 
   private func logStalePaneDragFeedbackIfMounted(reason: String) {
     let mountedFeedback = [
-      paneHeaderDragGhostView?.superview == nil ? nil : "ghost",
-      paneHeaderDragTargetView?.superview == nil ? nil : "dropTarget",
-      paneTabReorderTargetView?.superview == nil ? nil : "tabReorder",
+      paneHeaderDragGhostLayer?.layer.superlayer == nil ? nil : "ghost",
+      paneHeaderDragTargetLayer?.layer.superlayer == nil ? nil : "dropTarget",
+      paneTabReorderTargetLayer?.layer.superlayer == nil ? nil : "tabReorder",
     ].compactMap { $0 }
     guard !mountedFeedback.isEmpty else {
       return
@@ -12092,18 +12157,16 @@ final class TerminalWorkspaceView: NSView {
 
   private func updatePaneTabReorderTarget(_ target: PaneTabReorderDropTarget?) {
     guard let target else {
-      paneTabReorderTargetView?.removeFromSuperview()
-      paneTabReorderTargetView = nil
+      paneTabReorderTargetLayer?.layer.removeFromSuperlayer()
+      paneTabReorderTargetLayer = nil
       return
     }
-    let targetView = paneTabReorderTargetView ?? TerminalPaneTabReorderTargetView()
-    paneTabReorderTargetView = targetView
-    if targetView.superview !== self {
-      addSubview(targetView)
-    }
-    targetView.layer?.zPosition = Self.paneHeaderDragFeedbackZPosition
-    setPaneDragFeedbackFrame(target.lineFrame, for: targetView)
-    targetView.isHidden = false
+    let targetLayer = paneTabReorderTargetLayer ?? TerminalPaneTabReorderTargetLayer()
+    paneTabReorderTargetLayer = targetLayer
+    installPaneDragFeedbackLayer(targetLayer.layer)
+    targetLayer.layer.zPosition = Self.paneHeaderDragFeedbackZPosition
+    setPaneDragFeedbackFrame(target.lineFrame, for: targetLayer.layer)
+    targetLayer.layer.isHidden = false
   }
 
   private func updatePaneHeaderDropTarget(
@@ -12114,21 +12177,19 @@ final class TerminalWorkspaceView: NSView {
       let targetFrame = paneFrame(for: feedbackSessionId),
       let placement
     else {
-      paneHeaderDragTargetView?.removeFromSuperview()
-      paneHeaderDragTargetView = nil
+      paneHeaderDragTargetLayer?.layer.removeFromSuperlayer()
+      paneHeaderDragTargetLayer = nil
       return
     }
-    let targetView = paneHeaderDragTargetView ?? TerminalPaneHeaderDragTargetView()
-    paneHeaderDragTargetView = targetView
-    if targetView.superview !== self {
-      addSubview(targetView)
-    }
-    targetView.layer?.zPosition = Self.paneHeaderDragFeedbackZPosition
+    let targetLayer = paneHeaderDragTargetLayer ?? TerminalPaneHeaderDragTargetLayer()
+    paneHeaderDragTargetLayer = targetLayer
+    installPaneDragFeedbackLayer(targetLayer.layer)
+    targetLayer.layer.zPosition = Self.paneHeaderDragFeedbackZPosition
     setPaneDragFeedbackFrame(
       paneHeaderDropTargetFrame(targetFrame: targetFrame, placement: placement),
-      for: targetView)
-    targetView.configure(placement: placement)
-    targetView.isHidden = false
+      for: targetLayer.layer)
+    targetLayer.configure(placement: placement)
+    targetLayer.layer.isHidden = false
   }
 
   private func paneHeaderDropTargetFrame(
@@ -12157,12 +12218,26 @@ final class TerminalWorkspaceView: NSView {
     }
   }
 
-  private func setPaneDragFeedbackFrame(_ frame: CGRect, for view: NSView) {
-    NSAnimationContext.runAnimationGroup { context in
-      context.duration = 0
-      context.allowsImplicitAnimation = false
-      view.frame = frame
+  private func installPaneDragFeedbackLayer(_ feedbackLayer: CALayer) {
+    /*
+     CDXC:PaneDragFeedback 2026-06-13-09:33:
+     Pane drag feedback is visual-only. Mount it as CALayers on the workspace
+     root instead of NSViews above content so stale feedback cannot own clicks and
+     no custom hit-test pass is needed to make it click-through.
+     */
+    wantsLayer = true
+    guard let rootLayer = layer, feedbackLayer.superlayer !== rootLayer else {
+      return
     }
+    feedbackLayer.removeFromSuperlayer()
+    rootLayer.addSublayer(feedbackLayer)
+  }
+
+  private func setPaneDragFeedbackFrame(_ frame: CGRect, for feedbackLayer: CALayer) {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    feedbackLayer.frame = frame
+    CATransaction.commit()
   }
 
   private func logPaneTabDragMoveIfNeeded(
@@ -12311,13 +12386,13 @@ final class TerminalWorkspaceView: NSView {
 
   private func paneBorderFrame(for sessionId: String) -> CGRect? {
     if let session = sessions[sessionId] {
-      return session.borderView.convert(session.borderView.bounds, to: self)
+      return paneBorderFrameInWorkspace(borderLayer: session.borderView, containerView: session.containerView)
     }
     if let session = webPaneSessions[sessionId] {
-      return session.borderView.convert(session.borderView.bounds, to: self)
+      return paneBorderFrameInWorkspace(borderLayer: session.borderView, containerView: session.containerView)
     }
     if let session = sleepingPanePlaceholderSessions[sessionId] {
-      return session.borderView.convert(session.borderView.bounds, to: self)
+      return paneBorderFrameInWorkspace(borderLayer: session.borderView, containerView: session.containerView)
     }
     return nil
   }
@@ -12675,7 +12750,7 @@ final class TerminalWorkspaceView: NSView {
         return session.containerView.frame
       }
       if session.borderView.frame.width > 1, session.borderView.frame.height > 1 {
-        return session.containerView.convert(session.borderView.frame, to: self)
+        return paneBorderFrameInWorkspace(borderLayer: session.borderView, containerView: session.containerView)
       }
       if session.titleBarView.frame.width > 1, session.scrollView.frame.width > 1 {
         let localRect = session.titleBarView.frame.union(session.scrollView.frame)
@@ -12687,7 +12762,7 @@ final class TerminalWorkspaceView: NSView {
         return session.containerView.frame
       }
       if session.borderView.frame.width > 1, session.borderView.frame.height > 1 {
-        return session.containerView.convert(session.borderView.frame, to: self)
+        return paneBorderFrameInWorkspace(borderLayer: session.borderView, containerView: session.containerView)
       }
       if session.titleBarView.frame.width > 1, session.hostView.frame.width > 1 {
         let localRect = session.titleBarView.frame.union(session.hostView.frame)
@@ -12747,9 +12822,8 @@ final class TerminalWorkspaceView: NSView {
       session.titleBarView.isHidden = false
       session.titleBarView.removeFromSuperview()
       addSubview(session.titleBarView)
+      installWorkspacePaneBorderLayer(session.borderView)
       session.borderView.frame = rect
-      session.borderView.removeFromSuperview()
-      addSubview(session.borderView)
       session.borderView.isHidden = false
     } else if let session = webPaneSessions[sessionId] {
       session.containerView.isHidden = true
@@ -12757,9 +12831,8 @@ final class TerminalWorkspaceView: NSView {
       session.titleBarView.isHidden = false
       session.titleBarView.removeFromSuperview()
       addSubview(session.titleBarView)
+      installWorkspacePaneBorderLayer(session.borderView)
       session.borderView.frame = rect
-      session.borderView.removeFromSuperview()
-      addSubview(session.borderView)
       session.borderView.isHidden = false
     }
     updateTerminalBorder(for: sessionId)
@@ -12819,11 +12892,9 @@ final class TerminalWorkspaceView: NSView {
     contentView.onWakeRequested = { [weak self] in
       self?.sendEvent(.sleepingPaneWakeRequested(sessionId: sessionId))
     }
-    let borderView = TerminalPaneBorderView()
-    borderView.translatesAutoresizingMaskIntoConstraints = false
+    let borderView = TerminalPaneBorderLayer()
     let containerView = TerminalPaneLeafContainerView()
     containerView.translatesAutoresizingMaskIntoConstraints = true
-    containerView.titleBarHitTestView = titleBarView
     let session = SleepingPanePlaceholderSession(
       borderView: borderView,
       containerView: containerView,
@@ -15152,6 +15223,22 @@ final class TerminalWorkspaceView: NSView {
     }
   }
 
+  private func moveOffscreen(_ layer: CALayer) {
+    let size =
+      layer.frame.size.width > 1 && layer.frame.size.height > 1
+      ? layer.frame.size
+      : bounds.size
+    let nextFrame = CGRect(
+      x: bounds.maxX + 10_000,
+      y: bounds.maxY + 10_000,
+      width: max(size.width, 1),
+      height: max(size.height, 1)
+    )
+    if !rectsMatch(layer.frame, nextFrame) {
+      layer.frame = nextFrame
+    }
+  }
+
   private func applyWorkspaceBackgroundColor(_ value: String?) {
     let nextValue = value ?? ""
     guard workspaceBackgroundColorValue != nextValue else {
@@ -15172,6 +15259,13 @@ final class TerminalWorkspaceView: NSView {
       return
     }
     view.isHidden = hidden
+  }
+
+  private func setHidden(_ hidden: Bool, for layer: CALayer) {
+    guard layer.isHidden != hidden else {
+      return
+    }
+    layer.isHidden = hidden
   }
 
   private func updateAllTerminalBorders() {
@@ -19029,29 +19123,12 @@ private final class BrowserFindBarView: NSView, NSTextFieldDelegate {
     true
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    guard !isHidden, alphaValue > 0, bounds.contains(point) else {
-      return nil
-    }
-    /**
-     CDXC:BrowserSearch 2026-06-13-00:44:
-     The CEF find bar is a manual overlay above the browser surface.
-     Route hits directly to child controls so clicking the input or icon buttons does not leave keyboard focus on the Chromium view.
-     */
-    for child in [closeButton, nextButton, previousButton, textField] as [NSView] {
-      guard !child.isHidden, child.alphaValue > 0 else {
-        continue
-      }
-      let childPoint = convert(point, to: child)
-      guard child.bounds.contains(childPoint) else {
-        continue
-      }
-      return child.hitTest(childPoint) ?? child
-    }
-    return self
-  }
-
   override func mouseDown(with event: NSEvent) {
+    /**
+     CDXC:BrowserSearch 2026-06-13-09:52:
+     The CEF find bar is a normal AppKit subview with exact child-control frames.
+     Default AppKit hit dispatch should choose the text field and buttons; the bar only focuses the field when the non-control background is clicked.
+     */
     focusSearchField(reason: "barMouseDown", selectAll: false)
   }
 
@@ -19628,39 +19705,12 @@ private final class TerminalSearchBarView: NSView, NSTextFieldDelegate {
     true
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    guard !isHidden, alphaValue > 0, bounds.contains(point) else {
-      return nil
-    }
-    /**
-     CDXC:NativeTerminalSearch 2026-05-20-10:45:
-     The floating Ghostty search bar sits above the terminal surface as a
-     manually laid-out AppKit view. Child controls must be explicit hit-test
-     owners so clicks on the text field and icon buttons do not stop at the
-     parent bar and then fall back to terminal keyboard focus.
-     */
-    for child in [closeButton, nextButton, previousButton, textField] as [NSView] {
-      guard !child.isHidden, child.alphaValue > 0 else {
-        continue
-      }
-      let childPoint = convert(point, to: child)
-      guard child.bounds.contains(childPoint) else {
-        continue
-      }
-      let hitView = child.hitTest(childPoint) ?? child
-      appendSearchLog(
-        "nativeWorkspace.terminalSearch.childHitTest",
-        details: [
-          "childView": String(describing: type(of: child)),
-          "hitView": String(describing: type(of: hitView)),
-          "searchPoint": Self.describeLogPoint(point),
-        ])
-      return hitView
-    }
-    return self
-  }
-
   override func mouseDown(with event: NSEvent) {
+    /**
+     CDXC:NativeTerminalSearch 2026-06-13-09:52:
+     The terminal search bar should stay a normal AppKit control cluster with no custom hit-test routing.
+     AppKit owns text-field and button dispatch; clicking the bar background only focuses the search field.
+     */
     appendSearchLog(
       "nativeWorkspace.terminalSearch.barMouseDown",
       details: ["localPoint": Self.describeLogPoint(convert(event.locationInWindow, from: nil))])
@@ -20123,113 +20173,114 @@ private final class TerminalSearchBarView: NSView, NSTextFieldDelegate {
   }
 }
 
-private final class TerminalPaneHeaderDragTargetView: NSView {
+private final class TerminalPaneHeaderDragTargetLayer {
   private static let centerBackgroundColor = NSColor(
     calibratedRed: 0.18, green: 0.42, blue: 0.86, alpha: 0.12
   ).cgColor
   private static let edgeBackgroundColor = NSColor(
     calibratedRed: 0.18, green: 0.42, blue: 0.86, alpha: 0.2
   ).cgColor
+  let layer = CALayer()
 
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.borderWidth = 2
-    layer?.cornerRadius = 6
-    layer?.borderColor = NSColor(calibratedRed: 0.44, green: 0.68, blue: 1, alpha: 0.95).cgColor
-    layer?.backgroundColor = Self.centerBackgroundColor
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
+  init() {
     /**
-     CDXC:PaneDragFeedback 2026-05-11-20:24
-     Drop-target outlines are visual-only drag feedback. They can sit above pane
-     content during cleanup, so AppKit must always click through to the real
-     pane/titlebar owner underneath.
+     CDXC:PaneDragFeedback 2026-06-13-09:33:
+     Drop-target outlines are visual-only drag feedback. Render them as CALayers
+     on the workspace root instead of NSViews so they cannot participate in
+     AppKit hit testing while hovering above pane content.
      */
-    nil
+    layer.borderWidth = 2
+    layer.cornerRadius = 6
+    layer.borderColor = NSColor(calibratedRed: 0.44, green: 0.68, blue: 1, alpha: 0.95).cgColor
+    layer.backgroundColor = Self.centerBackgroundColor
+    layer.actions = [
+      "bounds": NSNull(),
+      "hidden": NSNull(),
+      "position": NSNull(),
+    ]
   }
 
   func configure(placement: PaneDropPlacement) {
-    layer?.backgroundColor =
+    layer.backgroundColor =
       placement == .center ? Self.centerBackgroundColor : Self.edgeBackgroundColor
   }
 }
 
-private final class TerminalPaneTabReorderTargetView: NSView {
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.backgroundColor = NSColor(calibratedRed: 0.44, green: 0.68, blue: 1, alpha: 0.98).cgColor
-    layer?.cornerRadius = 1
-  }
+private final class TerminalPaneTabReorderTargetLayer {
+  let layer = CALayer()
 
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
+  init() {
     /**
-     CDXC:PaneDragFeedback 2026-05-11-20:24
-     Tab reorder indicators are visual-only. They must never own the next click
-     after a drag release, even if AppKit has not removed the layer yet.
+     CDXC:PaneDragFeedback 2026-06-13-09:33:
+     Tab reorder indicators are visual-only. Keep them as layers so a stale
+     insertion line cannot own the next AppKit click after drag release.
      */
-    nil
+    layer.backgroundColor = NSColor(calibratedRed: 0.44, green: 0.68, blue: 1, alpha: 0.98).cgColor
+    layer.cornerRadius = 1
+    layer.actions = [
+      "bounds": NSNull(),
+      "hidden": NSNull(),
+      "position": NSNull(),
+    ]
   }
 }
 
-private final class TerminalPaneHeaderDragGhostView: NSView {
+private final class TerminalPaneHeaderDragGhostLayer {
   private static let height: CGFloat = 32
   private static let horizontalPadding: CGFloat = 8
   private static let iconSize: CGFloat = 16
   private static let iconGap: CGFloat = 7
+  let layer = CALayer()
+  private let iconLayer = CALayer()
+  private let titleLayer = CATextLayer()
 
-  private let iconImageView = NSImageView(frame: .zero)
-  private let titleLabel = NSTextField(labelWithString: "")
-
-  override var isFlipped: Bool {
-    true
+  var size: CGSize {
+    layer.bounds.size
   }
 
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.11, alpha: 0.96).cgColor
-    layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
-    layer?.borderWidth = 1
-    layer?.cornerRadius = 7
-    layer?.shadowColor = NSColor.black.cgColor
-    layer?.shadowOpacity = 0.32
-    layer?.shadowOffset = CGSize(width: 0, height: -5)
-    layer?.shadowRadius = 12
-
-    iconImageView.imageScaling = .scaleProportionallyDown
-    iconImageView.wantsLayer = true
-    iconImageView.layer?.cornerRadius = 3
-    iconImageView.layer?.masksToBounds = true
-    addSubview(iconImageView)
-
-    titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-    titleLabel.textColor = NSColor(calibratedWhite: 0.94, alpha: 1)
-    titleLabel.lineBreakMode = .byTruncatingTail
-    addSubview(titleLabel)
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
+  init() {
     /**
-     CDXC:PaneDragFeedback 2026-05-11-20:24
+     CDXC:PaneDragFeedback 2026-06-13-09:33:
      The floating drag ghost follows the pointer visually but is not a drag or
-     click target. Keep it transparent to AppKit hit testing.
+     click target. Build it from CALayers instead of an NSView tree so it never
+     enters AppKit hit testing.
      */
-    nil
+    layer.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.11, alpha: 0.96).cgColor
+    layer.borderColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
+    layer.borderWidth = 1
+    layer.cornerRadius = 7
+    layer.shadowColor = NSColor.black.cgColor
+    layer.shadowOpacity = 0.32
+    layer.shadowOffset = CGSize(width: 0, height: -5)
+    layer.shadowRadius = 12
+    layer.actions = [
+      "bounds": NSNull(),
+      "hidden": NSNull(),
+      "position": NSNull(),
+    ]
+
+    iconLayer.cornerRadius = 3
+    iconLayer.masksToBounds = true
+    iconLayer.contentsGravity = .resizeAspect
+    iconLayer.actions = [
+      "bounds": NSNull(),
+      "contents": NSNull(),
+      "position": NSNull(),
+    ]
+    layer.addSublayer(iconLayer)
+
+    titleLayer.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    titleLayer.fontSize = 12
+    titleLayer.foregroundColor = NSColor(calibratedWhite: 0.94, alpha: 1).cgColor
+    titleLayer.truncationMode = .end
+    titleLayer.alignmentMode = .left
+    titleLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+    titleLayer.actions = [
+      "bounds": NSNull(),
+      "position": NSNull(),
+      "string": NSNull(),
+    ]
+    layer.addSublayer(titleLayer)
   }
 
   func configure(
@@ -20239,44 +20290,61 @@ private final class TerminalPaneHeaderDragGhostView: NSView {
     agentIconColorHex: String?,
     maxWidth: CGFloat
   ) {
-    titleLabel.stringValue = title
+    titleLayer.string = title
     let agentIconImage = nativePaneImage(fromDataUrl: agentIconDataUrl, isTemplate: true)
-    iconImageView.image = favicon ?? agentIconImage
-    iconImageView.contentTintColor =
+    let iconImage = favicon ?? agentIconImage
+    iconLayer.contents = iconImage
+    iconLayer.backgroundColor =
       favicon == nil && agentIconImage != nil
-      ? nativePaneColor(fromHex: agentIconColorHex) ?? NSColor.white : nil
+      ? (nativePaneColor(fromHex: agentIconColorHex) ?? NSColor.white).withAlphaComponent(0.16).cgColor
+      : NSColor.clear.cgColor
     let measuredTitleWidth = ceil(
       (title as NSString).size(withAttributes: [
-        .font: titleLabel.font ?? NSFont.systemFont(ofSize: 12, weight: .semibold)
+        .font: NSFont.systemFont(ofSize: 12, weight: .semibold)
       ]).width
     )
     let width = min(
       maxWidth,
       max(96, Self.horizontalPadding * 2 + Self.iconSize + Self.iconGap + measuredTitleWidth)
     )
-    frame.size = CGSize(width: width, height: Self.height)
-    needsLayout = true
-    layoutSubtreeIfNeeded()
+    layer.bounds = CGRect(x: 0, y: 0, width: width, height: Self.height)
+    layoutSublayers()
   }
 
-  override func layout() {
-    super.layout()
-    iconImageView.frame = CGRect(
+  func layoutSublayers() {
+    iconLayer.frame = CGRect(
       x: Self.horizontalPadding,
-      y: floor((bounds.height - Self.iconSize) / 2),
+      y: floor((Self.height - Self.iconSize) / 2),
       width: Self.iconSize,
       height: Self.iconSize
     )
-    let titleX = iconImageView.frame.maxX + Self.iconGap
-    titleLabel.frame = CGRect(
+    let titleX = iconLayer.frame.maxX + Self.iconGap
+    titleLayer.frame = CGRect(
       x: titleX,
-      y: floor((bounds.height - 16) / 2),
-      width: max(0, bounds.width - titleX - Self.horizontalPadding),
+      y: floor((Self.height - 16) / 2),
+      width: max(0, layer.bounds.width - titleX - Self.horizontalPadding),
       height: 16
     )
   }
-
 }
+
+/**
+ CDXC:PaneTabs 2026-06-13-09:42:
+ Native tab-bar icon buttons in the main workspace area and command panes must use #cfcfcf glyphs on a stable #0e0e0e button background.
+ Share the colors between fixed tab-bar actions, command-pane actions, sticky active-tab navigation, and inline tab controls so the two native tab surfaces stay visually aligned.
+ */
+private let nativePaneTabBarIconButtonBackgroundColor = NSColor(
+  calibratedRed: 0x0E / 255,
+  green: 0x0E / 255,
+  blue: 0x0E / 255,
+  alpha: 1
+).cgColor
+private let nativePaneTabBarIconButtonTintColor = NSColor(
+  calibratedRed: 0xCF / 255,
+  green: 0xCF / 255,
+  blue: 0xCF / 255,
+  alpha: 1
+)
 
 private final class TerminalTitleBarActionButton: NSButton {
   private static let normalTintColor = NSColor(calibratedWhite: 0.88, alpha: 0.72)
@@ -20289,6 +20357,7 @@ private final class TerminalTitleBarActionButton: NSButton {
   private let rightBorderLayer = CALayer()
   private var hoverTrackingArea: NSTrackingArea?
   private var baseToolTip: String?
+  private var baseIsEnabledBeforeOverlaySuppression: Bool?
   private var isOverlayInteractionSuppressed = false
   fileprivate var debugActionKind = "unknown"
   private var isPointerInside = false {
@@ -20398,23 +20467,28 @@ private final class TerminalTitleBarActionButton: NSButton {
     guard isOverlayInteractionSuppressed != suppressed else {
       return
     }
+    /*
+     CDXC:NativeLayout 2026-06-13-09:33:
+     Titlebar action suppression should use normal AppKit enabled state instead
+     of a local hit-test override. Suppressed controls stay in their laid-out
+     frames but cannot perform actions while overlay ownership is disabled.
+     */
     isOverlayInteractionSuppressed = suppressed
     if suppressed {
+      baseIsEnabledBeforeOverlaySuppression = isEnabled
+      isEnabled = false
       baseToolTip = toolTip
       toolTip = nil
       isPointerInside = false
       isHighlighted = false
     } else {
+      if let baseIsEnabledBeforeOverlaySuppression {
+        isEnabled = baseIsEnabledBeforeOverlaySuppression
+      }
+      baseIsEnabledBeforeOverlaySuppression = nil
       toolTip = baseToolTip
     }
     updateActionChrome()
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    guard !isOverlayInteractionSuppressed else {
-      return nil
-    }
-    return super.hitTest(point)
   }
 
   override func mouseDown(with event: NSEvent) {
@@ -20522,6 +20596,37 @@ private final class TerminalTitleBarActionButton: NSButton {
     addTrackingArea(trackingArea)
   }
 
+  fileprivate func setTabBarIconChrome(
+    backgroundColor: CGColor,
+    tintColor: NSColor,
+    leftBorderColor: CGColor? = nil,
+    leftBorderWidth: CGFloat = 0
+  ) {
+    normalBackgroundColor = backgroundColor
+    hoverBackgroundColor = backgroundColor
+    activeBackgroundColor = backgroundColor
+    normalContentTintColor = tintColor
+    hoverContentTintColor = tintColor
+    activeContentTintColor = tintColor
+    self.leftBorderColor = leftBorderColor
+    self.leftBorderWidth = leftBorderWidth
+    rightBorderColor = nil
+    rightBorderWidth = 0
+  }
+
+  fileprivate func resetTabBarIconChrome() {
+    normalBackgroundColor = nil
+    hoverBackgroundColor = Self.hoverBackgroundColor
+    activeBackgroundColor = Self.activeBackgroundColor
+    normalContentTintColor = Self.normalTintColor
+    hoverContentTintColor = Self.hoverTintColor
+    activeContentTintColor = Self.activeTintColor
+    leftBorderColor = nil
+    leftBorderWidth = 0
+    rightBorderColor = nil
+    rightBorderWidth = 0
+  }
+
   override func mouseEntered(with event: NSEvent) {
     guard !isOverlayInteractionSuppressed else {
       isPointerInside = false
@@ -20592,19 +20697,9 @@ private final class TerminalTitleBarTabButton: NSButton {
   private static let inlineButtonWidth: CGFloat = 20
   private static let inlineButtonHeight: CGFloat = 20
   private static let inlineButtonTrailingPadding: CGFloat = 4
-  private static let inlineButtonBackgroundColor = NSColor(
-    calibratedRed: 0x4F / 255,
-    green: 0x4F / 255,
-    blue: 0x4F / 255,
-    alpha: 1
-  ).cgColor
-  private static let inlineButtonHoverBackgroundColor = NSColor(
-    calibratedRed: 0x36 / 255,
-    green: 0x36 / 255,
-    blue: 0x36 / 255,
-    alpha: 1
-  ).cgColor
-  private static let inlineButtonIconColor = NSColor(calibratedWhite: 0.94, alpha: 1).cgColor
+  private static let inlineButtonBackgroundColor = nativePaneTabBarIconButtonBackgroundColor
+  private static let inlineButtonHoverBackgroundColor = nativePaneTabBarIconButtonBackgroundColor
+  private static let inlineButtonIconColor = nativePaneTabBarIconButtonTintColor.cgColor
   private static let workingIndicatorColor = NSColor(
     calibratedRed: 0xF5 / 255,
     green: 0x9E / 255,
@@ -21912,24 +22007,14 @@ private final class TerminalSessionTitleBarView: NSView {
   private static let activeTabRevealScrollMargin: CGFloat = 12
   private static let activeTabRevealMinimumVisibleWidth: CGFloat = 60
   private static let stickyActiveTabButtonSize: CGFloat = 30
-  private static let stickyActiveTabButtonBackgroundColor = NSColor(
-    calibratedRed: 0x10 / 255,
-    green: 0x10 / 255,
-    blue: 0x10 / 255,
-    alpha: 1
-  ).cgColor
+  private static let stickyActiveTabButtonBackgroundColor = nativePaneTabBarIconButtonBackgroundColor
   private static let stickyActiveTabButtonBorderColor = NSColor(
     calibratedRed: 0x2A / 255,
     green: 0x2A / 255,
     blue: 0x2A / 255,
     alpha: 1
   ).cgColor
-  private static let stickyActiveTabButtonTintColor = NSColor(
-    calibratedRed: 0xA6 / 255,
-    green: 0xA6 / 255,
-    blue: 0xA6 / 255,
-    alpha: 1
-  )
+  private static let stickyActiveTabButtonTintColor = nativePaneTabBarIconButtonTintColor
   /**
    CDXC:PaneTabs 2026-05-31-05:51:
    Main workspace native tab-bar actions must visually match the React titlebar
@@ -21959,14 +22044,7 @@ private final class TerminalSessionTitleBarView: NSView {
   private static let workspaceTabBarActionButtonWidth: CGFloat = 42
   private static let workspaceTabBarActionButtonHeight: CGFloat = 34
   private static let workspaceTabBarActionIconPointSize: CGFloat = 15
-  private static let workspaceTabBarActionBackgroundColor = NSColor(
-    calibratedRed: 0x0E / 255,
-    green: 0x0E / 255,
-    blue: 0x0E / 255,
-    alpha: 1
-  ).cgColor
-  private static let workspaceTabBarActionHoverBackgroundColor = workspaceTabBarActionBackgroundColor
-  private static let workspaceTabBarActionActiveBackgroundColor = workspaceTabBarActionBackgroundColor
+  private static let workspaceTabBarActionBackgroundColor = nativePaneTabBarIconButtonBackgroundColor
   private static let workspaceTabBarActionLeftBorderColor = NSColor(
     calibratedRed: 0x25 / 255,
     green: 0x25 / 255,
@@ -22586,6 +22664,7 @@ private final class TerminalSessionTitleBarView: NSView {
     for button in tabButtons {
       button.setChromeRole(role)
     }
+    syncCommandTabBarActionButtonChrome()
     needsLayout = true
     needsDisplay = true
   }
@@ -23849,9 +23928,18 @@ private final class TerminalSessionTitleBarView: NSView {
     super.layout()
     let isCommandChrome = chromeRole == .commands
     let isWorkspaceTabbedChrome = !isCommandChrome && !tabItems.isEmpty
-    setWorkspaceTabBarActionChrome(for: tabAddButton, enabled: isWorkspaceTabbedChrome)
-    setWorkspaceTabBarActionChrome(for: tabBrowserButton, enabled: isWorkspaceTabbedChrome)
-    setWorkspaceTabBarActionChrome(for: actionMenuButton, enabled: isWorkspaceTabbedChrome)
+    if isCommandChrome {
+      setWorkspaceTabBarActionChrome(for: tabAddButton, enabled: false)
+      setWorkspaceTabBarActionChrome(for: tabBrowserButton, enabled: false)
+      setWorkspaceTabBarActionChrome(for: actionMenuButton, enabled: false)
+      setCommandTabBarActionChrome(for: tabAddButton, enabled: true)
+      setCommandTabBarActionChrome(for: actionMenuButton, enabled: true)
+    } else {
+      setWorkspaceTabBarActionChrome(for: tabAddButton, enabled: isWorkspaceTabbedChrome)
+      setWorkspaceTabBarActionChrome(for: tabBrowserButton, enabled: isWorkspaceTabbedChrome)
+      setWorkspaceTabBarActionChrome(for: actionMenuButton, enabled: isWorkspaceTabbedChrome)
+    }
+    syncCommandTabBarActionButtonChrome()
     let insetX: CGFloat = isCommandChrome ? 0 : 8
     /**
      CDXC:PaneTabs 2026-05-30-06:47:
@@ -24550,22 +24638,14 @@ private final class TerminalSessionTitleBarView: NSView {
     for button: TerminalTitleBarActionButton,
     enabled: Bool
   ) {
-    let isAlreadyEnabled = button.normalBackgroundColor != nil && button.leftBorderWidth > 0
-    guard isAlreadyEnabled != enabled else {
-      return
-    }
     if enabled {
-      button.normalBackgroundColor = Self.workspaceTabBarActionBackgroundColor
-      button.hoverBackgroundColor = Self.workspaceTabBarActionHoverBackgroundColor
-      button.activeBackgroundColor = Self.workspaceTabBarActionActiveBackgroundColor
-      button.leftBorderColor = Self.workspaceTabBarActionLeftBorderColor
-      button.leftBorderWidth = 1
+      button.setTabBarIconChrome(
+        backgroundColor: Self.workspaceTabBarActionBackgroundColor,
+        tintColor: nativePaneTabBarIconButtonTintColor,
+        leftBorderColor: Self.workspaceTabBarActionLeftBorderColor,
+        leftBorderWidth: 1)
     } else {
-      button.normalBackgroundColor = nil
-      button.hoverBackgroundColor = TerminalTitleBarActionButton.hoverBackgroundColor
-      button.activeBackgroundColor = TerminalTitleBarActionButton.activeBackgroundColor
-      button.leftBorderColor = nil
-      button.leftBorderWidth = 0
+      button.resetTabBarIconChrome()
     }
     if button === actionMenuButton {
       button.image = enabled
@@ -24575,6 +24655,29 @@ private final class TerminalSessionTitleBarView: NSView {
         : NSImage(
           systemSymbolName: "line.3.horizontal",
           accessibilityDescription: "Pane Actions")
+    }
+  }
+
+  private func setCommandTabBarActionChrome(
+    for button: TerminalTitleBarActionButton,
+    enabled: Bool
+  ) {
+    if enabled {
+      button.setTabBarIconChrome(
+        backgroundColor: nativePaneTabBarIconButtonBackgroundColor,
+        tintColor: nativePaneTabBarIconButtonTintColor)
+    } else {
+      button.resetTabBarIconChrome()
+    }
+  }
+
+  private func syncCommandTabBarActionButtonChrome() {
+    let isCommandChrome = chromeRole == .commands
+    for item in actionButtons {
+      guard let button = item.button as? TerminalTitleBarActionButton else {
+        continue
+      }
+      setCommandTabBarActionChrome(for: button, enabled: isCommandChrome)
     }
   }
 
@@ -24729,6 +24832,7 @@ private final class TerminalSessionTitleBarView: NSView {
       (item.button as? TerminalTitleBarActionButton)?.debugActionKind = item.action.rawValue
       addSubview(item.button)
     }
+    syncCommandTabBarActionButtonChrome()
     if actionMenuButton.superview == nil {
       addSubview(actionMenuButton)
     }
@@ -26803,20 +26907,6 @@ private final class PoppedOutTerminalPaneContentView: NSView {
     firstPromptTitleOverlayView.frame = firstPromptTitleOverlayView.isHidden ? .zero : terminalRect
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    if titleBarView.frame.contains(point) {
-      /**
-       CDXC:PanePopOut 2026-05-11-19:10
-       The popped-out terminal content view must give the custom native title
-       bar first ownership of its band. This keeps Pop In and sibling pane
-       actions on AppKit hit testing instead of a window monitor, even when the
-       embedded terminal/search views would otherwise compete for the same
-       mouse stream.
-       */
-      return titleBarView.hitTest(convert(point, to: titleBarView))
-    }
-    return super.hitTest(point)
-  }
 }
 
 private final class PoppedOutWebPaneContentView: NSView {
@@ -26855,18 +26945,6 @@ private final class PoppedOutWebPaneContentView: NSView {
     hostView.needsLayout = true
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    if titleBarView.frame.contains(point) {
-      /**
-       CDXC:PanePopOut 2026-05-11-19:10
-       Popped-out web panes share the terminal title-bar action contract:
-       title-bar clicks are routed by AppKit hit testing to the native title
-       bar, while the embedded browser surface owns only the content region.
-       */
-      return titleBarView.hitTest(convert(point, to: titleBarView))
-    }
-    return super.hitTest(point)
-  }
 }
 
 private final class PoppedOutPanePlaceholderView: NSView {
@@ -27006,10 +27084,6 @@ private final class TerminalPaneScrollButton: NSButton {
     true
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    isVisible ? super.hitTest(point) : nil
-  }
-
   private func configure() {
     /**
      CDXC:NativeTerminalScroll 2026-05-26-13:58:
@@ -27128,7 +27202,6 @@ private final class TerminalPaneScrollButton: NSButton {
 
 private final class TerminalPaneLeafContainerView: NSView {
   var onMouseDown: ((NSEvent) -> Void)?
-  weak var titleBarHitTestView: NSView?
 
   override var isOpaque: Bool {
     false
@@ -27148,27 +27221,13 @@ private final class TerminalPaneLeafContainerView: NSView {
     true
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    if let titleBarView = resolvedTitleBarHitTestView(),
-      titleBarView.superview === self,
-      !titleBarView.isHidden,
-      titleBarView.frame.contains(point)
-    {
-      /*
-       CDXC:NativePaneTabClicks 2026-06-12-04:08:
-       Normal in-workspace panes must make the titlebar band a hard AppKit
-       boundary. Recent click repros showed hover tracking still updating while
-       mouseDown/mouseUp hit Ghostty or sidebar web content, so route the titlebar
-       rectangle to its native titlebar before terminal/browser children can
-       compete for the same mouse stream.
-       */
-      return titleBarView.hitTest(convert(point, to: titleBarView))
-    }
-    return super.hitTest(point)
-  }
-
-  func resolvedTitleBarHitTestView() -> NSView? {
-    titleBarHitTestView ?? subviews.first { $0 is TerminalSessionTitleBarView }
+  func resolvedTitleBarView() -> TerminalSessionTitleBarView? {
+    /*
+     CDXC:NativePaneTabClicks 2026-06-13-09:52:
+     Pane containers should be ordinary parent views with strict sibling frames for titlebar and content.
+     Keep only a plain child lookup for temporary root/workspace routing while removing container-level hit-test overrides.
+     */
+    subviews.first { $0 is TerminalSessionTitleBarView } as? TerminalSessionTitleBarView
   }
 
   override func mouseDown(with event: NSEvent) {
@@ -27199,10 +27258,6 @@ private final class SleepingPanePlaceholderContentView: NSView {
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    bounds.contains(point) ? self : nil
   }
 
   override func layout() {
@@ -27461,10 +27516,6 @@ private final class TerminalPaneFirstPromptTitleOverlayView: NSView {
     fatalError("init(coder:) is not supported")
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    isHidden ? nil : self
-  }
-
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
     true
   }
@@ -27519,6 +27570,12 @@ private final class TerminalPaneFirstPromptTitleOverlayView: NSView {
 }
 
 private final class CommandsPanelChromeView: NSView {
+  /*
+   CDXC:NativeLayout 2026-06-13-09:33:
+   Command-panel chrome is a real panel background region, not a transparent
+   overlay. Keep it in normal AppKit layout and do not add click-through hit-test
+   overrides; command content and resize handles sit above it as sibling views.
+   */
   private static let backgroundColor = NSColor(
     calibratedWhite: 0.0,
     alpha: 1.0
@@ -27536,54 +27593,6 @@ private final class CommandsPanelChromeView: NSView {
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    nil
-  }
-}
-
-private final class CommandsPanelSeparatorView: NSView {
-  private static let separatorColor = NSColor(
-    srgbRed: 0x1E / 255.0,
-    green: 0x1E / 255.0,
-    blue: 0x1E / 255.0,
-    alpha: 1.0)
-
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.backgroundColor = Self.separatorColor.cgColor
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    nil
-  }
-}
-
-private final class WorkspacePaneSeparatorView: NSView {
-  private static let separatorColor = NSColor(
-    srgbRed: 0x1E / 255.0,
-    green: 0x1E / 255.0,
-    blue: 0x1E / 255.0,
-    alpha: 1.0)
-
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.backgroundColor = Self.separatorColor.cgColor
-  }
-
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) is not supported")
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    nil
   }
 }
 
@@ -27629,8 +27638,8 @@ private final class TerminalWorkspacePaneResizeHandleView: NSView {
      window-local resize monitor competing with sidebar resize.
      CDXC:NativePaneResize 2026-05-11-14:17
      The rail must be visually transparent in production. Native-style resizing
-     is represented by the real divider width; this view only owns native hit
-     testing, cursor setting, delayed hover feedback, and drag delivery.
+     is represented by the real divider width; this view owns cursor setting,
+     delayed hover feedback, and drag delivery through normal AppKit traversal.
      CDXC:NativePaneResize 2026-05-13-07:23
      Match the stable sidebar divider implementation for pane splits: the real
      five-pixel rail owns drag delivery without overlapping neighboring pane
@@ -27649,6 +27658,11 @@ private final class TerminalWorkspacePaneResizeHandleView: NSView {
      Resize rails must not leave a resize cursor stuck after release, double-click
      reset, or layout removal. Cursor cleanup is now tied to the visible rail under
      the current pointer, while begin/drag still assert the resize cursor.
+
+     CDXC:NativeLayout 2026-06-13-09:33:
+     The split rail is an exact native view and does not need a local hitTest
+     override. Normal AppKit traversal should select it from its frame; parent
+     prepass cleanup is handled separately after rail z-order is verified.
      */
     splitDirection = direction.rawValue
     layer?.backgroundColor = NSColor.clear.cgColor
@@ -27662,10 +27676,6 @@ private final class TerminalWorkspacePaneResizeHandleView: NSView {
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
     true
-  }
-
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    bounds.contains(point) ? self : nil
   }
 
   override func updateTrackingAreas() {
@@ -27808,7 +27818,7 @@ private final class TerminalWorkspacePaneResizeHandleView: NSView {
   }
 }
 
-final class TerminalPaneBorderView: NSView {
+final class TerminalPaneBorderLayer: CAShapeLayer {
   private enum BorderState: Equatable {
     case attention
     case focused
@@ -27843,41 +27853,45 @@ final class TerminalPaneBorderView: NSView {
   private var state: BorderState = .none
   private var suppressesFocusedBorder = false
 
-  override init(frame frameRect: NSRect) {
-    super.init(frame: frameRect)
-    wantsLayer = true
-    layer?.backgroundColor = NSColor.clear.cgColor
-    layer?.borderWidth = 0
-    layer?.cornerRadius = 0
-    layer?.masksToBounds = false
-    layer?.shadowRadius = 16
-    layer?.shadowOffset = .zero
-    layer?.shadowOpacity = 0
+  override init() {
+    super.init()
+    commonInit()
+  }
+
+  override init(layer: Any) {
+    super.init(layer: layer)
+    if let source = layer as? TerminalPaneBorderLayer {
+      chromeRole = source.chromeRole
+      hidesInactiveCommandBorder = source.hidesInactiveCommandBorder
+      roundedBottomCorner = source.roundedBottomCorner
+      state = source.state
+      suppressesFocusedBorder = source.suppressesFocusedBorder
+    }
+    commonInit()
   }
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) is not supported")
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    /**
-     CDXC:VisualOverlays 2026-05-11-20:24
-     Pane borders are status chrome, not controls. Always return nil so borders
-     and shadows cannot intercept terminal/browser clicks.
-     */
-    nil
+  override var bounds: CGRect {
+    didSet { updateChrome() }
   }
 
-  override func draw(_ dirtyRect: NSRect) {
-    super.draw(dirtyRect)
-    guard let borderColor = currentBorderColor() else {
-      return
-    }
-
-    let path = borderPath(in: bounds)
-    borderColor.setStroke()
-    path.lineWidth = currentBorderWidth()
-    path.stroke()
+  private func commonInit() {
+    /**
+     CDXC:NativePaneChrome 2026-06-13-09:52:
+     Pane borders are status chrome, not controls. Keep them as layers so terminal, browser, and titlebar clicks follow normal AppKit view dispatch without a full-frame decorative NSView.
+     */
+    contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+    backgroundColor = NSColor.clear.cgColor
+    fillColor = nil
+    masksToBounds = false
+    shadowRadius = 16
+    shadowOffset = .zero
+    shadowOpacity = 0
+    zPosition = 50
+    updateChrome()
   }
 
   fileprivate func setRoundedBottomCorner(_ corner: TerminalPaneRoundedBottomCorner) {
@@ -27893,7 +27907,7 @@ final class TerminalPaneBorderView: NSView {
       return
     }
     roundedBottomCorner = corner
-    needsDisplay = true
+    updateChrome()
   }
 
   fileprivate func setChromeRole(_ role: TerminalPaneChromeRole) {
@@ -27901,8 +27915,7 @@ final class TerminalPaneBorderView: NSView {
       return
     }
     chromeRole = role
-    applyShadow(for: state)
-    needsDisplay = true
+    updateChrome()
   }
 
   fileprivate func setHidesInactiveCommandBorder(_ hides: Bool) {
@@ -27910,7 +27923,7 @@ final class TerminalPaneBorderView: NSView {
       return
     }
     hidesInactiveCommandBorder = hides
-    needsDisplay = true
+    updateChrome()
   }
 
   fileprivate func setSuppressesFocusedBorder(_ suppresses: Bool) {
@@ -27922,8 +27935,7 @@ final class TerminalPaneBorderView: NSView {
       return
     }
     suppressesFocusedBorder = suppresses
-    applyShadow(for: state)
-    needsDisplay = true
+    updateChrome()
   }
 
   func setState(isFocused: Bool, isAttention: Bool) {
@@ -27942,25 +27954,41 @@ final class TerminalPaneBorderView: NSView {
       return
     }
     state = nextState
-    applyShadow(for: nextState)
-    needsDisplay = true
+    updateChrome()
   }
 
-  private func currentBorderColor() -> NSColor? {
+  private func updateChrome() {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    let nextColor = currentBorderColor()
+    let nextPath = nextColor == nil ? nil : borderPath(in: bounds)
+    path = nextPath
+    strokeColor = nextColor
+    lineWidth = nextColor == nil ? 0 : currentBorderWidth()
+    /*
+     CDXC:NativePaneChrome 2026-06-13-11:14:
+     Focused pane chrome must keep the existing outline without tinting terminal content. Do not assign the closed pane border path as a CALayer shadowPath; Core Animation treats that rectangle as a filled shadow source and paints a gray wash over the focused pane. Let the layer derive any shadow only from the stroked border pixels.
+     */
+    shadowPath = nil
+    applyShadow(for: state)
+    CATransaction.commit()
+  }
+
+  private func currentBorderColor() -> CGColor? {
     switch state {
     case .attention:
-      return NSColor(cgColor: Self.attentionBorderColor)
+      return Self.attentionBorderColor
     case .focused:
       if suppressesFocusedBorder {
         return nil
       }
-      return NSColor(cgColor: Self.focusedBorderColor)
+      return Self.focusedBorderColor
     case .none:
       if hidesInactiveCommandBorder {
         return nil
       }
       if chromeRole == .commands {
-        return NSColor(cgColor: Self.commandBorderColor)
+        return Self.commandBorderColor
       }
       return nil
     }
@@ -27969,19 +27997,19 @@ final class TerminalPaneBorderView: NSView {
   private func applyShadow(for state: BorderState) {
     switch state {
     case .attention:
-      layer?.shadowColor = Self.attentionBorderColor
-      layer?.shadowOpacity = 0.28
+      shadowColor = Self.attentionBorderColor
+      shadowOpacity = 0.28
     case .focused:
       if suppressesFocusedBorder {
-        layer?.shadowColor = nil
-        layer?.shadowOpacity = 0
+        shadowColor = nil
+        shadowOpacity = 0
       } else {
-        layer?.shadowColor = Self.focusedBorderColor
-        layer?.shadowOpacity = 0.18
+        shadowColor = Self.focusedBorderColor
+        shadowOpacity = 0.18
       }
     case .none:
-      layer?.shadowColor = nil
-      layer?.shadowOpacity = 0
+      shadowColor = nil
+      shadowOpacity = 0
     }
   }
 
@@ -27999,9 +28027,12 @@ final class TerminalPaneBorderView: NSView {
       : Self.activeBorderWidth
   }
 
-  private func borderPath(in bounds: CGRect) -> NSBezierPath {
+  private func borderPath(in bounds: CGRect) -> CGPath {
     let inset = currentBorderWidth() / 2
     let rect = bounds.insetBy(dx: inset, dy: inset)
+    guard rect.width > 0, rect.height > 0 else {
+      return CGMutablePath()
+    }
     let radius = roundedBottomCorner == .none
       ? 0
       : min(Self.roundedBottomCornerRadius, rect.width / 2, rect.height / 2)
@@ -28009,45 +28040,47 @@ final class TerminalPaneBorderView: NSView {
     case .left:
       return bottomLeftRoundedBorderPath(in: rect, radius: radius)
     case .none:
-      return NSBezierPath(rect: rect)
+      let path = CGMutablePath()
+      path.addRect(rect)
+      return path
     case .right:
       return bottomRightRoundedBorderPath(in: rect, radius: radius)
     }
   }
 
-  private func bottomLeftRoundedBorderPath(in rect: CGRect, radius: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
+  private func bottomLeftRoundedBorderPath(in rect: CGRect, radius: CGFloat) -> CGPath {
+    let path = CGMutablePath()
     path.move(to: CGPoint(x: rect.minX, y: rect.minY + radius))
     if radius > 0 {
-      path.curve(
+      path.addCurve(
         to: CGPoint(x: rect.minX + radius, y: rect.minY),
-        controlPoint1: CGPoint(x: rect.minX, y: rect.minY + radius * 0.4477),
-        controlPoint2: CGPoint(x: rect.minX + radius * 0.4477, y: rect.minY)
+        control1: CGPoint(x: rect.minX, y: rect.minY + radius * 0.4477),
+        control2: CGPoint(x: rect.minX + radius * 0.4477, y: rect.minY)
       )
     } else {
-      path.line(to: CGPoint(x: rect.minX, y: rect.minY))
+      path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
     }
-    path.line(to: CGPoint(x: rect.maxX, y: rect.minY))
-    path.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
-    path.line(to: CGPoint(x: rect.minX, y: rect.maxY))
-    path.close()
+    path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+    path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+    path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+    path.closeSubpath()
     return path
   }
 
-  private func bottomRightRoundedBorderPath(in rect: CGRect, radius: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
+  private func bottomRightRoundedBorderPath(in rect: CGRect, radius: CGFloat) -> CGPath {
+    let path = CGMutablePath()
     path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-    path.line(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+    path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
     if radius > 0 {
-      path.curve(
+      path.addCurve(
         to: CGPoint(x: rect.maxX, y: rect.minY + radius),
-        controlPoint1: CGPoint(x: rect.maxX - radius * 0.4477, y: rect.minY),
-        controlPoint2: CGPoint(x: rect.maxX, y: rect.minY + radius * 0.4477)
+        control1: CGPoint(x: rect.maxX - radius * 0.4477, y: rect.minY),
+        control2: CGPoint(x: rect.maxX, y: rect.minY + radius * 0.4477)
       )
     }
-    path.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
-    path.line(to: CGPoint(x: rect.minX, y: rect.maxY))
-    path.close()
+    path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+    path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+    path.closeSubpath()
     return path
   }
 }

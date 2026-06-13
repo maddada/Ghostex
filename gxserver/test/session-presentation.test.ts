@@ -209,6 +209,72 @@ test("passive Cursor hooks cannot rewrite a gxserver-launched Codex session", ()
   assert.equal(result.session.runtimeSettings.agentSessionPath, undefined);
 });
 
+test("startup text locks gxserver-started agent sessions against passive cross-agent metadata", () => {
+  const project = projectFixture({});
+  const session = sessionFixture({
+    agentId: "codex",
+    kind: "agent",
+    launchSettings: {
+      startupText: "codex --yolo\r",
+    },
+    runtimeSettings: {
+      agentName: "codex",
+      titleSource: "terminal-auto",
+    },
+    title: "Codex Hotkey Comparison",
+  });
+  const repository = new MockPresentationRepository(project, [session]);
+
+  const result = applySessionStateEvent(repository, {
+    agentName: "claude",
+    identityUpdateSource: "passive",
+    projectId: session.projectId,
+    sessionId: session.sessionId,
+  });
+
+  /*
+  CDXC:GxserverSessionIdentity 2026-06-13-09:08:
+  Some restored rows only preserve raw startup text such as `codex --yolo`. That launch text must still reject passive cross-agent hooks so stale Claude metadata cannot override a Codex session for sidebar, search, resume, or status consumers.
+  */
+  assert.equal(result.changed, false);
+  assert.equal(result.reason, "launch-agent-mismatch");
+  assert.equal(result.session.agentId, "codex");
+  assert.equal(result.session.runtimeSettings.agentName, "codex");
+});
+
+test("live process identity can switch a startup-locked session after the user changes agents", () => {
+  const claudeSessionId = "9970b270-b39f-4d63-a764-fa8d88083995";
+  const project = projectFixture({});
+  const session = sessionFixture({
+    agentId: "codex",
+    kind: "agent",
+    launchSettings: {
+      startupText: "codex --yolo\r",
+    },
+    runtimeSettings: {
+      agentName: "codex",
+      launchAgentId: "codex",
+      titleSource: "terminal-auto",
+    },
+    title: "Manual Agent Switch",
+  });
+  const repository = new MockPresentationRepository(project, [session]);
+
+  const result = applySessionStateEvent(repository, {
+    agentName: "claude",
+    agentSessionId: claudeSessionId,
+    identityUpdateSource: "live-process",
+    projectId: session.projectId,
+    sessionId: session.sessionId,
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.session.agentId, "claude");
+  assert.equal(result.session.runtimeSettings.agentName, "claude");
+  assert.equal(result.session.runtimeSettings.agentSessionId, claudeSessionId);
+  assert.equal(result.session.runtimeSettings.launchAgentId, "claude");
+});
+
 test("passive Cursor transcript paths correct stale Codex identity without agent name", () => {
   const cursorSessionId = "866a452b-3a52-4f27-9b26-fd717a2f1c16";
   const cursorSessionPath =

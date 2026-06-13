@@ -1988,17 +1988,6 @@ async function syncLiveZmxProcessIdentities(
     if (!identity?.agentId) {
       continue;
     }
-    const launchAgentMismatch = resolveSessionLaunchAgentMismatch(current, identity.agentId);
-    if (launchAgentMismatch) {
-      logSessionLaunchAgentMismatch(runtime, {
-        projectId: current.projectId,
-        sessionId: current.sessionId,
-      }, launchAgentMismatch, "live-process-identity", {
-        hasAgentSessionId: identity.agentSessionId !== undefined,
-        hasAgentSessionPath: identity.agentSessionPath !== undefined,
-      });
-      continue;
-    }
     const result = applySessionStateEvent(repository, {
       agentName: identity.agentId,
       agentSessionId: identity.agentSessionId,
