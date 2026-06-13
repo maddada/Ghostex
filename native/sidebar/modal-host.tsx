@@ -9,7 +9,6 @@ import { CommandPalette } from "../../sidebar/command-palette";
 import { CommandConfigModal, type CommandConfigDraft } from "../../sidebar/command-config-modal";
 import { DaemonSessionsModal } from "../../sidebar/daemon-sessions-modal";
 import { DelayedSendModal } from "../../sidebar/delayed-send-modal";
-import { FindPreviousSessionModal } from "../../sidebar/find-previous-session-modal";
 import { FirstUserMessageModal } from "../../sidebar/first-user-message-modal";
 import { PinnedPromptsModal } from "../../sidebar/pinned-prompts-modal";
 import { PreviousSessionsModal } from "../../sidebar/previous-sessions-modal";
@@ -68,7 +67,6 @@ type AppModalKind =
   | "configureAgents"
   | "daemonSessions"
   | "delayedSend"
-  | "findPreviousSession"
   | "hotkeys"
   | "gitCommit"
   | "gitFileDiff"
@@ -244,10 +242,6 @@ type DelayedSendModalState = {
   title?: string;
 };
 
-type FindPreviousSessionModalState = {
-  initialQuery?: string;
-};
-
 type FloatingPromptEditorFrame = {
   height: number;
   left: number;
@@ -409,10 +403,10 @@ const vscode: WebviewApi = {
       console.debug("[ghostex-app-modal-host] sidebarCommand", redactAppModalDebugMessage(message));
     }
     /**
-     * CDXC:PreviousSessions 2026-05-07-16:02
-     * Previous-session search crosses the full-window modal host before the
-     * native sidebar handles it. Log every modal command at this boundary so a
-     * dead Find Session button can be traced to React, WebKit, or native code.
+     * CDXC:AppModals 2026-06-13-01:09:
+     * Previous Sessions no longer sends agent-prompt search commands, but modal
+     * commands still cross this full-window host before native dispatch. Keep a
+     * single debug boundary for restore, delete, and direct text-search commands.
      */
     postAppModalHostMessage({ message, type: "sidebarCommand" }, "AppModals:sidebarCommand");
   },
@@ -1811,7 +1805,6 @@ function AppModalHost() {
     agentsHubFileContent,
     config,
     delayedSend,
-    findPreviousSession,
     firstUserMessage,
     gitCommit,
     gitFileDiff,
@@ -1871,7 +1864,6 @@ function AppModalHost() {
     activeModal,
     config,
     delayedSend,
-    findPreviousSession,
     firstUserMessage,
     gitCommit,
     gitFileDiff,
@@ -2162,23 +2154,6 @@ function AppModalHost() {
         }}
         petOverlayEnabled={settings?.petOverlayEnabled}
         vscode={vscode}
-      />
-      <FindPreviousSessionModal
-        initialQuery={findPreviousSession?.initialQuery}
-        isOpen={activeModal === "findPreviousSession"}
-        onCancel={closeModal}
-        onConfirm={(query) => {
-          if (isAppModalDebugLoggingEnabled()) {
-            console.debug("[ghostex-app-modal-host] findPreviousSession.confirm", {
-              queryLength: query.trim().length,
-            });
-          }
-          vscode.postMessage({
-            query,
-            type: "promptFindPreviousSession",
-          });
-          closeModal();
-        }}
       />
       <DelayedSendModal
         delayedSendDeadlineAt={delayedSend?.delayedSendDeadlineAt}
@@ -2715,7 +2690,6 @@ function useModalStateFromNative() {
     useState<AgentsHubFileContentMessage>();
   const [config, setConfig] = useState<ConfigModalState>({});
   const [delayedSend, setDelayedSend] = useState<DelayedSendModalState>();
-  const [findPreviousSession, setFindPreviousSession] = useState<FindPreviousSessionModalState>();
   const [firstUserMessage, setFirstUserMessage] = useState<FirstUserMessageModalState>();
   const [gitCommit, setGitCommit] = useState<GitCommitModalDraft>();
   const [gitFileDiff, setGitFileDiff] = useState<GitFileDiffModalDraft>();
@@ -2747,7 +2721,6 @@ function useModalStateFromNative() {
     setAddRepository({});
     setConfig({});
     setDelayedSend(undefined);
-    setFindPreviousSession(undefined);
     setFirstUserMessage(undefined);
     setGitCommit(undefined);
     setGitFileDiff(undefined);
@@ -2822,7 +2795,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -2841,7 +2813,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
@@ -2865,7 +2836,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -2899,7 +2869,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -2961,7 +2930,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
@@ -2987,23 +2955,6 @@ function useModalStateFromNative() {
               title: typeof message.title === "string" ? message.title : undefined,
             });
             setConfig({});
-            setFindPreviousSession(undefined);
-            setFirstUserMessage(undefined);
-            setFloatingPromptEditor(undefined);
-            setRemoteGxserverInstall(undefined);
-            setRemoteProjectPicker(undefined);
-            setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
-            setWorktree(undefined);
-            setWorktreeDelete(undefined);
-          } else if (message.modal === "findPreviousSession") {
-            setFindPreviousSession({
-              initialQuery:
-                typeof message.initialQuery === "string" ? message.initialQuery : undefined,
-            });
-            setConfig({});
-            setDelayedSend(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3026,7 +2977,6 @@ function useModalStateFromNative() {
             setT3BrowserAccess(message.access);
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3045,7 +2995,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3064,7 +3013,6 @@ function useModalStateFromNative() {
             });
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3081,7 +3029,6 @@ function useModalStateFromNative() {
             setWorktreeDelete(message.worktreeDeleteDraft);
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3099,7 +3046,6 @@ function useModalStateFromNative() {
             setGitFileDiff(undefined);
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteProjectPicker(undefined);
@@ -3124,7 +3070,6 @@ function useModalStateFromNative() {
             });
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-            setFindPreviousSession(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
@@ -3140,7 +3085,6 @@ function useModalStateFromNative() {
             setConfig({ agentDraft: message.agentDraft });
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
-            setFindPreviousSession(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
@@ -3152,7 +3096,6 @@ function useModalStateFromNative() {
           } else {
             setConfig({});
             setDelayedSend(undefined);
-            setFindPreviousSession(undefined);
             setFirstUserMessage(undefined);
             setFloatingPromptEditor(undefined);
             setRemoteGxserverInstall(undefined);
@@ -3398,7 +3341,6 @@ function useModalStateFromNative() {
     agentsHubFileContent,
     config,
     delayedSend,
-    findPreviousSession,
     firstUserMessage,
     gitCommit,
     gitFileDiff,
@@ -3513,7 +3455,6 @@ function isModalRenderable({
   activeModal,
   config,
   delayedSend,
-  findPreviousSession,
   firstUserMessage,
   gitCommit,
   gitFileDiff,
@@ -3530,7 +3471,6 @@ function isModalRenderable({
   activeModal: AppModalKind | undefined;
   config: ConfigModalState;
   delayedSend: DelayedSendModalState | undefined;
-  findPreviousSession: FindPreviousSessionModalState | undefined;
   firstUserMessage: FirstUserMessageModalState | undefined;
   gitCommit: GitCommitModalDraft | undefined;
   gitFileDiff: GitFileDiffModalDraft | undefined;
@@ -3558,8 +3498,6 @@ function isModalRenderable({
       return config.commandDraft !== undefined;
     case "delayedSend":
       return delayedSend !== undefined;
-    case "findPreviousSession":
-      return findPreviousSession !== undefined;
     case "firstUserMessage":
       return firstUserMessage !== undefined;
     case "gitCommit":

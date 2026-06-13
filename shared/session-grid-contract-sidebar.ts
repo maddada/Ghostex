@@ -712,11 +712,6 @@ export type SidebarShowSessionRenameModalMessage = {
   type: "showSessionRenameModal";
 };
 
-export type SidebarShowFindPreviousSessionModalMessage = {
-  initialQuery?: string;
-  type: "showFindPreviousSessionModal";
-};
-
 export type SidebarShowT3ThreadIdModalMessage = {
   currentThreadId: string;
   sessionId: string;
@@ -772,7 +767,6 @@ export type ExtensionToSidebarMessage =
   | SidebarGhostexCliStatusMessage
   | SidebarOSIntegrationStatusMessage
   | SidebarShowSessionRenameModalMessage
-  | SidebarShowFindPreviousSessionModalMessage
   | SidebarShowT3ThreadIdModalMessage
   | SidebarPreviousSessionsResultMessage
   | SidebarRemoteMachineStatusMessage;
@@ -1550,25 +1544,19 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:PreviousSessions 2026-04-28-05:36
-       * Native full-window modals cannot rely on WKWebView JavaScript prompt
-       * dialogs. Carry the user's typed search text with the command so the
-       * native launcher can create the agent session immediately.
-       */
-      query?: string;
-      type: "promptFindPreviousSession";
-    }
-  | {
-      /**
        * CDXC:PreviousSessions 2026-05-29-12:36:
-       * Previous Sessions needs a direct text-search launcher beside the agent
-       * prompt workflow. Keep it as an explicit sidebar command so the modal
-       * can start a fresh terminal running `gx f` without overloading the
-       * existing prompt-to-agent message.
+       * Previous Sessions needs a direct text-search launcher. Keep it as an
+       * explicit sidebar command so the Search row can start a fresh terminal
+       * running `gx f`.
        *
        * CDXC:PreviousSessions 2026-05-29-20:32:
        * Search by Text must create that terminal in the currently active
        * project, not in the Quick/projectless terminal area.
+       *
+       * CDXC:PreviousSessions 2026-06-13-01:09:
+       * The Previous Sessions modal no longer renders launch buttons, and the
+       * agent-based previous-session prompt path has been removed. This command
+       * remains the direct Search row launcher only.
        */
       type: "searchPreviousSessionsByText";
     }

@@ -16,7 +16,6 @@ export type AppModalKind =
   | "configureActions"
   | "configureAgents"
   | "daemonSessions"
-  | "findPreviousSession"
   | "floatingPromptEditor"
   | "gitFileDiff"
   | "deleteWorktree"
@@ -46,7 +45,6 @@ export type OpenAppModalMessage =
         | "commandConfig"
         | "delayedSend"
         | "firstUserMessage"
-        | "findPreviousSession"
         | "floatingPromptEditor"
         | "gitFileDiff"
         | "deleteWorktree"
@@ -78,7 +76,6 @@ export type OpenAppModalMessage =
       remoteMachineName: string;
       type: "open";
     }
-  | { initialQuery?: string; modal: "findPreviousSession"; type: "open" }
   | {
       initialSearchQuery?: string;
       initialRemoteMachineId?: string;

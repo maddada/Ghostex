@@ -346,7 +346,7 @@ export function PreviousSessionsModal({
         >
           <button
             aria-label="Close previous sessions"
-            className="confirm-modal-close-button"
+            className="confirm-modal-close-button previous-sessions-close-button"
             onClick={onClose}
             type="button"
           >
@@ -496,54 +496,10 @@ export function PreviousSessionsModal({
               </div>
             )}
           </div>
-          <div className="previous-sessions-footer">
-            <button
-              className="previous-sessions-find-button"
-              onClick={() => {
-                const normalizedQuery = searchQuery.trim();
-                if (showDebugSessionNumbers) {
-                  console.debug("[ghostex-previous-sessions] promptFindPreviousSession.click", {
-                    hasQuery: Boolean(normalizedQuery),
-                    queryLength: normalizedQuery.length,
-                  });
-                }
-                /**
-                 * CDXC:PreviousSessions 2026-05-07-16:02
-                 * The footer button is explicitly a prompt launcher. Always
-                 * send the command: an empty sidebar search opens the dedicated
-                 * Find Previous Session prompt, while non-empty text is used as
-                 * that prompt's initial query.
-                 */
-                vscode.postMessage({
-                  query: normalizedQuery || undefined,
-                  type: "promptFindPreviousSession",
-                });
-                onClose();
-              }}
-              type="button"
-            >
-              Prompt to Search
-            </button>
-            <button
-              className="previous-sessions-find-button"
-              onClick={() => {
-                /**
-                 * CDXC:PreviousSessions 2026-05-29-12:36:
-                 * Search by Text is the lightweight zehn path: start a new
-                 * terminal and run `gx f` directly. Keep it separate from
-                 * Prompt to Search, which creates an agent helper and stages a
-                 * natural-language recovery prompt.
-                 */
-                vscode.postMessage({
-                  type: "searchPreviousSessionsByText",
-                });
-                onClose();
-              }}
-              type="button"
-            >
-              Search by Text
-            </button>
-          </div>
+          {/*
+           * CDXC:PreviousSessions 2026-06-13-01:09:
+           * Previous Sessions is now a browse, filter, restore, and delete modal only. Do not render footer launch buttons here, and do not expose the removed agent-prompt search workflow from this surface.
+           */}
         </div>
       </div>
     </TooltipProvider>,

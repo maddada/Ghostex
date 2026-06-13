@@ -1219,15 +1219,6 @@ export function SidebarApp({
       return;
     }
 
-    if (event.data.type === "showFindPreviousSessionModal") {
-      openAppModal({
-        initialQuery: event.data.initialQuery,
-        modal: "findPreviousSession",
-        type: "open",
-      });
-      return;
-    }
-
     if (event.data.type === "showT3ThreadIdModal") {
       openAppModal({
         modal: "t3ThreadId",
