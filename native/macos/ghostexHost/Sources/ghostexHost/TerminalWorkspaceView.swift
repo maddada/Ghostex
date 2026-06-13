@@ -6478,7 +6478,6 @@ final class TerminalWorkspaceView: NSView {
     let nextPoppedOutSessionIds = Set(command.poppedOutSessionIds ?? []).intersection(nextActiveSessionIds)
     let nextPaneGap = Self.clampedPaneGap(command.paneGap)
     let nextLayout = command.layout
-    let previousSidebarResizeEdgeExtensionWidth = sidebarResizeEdgeExtensionWidth
     let previousDelayedSendRemainingLabels = sessionDelayedSendRemainingLabels
     let shouldRelayout =
       command.layoutChanged
@@ -6609,15 +6608,6 @@ final class TerminalWorkspaceView: NSView {
     paneGap = nextPaneGap
     if shouldRefreshPaneTabMetadata && !shouldRelayout {
       syncPaneTabChromeFromCurrentLayout()
-    }
-    if abs(sidebarResizeEdgeExtensionWidth - previousSidebarResizeEdgeExtensionWidth) > 0.5 {
-      /**
-       CDXC:SidebarResizeRails 2026-05-15-03:59:
-       The root sidebar divider owns the workspace edge gap. Active-pane and
-       pane-gap changes happen inside TerminalWorkspaceView, so ask the parent
-       root view to refresh the divider frame whenever that covered width changes.
-       */
-      superview?.needsLayout = true
     }
     applyProjectEditorCompanionPaneHiddenPreference(
       command.activeProjectEditorCompanionPaneHidden,
@@ -10321,20 +10311,6 @@ final class TerminalWorkspaceView: NSView {
      views, because overlap lets those views compete for hover and drag ownership.
      */
     return hit.rect.intersection(bounds)
-  }
-
-  var sidebarResizeEdgeExtensionWidth: CGFloat {
-    /**
-     CDXC:SidebarResizeRails 2026-05-15-03:59:
-     The sidebar/workspace boundary has one AppKit resize owner: ghostexRootView's
-     root divider. Expose the workspace edge gap width so the root divider can
-     cover that visible gap without TerminalWorkspaceView installing a second
-     hover affordance or drag target beside split panes.
-     */
-    guard paneGap > 0, !orderedVisibleSessionIds().isEmpty else {
-      return 0
-    }
-    return paneGap
   }
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

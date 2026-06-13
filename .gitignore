@@ -15,7 +15,6 @@ tmp/imagegen/
 .DS_Store
 .vscode/
 .fresh/
-AGENTS.md
 .agents/skills/
 .agents/skills/ghostex-release-to-brew/SKILL.md
 storybook-static/
@@ -27,9 +26,13 @@ native/macos/ghostexHost/build/
 native/macos/ghostexHost/ghostexHost.xcodeproj/
 native/macos/ghostexHost/ghostex.xcodeproj/
 tmp/
-# CDXC:PublicRelease 2026-04-27-05:36: Keep local agent instructions,
-# generated Storybook output, native build products, and runtime logs out of
-# the public repository while preserving each developer's local copies.
+# CDXC:PublicRelease 2026-04-27-05:36: Keep generated Storybook output,
+# native build products, and runtime logs out of the public repository while
+# preserving each developer's local copies.
+# CDXC:AgentInstructions 2026-06-13-09:26: Track the repo AGENTS.md so Ghostex
+# native layout and hit-testing requirements travel with app source instead of
+# living only as a local ignored instruction file. Keep private agent skill
+# folders ignored separately.
 # CDXC:Distribution 2026-04-28-04:19: Release DMG/ZIP artifacts are uploaded to
 # GitHub Releases and referenced by Homebrew casks, so git should track source
 # and metadata only instead of committing binary distribution outputs.

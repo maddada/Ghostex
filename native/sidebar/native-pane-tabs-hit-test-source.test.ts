@@ -57,13 +57,13 @@ describe("native pane tab titlebar hit testing", () => {
     expect(titlebarHelperSource).toContain('NativePaneTabDragReproLog.append(event: "nativePaneTabs.root.hitTest.titleBarPrepass"');
   });
 
-  test("routes right-side sidebar content before workspace prepasses", () => {
+  test("keeps sidebar and divider as non-overlapping native regions", () => {
     /*
-     * CDXC:SidebarPlacement 2026-06-13-08:14:
-     * Right-side sidebar controls must remain clickable after AppKit moves the
-     * sidebar webview to the trailing edge. The root hit-test path should ask
-     * visible sidebar content first, but only after the sidebar webview confirms
-     * the point is outside its native resize-divider exclusion band.
+     * CDXC:NativeLayout 2026-06-13-09:02:
+     * Sidebar controls should be clickable through normal AppKit traversal, not
+     * a root hit-test prepass. Keep the sidebar WKWebView and native divider in
+     * adjacent frames so the divider owns only its visible grab region and the
+     * webview owns only sidebar content.
      */
     const rootHitTestIndex = appDelegateSource.indexOf(
       "override func hitTest(_ point: NSPoint) -> NSView?",
@@ -73,40 +73,31 @@ describe("native pane tab titlebar hit testing", () => {
       "if let sidebarHitView = sidebarContentHitView(at: point)",
       rootHitTestIndex,
     );
-    const resizePrepassIndex = appDelegateSource.indexOf(
-      "if let resizeHandleHitView = workspaceResizeHandleHitView(at: point)",
-      rootHitTestIndex,
-    );
-    const titlebarPrepassIndex = appDelegateSource.indexOf(
-      "if let paneTitleBarHitView = workspacePaneTitleBarHitView(at: point)",
-      rootHitTestIndex,
-    );
-    const sidebarHelperSource = sourceSection(
-      appDelegateSource,
-      "private func sidebarContentHitView(at point: NSPoint)",
-      "private func workspaceResizeHandleHitView",
-      rootHitTestIndex,
-    );
     const sidebarWebViewSource = sourceSection(
       appDelegateSource,
       "final class SidebarWebView: WKWebView",
       "final class SidebarModalBackdropView",
     );
+    const layoutSource = sourceSection(
+      appDelegateSource,
+      "override func layout()",
+      "private func dividerSeparatorFrame",
+      appDelegateSource.indexOf("final class ghostexRootView"),
+    );
 
     expect(rootHitTestIndex).toBeGreaterThan(-1);
-    expect(sidebarPrepassIndex).toBeGreaterThan(rootHitTestIndex);
-    expect(sidebarPrepassIndex).toBeLessThan(resizePrepassIndex);
-    expect(sidebarPrepassIndex).toBeLessThan(titlebarPrepassIndex);
-    expect(sidebarHelperSource).toContain("!isSidebarCollapsed");
-    expect(sidebarHelperSource).toContain("!sidebarView.isHidden");
-    expect(sidebarHelperSource).toContain("sidebarView.frame.contains(point)");
-    expect(sidebarHelperSource).toContain("let sidebarPoint = convert(point, to: sidebarView)");
-    expect(sidebarHelperSource).toContain("sidebarView.containsInteractiveHitPoint(sidebarPoint)");
-    expect(sidebarHelperSource).toContain("return sidebarView.hitTest(sidebarPoint) ?? sidebarView");
-    expect(sidebarWebViewSource).toContain("func containsInteractiveHitPoint(_ point: NSPoint) -> Bool");
-    expect(sidebarWebViewSource).toContain("isInteractivePoint(point)");
-    expect(sidebarWebViewSource).toContain("case .right:");
-    expect(sidebarWebViewSource).toContain("return point.x > bounds.minX + excludedWidth");
+    expect(sidebarPrepassIndex).toBe(-1);
+    expect(appDelegateSource).not.toContain("private func sidebarContentHitView(at point: NSPoint)");
+    expect(layoutSource).toContain("sidebarView.frame = frames.sidebar");
+    expect(layoutSource).toContain("divider.frame = frames.divider");
+    expect(layoutSource).not.toContain("visualSidebarFrame");
+    expect(layoutSource).not.toContain("resizeHitExclusion");
+    expect(appDelegateSource).not.toContain("sidebarResizeEdgeExtension");
+    expect(appDelegateSource).not.toContain("private func visualSidebarFrame");
+    expect(terminalWorkspaceSource).not.toContain("sidebarResizeEdgeExtensionWidth");
+    expect(sidebarWebViewSource).not.toContain("override func hitTest(_ point: NSPoint) -> NSView?");
+    expect(sidebarWebViewSource).not.toContain("containsInteractiveHitPoint");
+    expect(sidebarWebViewSource).not.toContain("resizeHitExclusion");
   });
 
   test("routes pane titlebar controls from the window before React titlebar dispatch", () => {

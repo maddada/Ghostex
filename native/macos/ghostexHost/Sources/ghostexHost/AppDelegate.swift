@@ -5034,8 +5034,6 @@ final class TitlebarChromeWebView: WKWebView {
 }
 
 final class SidebarWebView: WKWebView {
-  var resizeHitExclusionSide: SidebarSide = .left
-  var resizeHitExclusionWidth: CGFloat = 0
   var onNativePointerInsideChanged: ((Bool) -> Void)?
   private var nativePointerInside: Bool?
   private var nativePointerTrackingArea: NSTrackingArea?
@@ -5048,9 +5046,14 @@ final class SidebarWebView: WKWebView {
     /*
      CDXC:SidebarHover 2026-06-10-23:44:
      Sidebar hover state must follow AppKit's effective WebView boundary, not only
-     WebKit's last mouse target. Track mouse movement in native code so crossing
-     into the resize-excluded strip or leaving the sidebar can invalidate stale
-     CSS :hover before delayed tooltips open.
+     WebKit's last mouse target. Track mouse movement in native code so leaving
+     the exact sidebar frame invalidates stale CSS :hover before delayed tooltips
+     open.
+
+     CDXC:NativeLayout 2026-06-13-09:02:
+     The sidebar webview no longer paints or receives events under the native
+     divider. Its AppKit frame is the sidebar's exact content region, so pointer
+     tracking can follow normal bounds containment instead of hit-test exclusion.
      */
     let trackingArea = NSTrackingArea(
       rect: .zero,
@@ -5077,59 +5080,8 @@ final class SidebarWebView: WKWebView {
     super.mouseExited(with: event)
   }
 
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    guard bounds.contains(point) else {
-      setNativePointerInside(false)
-      return nil
-    }
-    /**
-     CDXC:NativeSidebarChrome 2026-06-04-22:20:
-     The sidebar webview visually paints under the native resize divider to
-     remove the right-edge gap, but WebKit must not receive pointer events in
-     that divider strip. Yield that band so the AppKit resize handle remains
-     the single drag owner.
-     */
-    let excludedWidth = min(max(resizeHitExclusionWidth, 0), bounds.width)
-    if excludedWidth > 0 {
-      switch resizeHitExclusionSide {
-      case .left:
-        if point.x >= bounds.maxX - excludedWidth {
-          setNativePointerInside(false)
-          return nil
-        }
-      case .right:
-        if point.x <= bounds.minX + excludedWidth {
-          setNativePointerInside(false)
-          return nil
-        }
-      }
-    }
-    setNativePointerInside(true)
-    return super.hitTest(point)
-  }
-
   private func updateNativePointerInside(for event: NSEvent) {
-    setNativePointerInside(isInteractivePoint(convert(event.locationInWindow, from: nil)))
-  }
-
-  func containsInteractiveHitPoint(_ point: NSPoint) -> Bool {
-    isInteractivePoint(point)
-  }
-
-  private func isInteractivePoint(_ point: NSPoint) -> Bool {
-    guard bounds.contains(point) else {
-      return false
-    }
-    let excludedWidth = min(max(resizeHitExclusionWidth, 0), bounds.width)
-    guard excludedWidth > 0 else {
-      return true
-    }
-    switch resizeHitExclusionSide {
-    case .left:
-      return point.x < bounds.maxX - excludedWidth
-    case .right:
-      return point.x > bounds.minX + excludedWidth
-    }
+    setNativePointerInside(bounds.contains(convert(event.locationInWindow, from: nil)))
   }
 
   private func setNativePointerInside(_ isInside: Bool) {
@@ -9875,8 +9827,6 @@ final class ghostexRootView: NSView {
     super.layout()
     let frames = rootLayoutFrames()
     validateRootLayoutFrames(frames)
-    let sidebarVisualFrame = visualSidebarFrame(for: frames)
-    let sidebarResizeHitWidth = min(Self.dividerWidth, max(frames.divider.width, 0))
     /**
      CDXC:NativeSidebarChrome 2026-05-31-18:58:
      The native #252525 sidebar/workarea border and resize strip must remain
@@ -9884,22 +9834,14 @@ final class ghostexRootView: NSView {
      WKWebView so web content cannot interfere with the transparent native drag
      handle.
 
-     CDXC:NativeSidebarChrome 2026-06-04-22:14:
-     The reference sidebar must visually reach the workspace edge in the macOS
-     app. Paint the sidebar webview under the standard transparent resize
-     divider while keeping the divider above it for hit testing and drag
-     ownership.
-
-     CDXC:NativeSidebarChrome 2026-06-04-22:20:
-     The sidebar webview's excluded hit-test strip must match the fixed native
-     divider paint width so dragging continues to resize the sidebar after the
-     webview starts painting under that transparent divider.
+     CDXC:NativeLayout 2026-06-13-09:02:
+     The sidebar, divider, and workspace must be strict sibling regions. Do not
+     extend the sidebar WKWebView under the native divider or compensate with
+     sidebar hit-test exclusions; the visible divider owns only its own frame.
      */
     let shouldRefreshDividerCursorAfterLayout =
       isSidebarCollapsed && !divider.isHidden && divider.needsCursorRefreshBeforeHide()
-    sidebarView.frame = sidebarVisualFrame
-    sidebarView.resizeHitExclusionSide = sidebarSide
-    sidebarView.resizeHitExclusionWidth = sidebarResizeHitWidth
+    sidebarView.frame = frames.sidebar
     divider.frame = frames.divider
     divider.separatorFrame = dividerSeparatorFrame(for: frames)
     sidebarView.isHidden = isSidebarCollapsed
@@ -9931,32 +9873,6 @@ final class ghostexRootView: NSView {
       height: startupOverlayIconSize
     )
     titlebarChromeView.titlebarHeight = Self.reactTitlebarHeight
-  }
-
-  private func visualSidebarFrame(for frames: RootLayoutFrames) -> CGRect {
-    /**
-     CDXC:NativeSidebarChrome 2026-06-04-22:14:
-     The transparent root divider is the source of the visible right-edge gap
-     beside left-side sidebars. Extend only the webview's paint frame across
-     the fixed divider width; do not include the dynamic workspace edge
-     extension because that belongs to split-pane resize ownership.
-     */
-    let dividerPaintWidth = min(Self.dividerWidth, max(frames.divider.width, 0))
-    guard dividerPaintWidth > 0 else {
-      return frames.sidebar
-    }
-    if sidebarSide == .left {
-      return CGRect(
-        x: frames.sidebar.minX,
-        y: frames.sidebar.minY,
-        width: frames.sidebar.width + dividerPaintWidth,
-        height: frames.sidebar.height)
-    }
-    return CGRect(
-      x: frames.sidebar.minX - dividerPaintWidth,
-      y: frames.sidebar.minY,
-      width: frames.sidebar.width + dividerPaintWidth,
-      height: frames.sidebar.height)
   }
 
   private func dividerSeparatorFrame(for frames: RootLayoutFrames) -> CGRect? {
@@ -10024,15 +9940,12 @@ final class ghostexRootView: NSView {
    pre-pass as resize rails so tab activation, tab Close, and tab-bar action
    buttons are owned by the visible native titlebar under the pointer.
 
-   CDXC:SidebarPlacement 2026-06-13-08:14:
-   Right-side sidebar clicks must not enter workspace prepasses before the
-   sidebar webview has a chance to claim visible content. Keep this as a narrow
-   sidebar-content prepass that still yields the native resize divider strip.
+   CDXC:NativeLayout 2026-06-13-09:02:
+   Sidebar clicks should follow normal AppKit traversal. The sidebar webview and
+   divider now use adjacent non-overlapping frames, so the root view must not add
+   a sidebar-specific hit-test prepass to compensate for divider underlap.
    */
   override func hitTest(_ point: NSPoint) -> NSView? {
-    if let sidebarHitView = sidebarContentHitView(at: point) {
-      return sidebarHitView
-    }
     if let resizeHandleHitView = workspaceResizeHandleHitView(at: point) {
       return resizeHandleHitView
     }
@@ -10040,24 +9953,6 @@ final class ghostexRootView: NSView {
       return paneTitleBarHitView
     }
     return super.hitTest(point)
-  }
-
-  private func sidebarContentHitView(at point: NSPoint) -> NSView? {
-    /*
-     CDXC:SidebarPlacement 2026-06-13-08:14:
-     Right-side sidebar content must remain clickable after the webview moves to
-     the trailing edge. Resolve visible sidebar content before workspace resize
-     and pane-titlebar prepasses, while still yielding the native divider strip
-     so resizing keeps its single AppKit owner.
-     */
-    guard !isSidebarCollapsed, !sidebarView.isHidden, sidebarView.frame.contains(point) else {
-      return nil
-    }
-    let sidebarPoint = convert(point, to: sidebarView)
-    guard sidebarView.containsInteractiveHitPoint(sidebarPoint) else {
-      return nil
-    }
-    return sidebarView.hitTest(sidebarPoint) ?? sidebarView
   }
 
   private func workspaceResizeHandleHitView(at point: NSPoint) -> NSView? {
@@ -10133,9 +10028,6 @@ final class ghostexRootView: NSView {
     let chromeX: CGFloat = sidebarSide == .left ? 0 : max(bounds.width - chromeWidth, 0)
     let workspaceX: CGFloat = sidebarSide == .left ? chromeWidth : 0
     let workspaceWidth = max(bounds.width - chromeWidth, 1)
-    let sidebarResizeEdgeExtension = min(
-      max(workspaceView.sidebarResizeEdgeExtensionWidth, 0),
-      workspaceWidth)
     /**
      CDXC:EditorPanes 2026-05-08-13:02
      Resizing the sidebar while a VS Code editor pane is visible can crash the
@@ -10162,20 +10054,20 @@ final class ghostexRootView: NSView {
      same handle on their left edge so dragging grows/shrinks the visible
      sidebar boundary instead of the outside window edge.
 
-     CDXC:SidebarResizeRails 2026-05-15-03:59:
-     The sidebar/workspace boundary must have one native resize owner. Extend the
-     existing root divider over the adjacent workspace edge gap so split-pane
-     layouts do not show a second sidebar rail with separate drag handling.
+     CDXC:NativeLayout 2026-06-13-09:02:
+     The sidebar divider must be exactly the visible native divider width. Do not
+     extend it over workspace pane gaps or adjacent content; those pixels belong
+     to the workspace region and should not become an invisible sidebar grab area.
      */
     let sidebarX: CGFloat
     let dividerX: CGFloat
-    let dividerWidth = Self.dividerWidth + sidebarResizeEdgeExtension
+    let dividerWidth = Self.dividerWidth
     if sidebarSide == .left {
       sidebarX = chromeX
       dividerX = chromeX + workspaceBarWidth + sidebarWidth
     } else {
       sidebarX = chromeX + Self.dividerWidth
-      dividerX = chromeX - sidebarResizeEdgeExtension
+      dividerX = chromeX
     }
 
     let sidebarFrame = CGRect(
