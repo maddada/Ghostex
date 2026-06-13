@@ -1525,6 +1525,19 @@ export function selectPaneTabInSimpleWorkspace(
     groupSnapshotWithVirtualTabs.paneLayout,
     sessionId,
   );
+  const selectedSession = groupSnapshotWithVirtualTabs.sessions.find(
+    (session) => session.sessionId === sessionId,
+  );
+  /**
+   * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+   * Selecting a sleeping native tab should only change the pane/tab owner in
+   * paneLayout. Preserve the current awake runtime focus until the black
+   * placeholder body sends the explicit wake request.
+   */
+  const nextFocusedSessionId =
+    selectedSession?.isSleeping === true
+      ? groupSnapshotWithVirtualTabs.focusedSessionId
+      : sessionId;
   if (!groupSnapshotWithVirtualTabs.visibleSessionIds.includes(sessionId)) {
     const focusedTabSessionIds =
       groupSnapshotWithVirtualTabs.visibleCount === 1 &&
@@ -1550,7 +1563,10 @@ export function selectPaneTabInSimpleWorkspace(
       groupSnapshotWithVirtualTabs.paneLayout,
       sessionId,
     );
-    const nextVisibleSessionIds = [...groupSnapshotWithVirtualTabs.visibleSessionIds, sessionId];
+    const nextVisibleSessionIds =
+      selectedSession?.isSleeping === true
+        ? groupSnapshotWithVirtualTabs.visibleSessionIds
+        : [...groupSnapshotWithVirtualTabs.visibleSessionIds, sessionId];
     /**
      * CDXC:PaneTabs 2026-05-29-09:04:
      * Native tab chrome can expose virtual tab members that are not in legacy
@@ -1562,11 +1578,14 @@ export function selectPaneTabInSimpleWorkspace(
       ...targetGroup,
       snapshot: normalizeGroupSnapshot({
         ...groupSnapshotWithVirtualTabs,
-        focusedSessionId: sessionId,
+        focusedSessionId: nextFocusedSessionId,
         ...(nextLayout ? { paneLayout: nextLayout } : {}),
-        visibleCount: clampSupportedVisibleCount(
-          Math.max(groupSnapshotWithVirtualTabs.visibleCount, nextVisibleSessionIds.length),
-        ),
+        visibleCount:
+          selectedSession?.isSleeping === true
+            ? groupSnapshotWithVirtualTabs.visibleCount
+            : clampSupportedVisibleCount(
+                Math.max(groupSnapshotWithVirtualTabs.visibleCount, nextVisibleSessionIds.length),
+              ),
         visibleSessionIds: nextVisibleSessionIds,
       }),
     }));
@@ -1583,7 +1602,7 @@ export function selectPaneTabInSimpleWorkspace(
     ...targetGroup,
     snapshot: normalizeGroupSnapshot({
       ...groupSnapshotWithVirtualTabs,
-      focusedSessionId: sessionId,
+      focusedSessionId: nextFocusedSessionId,
       ...(nextLayout ? { paneLayout: nextLayout } : {}),
     }),
   }));
@@ -4102,7 +4121,18 @@ function getNextPaneLayoutForFocusedSession(
   nextFocusedSessionId: string,
   currentFocusedSessionId: string | undefined,
 ): SessionPaneLayoutNode | undefined {
-  if (currentVisibleSessionIds.includes(nextFocusedSessionId)) {
+  if (
+    currentVisibleSessionIds.includes(nextFocusedSessionId) ||
+    paneLayoutContainsSession(currentLayout, nextFocusedSessionId)
+  ) {
+    /*
+     * CDXC:PaneFocus 2026-06-12-13:13:
+     * Native terminalFocused can arrive with stale visibleSessionIds after a
+     * pane close, while paneLayout still contains the clicked pane/tab owner.
+     * Select existing paneLayout members in place instead of replacing the
+     * focused pane, otherwise clicking real split panes can merge them into the
+     * focused tab group one owner at a time.
+     */
     return setActiveSessionInPaneLayout(currentLayout, nextFocusedSessionId);
   }
   /**

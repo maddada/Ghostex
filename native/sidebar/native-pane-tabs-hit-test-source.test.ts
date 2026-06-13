@@ -10,6 +10,14 @@ const appDelegateSource = readFileSync(
   "utf8",
 );
 
+function sourceSection(source: string, startNeedle: string, endNeedle: string, fromIndex = 0): string {
+  const startIndex = source.indexOf(startNeedle, fromIndex);
+  expect(startIndex).toBeGreaterThan(-1);
+  const endIndex = source.indexOf(endNeedle, startIndex + startNeedle.length);
+  expect(endIndex).toBeGreaterThan(startIndex);
+  return source.slice(startIndex, endIndex);
+}
+
 describe("native pane tab titlebar hit testing", () => {
   test("routes workspace pane titlebars from the root before embedded siblings", () => {
     /**
@@ -47,6 +55,58 @@ describe("native pane tab titlebar hit testing", () => {
     expect(titlebarPrepassIndex).toBeLessThan(superHitIndex);
     expect(titlebarHelperSource).toContain("workspaceView.paneTitleBarHitView(at: workspacePoint)");
     expect(titlebarHelperSource).toContain('NativePaneTabDragReproLog.append(event: "nativePaneTabs.root.hitTest.titleBarPrepass"');
+  });
+
+  test("routes right-side sidebar content before workspace prepasses", () => {
+    /*
+     * CDXC:SidebarPlacement 2026-06-13-08:14:
+     * Right-side sidebar controls must remain clickable after AppKit moves the
+     * sidebar webview to the trailing edge. The root hit-test path should ask
+     * visible sidebar content first, but only after the sidebar webview confirms
+     * the point is outside its native resize-divider exclusion band.
+     */
+    const rootHitTestIndex = appDelegateSource.indexOf(
+      "override func hitTest(_ point: NSPoint) -> NSView?",
+      appDelegateSource.indexOf("final class ghostexRootView"),
+    );
+    const sidebarPrepassIndex = appDelegateSource.indexOf(
+      "if let sidebarHitView = sidebarContentHitView(at: point)",
+      rootHitTestIndex,
+    );
+    const resizePrepassIndex = appDelegateSource.indexOf(
+      "if let resizeHandleHitView = workspaceResizeHandleHitView(at: point)",
+      rootHitTestIndex,
+    );
+    const titlebarPrepassIndex = appDelegateSource.indexOf(
+      "if let paneTitleBarHitView = workspacePaneTitleBarHitView(at: point)",
+      rootHitTestIndex,
+    );
+    const sidebarHelperSource = sourceSection(
+      appDelegateSource,
+      "private func sidebarContentHitView(at point: NSPoint)",
+      "private func workspaceResizeHandleHitView",
+      rootHitTestIndex,
+    );
+    const sidebarWebViewSource = sourceSection(
+      appDelegateSource,
+      "final class SidebarWebView: WKWebView",
+      "final class SidebarModalBackdropView",
+    );
+
+    expect(rootHitTestIndex).toBeGreaterThan(-1);
+    expect(sidebarPrepassIndex).toBeGreaterThan(rootHitTestIndex);
+    expect(sidebarPrepassIndex).toBeLessThan(resizePrepassIndex);
+    expect(sidebarPrepassIndex).toBeLessThan(titlebarPrepassIndex);
+    expect(sidebarHelperSource).toContain("!isSidebarCollapsed");
+    expect(sidebarHelperSource).toContain("!sidebarView.isHidden");
+    expect(sidebarHelperSource).toContain("sidebarView.frame.contains(point)");
+    expect(sidebarHelperSource).toContain("let sidebarPoint = convert(point, to: sidebarView)");
+    expect(sidebarHelperSource).toContain("sidebarView.containsInteractiveHitPoint(sidebarPoint)");
+    expect(sidebarHelperSource).toContain("return sidebarView.hitTest(sidebarPoint) ?? sidebarView");
+    expect(sidebarWebViewSource).toContain("func containsInteractiveHitPoint(_ point: NSPoint) -> Bool");
+    expect(sidebarWebViewSource).toContain("isInteractivePoint(point)");
+    expect(sidebarWebViewSource).toContain("case .right:");
+    expect(sidebarWebViewSource).toContain("return point.x > bounds.minX + excludedWidth");
   });
 
   test("routes pane titlebar controls from the window before React titlebar dispatch", () => {
@@ -434,5 +494,171 @@ describe("native pane tab titlebar hit testing", () => {
     expect(functionSource).toContain("max(commandPanelBounds.maxY, bounds.minY)");
     expect(functionSource).toContain("y: railY");
     expect(functionSource).not.toContain("commandPanelBounds.maxY - railHeight / 2");
+  });
+
+  test("releases native resize cursors when rails end, reset, or hide", () => {
+    /**
+     * CDXC:NativePaneResize 2026-06-13-03:40:
+     * Native resize cursors must be owned by visible concrete rails only. End,
+     * double-click reset, and hide/collapse paths should refresh from the rail
+     * currently under the pointer instead of reasserting resize cursors after
+     * the resize gesture or visible hit target has ended.
+     */
+    const beginProjectResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func beginProjectEditorCompanionResize(with event: NSEvent) -> Bool",
+      "@discardableResult\n  private func continueProjectEditorCompanionResize",
+    );
+    const beginProjectResetSource = beginProjectResizeSource.slice(
+      beginProjectResizeSource.indexOf("if event.clickCount >= 2"),
+      beginProjectResizeSource.indexOf("let point = convert"),
+    );
+    const endProjectResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func endProjectEditorCompanionResize(with event: NSEvent) -> Bool",
+      "private func keepCommandsPanelAboveWorkspacePanes",
+    );
+    const beginPaneResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func beginPaneResize(hit: PaneResizeHit, event: NSEvent) -> Bool",
+      "@discardableResult\n  private func continuePaneResize",
+    );
+    const beginPaneResetSource = beginPaneResizeSource.slice(
+      beginPaneResizeSource.indexOf("if event.clickCount >= 2"),
+      beginPaneResizeSource.indexOf("let currentRatios"),
+    );
+    const continuePaneResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func continuePaneResize(with event: NSEvent) -> Bool",
+      "private func paneResizeCursor(for direction",
+    );
+    const endPaneResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func endPaneResize(with event: NSEvent) -> Bool",
+      "private func resetPaneHeaderInteractionState",
+    );
+    const beginCommandsResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func beginCommandsPanelResize(with event: NSEvent) -> Bool",
+      "private func resetCommandsPanelHeightRatio",
+    );
+    const beginCommandsResetSource = beginCommandsResizeSource.slice(
+      beginCommandsResizeSource.indexOf("if event.clickCount >= 2"),
+      beginCommandsResizeSource.indexOf("let point = convert"),
+    );
+    const endCommandsResizeSource = sourceSection(
+      terminalWorkspaceSource,
+      "private func endCommandsPanelResize(with event: NSEvent) -> Bool",
+      "@discardableResult\n  private func endPaneResize",
+    );
+    const workspaceHandleIndex = terminalWorkspaceSource.indexOf(
+      "final class TerminalWorkspacePaneResizeHandleView: NSView",
+    );
+    const workspaceHandleSource = sourceSection(
+      terminalWorkspaceSource,
+      "final class TerminalWorkspacePaneResizeHandleView: NSView",
+      "final class TerminalPaneBorderView",
+    );
+    const workspaceHandleMouseExitedSource = sourceSection(
+      workspaceHandleSource,
+      "override func mouseExited(with event: NSEvent)",
+      "override func cursorUpdate(with event: NSEvent)",
+    );
+    const workspaceHandleMouseUpSource = sourceSection(
+      terminalWorkspaceSource,
+      "override func mouseUp(with event: NSEvent)",
+      "final class TerminalPaneBorderView",
+      workspaceHandleIndex,
+    );
+    const rootLayoutSource = sourceSection(
+      appDelegateSource,
+      "override func layout()",
+      "private func promoteSidebarChrome",
+      appDelegateSource.indexOf("final class ghostexRootView"),
+    );
+    const sidebarHandleIndex = appDelegateSource.indexOf("final class PaneResizeHandleView: NSView");
+    const sidebarHandleSource = sourceSection(
+      appDelegateSource,
+      "final class PaneResizeHandleView: NSView",
+      "extension ghostexRootView: WKNavigationDelegate",
+    );
+    const sidebarHandleMouseExitedSource = sourceSection(
+      sidebarHandleSource,
+      "override func mouseExited(with event: NSEvent)",
+      "override func resetCursorRects",
+    );
+    const sidebarHandleMouseDraggedSource = sourceSection(
+      sidebarHandleSource,
+      "override func mouseDragged(with event: NSEvent)",
+      "override func mouseUp(with event: NSEvent)",
+    );
+    const sidebarHandleMouseUpSource = sourceSection(
+      appDelegateSource,
+      "override func mouseUp(with event: NSEvent)",
+      "extension ghostexRootView: WKNavigationDelegate",
+      sidebarHandleIndex,
+    );
+
+    expect(terminalWorkspaceSource).toContain("private func refreshResizeCursorForCurrentPointer()");
+    expect(terminalWorkspaceSource).toContain("refreshCursorForCurrentPointerIfInside()");
+    expect(terminalWorkspaceSource).toContain("needsCursorRefreshBeforeRemoval()");
+    expect(terminalWorkspaceSource).toContain("let shouldRefreshCursor = paneResizeHandleViews.contains");
+    expect(terminalWorkspaceSource).toContain("commandsPanelResizeHandleView.needsCursorRefreshBeforeRemoval()");
+    expect(terminalWorkspaceSource).toContain("projectEditorCompanionResizeHandleView.needsCursorRefreshBeforeRemoval()");
+    expect(workspaceHandleSource).toContain("isResizeDragging || isCurrentPointerInsideVisibleHandle()");
+    expect(workspaceHandleSource).toContain("private func isCurrentPointerInsideVisibleHandle() -> Bool");
+    expect(workspaceHandleMouseExitedSource).toContain("if !isResizeDragging");
+    expect(workspaceHandleMouseExitedSource).toContain("refreshCursorForCurrentPointer()");
+    expect(workspaceHandleMouseExitedSource).not.toContain("NSCursor.arrow.set()");
+    expect(workspaceHandleMouseUpSource).toContain("isResizeDragging = false");
+    expect(workspaceHandleMouseUpSource).toContain("refreshCursorForCurrentPointer()");
+
+    expect(beginProjectResetSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(beginProjectResetSource).not.toContain("NSCursor.resizeLeftRight.set()");
+    expect(endProjectResizeSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(endProjectResizeSource).not.toContain("NSCursor.resizeLeftRight.set()");
+    expect(beginPaneResetSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(beginPaneResetSource).not.toContain("paneResizeCursor(for: hit.direction).set()");
+    expect(beginPaneResizeSource).toContain("paneResizeCursor(for: hit.direction).set()");
+    expect(continuePaneResizeSource).toContain("paneResizeCursor(for: drag.direction).set()");
+    expect(endPaneResizeSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(endPaneResizeSource).not.toContain("paneResizeCursor(for: drag.direction).set()");
+    expect(beginCommandsResetSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(beginCommandsResetSource).not.toContain("NSCursor.resizeUpDown.set()");
+    expect(endCommandsResizeSource).toContain("refreshResizeCursorForCurrentPointer()");
+    expect(endCommandsResizeSource).not.toContain("NSCursor.resizeUpDown.set()");
+
+    expect(rootLayoutSource).toContain("divider.needsCursorRefreshBeforeHide()");
+    expect(rootLayoutSource).toContain("divider.refreshCursorAfterVisibilityChange()");
+    expect(appDelegateSource).not.toContain("addCursorRect(divider.frame, cursor: .resizeLeftRight)");
+    expect(sidebarHandleSource).toContain("private var isResizeDragging = false");
+    expect(sidebarHandleSource).toContain("private func appendSidebarResizeCursorLog(");
+    expect(sidebarHandleSource).toContain("guard NativeDebugLogging.isEnabled");
+    expect(sidebarHandleSource).toContain("NativePaneTabDragReproLog.append(event: eventName, details: details)");
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.mouseEntered"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.mouseExited"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.cursorRefresh"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.resetCursorRects"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.mouseDown"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.mouseDragged"');
+    expect(sidebarHandleSource).toContain('"nativeSidebarResize.handle.mouseUp"');
+    expect(sidebarHandleSource).toContain('"cursorAction": cursorAction');
+    expect(sidebarHandleSource).toContain('"pointerInside": pointerInside ?? isCurrentPointerInsideVisibleHandle()');
+    expect(sidebarHandleSource).toContain('"currentWindowPoint"');
+    expect(sidebarHandleSource).toContain('"eventWindowPoint"');
+    expect(sidebarHandleSource).toContain("if Self.sidebarResizeCursorEventSupportsClickCount(event.type)");
+    expect(sidebarHandleSource).toContain("private static func sidebarResizeCursorEventSupportsClickCount");
+    expect(sidebarHandleSource).toContain("case .leftMouseDown, .leftMouseDragged, .leftMouseUp,");
+    expect(sidebarHandleSource).toContain(".rightMouseDown, .rightMouseDragged, .rightMouseUp,");
+    expect(sidebarHandleSource).toContain(".otherMouseDown, .otherMouseDragged, .otherMouseUp:");
+    expect(sidebarHandleSource).toContain("func needsCursorRefreshBeforeHide() -> Bool");
+    expect(sidebarHandleSource).toContain("func refreshCursorAfterVisibilityChange()");
+    expect(sidebarHandleSource).toContain("private func isCurrentPointerInsideVisibleHandle() -> Bool");
+    expect(sidebarHandleSource).toContain("addCursorRect(bounds, cursor: .resizeLeftRight)");
+    expect(sidebarHandleMouseExitedSource).toContain("if !isResizeDragging");
+    expect(sidebarHandleMouseExitedSource).not.toContain("clickCount");
+    expect(sidebarHandleMouseDraggedSource).toContain("NSCursor.resizeLeftRight.set()");
+    expect(sidebarHandleMouseUpSource).toContain("isResizeDragging = false");
+    expect(sidebarHandleMouseUpSource).toContain('refreshCursorForCurrentPointer(reason: "mouseUp", event: event)');
   });
 });

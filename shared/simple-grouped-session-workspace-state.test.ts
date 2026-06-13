@@ -1161,6 +1161,76 @@ describe("focusSessionInSimpleWorkspace", () => {
     });
   });
 
+  test("should preserve an existing split pane when native focus sees stale visible ids", () => {
+    const tabOwnerSessionId = sessionIdForDisplay(0);
+    const hiddenTabSessionId = sessionIdForDisplay(1);
+    const clickedPaneSessionId = sessionIdForDisplay(2);
+    const backgroundTabSessionId = sessionIdForDisplay(3);
+
+    const result = focusSessionInSimpleWorkspace(
+      createWorkspaceSnapshot({
+        activeGroupId: DEFAULT_MAIN_GROUP_ID,
+        groups: [
+          {
+            groupId: DEFAULT_MAIN_GROUP_ID,
+            snapshot: {
+              focusedSessionId: tabOwnerSessionId,
+              fullscreenRestoreVisibleCount: undefined,
+              paneLayout: {
+                children: [
+                  {
+                    activeSessionId: tabOwnerSessionId,
+                    kind: "tabs",
+                    sessionIds: [hiddenTabSessionId, tabOwnerSessionId, backgroundTabSessionId],
+                  },
+                  { kind: "leaf", sessionId: clickedPaneSessionId },
+                ],
+                direction: "horizontal",
+                kind: "split",
+              },
+              sessions: [
+                createSessionRecord(1, 0),
+                createSessionRecord(2, 1),
+                createSessionRecord(3, 2),
+                createSessionRecord(4, 3),
+              ],
+              viewMode: "grid",
+              visibleCount: 1,
+              visibleSessionIds: [tabOwnerSessionId],
+            },
+            title: "Main",
+          },
+        ],
+        nextGroupNumber: 2,
+        nextSessionDisplayId: 4,
+        nextSessionNumber: 5,
+      }),
+      clickedPaneSessionId,
+    );
+
+    expect(result.snapshot.groups[0]?.snapshot.focusedSessionId).toBe(clickedPaneSessionId);
+    /*
+     * CDXC:PaneFocus 2026-06-12-13:13:
+     * Native terminalFocused can target a real split pane even when legacy
+     * visibleSessionIds only names the previous pane owner. Because paneLayout
+     * already owns the clicked pane, focus must select it in place instead of
+     * moving that session into the previous pane's tab group and flattening the
+     * split.
+     */
+    expect(result.snapshot.groups[0]?.snapshot.paneLayout).toEqual({
+      children: [
+        {
+          activeSessionId: tabOwnerSessionId,
+          kind: "tabs",
+          sessionIds: [hiddenTabSessionId, tabOwnerSessionId, backgroundTabSessionId],
+        },
+        { kind: "leaf", sessionId: clickedPaneSessionId },
+      ],
+      direction: "horizontal",
+      kind: "split",
+    });
+  });
+
   test("should keep hidden tab-group members when selecting a hidden sidebar session", () => {
     const sleepingSession = {
       ...createSessionRecord(2, 1),
@@ -4388,6 +4458,90 @@ describe("setSessionSleepingInSimpleWorkspace", () => {
      * The right split stays a right split instead of moving the restored tab
      * into the previously focused left group.
      */
+    expect(selected.snapshot.groups[0]?.snapshot.paneLayout).toEqual({
+      children: [
+        {
+          activeSessionId: focusedLeftSessionId,
+          kind: "tabs",
+          sessionIds: [leftSessionId, focusedLeftSessionId],
+        },
+        {
+          activeSessionId: sleepingRightSessionId,
+          kind: "tabs",
+          sessionIds: [sleepingRightSessionId, activeRightSessionId],
+        },
+      ],
+      direction: "horizontal",
+      kind: "split",
+    });
+  });
+
+  test("should select a sleeping native pane tab without waking it", () => {
+    const leftSessionId = sessionIdForDisplay(0);
+    const focusedLeftSessionId = sessionIdForDisplay(1);
+    const sleepingRightSessionId = sessionIdForDisplay(2);
+    const activeRightSessionId = sessionIdForDisplay(3);
+
+    const selected = selectPaneTabInSimpleWorkspace(
+      createWorkspaceSnapshot({
+        activeGroupId: DEFAULT_MAIN_GROUP_ID,
+        groups: [
+          {
+            groupId: DEFAULT_MAIN_GROUP_ID,
+            snapshot: {
+              focusedSessionId: focusedLeftSessionId,
+              fullscreenRestoreVisibleCount: undefined,
+              paneLayout: {
+                children: [
+                  {
+                    activeSessionId: focusedLeftSessionId,
+                    kind: "tabs",
+                    sessionIds: [leftSessionId, focusedLeftSessionId],
+                  },
+                  {
+                    activeSessionId: activeRightSessionId,
+                    kind: "tabs",
+                    sessionIds: [sleepingRightSessionId, activeRightSessionId],
+                  },
+                ],
+                direction: "horizontal",
+                kind: "split",
+              },
+              sessions: [
+                createSessionRecord(1, 0),
+                createSessionRecord(2, 1),
+                { ...createSessionRecord(3, 2), isSleeping: true },
+                createSessionRecord(4, 3),
+              ],
+              viewMode: "grid",
+              visibleCount: 2,
+              visibleSessionIds: [focusedLeftSessionId, activeRightSessionId],
+            },
+            title: "Main",
+          },
+        ],
+        nextGroupNumber: 2,
+        nextSessionDisplayId: 4,
+        nextSessionNumber: 5,
+      }),
+      DEFAULT_MAIN_GROUP_ID,
+      sleepingRightSessionId,
+    );
+
+    /*
+     * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+     * Click-to-wake tab selection is a layout operation, not a wake operation.
+     * The selected sleeping tab stays cold while its original right split
+     * remains selected in paneLayout so native can render a black placeholder
+     * in that slot. Keep runtime focus and visibleSessionIds on awake sessions
+     * until the user clicks the placeholder body to wake the terminal.
+     */
+    expect(selected.snapshot.groups[0]?.snapshot.sessions[2]?.isSleeping).toBe(true);
+    expect(selected.snapshot.groups[0]?.snapshot.focusedSessionId).toBe(focusedLeftSessionId);
+    expect(selected.snapshot.groups[0]?.snapshot.visibleSessionIds).toEqual([
+      focusedLeftSessionId,
+      activeRightSessionId,
+    ]);
     expect(selected.snapshot.groups[0]?.snapshot.paneLayout).toEqual({
       children: [
         {

@@ -521,7 +521,15 @@ struct StartCodeServerRuntime: Decodable {
   let vscodeUserConfigDir: String?
 }
 
+struct ProjectEditorBrowserTabState: Codable {
+  let id: String
+  let title: String
+  let url: String
+}
+
 struct CreateProjectEditorPane: Decodable {
+  let activeBrowserTabId: String?
+  let browserTabs: [ProjectEditorBrowserTabState]?
   let browserFeedbackTool: String?
   let companionPaneHidden: Bool?
   let mode: String?
@@ -590,6 +598,7 @@ struct SetActiveTerminalSet: Decodable {
   let commandsPanelIsVisible: Bool?
   let commandsPanelLayout: NativeTerminalLayout?
   let commandsPanelMode: String?
+  let clickToWakeSleepingSessions: Bool?
   let debuggingMode: Bool?
   let focusRequestId: Int?
   let focusedSessionId: String?
@@ -1300,9 +1309,11 @@ enum HostEvent: Encodable {
   case terminalTitleChanged(sessionId: String, title: String, sessionPersistenceName: String?)
   case browserFaviconChanged(sessionId: String, faviconDataUrl: String?)
   case browserUrlChanged(sessionId: String, url: String)
+  case browserOpenInNewTabRequested(sourceSessionId: String, url: String)
   case terminalTitleBarAction(sessionId: String, action: TerminalTitleBarAction)
   case paneReorderRequested(sourceSessionId: String, targetSessionId: String, placement: PaneDropPlacement?)
   case paneTabSelected(sessionId: String)
+  case sleepingPaneWakeRequested(sessionId: String)
   case paneTabFocusRequested(sessionId: String)
   case paneTabReorderRequested(
     sourceSessionId: String, targetSessionId: String, position: PaneTabReorderPosition)
@@ -1323,7 +1334,8 @@ enum HostEvent: Encodable {
     requestId: String, provider: String, sessionName: String, exists: Bool, error: String?)
   case projectEditorBackRequested(projectId: String)
   case projectEditorCompanionPaneHiddenChanged(projectId: String, hidden: Bool)
-  case projectEditorTabSelected(projectId: String, url: String?)
+  case projectEditorTabSelected(
+    projectId: String, url: String?, activeTabId: String?, tabs: [ProjectEditorBrowserTabState]?)
   case projectEditorLoadState(projectId: String, status: String, message: String?)
   case codeServerRuntimeStartFailed(projectId: String?, message: String)
   case projectBoardRequest(ProjectBoardBridgeRequest)
@@ -1374,6 +1386,8 @@ enum HostEvent: Encodable {
     case trigger
     case faviconDataUrl
     case url
+    case activeTabId
+    case tabs
     case projectEditorId
     case projectId
     case serverOrigin
@@ -1458,6 +1472,15 @@ enum HostEvent: Encodable {
       try container.encode("browserUrlChanged", forKey: .type)
       try container.encode(sessionId, forKey: .sessionId)
       try container.encode(url, forKey: .url)
+    case .browserOpenInNewTabRequested(let sourceSessionId, let url):
+      /**
+       CDXC:BrowserTabs 2026-06-13-00:00:
+       Normal CEF browser panes need target-blank, middle-click, and context-menu new-window intents to create a sibling Agents/workspace browser tab.
+       Send only the source native session id and destination URL so the sidebar can preserve tab-group placement without native duplicating React workspace state.
+       */
+      try container.encode("browserOpenInNewTabRequested", forKey: .type)
+      try container.encode(sourceSessionId, forKey: .sourceSessionId)
+      try container.encode(url, forKey: .url)
     case .terminalTitleBarAction(let sessionId, let action):
       try container.encode("terminalTitleBarAction", forKey: .type)
       try container.encode(sessionId, forKey: .sessionId)
@@ -1469,6 +1492,15 @@ enum HostEvent: Encodable {
       try container.encodeIfPresent(placement, forKey: .placement)
     case .paneTabSelected(let sessionId):
       try container.encode("paneTabSelected", forKey: .type)
+      try container.encode(sessionId, forKey: .sessionId)
+    case .sleepingPaneWakeRequested(let sessionId):
+      /**
+       CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+       Native placeholders send a separate wake event so selecting a sleeping
+       tab can preserve split geometry without starting Ghostty until the user
+       clicks the black pane body.
+       */
+      try container.encode("sleepingPaneWakeRequested", forKey: .type)
       try container.encode(sessionId, forKey: .sessionId)
     case .paneTabFocusRequested(let sessionId):
       /**
@@ -1601,18 +1633,25 @@ enum HostEvent: Encodable {
       try container.encode("projectEditorCompanionPaneHiddenChanged", forKey: .type)
       try container.encode(projectId, forKey: .projectId)
       try container.encode(hidden, forKey: .hidden)
-    case .projectEditorTabSelected(let projectId, let url):
+    case .projectEditorTabSelected(let projectId, let url, let activeTabId, let tabs):
       /**
-       CDXC:GitProjectTabs 2026-05-16-09:50:
-       Git project tabs and browser toolbar controls live in native AppKit
+       CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       Browser project tabs and browser toolbar controls live in native AppKit
        chrome, but the sidebar remains the owner of active project and mode
        state. Send the selected project-editor id and active tab URL back so
-       React's next layout sync keeps the Git CEF pane visible instead of
+       React's next layout sync keeps the Browser CEF pane visible instead of
        restoring the same project's Code CEF pane.
+
+       CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       Browser mode reports every project Browser tab back to React whenever
+       native selection or navigation changes. React persists those tabs locally
+       so restart restores them as sleeping metadata until Browser is surfaced.
        */
       try container.encode("projectEditorTabSelected", forKey: .type)
       try container.encode(projectId, forKey: .projectId)
       try container.encodeIfPresent(url, forKey: .url)
+      try container.encodeIfPresent(activeTabId, forKey: .activeTabId)
+      try container.encodeIfPresent(tabs, forKey: .tabs)
     case .projectEditorLoadState(let projectId, let status, let message):
       /**
        CDXC:EditorPanes 2026-05-09-17:24

@@ -197,11 +197,22 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:GitProjectTabs 2026-05-16-07:42:
-       * Git mode needs visible project-scoped browser chrome: reuse the native
-      * browser address toolbar and the main work-area tab strip for each open
-      * project's Git view while leaving Code and Project editor panes plain.
+       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * Browser mode needs visible project-scoped browser chrome: reuse the native
+       * browser address toolbar and the main work-area tab strip for each open
+       * project's Browser view while leaving Code and Project editor panes plain.
+       *
+       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * Browser mode restores the project's saved tab list only when surfaced.
+       * Startup keeps those tabs sleeping in sidebar metadata, then sends them
+       * in this command when the user opens Browser mode.
        */
+      activeBrowserTabId?: string;
+      browserTabs?: Array<{
+        id: string;
+        title: string;
+        url: string;
+      }>;
       browserFeedbackTool?: "react-grab" | "agentation";
       mode?: "code" | "git" | "tasks";
       companionPaneHidden?: boolean;
@@ -314,6 +325,13 @@ export type NativeGhosttyHostCommand =
       sessionAgentIconColors?: Record<string, string>;
       sessionAgentIconDataUrls?: Record<string, string>;
       /**
+       * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+       * Native split panes are stable visual slots. When click-to-wake is on,
+       * a selected sleeping tab renders a black placeholder with an explicit
+       * pane-body wake affordance instead of auto-starting Ghostty on tab click.
+       */
+      clickToWakeSleepingSessions?: boolean;
+      /**
        * CDXC:DelayedSend 2026-05-17-03:14
        * Native tab strips and pane overlays are outside React, so layout sync
        * must carry the active Delayed Send countdown labels into AppKit.
@@ -417,6 +435,16 @@ export type NativeGhosttyHostEvent =
       url: string;
     }
   | {
+      /**
+       * CDXC:BrowserTabs 2026-06-13-00:00:
+       * CEF popup and link-open-new-tab intents in Agents browser panes are
+       * sidebar-owned workspace mutations, not native window creation.
+       */
+      sourceSessionId: string;
+      type: "browserOpenInNewTabRequested";
+      url: string;
+    }
+  | {
       cwd: string;
       sessionId: string;
       type: "terminalCwdChanged";
@@ -503,6 +531,15 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
+       * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+       * Clicking a sleeping pane's placeholder body is the explicit wake intent
+       * when tab selection itself is configured to preserve the cold renderer.
+       */
+      sessionId: string;
+      type: "sleepingPaneWakeRequested";
+    }
+  | {
+      /**
        * CDXC:SessionFocusMode 2026-05-23-09:28:
        * Native tab Focus is separate from selection because it enters the
        * reversible session-focus mode and may temporarily switch the project
@@ -567,14 +604,25 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:GitProjectTabs 2026-05-16-09:50:
-       * Native Git project tabs and toolbar buttons report the selected
-       * project-editor id plus active tab URL so React can make Git mode the
-       * authoritative active surface before the next layout sync. This prevents
-       * browser toolbar actions like Back from resurrecting the same project's
-       * Code CEF pane.
+       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * Native Browser project tabs and toolbar buttons report the selected
+       * project-editor id plus active tab URL so React can make Browser mode
+       * the authoritative active surface before the next layout sync. This
+       * prevents browser toolbar actions like Back from resurrecting the same
+       * project's Code CEF pane.
+       *
+       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * Browser mode persists the whole project Browser tab list, not only the
+       * selected URL, so app restart can restore the user's prior tabs as
+       * sleeping metadata until Browser mode is surfaced.
        */
+      activeTabId?: string;
       projectId: string;
+      tabs?: Array<{
+        id: string;
+        title: string;
+        url: string;
+      }>;
       type: "projectEditorTabSelected";
       url?: string;
     }

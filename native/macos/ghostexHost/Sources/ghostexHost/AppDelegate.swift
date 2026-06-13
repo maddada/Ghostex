@@ -1091,6 +1091,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, SPUU
       for: .applicationSupportDirectory, in: .userDomainMask
     ).first
     let macOSConfigPaths = [
+      appSupportURL?.appendingPathComponent("com.mitchellh.ghostty/config.ghostty").path,
+      appSupportURL?.appendingPathComponent("com.ghostty.org/config.ghostty").path,
+      appSupportURL?.appendingPathComponent("Ghostty/config.ghostty").path,
       appSupportURL?.appendingPathComponent("com.mitchellh.ghostty/config").path,
       appSupportURL?.appendingPathComponent("com.ghostty.org/config").path,
       appSupportURL?.appendingPathComponent("Ghostty/config").path,
@@ -1100,6 +1103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, SPUU
      Installed Ghostty for macOS stores user settings in Application Support
      on this machine. Prefer that real app config before falling back to
      Ghostty's default loader so embedded terminals match the user's app.
+
+     CDXC:NativeIME 2026-06-13-02:32:
+     Current Ghostty prefers config.ghostty over the legacy config filename. Match that order so user keybinds such as Shift+Enter are loaded into embedded surfaces instead of silently falling back to a Ghostex-generated legacy config.
      */
     if let path = macOSConfigPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) {
       return GhosttyConfigSelection(path: path, source: "macOS Application Support")
@@ -4115,7 +4121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, SPUU
   private static func defaultWritableGhosttyConfigURL() -> URL {
     let appSupport = FileManager.default.urls(
       for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    return appSupport.appendingPathComponent("com.mitchellh.ghostty/config")
+    /**
+     CDXC:NativeIME 2026-06-13-02:32:
+     New Ghostty installs write config.ghostty. Keep Ghostex-created configs on the same filename so future embedded-terminal keybinds load through the same path as Ghostty's own preferred loader.
+     */
+    return appSupport.appendingPathComponent("com.mitchellh.ghostty/config.ghostty")
   }
 
   private static func mergeGhosttyTerminalSettings(
@@ -4638,7 +4648,7 @@ private final class NativeSettingsStore {
      CDXC:Hotkeys 2026-06-07-14:24:
      Terminal-focused AppKit dispatch must use the same default hotkey table as
      the shared sidebar model. Cmd+T creates a terminal tab, Cmd+N creates a
-     browser tab, and Option+1..4 switch Agents, Source, GitHub, and Kanban
+     browser tab, and Option+1..4 switch Agents, Source, Browser, and Kanban
      without depending on the sidebar WebKit DOM receiving the keydown.
      */
     "switchAgentsView": "alt+1",
@@ -5100,6 +5110,10 @@ final class SidebarWebView: WKWebView {
 
   private func updateNativePointerInside(for event: NSEvent) {
     setNativePointerInside(isInteractivePoint(convert(event.locationInWindow, from: nil)))
+  }
+
+  func containsInteractiveHitPoint(_ point: NSPoint) -> Bool {
+    isInteractivePoint(point)
   }
 
   private func isInteractivePoint(_ point: NSPoint) -> Bool {
@@ -7311,7 +7325,7 @@ final class ghostexRootView: NSView {
   func routeTitlebarMouseEventFromWindow(_ event: NSEvent) -> Bool {
     /*
      CDXC:NativePaneTabClicks 2026-06-12-07:11:
-     The GitHub project tab Add button can sit in a top workspace band where
+     The Browser project tab Add button can sit in a top workspace band where
      AppKit window-chrome dispatch bypasses root/content hit testing entirely.
      Route pane-titlebar mouse streams from the NSWindow boundary before React
      titlebar routing so the visible native titlebar owns Add, Close, activation,
@@ -7541,8 +7555,8 @@ final class ghostexRootView: NSView {
 
   private func openGitHubProjectFromTitlebar() {
     /**
-     CDXC:ModeSwitcher 2026-06-02-15:27:
-     Git mode opens the active project's GitHub remote inside the workarea, not in an external browser. Forward to the sidebar adapter so gxserver-backed Git inspection and macOS-owned browser surface focus stay in the normal paths.
+     CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+     Browser mode opens or restores the active project's Browser tab group inside the workarea, not in an external browser. Forward to the sidebar adapter so GitHub seed selection, fallback URL handling, and macOS-owned browser surface focus stay in the normal paths.
      */
     sidebarView.evaluateJavaScript(
       """
@@ -7556,7 +7570,7 @@ final class ghostexRootView: NSView {
      CDXC:ProjectEditorCompanion 2026-06-12-03:18:
      The titlebar companion control now toggles the project-owned hidden
      preference instead of only restoring it. Forward through React sidebar
-     state so Code, GitHub, and Kanban modes keep one shared local value before
+     state so Code, Browser, and Kanban modes keep one shared local value before
      native AppKit applies layout.
      */
     sidebarView.evaluateJavaScript(
@@ -8791,6 +8805,14 @@ final class ghostexRootView: NSView {
        */
       return true
     }
+    if workspaceView.handleFocusedChromiumFindShortcut(event) {
+      /**
+       CDXC:BrowserSearch 2026-06-13-00:00:
+       Focused CEF panes need Chrome-style Cmd+F browser search before AppKit's generic hotkey path routes the same key to terminal search or app-wide actions.
+       The workspace resolver scopes this to embedded Chromium hosts so native text fields and modals keep normal editing behavior.
+       */
+      return true
+    }
     let hotkeyText = Self.hotkeyText(for: event)
     if Self.isAppQuitHotkeyText(hotkeyText) {
       /**
@@ -9873,6 +9895,8 @@ final class ghostexRootView: NSView {
      divider paint width so dragging continues to resize the sidebar after the
      webview starts painting under that transparent divider.
      */
+    let shouldRefreshDividerCursorAfterLayout =
+      isSidebarCollapsed && !divider.isHidden && divider.needsCursorRefreshBeforeHide()
     sidebarView.frame = sidebarVisualFrame
     sidebarView.resizeHitExclusionSide = sidebarSide
     sidebarView.resizeHitExclusionWidth = sidebarResizeHitWidth
@@ -9882,6 +9906,9 @@ final class ghostexRootView: NSView {
     divider.isHidden = isSidebarCollapsed
     window?.invalidateCursorRects(for: self)
     window?.invalidateCursorRects(for: divider)
+    if shouldRefreshDividerCursorAfterLayout {
+      divider.refreshCursorAfterVisibilityChange()
+    }
     workspaceView.frame = frames.workspace
     nativeToastController?.setLayout(parentWindow: window, rootView: self, anchorFrame: frames.workspace)
     sidebarModalBackdropView.frame = isSidebarCollapsed ? .zero : frames.sidebar.union(frames.divider)
@@ -9963,6 +9990,12 @@ final class ghostexRootView: NSView {
      boundary. Keep the previous divider-before-border ordering while making
      the visible boundary belong to PaneResizeHandleView, not the hidden
      standalone border view.
+
+     CDXC:NativeSidebarChrome 2026-06-13-07:26:
+     The sidebar divider must match the stable workspace splitter model: only
+     the concrete PaneResizeHandleView owns resize cursor rects. Do not register
+     a parent/root cursor rect over the same frame, because that second owner can
+     leave the resize cursor active after the pointer leaves the divider.
      */
     addSubview(sidebarView, positioned: .above, relativeTo: titlebarChromeView)
     addSubview(divider, positioned: .above, relativeTo: sidebarView)
@@ -9970,24 +10003,12 @@ final class ghostexRootView: NSView {
     addSubview(sidebarModalBackdropView, positioned: .above, relativeTo: divider)
   }
 
-  override func resetCursorRects() {
-    super.resetCursorRects()
-    /**
-     CDXC:NativeSidebarChrome 2026-06-09-15:32:
-     The sidebar/workarea drag bar should show the native left-right resize cursor again while keeping the delayed hover line. Register the root divider frame with AppKit so the cursor follows the same layout band that hit testing routes to PaneResizeHandleView.
-     */
-    guard !divider.isHidden, !divider.frame.isNull, !divider.frame.isEmpty else {
-      return
-    }
-    addCursorRect(divider.frame, cursor: .resizeLeftRight)
-  }
-
   /*
    CDXC:RootHitBoundaries 2026-06-11-21:10:
-   The root view intentionally relies on AppKit's default hit-test traversal
-   instead of manually routing workspace, titlebar, modal, and sidebar hits.
-   Browser-native drag/drop in Source should see the same ordinary view
-   ownership model as the minimal CEF/WKWebView harness.
+   The root view intentionally keeps normal AppKit traversal for broad
+   workspace, titlebar, modal, and embedded browser hits. Browser-native
+   drag/drop in Source should see the same ordinary view ownership model as the
+   minimal CEF/WKWebView harness.
 
    CDXC:NativePaneResize 2026-06-12-03:18:
    The 03:15 companion resize repro still showed the five-point rail receiving
@@ -10002,8 +10023,16 @@ final class ghostexRootView: NSView {
    pane-titlebar ownership. Give mounted workspace titlebars the same root
    pre-pass as resize rails so tab activation, tab Close, and tab-bar action
    buttons are owned by the visible native titlebar under the pointer.
+
+   CDXC:SidebarPlacement 2026-06-13-08:14:
+   Right-side sidebar clicks must not enter workspace prepasses before the
+   sidebar webview has a chance to claim visible content. Keep this as a narrow
+   sidebar-content prepass that still yields the native resize divider strip.
    */
   override func hitTest(_ point: NSPoint) -> NSView? {
+    if let sidebarHitView = sidebarContentHitView(at: point) {
+      return sidebarHitView
+    }
     if let resizeHandleHitView = workspaceResizeHandleHitView(at: point) {
       return resizeHandleHitView
     }
@@ -10011,6 +10040,24 @@ final class ghostexRootView: NSView {
       return paneTitleBarHitView
     }
     return super.hitTest(point)
+  }
+
+  private func sidebarContentHitView(at point: NSPoint) -> NSView? {
+    /*
+     CDXC:SidebarPlacement 2026-06-13-08:14:
+     Right-side sidebar content must remain clickable after the webview moves to
+     the trailing edge. Resolve visible sidebar content before workspace resize
+     and pane-titlebar prepasses, while still yielding the native divider strip
+     so resizing keeps its single AppKit owner.
+     */
+    guard !isSidebarCollapsed, !sidebarView.isHidden, sidebarView.frame.contains(point) else {
+      return nil
+    }
+    let sidebarPoint = convert(point, to: sidebarView)
+    guard sidebarView.containsInteractiveHitPoint(sidebarPoint) else {
+      return nil
+    }
+    return sidebarView.hitTest(sidebarPoint) ?? sidebarView
   }
 
   private func workspaceResizeHandleHitView(at point: NSPoint) -> NSView? {
@@ -11836,6 +11883,7 @@ final class PaneResizeHandleView: NSView {
     }
   }
   private let resizeHoverIndicator = NativeResizeHoverIndicator(lineAxis: .vertical)
+  private var isResizeDragging = false
   private var lastDragWindowX: CGFloat = 0
 
   override init(frame frameRect: NSRect) {
@@ -11863,10 +11911,21 @@ final class PaneResizeHandleView: NSView {
   override func mouseEntered(with event: NSEvent) {
     onPointerEntered?()
     resizeHoverIndicator.mouseEntered(in: self)
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.mouseEntered",
+      event: event,
+      cursorAction: "none")
   }
 
   override func mouseExited(with event: NSEvent) {
     resizeHoverIndicator.mouseExited(in: self)
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.mouseExited",
+      event: event,
+      cursorAction: isResizeDragging ? "skipActiveDrag" : "refresh")
+    if !isResizeDragging {
+      refreshCursorForCurrentPointer(reason: "mouseExited", event: event)
+    }
   }
 
   override func resetCursorRects() {
@@ -11874,8 +11933,17 @@ final class PaneResizeHandleView: NSView {
     /**
      CDXC:NativeSidebarChrome 2026-06-09-15:32:
      Sidebar resize keeps the AppKit left-right resize cursor on the concrete handle view while the hover layer provides the delayed visual line.
+
+     CDXC:NativeSidebarChrome 2026-06-13-03:40:
+     The sidebar divider must release the resize cursor when pointer ownership
+     leaves the visible rail or the resize drag ends. Keep the cursor rect for
+     normal hover, but refresh the current cursor explicitly on exit/up/reset/hide.
      */
     addCursorRect(bounds, cursor: .resizeLeftRight)
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.resetCursorRects",
+      event: nil,
+      cursorAction: "addCursorRectResizeLeftRight")
   }
 
   /**
@@ -11913,13 +11981,81 @@ final class PaneResizeHandleView: NSView {
       height: bounds.height)
   }
 
+  private func refreshCursorForCurrentPointer(reason: String, event: NSEvent? = nil) {
+    /*
+     CDXC:NativeSidebarChrome 2026-06-13-03:40:
+     Sidebar resize cursor ownership belongs only to the visible AppKit divider.
+     If a drag, reset, collapse, or pointer exit leaves the cursor outside the
+     divider, return to the default cursor immediately instead of waiting for a
+     later AppKit cursor-rect update.
+     */
+    let pointerInside = isCurrentPointerInsideVisibleHandle()
+    guard pointerInside else {
+      NSCursor.arrow.set()
+      appendSidebarResizeCursorLog(
+        "nativeSidebarResize.handle.cursorRefresh",
+        event: event,
+        reason: reason,
+        pointerInside: pointerInside,
+        cursorAction: "setArrow")
+      return
+    }
+    NSCursor.resizeLeftRight.set()
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.cursorRefresh",
+      event: event,
+      reason: reason,
+      pointerInside: pointerInside,
+      cursorAction: "setResizeLeftRight")
+  }
+
+  func needsCursorRefreshBeforeHide() -> Bool {
+    let needsRefresh = isResizeDragging || isCurrentPointerInsideVisibleHandle()
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.needsCursorRefreshBeforeHide",
+      event: nil,
+      extra: ["needsRefresh": needsRefresh],
+      cursorAction: "none")
+    return needsRefresh
+  }
+
+  func refreshCursorAfterVisibilityChange() {
+    refreshCursorForCurrentPointer(reason: "visibilityChange")
+  }
+
+  private func isCurrentPointerInsideVisibleHandle() -> Bool {
+    guard let window,
+      superview != nil,
+      !isHidden,
+      alphaValue > 0,
+      bounds.width > 0,
+      bounds.height > 0,
+      bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    else {
+      return false
+    }
+    return true
+  }
+
   override func mouseDown(with event: NSEvent) {
     onPointerEntered?()
     if event.clickCount >= 2 {
+      isResizeDragging = false
       onDoubleClick?()
+      appendSidebarResizeCursorLog(
+        "nativeSidebarResize.handle.mouseDown.doubleClick",
+        event: event,
+        cursorAction: "reset")
+      refreshCursorForCurrentPointer(reason: "doubleClickReset", event: event)
       return
     }
+    isResizeDragging = true
     lastDragWindowX = event.locationInWindow.x
+    NSCursor.resizeLeftRight.set()
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.mouseDown",
+      event: event,
+      cursorAction: "setResizeLeftRight")
   }
 
   override func mouseDragged(with event: NSEvent) {
@@ -11933,11 +12069,119 @@ final class PaneResizeHandleView: NSView {
     let currentWindowX = event.locationInWindow.x
     let deltaX = currentWindowX - lastDragWindowX
     lastDragWindowX = currentWindowX
+    NSCursor.resizeLeftRight.set()
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.mouseDragged",
+      event: event,
+      extra: ["deltaX": Double(deltaX)],
+      cursorAction: "setResizeLeftRight")
     onDrag?(deltaX)
   }
 
   override func mouseUp(with event: NSEvent) {
+    isResizeDragging = false
     onDragEnded?()
+    appendSidebarResizeCursorLog(
+      "nativeSidebarResize.handle.mouseUp",
+      event: event,
+      cursorAction: "refresh")
+    refreshCursorForCurrentPointer(reason: "mouseUp", event: event)
+  }
+
+  private func appendSidebarResizeCursorLog(
+    _ eventName: String,
+    event: NSEvent?,
+    reason: String? = nil,
+    pointerInside: Bool? = nil,
+    extra: [String: Any] = [:],
+    cursorAction: String
+  ) {
+    /**
+     CDXC:NativeSidebarChrome 2026-06-13-07:38:
+     The sticky sidebar resize cursor repro needs the same native event stream
+     as working workspace splitters. Log only AppKit geometry, visibility,
+     pointer containment, and cursor actions so support can compare enter/exit
+     delivery without persisting project names, paths, URLs, command text, or
+     terminal content.
+     */
+    guard NativeDebugLogging.isEnabled else {
+      return
+    }
+    let currentWindowPoint = window?.mouseLocationOutsideOfEventStream
+    let currentLocalPoint = currentWindowPoint.map { convert($0, from: nil) }
+    var details: [String: Any] = [
+      "alphaValue": Double(alphaValue),
+      "bounds": Self.debugFrame(bounds),
+      "cursorAction": cursorAction,
+      "frame": Self.debugFrame(frame),
+      "hasSuperview": superview != nil,
+      "hasWindow": window != nil,
+      "isHidden": isHidden,
+      "isResizeDragging": isResizeDragging,
+      "pointerInside": pointerInside ?? isCurrentPointerInsideVisibleHandle(),
+    ]
+    if let reason {
+      details["reason"] = reason
+    }
+    if let currentWindowPoint {
+      details["currentWindowPoint"] = Self.debugPoint(currentWindowPoint)
+    }
+    if let currentLocalPoint {
+      details["currentLocalPoint"] = Self.debugPoint(currentLocalPoint)
+    }
+    if let windowNumber = event?.window?.windowNumber ?? window?.windowNumber {
+      details["windowNumber"] = windowNumber
+    } else {
+      details["windowNumber"] = NSNull()
+    }
+    if let event {
+      /*
+       CDXC:NativeSidebarChrome 2026-06-13-07:59:
+       AppKit tracking events such as mouseEntered and mouseExited can raise
+       NSGenericException when code reads clickCount. Persist clickCount only
+       for real mouse button streams; hover and cursor logs still keep event
+       type and pointer geometry.
+       */
+      if Self.sidebarResizeCursorEventSupportsClickCount(event.type) {
+        details["clickCount"] = event.clickCount
+      }
+      details["eventType"] = String(describing: event.type)
+      details["eventWindowPoint"] = Self.debugPoint(event.locationInWindow)
+      details["eventLocalPoint"] = Self.debugPoint(convert(event.locationInWindow, from: nil))
+    }
+    for (key, value) in extra {
+      details[key] = value
+    }
+    NativePaneTabDragReproLog.append(event: eventName, details: details)
+  }
+
+  private static func debugFrame(_ frame: CGRect) -> [String: Double] {
+    [
+      "height": Double(frame.height),
+      "maxX": Double(frame.maxX),
+      "maxY": Double(frame.maxY),
+      "minX": Double(frame.minX),
+      "minY": Double(frame.minY),
+      "width": Double(frame.width),
+    ]
+  }
+
+  private static func debugPoint(_ point: CGPoint) -> [String: Double] {
+    [
+      "x": Double(point.x),
+      "y": Double(point.y),
+    ]
+  }
+
+  private static func sidebarResizeCursorEventSupportsClickCount(_ eventType: NSEvent.EventType) -> Bool {
+    switch eventType {
+    case .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+      .rightMouseDown, .rightMouseDragged, .rightMouseUp,
+      .otherMouseDown, .otherMouseDragged, .otherMouseUp:
+      return true
+    default:
+      return false
+    }
   }
 }
 
@@ -13481,7 +13725,7 @@ private final class AppModalWindowController: NSObject, NSWindowDelegate, WKNavi
       return "Running Sessions"
     case "delayedSend":
       return "Delayed Send"
-    case "findPreviousSession", "previousSessions":
+    case "previousSessions":
       return "Previous Sessions"
     case "firstLaunchSetup", "tipsAndTricks":
       return "Tips & Tricks"

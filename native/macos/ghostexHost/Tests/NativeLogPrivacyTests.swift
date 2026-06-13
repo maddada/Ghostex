@@ -295,6 +295,43 @@ enum NativeLogPrivacyTests {
     assertTrue(!paneTabWindowPrepassJson.contains("secret-token"), "pane-tab window prepass logs must not include secrets")
     assertTrue(!paneTabWindowPrepassJson.contains("private?token"), "pane-tab window prepass logs must not include full URLs or query strings")
 
+    let sidebarResizeCursorPayload = NativeLogPrivacy.sanitizePayload([
+      "alphaValue": 1,
+      "bounds": ["height": 998, "maxX": 6, "maxY": 998, "minX": 0, "minY": 0, "width": 6],
+      "commandText": "codex --ask private request",
+      "currentLocalPoint": ["x": 8, "y": 420],
+      "currentWindowPoint": ["x": 242, "y": 420],
+      "cursorAction": "setArrow",
+      "event": "nativeSidebarResize.handle.cursorRefresh",
+      "eventLocalPoint": ["x": 8, "y": 420],
+      "eventType": "mouseExited",
+      "eventWindowPoint": ["x": 242, "y": 420],
+      "frame": ["height": 998, "maxX": 238, "maxY": 998, "minX": 232, "minY": 0, "width": 6],
+      "hasSuperview": true,
+      "hasWindow": true,
+      "isHidden": false,
+      "isResizeDragging": false,
+      "pointerInside": false,
+      "projectName": "Private Customer Project",
+      "projectPath": "/Users/person/dev/private-customer",
+      "reason": "mouseExited",
+      "secretToken": "secret-token",
+      "url": "https://example.test/private?token=secret-token",
+      "windowNumber": 12,
+    ])
+    let sidebarResizeCursorJson = serializePrivacyTestPayload(sidebarResizeCursorPayload)
+
+    assertTrue(sidebarResizeCursorJson.contains("nativeSidebarResize.handle.cursorRefresh"), "sidebar resize cursor event should remain visible")
+    assertTrue(sidebarResizeCursorJson.contains("setArrow"), "sidebar resize cursor action should remain visible")
+    assertTrue(sidebarResizeCursorJson.contains("mouseExited"), "sidebar resize cursor reason and event type should remain visible")
+    assertTrue(sidebarResizeCursorJson.contains("currentWindowPoint"), "sidebar resize cursor pointer geometry should remain visible")
+    assertTrue(sidebarResizeCursorJson.contains("pointerInside"), "sidebar resize cursor containment should remain visible")
+    assertTrue(!sidebarResizeCursorJson.contains("Private Customer Project"), "sidebar resize cursor logs must not include project names")
+    assertTrue(!sidebarResizeCursorJson.contains("/Users/person"), "sidebar resize cursor logs must not include paths")
+    assertTrue(!sidebarResizeCursorJson.contains("codex --ask private request"), "sidebar resize cursor logs must not include command text")
+    assertTrue(!sidebarResizeCursorJson.contains("secret-token"), "sidebar resize cursor logs must not include secrets")
+    assertTrue(!sidebarResizeCursorJson.contains("private?token"), "sidebar resize cursor logs must not include full URLs or query strings")
+
     let sourceDragPayload = NativeLogPrivacy.sanitizePayload([
       "activeElement": [
         "classTokens": ["monaco-workbench", "part-editor"],

@@ -5,6 +5,10 @@ import { AppTooltip, dismissSidebarTooltips, TooltipProvider } from "../../sideb
 import { openAppModal, postAppModalHostMessage } from "../../sidebar/app-modal-host-bridge";
 import { dismissAllSidebarContextMenus } from "../../sidebar/sidebar-context-menu-portal";
 import { SidebarApp } from "../../sidebar/sidebar-app";
+import {
+  readRenderedSidebarSessionSlots,
+  type RenderedSidebarSessionSlot,
+} from "../../sidebar/sidebar-visible-session-slots";
 import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "../../sidebar/agent-logos";
 import { TOOLTIP_DELAY_MS } from "../../sidebar/tooltip-delay";
 import {
@@ -38,10 +42,6 @@ import {
   type NativeSessionTransitionOriginSession,
 } from "./native-session-transition-focus";
 import { splitAgentPromptTextIntoLineChunks } from "./native-agent-prompt-text";
-import {
-  DEFAULT_FIND_PREVIOUS_SESSION_PROMPT_TEMPLATE,
-  renderFindPreviousSessionPrompt,
-} from "../../shared/find-previous-session-prompt";
 import type { NativeTerminalLayout } from "../../shared/native-ghostty-host-protocol";
 import {
   clampVisibleSessionCount,
@@ -401,6 +401,11 @@ type NativeTerminalTitleBarAction =
 type ProjectEditorLoadStatus = "idle" | "opening" | "running" | "error";
 type ProjectEditorSurfaceMode = "code" | "git" | "tasks";
 type TitlebarMode = "agents" | ProjectEditorSurfaceMode;
+type NativeProjectBrowserTabRestoreState = {
+  id: string;
+  title: string;
+  url: string;
+};
 type NativeGxserverDaemonStatus = {
   alwaysStart: boolean;
   message?: string;
@@ -467,6 +472,8 @@ type NativeHostCommand =
     }
   | { type: "stopCodeServerRuntime" }
   | {
+      activeBrowserTabId?: string;
+      browserTabs?: NativeProjectBrowserTabRestoreState[];
       browserFeedbackTool?: "react-grab" | "agentation";
       companionPaneHidden?: boolean;
       mode?: ProjectEditorSurfaceMode;
@@ -551,6 +558,7 @@ type NativeHostCommand =
       sessionFaviconDataUrls?: Record<string, string>;
       sessionAgentIconDataUrls?: Record<string, string>;
       sessionAgentIconColors?: Record<string, string>;
+      clickToWakeSleepingSessions?: boolean;
       sessionActivities?: Record<string, "attention" | "sleeping" | "working">;
       sessionDelayedSendRemainingLabels?: Record<string, string>;
       sessionFirstPromptTitleGenerationSessionIds?: string[];
@@ -845,6 +853,7 @@ type NativeHostEvent =
     }
   | { faviconDataUrl?: string; sessionId: string; type: "browserFaviconChanged" }
   | { sessionId: string; type: "browserUrlChanged"; url: string }
+  | { sourceSessionId: string; type: "browserOpenInNewTabRequested"; url: string }
   | {
       action: NativeTerminalTitleBarAction;
       sessionId: string;
@@ -857,6 +866,7 @@ type NativeHostEvent =
       type: "paneReorderRequested";
     }
   | { sessionId: string; type: "paneTabSelected" }
+  | { sessionId: string; type: "sleepingPaneWakeRequested" }
   | { sessionId: string; type: "paneTabFocusRequested" }
   | { scope: NativePaneTabCloseScope; sessionId: string; type: "paneTabCloseRequested" }
   | { scope: NativePaneTabSleepScope; sessionId: string; type: "paneTabSleepRequested" }
@@ -903,7 +913,9 @@ type NativeHostEvent =
   | (ProjectBoardBridgeRequest & { type: "projectBoardRequest" })
   | { payloadJson: string; type: "osIntegrationStatus" }
   | {
+      activeTabId?: string;
       projectId: string;
+      tabs?: NativeProjectBrowserTabRestoreState[];
       type: "projectEditorTabSelected";
       url?: string;
     }
@@ -963,17 +975,30 @@ type NativePersistenceSessionStateResult = Extract<
 >;
 type NativeTerminalTextResult = Extract<NativeHostEvent, { type: "terminalTextResult" }>;
 type NativeSidebarBackgroundOperation = () => void;
+type NativeSidebarBulkActionOptions = {
+  delayBetweenOperationsMs?: number;
+};
+
+const NATIVE_SIDEBAR_BULK_SLEEP_INTERVAL_MS = 350;
 
 /**
  * CDXC:NativeSidebarBulkActions 2026-06-07-13:09:
  * Context-menu and titlebar lifecycle commands can target many sessions. Queue
  * each target as its own macrotask so menu dismissal and sidebar paint are not
  * blocked by synchronous close/sleep/reload fan-out.
+ *
+ * CDXC:NativeSidebarBulkActions 2026-06-13-02:09:
+ * Multi-session sleep actions should cascade with a short pause between targets
+ * so zmx shutdown, native pane teardown, and sidebar publishing do not spike the
+ * laptop or make the app lag when users click Sleep Inactive, Sleep below, or a
+ * tab-scope sleep command.
  */
 function runNativeSidebarBulkActionInBackground(
   operations: readonly NativeSidebarBackgroundOperation[],
+  options: NativeSidebarBulkActionOptions = {},
 ): void {
   const pendingOperations = [...operations];
+  const delayBetweenOperationsMs = Math.max(0, options.delayBetweenOperationsMs ?? 0);
   const runNext = () => {
     const operation = pendingOperations.shift();
     if (!operation) {
@@ -982,13 +1007,21 @@ function runNativeSidebarBulkActionInBackground(
 
     operation();
     if (pendingOperations.length > 0) {
-      window.setTimeout(runNext, 0);
+      window.setTimeout(runNext, delayBetweenOperationsMs);
     }
   };
 
   if (pendingOperations.length > 0) {
     window.setTimeout(runNext, 0);
   }
+}
+
+function runNativeSidebarBulkSleepActionInBackground(
+  operations: readonly NativeSidebarBackgroundOperation[],
+): void {
+  runNativeSidebarBulkActionInBackground(operations, {
+    delayBetweenOperationsMs: NATIVE_SIDEBAR_BULK_SLEEP_INTERVAL_MS,
+  });
 }
 
 type NativeBootstrap = {
@@ -1328,6 +1361,7 @@ let gitState = createDefaultSidebarGitState(
  * delays before closing their native Chromium surfaces.
  */
 const CODE_SERVER_EDITOR_ORIGIN = "http://127.0.0.1:3775";
+const DEFAULT_PROJECT_BROWSER_URL = "https://github.com/maddada/Ghostex";
 const PROJECT_EDITOR_OPEN_TIMEOUT_MS = 10 * 1000;
 const AUTO_SLEEP_MONITOR_INTERVAL_MS = 60 * 1000;
 const AUTO_SLEEP_MINUTE_MS = 60 * 1000;
@@ -1360,20 +1394,20 @@ let gxserverPresentationRecoveryAttempt = 0;
 let lastGxserverPresentationTabReconciliationLogKey: string | undefined;
 const sessionFocusPreviousProjectModeByProjectId = new Map<string, ProjectEditorSurfaceMode>();
 const awakeProjectEditorModesByProjectId = new Map<string, Set<ProjectEditorSurfaceMode>>();
-const projectEditorSurfaceByProjectId = new Map<
-  string,
-  {
-    errorMessage?: string;
-    isOpen: boolean;
-    isSleeping: boolean;
-    lastAccessedAt?: string;
-    mode: ProjectEditorSurfaceMode;
-    nativeEditorId: string;
-    status: ProjectEditorLoadStatus;
-    title?: string;
-    url?: string;
-  }
->();
+type ProjectEditorSurfaceState = {
+  activeBrowserTabId?: string;
+  browserTabs?: NativeProjectBrowserTabRestoreState[];
+  errorMessage?: string;
+  isOpen: boolean;
+  isSleeping: boolean;
+  lastAccessedAt?: string;
+  mode: ProjectEditorSurfaceMode;
+  nativeEditorId: string;
+  status: ProjectEditorLoadStatus;
+  title?: string;
+  url?: string;
+};
+const projectEditorSurfaceByProjectId = new Map<string, ProjectEditorSurfaceState>();
 const pendingProcessResults = new Map<
   string,
   {
@@ -1633,7 +1667,11 @@ type TitlebarResourceSession = {
 };
 
 type NativeProjectEditorRestoreState = {
+  activeBrowserTabId?: string;
+  browserTabs?: NativeProjectBrowserTabRestoreState[];
   isOpen: boolean;
+  mode?: ProjectEditorSurfaceMode;
+  url?: string;
 };
 
 type NativeCliSessionSelector = {
@@ -2732,6 +2770,13 @@ function startGxserverPresentationSubscription(): void {
           revision: gxserverStartupSnapshot?.presentation?.revision,
         });
         scheduleGxserverPresentationSubscriptionRecovery("error");
+      },
+      onRendererCommand: (command) => {
+        /*
+        CDXC:GxserverRendererCommands 2026-06-13-02:24:
+        gxserver owns CLI command dispatch after the cutover. The macOS sidebar only executes renderer-local effects that still depend on visible workspace state, native AppKit/CEF integration, or sidebar-only UI helpers.
+        */
+        return handleNativeCliCommand(command.action, command.payload);
       },
       onSnapshot: (snapshot) => {
         applyGxserverPresentationSnapshot(snapshot, "websocket-snapshot");
@@ -5293,6 +5338,29 @@ function createNativeBrowserSession(
     url: normalizedUrl,
   });
   return session;
+}
+
+function handleBrowserOpenInNewTabRequested(
+  hostEvent: Extract<NativeHostEvent, { type: "browserOpenInNewTabRequested" }>,
+): void {
+  const sidebarSessionId = sidebarSessionIdForNativeSession(hostEvent.sourceSessionId);
+  const sourceSession = findSessionRecord(sidebarSessionId);
+  if (sourceSession?.kind !== "browser") {
+    return;
+  }
+  /**
+   * CDXC:BrowserTabs 2026-06-13-00:00:
+   * CEF middle-click and "Open Link in New Tab/Window" from the Agents browser
+   * should create a real browser tab beside the source pane. Native reports the
+   * link intent, while React owns tab-group placement and session persistence.
+   */
+  createNativeBrowserSession(hostEvent.url, findSessionGroupId(sidebarSessionId), {
+    visiblePlacement: {
+      kind: "appendToTabGroup",
+      position: "after",
+      targetSessionId: sidebarSessionId,
+    },
+  });
 }
 
 function findBrowserSessionInProjectByUrl(
@@ -9453,7 +9521,108 @@ function normalizeStoredProjectEditorRestoreState(
     return undefined;
   }
   const source = candidate as Partial<NativeProjectEditorRestoreState>;
-  return source.isOpen === true ? { isOpen: true } : undefined;
+  if (source.isOpen !== true) {
+    return undefined;
+  }
+  const mode =
+    source.mode === "code" || source.mode === "git" || source.mode === "tasks"
+      ? source.mode
+      : undefined;
+  const url = normalizeProjectBrowserUrl(source.url);
+  const browserTabs = normalizeProjectBrowserTabRestoreStates(source.browserTabs);
+  const activeBrowserTabId =
+    typeof source.activeBrowserTabId === "string" &&
+    browserTabs.some((tab) => tab.id === source.activeBrowserTabId)
+      ? source.activeBrowserTabId
+      : browserTabs[0]?.id;
+  return {
+    ...(activeBrowserTabId ? { activeBrowserTabId } : {}),
+    ...(browserTabs.length > 0 ? { browserTabs } : {}),
+    isOpen: true,
+    ...(mode ? { mode } : {}),
+    ...(url ? { url } : {}),
+  };
+}
+
+function normalizeProjectBrowserTabRestoreStates(
+  candidate: unknown,
+): NativeProjectBrowserTabRestoreState[] {
+  if (!Array.isArray(candidate)) {
+    return [];
+  }
+  const seenIds = new Set<string>();
+  const tabs: NativeProjectBrowserTabRestoreState[] = [];
+  for (const [index, value] of candidate.entries()) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const source = value as Partial<NativeProjectBrowserTabRestoreState> & { tabId?: string };
+    const url = normalizeProjectBrowserUrl(source.url);
+    if (!url) {
+      continue;
+    }
+    const idSource =
+      typeof source.id === "string"
+        ? source.id
+        : typeof source.tabId === "string"
+          ? source.tabId
+          : "";
+    const id = normalizeProjectBrowserTabId(idSource) ?? createProjectBrowserTabRestoreId(index);
+    if (seenIds.has(id)) {
+      continue;
+    }
+    seenIds.add(id);
+    const title = normalizeProjectBrowserTabTitle(source.title, url);
+    tabs.push({ id, title, url });
+  }
+  return tabs;
+}
+
+function normalizeProjectBrowserTabId(candidate: string | undefined): string | undefined {
+  const trimmed = candidate?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.slice(0, 160);
+}
+
+function normalizeProjectBrowserTabTitle(candidate: unknown, url: string): string {
+  const trimmed = typeof candidate === "string" ? candidate.trim() : "";
+  if (trimmed && trimmed.toLowerCase() !== "about:blank") {
+    return trimmed.slice(0, 160);
+  }
+  return projectBrowserTabTitleForUrl(url);
+}
+
+function normalizeProjectBrowserUrl(candidate: unknown): string | undefined {
+  const trimmed = typeof candidate === "string" ? candidate.trim() : "";
+  if (!trimmed || trimmed.toLowerCase() === "about:blank") {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function projectBrowserTabTitleForUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const lastPath = parsed.pathname.split("/").filter(Boolean).at(-1)?.trim();
+    return lastPath || parsed.hostname || "Browser";
+  } catch {
+    return "Browser";
+  }
+}
+
+function createProjectBrowserTabRestoreId(index?: number): string {
+  const suffix =
+    typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `browser-tab-${index ?? 0}-${suffix}`;
 }
 
 function restoreProjectEditorSurfaceStates(
@@ -9471,24 +9640,47 @@ function restoreProjectEditorSurfaceStates(
       continue;
     }
     const isActiveProject = project.projectId === startupActiveProjectId;
+    const restoredMode = project.projectEditor.mode ?? "code";
+    const restoredBrowserTabs = normalizeProjectBrowserTabRestoreStates(project.projectEditor.browserTabs);
+    const restoredActiveBrowserTabId =
+      project.projectEditor.activeBrowserTabId &&
+      restoredBrowserTabs.some((tab) => tab.id === project.projectEditor?.activeBrowserTabId)
+        ? project.projectEditor.activeBrowserTabId
+        : restoredBrowserTabs[0]?.id;
+    const restoredUrl =
+      restoredMode === "git"
+        ? normalizeProjectBrowserUrl(project.projectEditor.url) ??
+          restoredBrowserTabs.find((tab) => tab.id === restoredActiveBrowserTabId)?.url ??
+          restoredBrowserTabs[0]?.url
+        : normalizeProjectBrowserUrl(project.projectEditor.url);
     /**
      * CDXC:EditorPanes 2026-05-14-13:22:
      * If embedded Code was open when ghostex quit, restart must bring that Code row
      * back in the sidebar. Hydrate project-editor surface state from the durable
      * project snapshot; the active project recreates its Code pane immediately,
      * while background projects stay sleeping until the user focuses them.
+     *
+     * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+     * Browser-mode project tabs are restored as sleeping metadata on startup.
+     * Do not create CEF browser views for remembered Browser tabs until the user
+     * surfaces Browser mode; the default first tab remains GitHub/Ghostex only
+     * when a project has no prior Browser tab list.
      */
     projectEditorSurfaceByProjectId.set(project.projectId, {
+      activeBrowserTabId: restoredMode === "git" ? restoredActiveBrowserTabId : undefined,
+      browserTabs: restoredMode === "git" ? restoredBrowserTabs : undefined,
       errorMessage: undefined,
       isOpen: true,
-      isSleeping: !isActiveProject,
+      isSleeping: restoredMode === "git" || !isActiveProject,
       lastAccessedAt: new Date().toISOString(),
-      mode: "code",
-      nativeEditorId: createNativeProjectEditorId(project.projectId, "code"),
-      status: isActiveProject ? "opening" : "idle",
+      mode: restoredMode,
+      nativeEditorId: createNativeProjectEditorId(project.projectId, restoredMode),
+      status: restoredMode !== "git" && isActiveProject ? "opening" : "idle",
+      title: restoredMode === "git" ? "Browser" : undefined,
+      url: restoredUrl,
     });
-    if (isActiveProject) {
-      rememberAwakeProjectEditorMode(project.projectId, "code");
+    if (restoredMode !== "git" && isActiveProject) {
+      rememberAwakeProjectEditorMode(project.projectId, restoredMode);
     }
   }
 }
@@ -15249,11 +15441,14 @@ function setProjectEditorPersistedOpen(
       return project;
     }
     if (isOpen) {
-      if (project.projectEditor?.isOpen === true) {
+      const nextProjectEditor =
+        projectEditorRestoreStateFromSurface(projectEditorSurfaceByProjectId.get(projectId)) ??
+        ({ isOpen: true } satisfies NativeProjectEditorRestoreState);
+      if (areProjectEditorRestoreStatesEqual(project.projectEditor, nextProjectEditor)) {
         return project;
       }
       didChange = true;
-      return { ...project, projectEditor: { isOpen: true } };
+      return { ...project, projectEditor: nextProjectEditor };
     }
     if (!project.projectEditor) {
       return project;
@@ -18891,7 +19086,7 @@ async function stageNativeAgentPrompt(input: {
    * still mounting its TUI. Wait for native terminalReady, then give the agent
    * prompt editor time to appear. When a helper session needs a title, submit
    * `/rename` first and only write the real prompt after that command has
-   * settled, so Multi-commit, Find Session, project-board Start Work, merge
+   * settled, so Multi-commit, project-board Start Work, merge
    * conflicts, and worktree first prompts all use the same ordered path.
    *
    * CDXC:PromptAgents 2026-05-31-07:35:
@@ -22979,7 +23174,7 @@ function runNativeHotkeyAction(actionId: ghostexHotkeyActionId, source: "dom" | 
 function switchNativeWorkareaView(view: "agents" | "github" | "kanban" | "source"): void {
   /**
    * CDXC:Hotkeys 2026-06-06-04:36:
-   * Option+1..4 must switch the active project workarea using the same route as the titlebar segmented control: Agents, Source, GitHub, Kanban. Reuse those handlers so hotkeys preserve project-editor sleep, focus, and validation behavior.
+   * Option+1..4 must switch the active project workarea using the same route as the titlebar segmented control: Agents, Source, Browser, Kanban. Reuse those handlers so hotkeys preserve project-editor sleep, focus, and validation behavior.
    */
   switch (view) {
     case "agents":
@@ -23505,17 +23700,28 @@ function escapeNativeHotkeySelectorValue(value: string): string {
     : value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-type NativeRenderedHotkeySidebarSessionSlot = {
-  isSleeping: boolean;
-  sessionId: string;
-};
+type NativeRenderedHotkeySidebarSessionSlot = RenderedSidebarSessionSlot;
 
 function getRenderedNativeHotkeySidebarSessionSlotIds(): string[] {
   return getRenderedNativeHotkeySidebarSessionSlots().map((slot) => slot.sessionId);
 }
 
+function getNativeHotkeySidebarSessionListRoot(): ParentNode | undefined {
+  /**
+   * CDXC:Hotkeys 2026-06-13-07:33:
+   * Cmd+number must read the actual sidebar session list, not every session-labeled control inside the native sidebar shell. The macOS wrapper can render tab or pane chrome with session IDs before the sidebar rows, and scanning the shell makes slot numbers follow storage/chrome order instead of the Last Active list the user sees.
+   */
+  return document.querySelector(".native-sidebar-main .session-groups-content") ?? undefined;
+}
+
 function getRenderedNativeHotkeySidebarSessionSlots(): NativeRenderedHotkeySidebarSessionSlot[] {
-  const root = document.querySelector(".native-sidebar-main") ?? document;
+  const root = getNativeHotkeySidebarSessionListRoot();
+  if (!root) {
+    logNativeHotkeyDebug("nativeHotkeys.sessionSlotRootMissing", {
+      activeSessionsSortMode,
+    });
+    return [];
+  }
   const seenSessionIds = new Set<string>();
   const slots: NativeRenderedHotkeySidebarSessionSlot[] = [];
   /**
@@ -23525,24 +23731,12 @@ function getRenderedNativeHotkeySidebarSessionSlots(): NativeRenderedHotkeySideb
    * CDXC:Hotkeys 2026-06-07-14:05:
    * Previous/next session hotkeys use the same rendered rows but also read each row's sleeping state so traversal can skip sleeping sessions while still honoring expanded-group sidebar order.
    */
-  for (const element of Array.from(
-    root.querySelectorAll<HTMLElement>("[data-sidebar-session-id]"),
-  )) {
-    const sessionId = element.getAttribute("data-sidebar-session-id");
-    if (
-      !sessionId ||
-      seenSessionIds.has(sessionId) ||
-      element.getAttribute("data-visible") === "false" ||
-      element.closest('[aria-hidden="true"], [data-collapsed="true"]') ||
-      element.getClientRects().length === 0
-    ) {
+  for (const slot of readRenderedSidebarSessionSlots(root)) {
+    if (seenSessionIds.has(slot.sessionId)) {
       continue;
     }
-    seenSessionIds.add(sessionId);
-    slots.push({
-      isSleeping: element.getAttribute("data-sleeping") === "true",
-      sessionId,
-    });
+    seenSessionIds.add(slot.sessionId);
+    slots.push(slot);
   }
   return slots;
 }
@@ -24281,6 +24475,11 @@ function setNativeSessionsSleepingInBackground(
    * one native message. Deduplicate and skip already-sleeping targets, then run
    * lifecycle work in macrotasks with one final publish so the sidebar does not
    * repaint after every individual session shutdown.
+   *
+   * CDXC:NativeSidebarBulkActions 2026-06-13-02:09:
+   * Sleeping many sessions from Sleep below must use the sleep cascade interval;
+   * waking can keep the normal fast background queue because it does not fan out
+   * provider shutdown work.
    */
   const targetSessionIds = Array.from(new Set(sessionIds)).filter((sessionId) =>
     sleeping ? !isNativeSidebarSessionAlreadySleeping(sessionId) : true,
@@ -24289,7 +24488,10 @@ function setNativeSessionsSleepingInBackground(
     return;
   }
 
-  runNativeSidebarBulkActionInBackground([
+  const runBulkLifecycleAction = sleeping
+    ? runNativeSidebarBulkSleepActionInBackground
+    : runNativeSidebarBulkActionInBackground;
+  runBulkLifecycleAction([
     ...targetSessionIds.map((sessionId) => () =>
       setNativeSessionSleeping(sessionId, sleeping, {
         focusTransition: false,
@@ -24400,7 +24602,7 @@ function sleepInactiveSessionsFromTitlebar(sessionIds: string[]): void {
     }
     sessionIdsToSleep.push(sessionId);
   }
-  runNativeSidebarBulkActionInBackground(
+  runNativeSidebarBulkSleepActionInBackground(
     sessionIdsToSleep.map((sessionId) => () => setNativeSessionSleeping(sessionId, true)),
   );
 }
@@ -24484,7 +24686,7 @@ function sleepInactiveProjectSessions(projectId: string): void {
       );
       backgroundOperations.push(() => setNativeSessionSleeping(combinedSessionId, true));
     }
-    runNativeSidebarBulkActionInBackground(backgroundOperations);
+    runNativeSidebarBulkSleepActionInBackground(backgroundOperations);
     return;
   }
   const projectedSessionsById = new Map(
@@ -24522,7 +24724,7 @@ function sleepInactiveProjectSessions(projectId: string): void {
       }
     }
   }
-  runNativeSidebarBulkActionInBackground(backgroundOperations);
+  runNativeSidebarBulkSleepActionInBackground(backgroundOperations);
 }
 
 function hasProjectedDelayedSend(
@@ -24696,12 +24898,12 @@ function runNativeAutoSleepMonitor(source: "interval" | "settings-change" | "sta
         terminalCount: terminalSessionIdsToSleep.length,
       });
     }
-    for (const sessionId of terminalSessionIdsToSleep) {
-      setNativeSessionSleeping(sessionId, true);
-    }
-    for (const session of browserSessionsToSleep) {
-      setNativeBrowserSessionSleeping(session.projectId, session.sessionId, true);
-    }
+    runNativeSidebarBulkSleepActionInBackground([
+      ...terminalSessionIdsToSleep.map((sessionId) => () => setNativeSessionSleeping(sessionId, true)),
+      ...browserSessionsToSleep.map((session) => () =>
+        setNativeBrowserSessionSleeping(session.projectId, session.sessionId, true),
+      ),
+    ]);
     return;
   }
   for (const project of projects) {
@@ -24757,12 +24959,12 @@ function runNativeAutoSleepMonitor(source: "interval" | "settings-change" | "sta
       terminalCount: terminalSessionIdsToSleep.length,
     });
   }
-  for (const sessionId of terminalSessionIdsToSleep) {
-    setNativeSessionSleeping(sessionId, true);
-  }
-  for (const session of browserSessionsToSleep) {
-    setNativeBrowserSessionSleeping(session.projectId, session.sessionId, true);
-  }
+  runNativeSidebarBulkSleepActionInBackground([
+    ...terminalSessionIdsToSleep.map((sessionId) => () => setNativeSessionSleeping(sessionId, true)),
+    ...browserSessionsToSleep.map((session) => () =>
+      setNativeBrowserSessionSleeping(session.projectId, session.sessionId, true),
+    ),
+  ]);
 }
 
 function shouldAutoSleepAgentSession({
@@ -24788,7 +24990,7 @@ function shouldAutoSleepAgentSession({
   CDXC:AutoSleep 2026-06-09-20:33:
   Agent Auto Sleep must not disturb a user's split layout. Treat the active
   owner of every persisted pane in every project as surfaced, even when Focus
-  Mode or Source/GitHub/Kanban currently hides that pane from AppKit.
+  Mode or Source/Browser/Kanban currently hides that pane from AppKit.
   */
   if (protectedProjectSessionKeys.has(autoSleepProjectSessionKey(project.projectId, session.sessionId))) {
     return false;
@@ -25185,6 +25387,7 @@ function quitResourcesFromTitlebar(sessionIds: string[], projectIds: string[]): 
    * Resource rows can be gxserver presentation-only. Terminal quits must still route through setNativeSessionSleeping so gxserver owns lifecycle mutation and macOS only records local-first presentation.
    */
   const backgroundOperations: NativeSidebarBackgroundOperation[] = [];
+  let includesSleepOperation = false;
   for (const projectId of Array.from(new Set(projectIds))) {
     if (findProject(projectId)) {
       backgroundOperations.push(() => disposeProjectEditorSurface(projectId));
@@ -25201,13 +25404,17 @@ function quitResourcesFromTitlebar(sessionIds: string[], projectIds: string[]): 
       continue;
     }
     if (session?.kind === "terminal" || presentationSession?.kind === "terminal") {
+      includesSleepOperation = true;
       backgroundOperations.push(() => setNativeSessionSleeping(sessionId, true));
     } else {
       backgroundOperations.push(() => closeTerminal(sessionId));
     }
   }
   backgroundOperations.push(() => publish());
-  runNativeSidebarBulkActionInBackground(backgroundOperations);
+  const runBulkLifecycleAction = includesSleepOperation
+    ? runNativeSidebarBulkSleepActionInBackground
+    : runNativeSidebarBulkActionInBackground;
+  runBulkLifecycleAction(backgroundOperations);
 }
 
 function setNativeSessionPoppedOut(sessionId: string, poppedOut: boolean): void {
@@ -25265,7 +25472,7 @@ function setNativeGroupSleeping(groupId: string, sleeping: boolean): void {
       backgroundOperations.push(() => stopNativeSleepingSessionRuntime(session.sessionId, project));
     }
     backgroundOperations.push(() => publish());
-    runNativeSidebarBulkActionInBackground(backgroundOperations);
+    runNativeSidebarBulkSleepActionInBackground(backgroundOperations);
     return;
   }
 
@@ -26581,87 +26788,12 @@ async function runCliAgent(agentId: string, groupId?: string): Promise<SessionRe
   return launchAgentTerminal(agent, groupId);
 }
 
-/**
- * CDXC:PreviousSessions 2026-04-28-05:12
- * Native ghostex must mirror the reference Prompt to Search workflow:
- * receive the modal's remembered-topic query, launch a terminal agent session,
- * rename that helper session, then stage the local-session search prompt.
- *
- * CDXC:PromptAgents 2026-05-28-07:15:
- * Prompt to Search should use the same Settings-selected default prompt
- * agent as Git helper prompts and project-board Start Work instead of
- * hardcoding Codex.
- */
-async function promptFindPreviousSession(queryInput?: string): Promise<void> {
-  const query = queryInput?.trim();
-  appendAgentDetectionDebugLog("nativeSidebar.promptFindPreviousSession.received", {
-    hasQuery: Boolean(query),
-    queryLength: query?.length ?? 0,
-  });
-  if (!query) {
-    showNativeMessage("info", "Type what you remember in the Previous Sessions search field.");
-    return;
-  }
-
-  const agent = resolveFindPreviousSessionAgent();
-  if (!agent) {
-    appendAgentDetectionDebugLog("nativeSidebar.promptFindPreviousSession.missingAgent", {
-      requestedAgentId: settings.defaultPromptAgentId,
-    });
-    showNativeMessage(
-      "info",
-      "Ghostex could not find a configured default prompt agent for Find a session.",
-    );
-    return;
-  }
-
-  const projectId = activeProjectId;
-  const session = await launchAgentTerminal(agent);
-  if (!session) {
-    appendAgentDetectionDebugLog("nativeSidebar.promptFindPreviousSession.createSessionFailed", {
-      agentId: agent.agentId,
-      queryLength: query.length,
-    });
-    return;
-  }
-
-  const prompt = renderFindPreviousSessionPrompt(
-    DEFAULT_FIND_PREVIOUS_SESSION_PROMPT_TEMPLATE,
-    query,
-  );
-  /**
-   * CDXC:PreviousSessions 2026-05-07-16:02
-   * The Find Session button crosses React, the modal-host WebKit bridge, and
-   * native sidebar command dispatch before terminal input is written. Keep
-   * debug breadcrumbs at session creation and prompt staging so Computer Use
-   * repros can identify the exact boundary that stopped the action.
-   */
-  appendAgentDetectionDebugLog("nativeSidebar.promptFindPreviousSession.stagingPrompt", {
-    agentId: agent.agentId,
-    nativeSessionId: nativeSessionIdForProjectSidebarSession(projectId, session.sessionId),
-    queryLength: query.length,
-    sessionId: session.sessionId,
-  });
-  await stageNativeAgentPrompt({
-    agent,
-    projectId,
-    prompt,
-    renameTitle: `Search: ${query}`,
-    session,
-  });
-}
-
-function resolveFindPreviousSessionAgent(): SidebarAgentButton | undefined {
-  return resolveDefaultPromptAgent();
-}
-
 async function searchPreviousSessionsByText(): Promise<void> {
   /*
    * CDXC:PreviousSessions 2026-05-29-12:36:
-   * The Previous Sessions modal's Search by Text button should open a fresh
-   * terminal running `gx f`, which is the bundled zehn prompt-history search
-   * path. Do not route this through the agent prompt flow; users asked for a
-   * direct terminal search button next to Prompt to Find Session.
+   * The Search row's Search by Text button should open a fresh terminal running
+   * `gx f`, which is the bundled zehn prompt-history search path. Do not route
+   * this through an agent prompt flow.
    *
    * CDXC:PreviousSessions 2026-05-29-20:32:
    * Search by Text belongs in the currently active project, not in a generated
@@ -26673,6 +26805,10 @@ async function searchPreviousSessionsByText(): Promise<void> {
    * final session name. Mark it as a placeholder so cards render `∗ Search by
    * Text`, resume logic ignores it, and the next real terminal title can
    * replace it.
+   *
+   * CDXC:PreviousSessions 2026-06-13-01:09:
+   * Previous Sessions no longer renders footer launch buttons, and Prompt to
+   * Search has been removed. Keep this as the direct Search row launcher only.
    */
   appendAgentDetectionDebugLog("nativeSidebar.searchPreviousSessionsByText.received");
   const session = createTerminal("Search by Text", withAtuinIgnoredShellHistoryPrefix("gx f\r"), undefined, undefined, {
@@ -28938,12 +29074,14 @@ function closeAllNativeSessions(): void {
         )
         .map((session) => session.sessionId),
     );
-    for (const sessionId of Array.from(new Set(sessionIds))) {
-      setNativeSessionSleeping(sessionId, true);
-    }
-    sidebarCommandSessionByCommandId.clear();
-    sidebarCommandCommandIdBySessionId.clear();
-    publish();
+    runNativeSidebarBulkSleepActionInBackground([
+      ...Array.from(new Set(sessionIds)).map((sessionId) => () => setNativeSessionSleeping(sessionId, true)),
+      () => {
+        sidebarCommandSessionByCommandId.clear();
+        sidebarCommandCommandIdBySessionId.clear();
+        publish();
+      },
+    ]);
     return;
   }
   const sessionIds = projects.flatMap((project) =>
@@ -34837,7 +34975,7 @@ function hasAwakeProjectEditorMode(projectId: string, mode: ProjectEditorSurface
 
 function projectEditorErrorMessageForMode(mode: ProjectEditorSurfaceMode): string {
   if (mode === "git") {
-    return "GitHub did not finish loading within 10 seconds.";
+    return "Browser did not finish loading within 10 seconds.";
   }
   if (mode === "tasks") {
     return "Project did not finish loading within 10 seconds.";
@@ -34847,7 +34985,7 @@ function projectEditorErrorMessageForMode(mode: ProjectEditorSurfaceMode): strin
 
 function projectEditorLoadFailureMessageForMode(mode: ProjectEditorSurfaceMode): string {
   if (mode === "git") {
-    return "GitHub failed to load.";
+    return "Browser failed to load.";
   }
   if (mode === "tasks") {
     return "Project failed to load.";
@@ -34860,7 +34998,7 @@ function projectEditorSurfaceTitleForMode(
   mode: ProjectEditorSurfaceMode,
 ): string {
   if (mode === "git") {
-    return "GitHub";
+    return "Browser";
   }
   if (mode === "tasks") {
     return "Project";
@@ -35080,6 +35218,97 @@ function projectEditorTitle(project: NativeProject): string {
   return storedName || projectNameFromPath(project.path);
 }
 
+function projectBrowserActiveTabFromState(surfaceState: {
+  activeBrowserTabId?: string;
+  browserTabs?: NativeProjectBrowserTabRestoreState[];
+  url?: string;
+}): NativeProjectBrowserTabRestoreState | undefined {
+  const tabs = surfaceState.browserTabs ?? [];
+  return (
+    tabs.find((tab) => tab.id === surfaceState.activeBrowserTabId) ??
+    (surfaceState.url ? tabs.find((tab) => tab.url === surfaceState.url) : undefined) ??
+    tabs[0]
+  );
+}
+
+function projectBrowserActiveUrlFromState(surfaceState: {
+  activeBrowserTabId?: string;
+  browserTabs?: NativeProjectBrowserTabRestoreState[];
+  url?: string;
+}): string | undefined {
+  return normalizeProjectBrowserUrl(surfaceState.url) ?? projectBrowserActiveTabFromState(surfaceState)?.url;
+}
+
+function resolveProjectBrowserTabsForOpen(
+  surfaceState: {
+    activeBrowserTabId?: string;
+    browserTabs?: NativeProjectBrowserTabRestoreState[];
+  } | undefined,
+  seedUrl: string,
+): { activeBrowserTabId: string; browserTabs: NativeProjectBrowserTabRestoreState[] } {
+  const storedTabs = normalizeProjectBrowserTabRestoreStates(surfaceState?.browserTabs);
+  if (storedTabs.length > 0) {
+    const activeBrowserTabId =
+      surfaceState?.activeBrowserTabId &&
+      storedTabs.some((tab) => tab.id === surfaceState.activeBrowserTabId)
+        ? surfaceState.activeBrowserTabId
+        : storedTabs[0]!.id;
+    return { activeBrowserTabId, browserTabs: storedTabs };
+  }
+  const normalizedSeedUrl = normalizeProjectBrowserUrl(seedUrl) ?? DEFAULT_PROJECT_BROWSER_URL;
+  const id = createProjectBrowserTabRestoreId();
+  return {
+    activeBrowserTabId: id,
+    browserTabs: [
+      {
+        id,
+        title: projectBrowserTabTitleForUrl(normalizedSeedUrl),
+        url: normalizedSeedUrl,
+      },
+    ],
+  };
+}
+
+function projectEditorRestoreStateFromSurface(
+  surfaceState: ProjectEditorSurfaceState | undefined,
+): NativeProjectEditorRestoreState | undefined {
+  if (surfaceState?.isOpen !== true) {
+    return undefined;
+  }
+  const state: NativeProjectEditorRestoreState = {
+    isOpen: true,
+    mode: surfaceState.mode,
+  };
+  const url = normalizeProjectBrowserUrl(surfaceState.url);
+  if (url) {
+    state.url = url;
+  }
+  if (surfaceState.mode === "git") {
+    const browserTabs = normalizeProjectBrowserTabRestoreStates(surfaceState.browserTabs);
+    if (browserTabs.length > 0) {
+      state.browserTabs = browserTabs;
+      state.activeBrowserTabId =
+        surfaceState.activeBrowserTabId &&
+        browserTabs.some((tab) => tab.id === surfaceState.activeBrowserTabId)
+          ? surfaceState.activeBrowserTabId
+          : browserTabs[0]?.id;
+      state.url = projectBrowserActiveUrlFromState({
+        activeBrowserTabId: state.activeBrowserTabId,
+        browserTabs,
+        url,
+      });
+    }
+  }
+  return state;
+}
+
+function areProjectEditorRestoreStatesEqual(
+  left: NativeProjectEditorRestoreState | undefined,
+  right: NativeProjectEditorRestoreState | undefined,
+): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
 function wakeProjectEditorSurface(project: NativeProject, mode?: ProjectEditorSurfaceMode): void {
   const startedAtMs = performance.now();
   const surfaceState = projectEditorSurfaceByProjectId.get(project.projectId);
@@ -35087,7 +35316,9 @@ function wakeProjectEditorSurface(project: NativeProject, mode?: ProjectEditorSu
   const nativeEditorId = nativeProjectEditorIdForProject(project, nextMode);
   const url =
     nextMode === "git"
-      ? surfaceState?.url
+      ? surfaceState
+        ? projectBrowserActiveUrlFromState(surfaceState)
+        : undefined
       : nextMode === "tasks"
         ? surfaceState?.url
         : (surfaceState?.mode === "code" ? surfaceState.url : undefined) ??
@@ -35110,16 +35341,22 @@ function wakeProjectEditorSurface(project: NativeProject, mode?: ProjectEditorSu
     });
   }
   cancelProjectEditorSleepTimer(project.projectId);
-	  projectEditorSurfaceByProjectId.set(project.projectId, {
-	    errorMessage: undefined,
-	    isOpen: surfaceState?.isOpen === true,
-	    isSleeping: false,
-	    lastAccessedAt: new Date().toISOString(),
-	    mode: nextMode,
+  projectEditorSurfaceByProjectId.set(project.projectId, {
+    errorMessage: undefined,
+    isOpen: surfaceState?.isOpen === true,
+    isSleeping: false,
+    lastAccessedAt: new Date().toISOString(),
+    mode: nextMode,
     nativeEditorId,
     status: hasAwakeProjectEditorMode(project.projectId, nextMode) ? "running" : "opening",
     title: projectEditorSurfaceTitleForMode(project, nextMode),
     url,
+    ...(nextMode === "git"
+      ? {
+          activeBrowserTabId: surfaceState?.activeBrowserTabId,
+          browserTabs: normalizeProjectBrowserTabRestoreStates(surfaceState?.browserTabs),
+        }
+      : {}),
   });
   if (hasAwakeProjectEditorMode(project.projectId, nextMode)) {
     cancelProjectEditorOpenTimer(project.projectId);
@@ -35156,6 +35393,12 @@ function wakeProjectEditorSurface(project: NativeProject, mode?: ProjectEditorSu
     });
   }
   postNative({
+    ...(nextMode === "git"
+      ? {
+          activeBrowserTabId: surfaceState?.activeBrowserTabId,
+          browserTabs: normalizeProjectBrowserTabRestoreStates(surfaceState?.browserTabs),
+        }
+      : {}),
     browserFeedbackTool: settings.browserFeedbackTool,
     companionPaneHidden: project.projectEditorCompanionPaneHidden === true,
     mode: nextMode,
@@ -35254,13 +35497,13 @@ function openProjectEditorForGroup(groupId: string): void {
     if (surfaceState.status === "running") {
       cancelProjectEditorOpenTimer(project.projectId);
     }
-	    projectEditorSurfaceByProjectId.set(project.projectId, {
-	      ...surfaceState,
-	      errorMessage: undefined,
-	      isOpen: true,
-	      isSleeping: false,
-	      lastAccessedAt: new Date().toISOString(),
-	    });
+    projectEditorSurfaceByProjectId.set(project.projectId, {
+      ...surfaceState,
+      errorMessage: undefined,
+      isOpen: true,
+      isSleeping: false,
+      lastAccessedAt: new Date().toISOString(),
+    });
     setProjectEditorPersistedOpen(project.projectId, true, "focusProjectEditor");
     appendTitlebarCodeLagDebugLog("titlebarCodeLag.sidebarOpenForGroupBeforeExistingFocusPost", {
       elapsedMs: performance.now() - startedAtMs,
@@ -35408,10 +35651,15 @@ function toggleProjectEditorCompanionFromTitlebar(): void {
   /**
    * CDXC:ProjectEditorCompanion 2026-06-12-03:18:
    * The titlebar companion control is now the single collapse/expand toggle for
-   * Code, GitHub, and Kanban companion panes. Update the project-owned hidden
+   * Code, Browser, and Kanban companion panes. Update the project-owned hidden
    * preference in either direction, then publish through the normal
    * setActiveTerminalSet path so native AppKit layout observes the same state as
    * sidebar session clicks and editor-surface changes.
+   *
+   * CDXC:ProjectBrowserTabs 2026-06-13-00:28:
+   * Browser replaces the previous GitHub-facing top mode label, so companion
+   * pane requirements should name the user-visible Browser mode while the
+   * internal mode id remains git for host protocol compatibility.
    */
   setProjectEditorCompanionPaneHidden(
     project.projectId,
@@ -35421,7 +35669,7 @@ function toggleProjectEditorCompanionFromTitlebar(): void {
   publish();
 }
 
-function openProjectGitEditorSurface(project: NativeProject, githubUrl: string): void {
+function openProjectGitEditorSurface(project: NativeProject, seedUrl: string): void {
   if (activeProjectId !== project.projectId) {
     focusProject(project.projectId);
   }
@@ -35429,7 +35677,6 @@ function openProjectGitEditorSurface(project: NativeProject, githubUrl: string):
   const surfaceState = projectEditorSurfaceByProjectId.get(project.projectId);
   if (
     surfaceState?.mode === "git" &&
-    surfaceState.url === githubUrl &&
     surfaceState.isSleeping !== true &&
     (surfaceState.status === "opening" || surfaceState.status === "running")
   ) {
@@ -35437,30 +35684,45 @@ function openProjectGitEditorSurface(project: NativeProject, githubUrl: string):
     if (surfaceState.status === "running") {
       cancelProjectEditorOpenTimer(project.projectId);
     }
-	    projectEditorSurfaceByProjectId.set(project.projectId, {
-	      ...surfaceState,
-	      errorMessage: undefined,
-	      isOpen: true,
-	      isSleeping: false,
-	      lastAccessedAt: new Date().toISOString(),
-	    });
+    projectEditorSurfaceByProjectId.set(project.projectId, {
+      ...surfaceState,
+      errorMessage: undefined,
+      isOpen: true,
+      isSleeping: false,
+      lastAccessedAt: new Date().toISOString(),
+    });
+    setProjectEditorPersistedOpen(project.projectId, true, "focusProjectBrowser");
     postNative({ projectId: surfaceState.nativeEditorId, type: "focusProjectEditorPane" });
     publish();
     return;
   }
+  const browserState = resolveProjectBrowserTabsForOpen(
+    surfaceState?.mode === "git" ? surfaceState : undefined,
+    seedUrl,
+  );
+  const activeBrowserTab =
+    browserState.browserTabs.find((tab) => tab.id === browserState.activeBrowserTabId) ??
+    browserState.browserTabs[0]!;
+  const browserUrl = activeBrowserTab.url;
 
   /**
    * CDXC:ModeSwitcher 2026-05-15-13:18:
-   * Git mode must use the same project-editor shell as Code mode: the selected
-   * session stays in the left companion pane while the right Chromium surface
-   * shows the active project's GitHub remote. Do not create a browser session
-   * card, because that puts GitHub into the normal tabbed session workspace
-   * instead of the Code-style side-pane layout the mode switcher promises.
+   * Browser mode must use the same project-editor shell as Code mode: the
+   * selected session stays in the left companion pane while the right Chromium
+   * surface shows the active project's Browser tabs. Do not create a browser
+   * session card, because that puts the page into the normal tabbed session
+   * workspace instead of the Code-style side-pane layout the mode switcher promises.
    *
    * CDXC:ModeSwitcher 2026-05-15-14:42:
-   * Code, Git, and tasks-backed Project modes must keep separate native
+   * Code, Browser, and tasks-backed Project modes must keep separate native
    * project-editor panes. Native receives mode-scoped editor IDs so switching
    * modes changes the visible pane without reloading the other pages.
+   *
+   * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+   * Browser mode should restore the project's previous Browser tab list and
+   * active tab. If the project has never opened Browser mode, seed the first
+   * tab with the project's GitHub URL when one exists; otherwise use the
+   * Ghostex repository URL instead of disabling the top Browser control.
    */
   cancelProjectEditorSleepTimer(project.projectId);
   const isAwakeGitPane = hasAwakeProjectEditorMode(project.projectId, "git");
@@ -35469,19 +35731,24 @@ function openProjectGitEditorSurface(project: NativeProject, githubUrl: string):
   } else {
     scheduleProjectEditorOpenTimeout(project.projectId);
   }
-	  projectEditorSurfaceByProjectId.set(project.projectId, {
-	    errorMessage: undefined,
-	    isOpen: true,
-	    isSleeping: false,
-	    lastAccessedAt: new Date().toISOString(),
-	    mode: "git",
+  projectEditorSurfaceByProjectId.set(project.projectId, {
+    activeBrowserTabId: browserState.activeBrowserTabId,
+    browserTabs: browserState.browserTabs,
+    errorMessage: undefined,
+    isOpen: true,
+    isSleeping: false,
+    lastAccessedAt: new Date().toISOString(),
+    mode: "git",
     nativeEditorId,
     status: isAwakeGitPane ? "running" : "opening",
-    title: "GitHub",
-    url: githubUrl,
+    title: "Browser",
+    url: browserUrl,
   });
+  setProjectEditorPersistedOpen(project.projectId, true, "openProjectBrowser");
   rememberAwakeProjectEditorMode(project.projectId, "git");
   postNative({
+    activeBrowserTabId: browserState.activeBrowserTabId,
+    browserTabs: browserState.browserTabs,
     browserFeedbackTool: settings.browserFeedbackTool,
     companionPaneHidden: project.projectEditorCompanionPaneHidden === true,
     mode: "git",
@@ -35489,9 +35756,9 @@ function openProjectGitEditorSurface(project: NativeProject, githubUrl: string):
     projectTitle: projectEditorTitle(project),
     showsBrowserToolbar: true,
     showsProjectTabs: true,
-    title: "GitHub",
+    title: "Browser",
     type: "createProjectEditorPane",
-    url: githubUrl,
+    url: browserUrl,
   });
   postNative({ projectId: nativeEditorId, type: "focusProjectEditorPane" });
   stopCodeServerRuntimeIfEveryEditorSleeping();
@@ -35529,7 +35796,7 @@ function openProjectTasksEditorSurface(project: NativeProject, tasksUrl: string)
 
   /**
    * CDXC:ModeSwitcher 2026-05-15-14:42:
-   * The tasks-backed Project mode follows Git mode's project-editor behavior:
+   * The tasks-backed Project mode follows Browser mode's project-editor behavior:
    * keep the sessions companion pane on the left and preserve the Project
    * surface across Code/Git/Project mode switches instead of creating a normal
    * browser session or reloading.
@@ -35582,34 +35849,43 @@ async function openGitHubProjectFromTitlebar(): Promise<void> {
   if (isQuickProject(project) || project.isRecentProject === true) {
     return;
   }
+  const surfaceState = projectEditorSurfaceByProjectId.get(project.projectId);
+  if (surfaceState?.mode === "git") {
+    const rememberedUrl = projectBrowserActiveUrlFromState(surfaceState);
+    if (rememberedUrl) {
+      openProjectGitEditorSurface(project, rememberedUrl);
+      return;
+    }
+  }
+  const browserSeedUrl = await resolveProjectBrowserSeedUrl(project);
+  openProjectGitEditorSurface(project, browserSeedUrl);
+}
+
+async function resolveProjectBrowserSeedUrl(project: NativeProject): Promise<string> {
   try {
     const repoCheck = await runGxserverGitActionForNativeProject(project, { action: "isInsideWorkTree" });
     if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
-      showNativeMessage("warning", "Open a Git repository to use Git mode.");
-      return;
+      return DEFAULT_PROJECT_BROWSER_URL;
     }
     const remote = await runGxserverGitActionForNativeProject(project, { action: "getOriginRemoteUrl" });
     if (remote.exitCode !== 0) {
-      showNativeMessage("warning", 'Add an "origin" remote before opening Git mode.');
-      return;
+      return DEFAULT_PROJECT_BROWSER_URL;
     }
     const githubUrl = normalizeGitHubRemoteUrl(remote.stdout);
     if (!githubUrl) {
-      showNativeMessage("warning", "The origin remote is not a GitHub URL.");
-      return;
+      return DEFAULT_PROJECT_BROWSER_URL;
     }
     /**
-     * CDXC:ModeSwitcher 2026-05-15-12:38:
-     * Git mode should behave like Code mode at the app-shell level: keep the
-     * project sessions sidebar visible, but put the project's GitHub remote in
-     * the main workarea instead of launching the user's external browser.
+     * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+     * Browser mode starts with the project's GitHub remote only for projects
+     * that have one. Projects without a GitHub remote still open Browser mode
+     * to Ghostex's repository, and projects with existing Browser tabs reuse
+     * those tabs before this seed path runs.
      */
-    openProjectGitEditorSurface(project, githubUrl);
+    return githubUrl;
   } catch (error) {
-    showNativeMessage(
-      "error",
-      error instanceof Error ? error.message : "Could not open Git mode.",
-    );
+    void error;
+    return DEFAULT_PROJECT_BROWSER_URL;
   }
 }
 
@@ -36014,7 +36290,12 @@ function handleProjectEditorCompanionPaneHiddenChanged(
   publish();
 }
 
-function handleProjectEditorTabSelected(nativeEditorId: string, url?: string): void {
+function handleProjectEditorTabSelected(
+  nativeEditorId: string,
+  url?: string,
+  activeTabId?: string,
+  tabs?: NativeProjectBrowserTabRestoreState[],
+): void {
   const parsed = parseNativeProjectEditorId(nativeEditorId);
   if (!parsed) {
     return;
@@ -36072,11 +36353,28 @@ function handleProjectEditorTabSelected(nativeEditorId: string, url?: string): v
   if (!project) {
     return;
   }
+  const isSameNativeEditor = surfaceState?.nativeEditorId === nativeEditorId;
+  const browserTabs =
+    parsed.mode === "git" ? normalizeProjectBrowserTabRestoreStates(tabs) : [];
+  const activeBrowserTabId =
+    parsed.mode === "git" &&
+    activeTabId &&
+    browserTabs.some((tab) => tab.id === activeTabId)
+      ? activeTabId
+      : browserTabs[0]?.id;
+  const activeBrowserTab =
+    parsed.mode === "git"
+      ? browserTabs.find((tab) => tab.id === activeBrowserTabId) ?? browserTabs[0]
+      : undefined;
+  const nextUrl =
+    parsed.mode === "git"
+      ? normalizeProjectBrowserUrl(url) ?? activeBrowserTab?.url
+      : url ?? (isSameNativeEditor && surfaceState ? surfaceState.url : undefined);
   /**
    * CDXC:GitProjectTabs 2026-05-16-09:50:
    * Native Git-project chrome is allowed to correct stale sidebar mode state.
    * Toolbar actions such as Back first focus the AppKit Git pane, then React's
-   * next layout command must keep that Git CEF pane active instead of reusing a
+   * next layout command must keep that Browser CEF pane active instead of reusing a
    * previous Code-mode surface for the same project. Accept the native
    * project-editor id even when the stored surface currently points at another
    * project-editor mode, and persist the active Git tab URL supplied by native.
@@ -36085,8 +36383,13 @@ function handleProjectEditorTabSelected(nativeEditorId: string, url?: string): v
     activeProjectId = parsed.projectId;
     writeStoredProjects("projectEditorTabSelected");
   }
-  const isSameNativeEditor = surfaceState?.nativeEditorId === nativeEditorId;
   projectEditorSurfaceByProjectId.set(parsed.projectId, {
+    ...(parsed.mode === "git"
+      ? {
+          activeBrowserTabId,
+          browserTabs,
+        }
+      : {}),
     errorMessage: undefined,
     isOpen: true,
     isSleeping: false,
@@ -36095,10 +36398,11 @@ function handleProjectEditorTabSelected(nativeEditorId: string, url?: string): v
     nativeEditorId,
     status: isSameNativeEditor && surfaceState ? surfaceState.status : "running",
     title: projectEditorSurfaceTitleForMode(project, parsed.mode),
-    url: url ?? (isSameNativeEditor && surfaceState ? surfaceState.url : undefined),
+    url: nextUrl,
   });
   cancelProjectEditorSleepTimer(parsed.projectId);
   rememberAwakeProjectEditorMode(parsed.projectId, parsed.mode);
+  setProjectEditorPersistedOpen(parsed.projectId, true, "projectEditorTabSelected");
   void refreshProjectDiffStats(project.projectId);
   publish();
 }
@@ -36727,7 +37031,7 @@ function sleepInactiveRemoteProjectSessions(remoteReference: { machineId: string
       );
     });
   }
-  runNativeSidebarBulkActionInBackground(backgroundOperations);
+  runNativeSidebarBulkSleepActionInBackground(backgroundOperations);
 }
 
 function closeInactiveRemoteProjectSessions(remoteReference: { machineId: string; projectId: string }): void {
@@ -37552,7 +37856,10 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
         }
       }
       setNativeSessionsSleepingInBackground(localSessionIds, message.sleeping);
-      runNativeSidebarBulkActionInBackground(remoteOperations);
+      const runRemoteBulkLifecycleAction = message.sleeping
+        ? runNativeSidebarBulkSleepActionInBackground
+        : runNativeSidebarBulkActionInBackground;
+      runRemoteBulkLifecycleAction(remoteOperations);
       return;
     }
     case "setSessionFavorite":
@@ -37622,7 +37929,10 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
               );
             };
           });
-        runNativeSidebarBulkActionInBackground(backgroundOperations);
+        const runRemoteGroupLifecycleAction = message.sleeping
+          ? runNativeSidebarBulkSleepActionInBackground
+          : runNativeSidebarBulkActionInBackground;
+        runRemoteGroupLifecycleAction(backgroundOperations);
         return;
       }
       const groupReference = resolveSidebarGroupReference(message.groupId);
@@ -37778,13 +38088,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
         requestId: message.requestId,
         sessionTags: message.sessionTags,
       });
-      return;
-    case "promptFindPreviousSession":
-      if (message.query?.trim()) {
-        void promptFindPreviousSession(message.query);
-      } else {
-        openAppModal({ modal: "findPreviousSession", type: "open" });
-      }
       return;
     case "searchPreviousSessionsByText":
       void searchPreviousSessionsByText();
@@ -38581,6 +38884,7 @@ function syncNativeLayout(
     clampVisibleSessionCount(visibleSessions.length),
     getActiveNativeSplitLayoutHint(snapshot),
     focusedNativeSessionId,
+    { preserveParkedActiveTabOwners: settings.clickToWakeSleepingSessions },
   );
   const nativeLayoutShape = summarizePaneLayoutShape(layout);
   const paneLayoutShape = summarizePaneLayoutShape(snapshot.paneLayout);
@@ -38627,6 +38931,7 @@ function syncNativeLayout(
     clampVisibleSessionCount(Math.max(1, commandPanelVisibleSessions.length)),
     undefined,
     commandsPanelFocusedNativeSessionId,
+    { preserveParkedActiveTabOwners: settings.clickToWakeSleepingSessions },
   );
   const shouldConsumeFocusRequest =
     pendingNativeLayoutFocusRequest !== undefined &&
@@ -38700,11 +39005,10 @@ function syncNativeLayout(
      * segmented control in sync with the visible surface.
      *
      * CDXC:ModeSwitcher 2026-06-08-18:23:
-     * The titlebar GitHub mode should be disabled for Quick/projectless
-     * containers and for active projects without a GitHub remote. Send the
-     * explicit Quick flag and GitHub-remote state through layout sync so the
-     * isolated titlebar mirrors sidebar-owned project context without probing
-     * user paths or remotes itself.
+     * Browser mode is available for every real project, even when GitHub remote
+     * probing reports no GitHub URL. Send the explicit Quick flag through layout
+     * sync so the isolated titlebar disables only projectless contexts without
+     * probing user paths or remotes itself.
      */
     activeProjectDiffStats: currentProjectEditor.diffStats,
     activeProjectGitState: gitState,
@@ -38747,6 +39051,7 @@ function syncNativeLayout(
      */
     paneGap: 0,
     poppedOutSessionIds,
+    clickToWakeSleepingSessions: settings.clickToWakeSleepingSessions,
     sessionAgentIconDataUrls,
     sessionAgentIconColors,
     sessionDelayedSendRemainingLabels,
@@ -38957,6 +39262,7 @@ function buildLayout(
   visibleCount: VisibleSessionCount,
   splitHint?: NativeResolvedSplitLayoutHint,
   preferredActiveSessionId?: string,
+  options: { preserveParkedActiveTabOwners?: boolean } = {},
 ): NativeTerminalLayout | undefined {
   const visible = sessionIds.filter((sessionId) => activeSessionIds.has(sessionId)).slice(0, visibleCount);
   const persistedLayout = paneLayout
@@ -39005,7 +39311,12 @@ function buildLayout(
      * keep the previous pane owner.
      */
     const activePersistedLayout = preferredActiveSessionId
-      ? activatePreferredNativeTabOwner(persistedLayout, preferredActiveSessionId)
+      ? activatePreferredNativeTabOwner(
+          persistedLayout,
+          preferredActiveSessionId,
+          activeSessionIds,
+          options.preserveParkedActiveTabOwners === true,
+        )
       : persistedLayout;
     const missingSessionEntries = sessionIds.flatMap((sessionId, index) => {
       const sidebarSessionId = sidebarSessionIds[index];
@@ -39109,21 +39420,48 @@ function buildLayout(
 function activatePreferredNativeTabOwner(
   layout: NativeTerminalLayout,
   preferredActiveSessionId: string,
+  activeSessionIds: ReadonlySet<string>,
+  preserveParkedActiveTabOwners: boolean,
 ): NativeTerminalLayout {
   switch (layout.kind) {
     case "leaf":
       return layout;
-    case "tabs":
-      return layout.sessionIds.includes(preferredActiveSessionId)
-        ? { ...layout, activeSessionId: preferredActiveSessionId }
-        : layout;
+    case "tabs": {
+      if (!layout.sessionIds.includes(preferredActiveSessionId)) {
+        return layout;
+      }
+      const currentActiveSessionId =
+        layout.activeSessionId && layout.sessionIds.includes(layout.activeSessionId)
+          ? layout.activeSessionId
+          : undefined;
+      if (
+        preserveParkedActiveTabOwners &&
+        currentActiveSessionId &&
+        !activeSessionIds.has(currentActiveSessionId)
+      ) {
+        /*
+         * CDXC:SleepingPanePlaceholders 2026-06-13-02:33:
+         * Click-to-wake tab selection leaves runtime focus on an awake terminal
+         * while paneLayout.activeSessionId points at the selected sleeping tab.
+         * Do not promote the focused awake tab over that parked owner here, or
+         * the native layout never receives the black placeholder selection.
+         */
+        return layout;
+      }
+      return { ...layout, activeSessionId: preferredActiveSessionId };
+    }
     case "split": {
       let didActivate = false;
       const children = layout.children.map((child) => {
         if (didActivate) {
           return child;
         }
-        const nextChild = activatePreferredNativeTabOwner(child, preferredActiveSessionId);
+        const nextChild = activatePreferredNativeTabOwner(
+          child,
+          preferredActiveSessionId,
+          activeSessionIds,
+          preserveParkedActiveTabOwners,
+        );
         didActivate = nextChild !== child;
         return nextChild;
       });
@@ -39837,7 +40175,16 @@ window.addEventListener("ghostex-native-host-event", (event) => {
     return;
   }
   if (hostEvent.type === "projectEditorTabSelected") {
-    handleProjectEditorTabSelected(hostEvent.projectId, hostEvent.url);
+    handleProjectEditorTabSelected(
+      hostEvent.projectId,
+      hostEvent.url,
+      hostEvent.activeTabId,
+      hostEvent.tabs,
+    );
+    return;
+  }
+  if (hostEvent.type === "browserOpenInNewTabRequested") {
+    handleBrowserOpenInNewTabRequested(hostEvent);
     return;
   }
   if (hostEvent.type === "osIntegrationStatus") {
@@ -39871,6 +40218,10 @@ window.addEventListener("ghostex-native-host-event", (event) => {
   }
   if (hostEvent.type === "paneTabSelected") {
     handleNativePaneTabSelected(sidebarSessionIdForNativeSession(hostEvent.sessionId));
+    return;
+  }
+  if (hostEvent.type === "sleepingPaneWakeRequested") {
+    handleNativeSleepingPaneWakeRequested(sidebarSessionIdForNativeSession(hostEvent.sessionId));
     return;
   }
   if (hostEvent.type === "paneTabFocusRequested") {
@@ -40545,6 +40896,11 @@ function handleNativePaneTabSelected(sessionId: string): void {
      * Command-pane sleeping tabs use the same wake contract as workspace tabs:
      * selecting the tab must clear stale terminal runtime state and recreate
      * the native surface before focus, not only mark the command tab active.
+     *
+     * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+     * With click-to-wake enabled, native tab selection is layout-only for
+     * sleeping command sessions. Keep the command pane visible and selected,
+     * but leave the renderer cold until the black placeholder pane is clicked.
      */
     updateActiveProjectCommandsPanel((panel) => ({
       ...panel,
@@ -40553,11 +40909,15 @@ function handleNativePaneTabSelected(sessionId: string): void {
       paneLayout: setActiveCommandSessionInPaneLayout(panel.paneLayout, sessionId),
       sessions: panel.sessions.map((session) =>
         session.sessionId === sessionId && session.isSleeping === true
-          ? { ...session, isPoppedOut: undefined, isSleeping: false }
+          ? {
+              ...session,
+              isPoppedOut: undefined,
+              isSleeping: settings.clickToWakeSleepingSessions ? true : false,
+            }
           : session,
       ),
     }));
-    if (wasSleepingCommandSession) {
+    if (wasSleepingCommandSession && !settings.clickToWakeSleepingSessions) {
       const restoredCommandSession = findTerminalSession(sessionId) ?? selectedCommandSessionBefore;
       restoreNativeSessionSurfaceForWake(
         activeProject(),
@@ -40566,7 +40926,9 @@ function handleNativePaneTabSelected(sessionId: string): void {
         { forceTerminalRestore: true },
       );
     }
-    queueNativeLayoutFocusRequest(sessionId, "commandPaneTabSelected");
+    if (!wasSleepingCommandSession || !settings.clickToWakeSleepingSessions) {
+      queueNativeLayoutFocusRequest(sessionId, "commandPaneTabSelected");
+    }
     publish();
     return;
   }
@@ -40578,8 +40940,10 @@ function handleNativePaneTabSelected(sessionId: string): void {
   const wasMissingNativeWebSurface =
     (selectedSessionBefore?.kind === "browser" || selectedSessionBefore?.kind === "t3") &&
     !nativeSessionIdBySidebarSessionId.has(sessionId);
+  const shouldKeepSleepingPlaceholder = settings.clickToWakeSleepingSessions && wasSleeping;
   const shouldRestoreSelectedSurface =
-    wasSleeping || wasMissingNativeTerminalState || wasMissingNativeWebSurface;
+    !shouldKeepSleepingPlaceholder &&
+    (wasSleeping || wasMissingNativeTerminalState || wasMissingNativeWebSurface);
   appendPaneLayoutTraceDebugLog("paneTabSelected.received", {
     activeProjectId,
     groupId: group.groupId,
@@ -40588,7 +40952,7 @@ function handleNativePaneTabSelected(sessionId: string): void {
     wasSleeping,
     wasMissingNativeSurface: wasMissingNativeTerminalState || wasMissingNativeWebSurface,
   });
-  const workspaceWithWake = wasSleeping
+  const workspaceWithWake = wasSleeping && !shouldKeepSleepingPlaceholder
     ? wakePaneTabSessionInSimpleWorkspace(activeProject().workspace, group.groupId, sessionId).snapshot
     : activeProject().workspace;
   const result = selectPaneTabInSimpleWorkspace(workspaceWithWake, group.groupId, sessionId);
@@ -40617,6 +40981,12 @@ function handleNativePaneTabSelected(sessionId: string): void {
    * marked sleeping. A tab can be unmounted or provider-missing with no native
    * renderer yet, so selection must materialize paneLayout and create the
    * surface before asking AppKit to focus it.
+   *
+   * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+   * Sleeping tab clicks are no longer wake intents when the default
+   * click-to-wake setting is enabled. Select the tab in its existing split
+   * group and let Swift render a black placeholder; only the placeholder body
+   * click calls the wake path.
    */
   updateActiveProjectWorkspace(() => (result.changed ? result.snapshot : workspaceWithWake));
   appendPaneLayoutTraceDebugLog("paneTabSelected.applied", {
@@ -40637,10 +41007,54 @@ function handleNativePaneTabSelected(sessionId: string): void {
       forceTerminalRestore: wasSleeping,
     });
   }
-  queueNativeLayoutFocusRequest(
-    sessionId,
-    shouldRestoreSelectedSurface ? "paneTabWake" : "paneTabSelected",
-  );
+  if (!shouldKeepSleepingPlaceholder) {
+    queueNativeLayoutFocusRequest(
+      sessionId,
+      shouldRestoreSelectedSurface ? "paneTabWake" : "paneTabSelected",
+    );
+  }
+  publish();
+}
+
+function handleNativeSleepingPaneWakeRequested(sessionId: string): void {
+  if (activeCommandPanelContainsSession(sessionId)) {
+    const selectedCommandSessionBefore = findTerminalSession(sessionId);
+    updateActiveProjectCommandsPanel((panel) => ({
+      ...panel,
+      activeSessionId: sessionId,
+      isVisible: true,
+      paneLayout: setActiveCommandSessionInPaneLayout(panel.paneLayout, sessionId),
+      sessions: panel.sessions.map((session) =>
+        session.sessionId === sessionId && session.isSleeping === true
+          ? { ...session, isPoppedOut: undefined, isSleeping: false }
+          : session,
+      ),
+    }));
+    const restoredCommandSession = findTerminalSession(sessionId) ?? selectedCommandSessionBefore;
+    restoreNativeSessionSurfaceForWake(
+      activeProject(),
+      restoredCommandSession,
+      "command-pane-placeholder-wake",
+      { forceTerminalRestore: selectedCommandSessionBefore?.isSleeping === true },
+    );
+    queueNativeLayoutFocusRequest(sessionId, "commandPanePlaceholderWake");
+    publish();
+    return;
+  }
+
+  const group = activeWorkspaceGroup();
+  const selectedSessionBefore = findSessionRecord(sessionId);
+  const wasSleeping = selectedSessionBefore?.isSleeping === true;
+  const workspaceWithWake = wasSleeping
+    ? wakePaneTabSessionInSimpleWorkspace(activeProject().workspace, group.groupId, sessionId).snapshot
+    : activeProject().workspace;
+  const result = selectPaneTabInSimpleWorkspace(workspaceWithWake, group.groupId, sessionId);
+  updateActiveProjectWorkspace(() => (result.changed ? result.snapshot : workspaceWithWake));
+  const restoredSession = findSessionRecord(sessionId) ?? selectedSessionBefore;
+  restoreNativeSessionSurfaceForWake(activeProject(), restoredSession, "pane-placeholder-wake", {
+    forceTerminalRestore: wasSleeping,
+  });
+  queueNativeLayoutFocusRequest(sessionId, "panePlaceholderWake");
   publish();
 }
 
@@ -40789,7 +41203,7 @@ function handleNativePaneTabSleepRequested(
           orderedSessions: (findPaneTabGroupSessionIds(activeWorkspaceGroup().snapshot.paneLayout, sessionId) ?? sessionIds).map(createSessionTransitionOriginEntry),
         }
       : undefined;
-  runNativeSidebarBulkActionInBackground(
+  runNativeSidebarBulkSleepActionInBackground(
     sessionIds.map((tabSessionId) => () =>
       setNativeSessionSleeping(tabSessionId, true, transitionOrigin ? { transitionOrigin } : undefined),
     ),
@@ -41235,53 +41649,37 @@ function handleNativeTerminalTitleBarAction(
   }
 }
 
-let latestNativeSidebarPointerInside = true;
-let sidebarDomHoverSuppressed = false;
-
-function applySidebarPointerGate(): void {
-  const isInside = latestNativeSidebarPointerInside && !sidebarDomHoverSuppressed;
+function setSidebarNativePointerState(isInside: boolean): void {
   document.body.dataset.nativePointerInside = isInside ? "true" : "false";
-  if (isInside) {
-    delete document.body.dataset.sidebarTooltipsSuppressed;
-    return;
-  }
-  document.body.dataset.sidebarTooltipsSuppressed = "true";
 }
 
 function setNativeSidebarPointerInside(isInside: boolean): void {
   /*
    * CDXC:SidebarHover 2026-06-10-23:44:
-   * AppKit owns the reliable sidebar pointer boundary. When native reports the
-   * pointer outside, mark the root as non-interactive so stale WebKit :hover
-   * targets cannot keep hover highlights or delayed tooltips alive.
+   * AppKit owns the reliable sidebar pointer boundary. When native reports an
+   * exit, clear visible hover artifacts from the sidebar instead of trusting
+   * WebKit to deliver every trigger-level leave event.
    *
-   * CDXC:SidebarHover 2026-06-11-10:23:
-   * Keep native pointer state separate from DOM-level tooltip suppression.
-   * WebKit can still emit stale pointer movement while AppKit owns the native
-   * resize rail, so DOM re-entry may clear only the DOM suppression flag; it
-   * must not override a native outside state.
+   * CDXC:TooltipLifecycle 2026-06-13-02:30:
+   * Native pointer-leave is a cleanup signal, not a lasting hover gate. Record
+   * the boundary for stale row-visual cleanup and dismiss any open tooltips, but
+   * never set the sidebar tooltip suppression flag from this path; normal DOM
+   * pointer movement must be able to make hover tooltips appear again without a
+   * click. Drag suppression remains the only owner of tooltip creation blocking.
    */
-  if (isInside) {
-    latestNativeSidebarPointerInside = true;
-    sidebarDomHoverSuppressed = false;
-    applySidebarPointerGate();
-    return;
+  setSidebarNativePointerState(isInside);
+  if (!isInside) {
+    dismissSidebarTooltips();
   }
-  latestNativeSidebarPointerInside = false;
-  sidebarDomHoverSuppressed = true;
-  applySidebarPointerGate();
-  dismissSidebarTooltips();
 }
 
 function suppressSidebarHoverFromDom(): void {
-  sidebarDomHoverSuppressed = true;
-  applySidebarPointerGate();
+  setSidebarNativePointerState(false);
   dismissSidebarTooltips();
 }
 
 function enableSidebarHoverFromDom(): void {
-  sidebarDomHoverSuppressed = false;
-  applySidebarPointerGate();
+  setSidebarNativePointerState(true);
 }
 
 window.__ghostex_NATIVE_SIDEBAR__ = {
@@ -41360,17 +41758,10 @@ function NativeSidebarRoot() {
        * CDXC:SidebarTooltips 2026-05-25-07:16:
        * WKWebView can leave React and CSS hover tooltips visible when the user alt-tabs, clicks another app, or exits the sidebar without a normal trigger-level leave event. Suppress every sidebar tooltip surface until pointer movement re-enters this sidebar document.
        *
-       * CDXC:SidebarHover 2026-06-10-23:44:
-       * The same lost-leave path can leave the actual browser :hover target
-       * stuck. Route DOM-level exits through the native pointer flag too, so the
-       * root pointer-events gate and tooltip dismissal stay synchronized.
-       *
-       * CDXC:SidebarHover 2026-06-11-10:23:
-       * DOM pointer movement can be stale while AppKit owns the sidebar resize
-       * rail. DOM events may clear only DOM-level suppression; the native
-       * pointer bridge remains the authority for whether sidebar hover can turn
-       * back on, so the resize-rail path cannot resurrect a session row hover
-       * after the pointer left the sidebar.
+       * CDXC:TooltipLifecycle 2026-06-13-02:30:
+       * DOM-level exits share the same cleanup path as native exits: close any
+       * open tooltip and mark row hover visuals stale, but keep the document
+       * interactive so the next pointermove can immediately restore hover.
        */
       suppressSidebarHoverFromDom();
     };

@@ -237,6 +237,112 @@ private struct NativeBrowserCookieImportOutcome: Sendable {
   let warnings: [String]
 }
 
+private struct NativeChromiumCookieReadStats {
+  var rowCount = 0
+  var missingNameRows = 0
+  var domainFilteredRows = 0
+  var plaintextRows = 0
+  var encryptedRows = 0
+  var decryptedRows = 0
+  var skippedEncryptedRows = 0
+  var emptyValueRows = 0
+  var cookieRejectedRows = 0
+  var encryptedMinBytes: Int?
+  var encryptedMaxBytes: Int?
+  var encryptedPrefixCounts: [String: Int] = [:]
+  var decryptFailureReasonCounts: [String: Int] = [:]
+  var decryptStatusCounts: [String: Int] = [:]
+
+  mutating func noteEncryptedValue(encryptedHex: String) {
+    encryptedRows += 1
+    let byteCount = encryptedHex.trimmingCharacters(in: .whitespacesAndNewlines).count / 2
+    encryptedMinBytes = min(encryptedMinBytes ?? byteCount, byteCount)
+    encryptedMaxBytes = max(encryptedMaxBytes ?? byteCount, byteCount)
+    encryptedPrefixCounts[Self.encryptedPrefixKind(encryptedHex), default: 0] += 1
+  }
+
+  mutating func noteDecryptFailure(reason: String, status: Int?) {
+    skippedEncryptedRows += 1
+    decryptFailureReasonCounts[reason, default: 0] += 1
+    if let status {
+      decryptStatusCounts[String(status), default: 0] += 1
+    }
+  }
+
+  func logPayload(
+    family: NativeBrowserImportFamily,
+    sourceProfile: NativeBrowserImportSourceProfile,
+    domainFilterCount: Int,
+    candidateCookieCount: Int,
+    dedupedCookieCount: Int
+  ) -> [String: Any] {
+    [
+      "browserFamily": family.logValue,
+      "sourceProfileKind": sourceProfile.logKind,
+      "sourceProfileIsDefault": sourceProfile.isDefault,
+      "domainFilterCount": domainFilterCount,
+      "rowCount": rowCount,
+      "missingNameRows": missingNameRows,
+      "domainFilteredRows": domainFilteredRows,
+      "plaintextRows": plaintextRows,
+      "encryptedRows": encryptedRows,
+      "decryptedRows": decryptedRows,
+      "skippedEncryptedRows": skippedEncryptedRows,
+      "emptyValueRows": emptyValueRows,
+      "cookieRejectedRows": cookieRejectedRows,
+      "candidateCookieCount": candidateCookieCount,
+      "dedupedCookieCount": dedupedCookieCount,
+      "encryptedMinBytes": encryptedMinBytes ?? NSNull(),
+      "encryptedMaxBytes": encryptedMaxBytes ?? NSNull(),
+      "encryptedPrefixCounts": encryptedPrefixCounts,
+      "decryptFailureReasonCounts": decryptFailureReasonCounts,
+      "decryptStatusCounts": decryptStatusCounts,
+    ]
+  }
+
+  private static func encryptedPrefixKind(_ encryptedHex: String) -> String {
+    let normalized = encryptedHex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    guard normalized.count >= 6 else { return "short" }
+    switch normalized.prefix(6) {
+    case "763130":
+      return "v10"
+    case "763131":
+      return "v11"
+    case "763230":
+      return "v20"
+    default:
+      return "other"
+    }
+  }
+}
+
+private extension NativeBrowserImportFamily {
+  var logValue: String {
+    switch self {
+    case .chromium:
+      return "chromium"
+    case .firefox:
+      return "firefox"
+    }
+  }
+}
+
+private extension NativeBrowserImportSourceProfile {
+  var logKind: String {
+    let directoryName = rootURL.lastPathComponent
+    if directoryName == "Default" {
+      return "default"
+    }
+    if directoryName.range(of: #"^Profile [0-9]+$"#, options: .regularExpression) != nil {
+      return "numbered"
+    }
+    if isDefault {
+      return "defaultLike"
+    }
+    return "other"
+  }
+}
+
 private enum NativeBrowserDataImporter {
   private static let descriptors: [NativeBrowserImportDescriptor] = [
     NativeBrowserImportDescriptor(
@@ -315,6 +421,15 @@ private enum NativeBrowserDataImporter {
     destinationProfile: NativeBrowserProfileDefinition,
     domainFilters: [String]
   ) async -> NativeBrowserCookieImportOutcome {
+    let startedAt = Date()
+    NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.import.start", details: [
+      "browserFamily": candidate.descriptor.family.logValue,
+      "sourceProfileKind": sourceProfile.logKind,
+      "sourceProfileIsDefault": sourceProfile.isDefault,
+      "destinationProfileID": destinationProfile.id.uuidString,
+      "destinationProfileIsBuiltInDefault": destinationProfile.isBuiltInDefault,
+      "domainFilterCount": domainFilters.count,
+    ])
     let result: (cookies: [HTTPCookie], skipped: Int, warnings: [String])
     switch candidate.descriptor.family {
     case .chromium:
@@ -330,12 +445,29 @@ private enum NativeBrowserDataImporter {
       result.cookies,
       destinationProfileID: destinationProfile.id
     )
+    let skippedCookies = max(0, result.cookies.count - imported) + result.skipped
+    NativeBrowserImportDebugLog.append(
+      event: imported == 0 && !result.cookies.isEmpty
+        ? "nativeBrowserImport.cefImport.warningZeroImported"
+        : "nativeBrowserImport.import.finish",
+      details: [
+        "browserFamily": candidate.descriptor.family.logValue,
+        "sourceProfileKind": sourceProfile.logKind,
+        "sourceProfileIsDefault": sourceProfile.isDefault,
+        "destinationProfileID": destinationProfile.id.uuidString,
+        "destinationProfileIsBuiltInDefault": destinationProfile.isBuiltInDefault,
+        "candidateCookieCount": result.cookies.count,
+        "importedCookieCount": imported,
+        "skippedCookieCount": skippedCookies,
+        "warningCount": result.warnings.count,
+        "elapsedMs": Int(Date().timeIntervalSince(startedAt) * 1000),
+      ])
     return NativeBrowserCookieImportOutcome(
       browserName: candidate.descriptor.displayName,
       sourceProfileName: sourceProfile.displayName,
       destinationProfileName: destinationProfile.displayName,
       importedCookies: imported,
-      skippedCookies: max(0, result.cookies.count - imported) + result.skipped,
+      skippedCookies: skippedCookies,
       warnings: result.warnings
     )
   }
@@ -479,6 +611,7 @@ private enum NativeBrowserDataImporter {
     let databaseURL = profile.rootURL.appendingPathComponent("cookies.sqlite", isDirectory: false)
     let rows = readSQLiteJSONRows(
       databaseURL: databaseURL,
+      databaseKind: "firefoxCookies",
       sql: "SELECT host, name, value, path, expiry, isSecure FROM moz_cookies"
     )
     var cookies: [HTTPCookie] = []
@@ -515,6 +648,7 @@ private enum NativeBrowserDataImporter {
     let databaseURL = profile.rootURL.appendingPathComponent("Cookies", isDirectory: false)
     let rows = readSQLiteJSONRows(
       databaseURL: databaseURL,
+      databaseKind: "chromiumCookies",
       sql: """
       SELECT host_key, name, value, path, expires_utc, is_secure, hex(encrypted_value) AS encrypted_hex
       FROM cookies
@@ -523,22 +657,42 @@ private enum NativeBrowserDataImporter {
     let decryptor = NativeChromiumCookieDecryptor(descriptor: descriptor)
     var cookies: [HTTPCookie] = []
     var skippedEncrypted = 0
+    var stats = NativeChromiumCookieReadStats()
+    stats.rowCount = rows.count
     for row in rows {
       let host = stringValue(row["host_key"])
       let name = stringValue(row["name"])
       var value = stringValue(row["value"])
-      guard !name.isEmpty, domainMatches(host: host, filters: domainFilters) else { continue }
+      guard !name.isEmpty else {
+        stats.missingNameRows += 1
+        continue
+      }
+      guard domainMatches(host: host, filters: domainFilters) else {
+        stats.domainFilteredRows += 1
+        continue
+      }
       let encryptedHex = stringValue(row["encrypted_hex"])
       if value.isEmpty && !encryptedHex.isEmpty {
-        if let decryptedValue = decryptor.decrypt(encryptedHex: encryptedHex) {
+        stats.noteEncryptedValue(encryptedHex: encryptedHex)
+        let decryptResult = decryptor.decryptWithDiagnostics(encryptedHex: encryptedHex)
+        if let decryptedValue = decryptResult.value {
           value = decryptedValue
+          stats.decryptedRows += 1
         } else {
           skippedEncrypted += 1
+          stats.noteDecryptFailure(
+            reason: decryptResult.failureReason ?? "unknown",
+            status: decryptResult.failureStatus)
           continue
         }
+      } else if !value.isEmpty {
+        stats.plaintextRows += 1
       }
       value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !value.isEmpty else { continue }
+      guard !value.isEmpty else {
+        stats.emptyValueRows += 1
+        continue
+      }
       var properties: [HTTPCookiePropertyKey: Any] = [
         .domain: host,
         .path: stringValue(row["path"]).isEmpty ? "/" : stringValue(row["path"]),
@@ -553,8 +707,32 @@ private enum NativeBrowserDataImporter {
       }
       if let cookie = HTTPCookie(properties: properties) {
         cookies.append(cookie)
+      } else {
+        stats.cookieRejectedRows += 1
       }
     }
+    let dedupedCookies = dedupeCookies(cookies)
+    var statsPayload = stats.logPayload(
+      family: descriptor.family,
+      sourceProfile: profile,
+      domainFilterCount: domainFilters.count,
+      candidateCookieCount: cookies.count,
+      dedupedCookieCount: dedupedCookies.count
+    )
+    for (key, value) in decryptor.summaryLogPayload {
+      statsPayload[key] = value
+    }
+    let chromiumReadEvent: String
+    if skippedEncrypted > 0 {
+      chromiumReadEvent = "nativeBrowserImport.chromiumRead.warningSkippedEncrypted"
+    } else if rows.isEmpty {
+      chromiumReadEvent = "nativeBrowserImport.chromiumRead.warningNoRows"
+    } else {
+      chromiumReadEvent = "nativeBrowserImport.chromiumRead.summary"
+    }
+    NativeBrowserImportDebugLog.append(
+      event: chromiumReadEvent,
+      details: statsPayload)
     var warnings: [String] = []
     if skippedEncrypted > 0 {
       warnings.append("Skipped \(skippedEncrypted) encrypted Chromium cookies that could not be decoded by the native importer.")
@@ -562,11 +740,14 @@ private enum NativeBrowserDataImporter {
     if rows.isEmpty {
       warnings.append("No compatible Chromium cookies were found.")
     }
-    return (dedupeCookies(cookies), skippedEncrypted, warnings)
+    return (dedupedCookies, skippedEncrypted, warnings)
   }
 
-  private static func readSQLiteJSONRows(databaseURL: URL, sql: String) -> [[String: Any]] {
+  private static func readSQLiteJSONRows(databaseURL: URL, databaseKind: String, sql: String) -> [[String: Any]] {
     guard FileManager.default.fileExists(atPath: databaseURL.path) else {
+      NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.sqlite.missing", details: [
+        "databaseKind": databaseKind
+      ])
       return []
     }
     let tempDirectory = FileManager.default.temporaryDirectory
@@ -576,33 +757,86 @@ private enum NativeBrowserDataImporter {
       defer { try? FileManager.default.removeItem(at: tempDirectory) }
       let snapshotURL = tempDirectory.appendingPathComponent(databaseURL.lastPathComponent, isDirectory: false)
       try FileManager.default.copyItem(at: databaseURL, to: snapshotURL)
+      var sidecars: [[String: Any]] = []
       for suffix in ["-wal", "-shm"] {
         let source = URL(fileURLWithPath: "\(databaseURL.path)\(suffix)")
         if FileManager.default.fileExists(atPath: source.path) {
-          try? FileManager.default.copyItem(
-            at: source,
-            to: URL(fileURLWithPath: "\(snapshotURL.path)\(suffix)")
-          )
+          do {
+            try FileManager.default.copyItem(
+              at: source,
+              to: URL(fileURLWithPath: "\(snapshotURL.path)\(suffix)")
+            )
+            sidecars.append([
+              "kind": suffix == "-wal" ? "wal" : "shm",
+              "copied": true,
+              "bytes": fileSizeBytes(source),
+            ])
+          } catch {
+            sidecars.append([
+              "kind": suffix == "-wal" ? "wal" : "shm",
+              "copied": false,
+              "bytes": fileSizeBytes(source),
+              "reason": "copyFailed",
+            ])
+          }
         }
       }
       let process = Process()
       let output = Pipe()
+      let errorOutput = Pipe()
       process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
       process.arguments = ["-readonly", "-json", snapshotURL.path, sql]
+      process.standardInput = FileHandle.nullDevice
       process.standardOutput = output
-      process.standardError = FileHandle.nullDevice
+      process.standardError = errorOutput
       try process.run()
       let data = output.fileHandleForReading.readDataToEndOfFile()
+      let errorData = errorOutput.fileHandleForReading.readDataToEndOfFile()
       process.waitUntilExit()
-      guard process.terminationStatus == 0,
-        let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-      else {
+      guard process.terminationStatus == 0 else {
+        NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.sqlite.readFailed", details: [
+          "databaseKind": databaseKind,
+          "databaseBytes": fileSizeBytes(databaseURL),
+          "sidecars": sidecars,
+          "sqliteExitCode": Int(process.terminationStatus),
+          "stdoutBytes": data.count,
+          "stderrBytes": errorData.count,
+        ])
         return []
       }
+      guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.sqlite.decodeFailed", details: [
+          "databaseKind": databaseKind,
+          "databaseBytes": fileSizeBytes(databaseURL),
+          "sidecars": sidecars,
+          "sqliteExitCode": Int(process.terminationStatus),
+          "stdoutBytes": data.count,
+          "stderrBytes": errorData.count,
+        ])
+        return []
+      }
+      NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.sqlite.read", details: [
+        "databaseKind": databaseKind,
+        "databaseBytes": fileSizeBytes(databaseURL),
+        "sidecars": sidecars,
+        "sqliteExitCode": Int(process.terminationStatus),
+        "stdoutBytes": data.count,
+        "stderrBytes": errorData.count,
+        "rowCount": rows.count,
+      ])
       return rows
     } catch {
+      NativeBrowserImportDebugLog.append(event: "nativeBrowserImport.sqlite.exception", details: [
+        "databaseKind": databaseKind,
+        "databaseBytes": fileSizeBytes(databaseURL),
+        "reason": "snapshotOrLaunchFailed",
+      ])
       return []
     }
+  }
+
+  private static func fileSizeBytes(_ url: URL) -> Int64 {
+    (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
   }
 
   private static func importCookiesIntoCEFProfile(
@@ -682,14 +916,56 @@ private enum NativeBrowserDataImporter {
 
 private struct NativeChromiumCookieDecryptor {
   private let key: Data?
+  private let selectedServiceIndex: Int?
+  private let keyMaterialAvailable: Bool
+  private let keyDerivationStatus: Int
+  private let keychainAttemptCount: Int
 
   init(descriptor: NativeBrowserImportDescriptor) {
-    self.key = Self.deriveKey(password: Self.safeStoragePassword(services: descriptor.keychainServices))
+    let keychain = Self.safeStoragePassword(services: descriptor.keychainServices)
+    let derivation = Self.deriveKey(password: keychain.password)
+    self.key = derivation.key
+    self.selectedServiceIndex = keychain.selectedServiceIndex
+    self.keyMaterialAvailable = keychain.password != nil
+    self.keyDerivationStatus = derivation.status
+    self.keychainAttemptCount = keychain.attempts.count
+    NativeBrowserImportDebugLog.append(
+      event: self.key == nil
+        ? "nativeBrowserImport.chromiumDecryptor.keyMissing"
+        : "nativeBrowserImport.chromiumDecryptor.ready",
+      details: [
+        "serviceCount": descriptor.keychainServices.count,
+        "selectedServiceIndex": keychain.selectedServiceIndex ?? NSNull(),
+        "keyMaterialAvailable": keyMaterialAvailable,
+        "keyAvailable": self.key != nil,
+        "keyDerivationStatus": keyDerivationStatus,
+        "keychainAttempts": keychain.attempts,
+      ])
+  }
+
+  var summaryLogPayload: [String: Any] {
+    [
+      "keyAvailable": key != nil,
+      "keyMaterialAvailable": keyMaterialAvailable,
+      "keyDerivationStatus": keyDerivationStatus,
+      "selectedServiceIndex": selectedServiceIndex ?? NSNull(),
+      "keychainAttemptCount": keychainAttemptCount,
+    ]
   }
 
   func decrypt(encryptedHex: String) -> String? {
-    guard let key, var encrypted = Self.dataFromHexString(encryptedHex), !encrypted.isEmpty else {
-      return nil
+    decryptWithDiagnostics(encryptedHex: encryptedHex).value
+  }
+
+  func decryptWithDiagnostics(encryptedHex: String) -> (value: String?, failureReason: String?, failureStatus: Int?) {
+    guard let key else {
+      return (nil, "missingKey", nil)
+    }
+    guard var encrypted = Self.dataFromHexString(encryptedHex) else {
+      return (nil, "invalidHex", nil)
+    }
+    guard !encrypted.isEmpty else {
+      return (nil, "emptyEncryptedValue", nil)
     }
     if encrypted.count > 3,
       String(data: encrypted.prefix(3), encoding: .utf8) == "v10"
@@ -724,42 +1000,77 @@ private struct NativeChromiumCookieDecryptor {
       }
     }
     guard status == kCCSuccess else {
-      return nil
+      return (nil, "cryptorFailed", Int(status))
     }
     output.removeSubrange(outputLength..<output.count)
-    return String(data: output, encoding: .utf8)
+    guard let value = String(data: output, encoding: .utf8) else {
+      return (nil, "invalidUTF8", nil)
+    }
+    return (value, nil, nil)
   }
 
-  private static func safeStoragePassword(services: [String]) -> String? {
-    for service in services {
+  private static func safeStoragePassword(services: [String]) -> (
+    password: String?, selectedServiceIndex: Int?, attempts: [[String: Any]]
+  ) {
+    var attempts: [[String: Any]] = []
+    for (index, service) in services.enumerated() {
       let process = Process()
       let output = Pipe()
+      let errorOutput = Pipe()
       process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
       process.arguments = ["find-generic-password", "-w", "-s", service]
+      process.standardInput = FileHandle.nullDevice
       process.standardOutput = output
-      process.standardError = FileHandle.nullDevice
+      process.standardError = errorOutput
       do {
         try process.run()
         let data = output.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorOutput.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0,
-          let password = String(data: data, encoding: .utf8)?
+        guard process.terminationStatus == 0 else {
+          attempts.append([
+            "index": index,
+            "exitCode": Int(process.terminationStatus),
+            "stderrBytes": errorData.count,
+            "result": "nonzeroExit",
+          ])
+          continue
+        }
+        guard let password = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
           !password.isEmpty
         else {
+          attempts.append([
+            "index": index,
+            "exitCode": Int(process.terminationStatus),
+            "stderrBytes": errorData.count,
+            "result": "emptyOutput",
+          ])
           continue
         }
-        return password
+        attempts.append([
+          "index": index,
+          "exitCode": Int(process.terminationStatus),
+          "stderrBytes": errorData.count,
+          "result": "selected",
+        ])
+        return (password, index, attempts)
       } catch {
+        attempts.append([
+          "index": index,
+          "exitCode": NSNull(),
+          "stderrBytes": 0,
+          "result": "launchFailed",
+        ])
         continue
       }
     }
-    return nil
+    return (nil, nil, attempts)
   }
 
-  private static func deriveKey(password: String?) -> Data? {
+  private static func deriveKey(password: String?) -> (key: Data?, status: Int) {
     guard let passwordData = password?.data(using: .utf8), !passwordData.isEmpty else {
-      return nil
+      return (nil, Int(kCCParamError))
     }
     let salt = Data("saltysalt".utf8)
     var key = Data(repeating: 0, count: kCCKeySizeAES128)
@@ -783,7 +1094,7 @@ private struct NativeChromiumCookieDecryptor {
         }
       }
     }
-    return status == kCCSuccess ? key : nil
+    return status == kCCSuccess ? (key, Int(status)) : (nil, Int(status))
   }
 
   private static func dataFromHexString(_ value: String) -> Data? {
@@ -887,7 +1198,9 @@ private final class NativeBrowserImportDialogController: NSObject {
     }
 
     domainFilterField.placeholderString = "Optional domains, comma-separated"
-    domainFilterField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    for control in [browserPopup, sourceProfilePopup, destinationProfilePopup, domainFilterField] {
+      control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    }
 
     let grid = NSGridView(views: [
       [label("Source Browser"), browserPopup],
@@ -896,9 +1209,15 @@ private final class NativeBrowserImportDialogController: NSObject {
       [label("Domain Filter"), domainFilterField],
     ])
     grid.column(at: 0).xPlacement = .trailing
-    grid.column(at: 1).width = 280
+    grid.column(at: 1).width = 320
     grid.rowSpacing = 8
     grid.columnSpacing = 10
+    /*
+     CDXC:BrowserImport 2026-06-13-00:49:
+     The import modal dropdowns must be fully visible inside the native alert. NSAlert lays out accessory views from their frame, so size the grid from its fitting dimensions before assignment instead of passing a zero-frame grid that AppKit can clip into the button area.
+     */
+    grid.layoutSubtreeIfNeeded()
+    grid.setFrameSize(grid.fittingSize)
     return grid
   }
 

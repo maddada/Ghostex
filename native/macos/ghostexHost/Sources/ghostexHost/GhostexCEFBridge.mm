@@ -20,10 +20,12 @@
 #include "include/cef_application_mac.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_command_ids.h"
 #include "include/cef_command_line.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_cookie.h"
 #include "include/cef_display_handler.h"
+#include "include/cef_find_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_permission_handler.h"
@@ -937,6 +939,7 @@ class GhostexRemoteDevToolsClient : public CefClient, public CefLifeSpanHandler 
 
 class GhostexCEFBrowserClient : public CefClient,
                              public CefDisplayHandler,
+                             public CefFindHandler,
                              public CefLoadHandler,
                              public CefLifeSpanHandler,
                              public CefContextMenuHandler,
@@ -945,6 +948,7 @@ class GhostexCEFBrowserClient : public CefClient,
   explicit GhostexCEFBrowserClient(GhostexCEFBrowserView* owner) : owner_(owner) {}
 
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefFindHandler> GetFindHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override { return this; }
@@ -966,6 +970,12 @@ class GhostexCEFBrowserClient : public CefClient,
                         const CefString& message,
                         const CefString& source,
                         int line) override;
+  void OnFindResult(CefRefPtr<CefBrowser> browser,
+                    int identifier,
+                    int count,
+                    const CefRect& selectionRect,
+                    int activeMatchOrdinal,
+                    bool finalUpdate) override;
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
@@ -1004,6 +1014,7 @@ class GhostexCEFBrowserClient : public CefClient,
  private:
   static constexpr int kInspectElementCommandId = 26001;
 
+  bool OpenRequestedURLInGhostexTab(const CefString& target_url);
   void OpenRemoteDevToolsFrontend(CefRefPtr<CefBrowser> browser);
   void CreateRemoteDevToolsWindow(NSString* frontendURL);
 
@@ -1599,6 +1610,31 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
   browser_->GetHost()->Zoom(CEF_ZOOM_COMMAND_RESET);
 }
 
+- (void)findText:(NSString*)searchText forward:(BOOL)forward findNext:(BOOL)findNext {
+  if (!browser_) {
+    return;
+  }
+  NSString* text = searchText ?: @"";
+  if (text.length == 0) {
+    browser_->GetHost()->StopFinding(true);
+    [self ghostexCEFHandleFindResultWithCount:0 activeMatchOrdinal:0 finalUpdate:YES];
+    return;
+  }
+  /**
+   CDXC:BrowserSearch 2026-06-13-00:00:
+   Cmd+F in an embedded CEF pane should use Chromium page search, not the terminal or app-wide find path.
+   Route the native find bar through CEF's Find API so matches, selection, and next/previous navigation stay inside the focused browser renderer.
+   */
+  browser_->GetHost()->Find(CefString([text UTF8String]), forward, false, findNext);
+}
+
+- (void)stopFindingWithClearSelection:(BOOL)clearSelection {
+  if (browser_) {
+    browser_->GetHost()->StopFinding(clearSelection);
+  }
+  [self ghostexCEFHandleFindResultWithCount:0 activeMatchOrdinal:0 finalUpdate:YES];
+}
+
 - (void)executeJavaScript:(NSString*)javaScript {
   if (!browser_ || javaScript.length == 0) {
     return;
@@ -1716,6 +1752,14 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
   currentURLString_ = [url copy];
   if (self.urlChangedHandler) {
     self.urlChangedHandler(currentURLString_ ?: @"");
+  }
+}
+
+- (void)ghostexCEFHandleFindResultWithCount:(NSInteger)count
+                         activeMatchOrdinal:(NSInteger)activeMatchOrdinal
+                                finalUpdate:(BOOL)finalUpdate {
+  if (self.findResultHandler) {
+    self.findResultHandler(count, activeMatchOrdinal, finalUpdate);
   }
 }
 
@@ -1889,6 +1933,23 @@ bool GhostexCEFBrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
   return false;
 }
 
+void GhostexCEFBrowserClient::OnFindResult(CefRefPtr<CefBrowser> browser,
+                                           int identifier,
+                                           int count,
+                                           const CefRect& selectionRect,
+                                           int activeMatchOrdinal,
+                                           bool finalUpdate) {
+  GhostexCEFBrowserView* owner = owner_;
+  if (!owner) {
+    return;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [owner ghostexCEFHandleFindResultWithCount:count
+                            activeMatchOrdinal:activeMatchOrdinal
+                                   finalUpdate:finalUpdate];
+  });
+}
+
 void GhostexCEFBrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {}
 
 bool GhostexCEFBrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
@@ -1906,6 +1967,26 @@ void GhostexCEFBrowserClient::MarkClosingFromGhostex() {
   closingFromGhostex_ = true;
 }
 
+bool GhostexCEFBrowserClient::OpenRequestedURLInGhostexTab(const CefString& target_url) {
+  std::string url = target_url.ToString();
+  GhostexCEFBrowserView* owner = owner_;
+  if (url.empty() || !owner || !owner.newWindowRequestedHandler) {
+    return false;
+  }
+  /**
+   CDXC:BrowserTabs 2026-06-13-00:00:
+   CEF middle-click, target-blank, and context-menu "Open Link in New Tab/Window" should become a Ghostex tab in the current surface.
+   Dispatch the link intent to Swift instead of letting Chromium create an unmanaged native window or replacing the current page.
+   */
+  NSString* requestedURL = StringFromCefString(target_url);
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (owner.newWindowRequestedHandler) {
+      owner.newWindowRequestedHandler(requestedURL);
+    }
+  });
+  return true;
+}
+
 bool GhostexCEFBrowserClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                                          CefRefPtr<CefFrame> frame,
                                          int popup_id,
@@ -1920,14 +2001,7 @@ bool GhostexCEFBrowserClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                                          CefRefPtr<CefDictionaryValue>& extra_info,
                                          bool* no_javascript_access) {
   std::string url = target_url.ToString();
-  GhostexCEFBrowserView* owner = owner_;
-  if (!url.empty() && owner.newWindowRequestedHandler) {
-    NSString* requestedURL = StringFromCefString(target_url);
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if (owner.newWindowRequestedHandler) {
-        owner.newWindowRequestedHandler(requestedURL);
-      }
-    });
+  if (OpenRequestedURLInGhostexTab(target_url)) {
     return true;
   }
   if (browser && !url.empty()) {
@@ -1954,6 +2028,19 @@ bool GhostexCEFBrowserClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser
   if (command_id == kInspectElementCommandId) {
     OpenRemoteDevToolsFrontend(browser);
     return true;
+  }
+  if (command_id == IDC_CONTENT_CONTEXT_OPENLINKNEWTAB ||
+      command_id == IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW) {
+    CefString linkURL;
+    if (params) {
+      linkURL = params->GetUnfilteredLinkUrl();
+      if (linkURL.empty()) {
+        linkURL = params->GetLinkUrl();
+      }
+    }
+    if (OpenRequestedURLInGhostexTab(linkURL)) {
+      return true;
+    }
   }
   return false;
 }

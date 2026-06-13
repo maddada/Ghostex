@@ -31,6 +31,10 @@ int GhostexCEFRemoteDebuggingPort(void);
 @property(nonatomic, copy, nullable) void (^navigationStateChangedHandler)(BOOL canGoBack, BOOL canGoForward, BOOL isLoading);
 @property(nonatomic, copy, nullable) void (^consoleMessageHandler)(NSString* message, NSString* source, NSInteger line);
 @property(nonatomic, copy, nullable) void (^newWindowRequestedHandler)(NSString* url);
+@property(nonatomic, copy, nullable) void (^findResultHandler)(
+  NSInteger matchCount,
+  NSInteger activeMatchOrdinal,
+  BOOL finalUpdate);
 @property(nonatomic, copy, nullable) void (^loadEventHandler)(
   NSString* event,
   NSString* url,
@@ -61,6 +65,10 @@ int GhostexCEFRemoteDebuggingPort(void);
 - (void)zoomIn;
 - (void)zoomOut;
 - (void)resetZoom;
+- (void)findText:(NSString*)searchText
+         forward:(BOOL)forward
+        findNext:(BOOL)findNext NS_SWIFT_NAME(findText(_:forward:findNext:));
+- (void)stopFindingWithClearSelection:(BOOL)clearSelection NS_SWIFT_NAME(stopFinding(clearSelection:));
 - (void)executeJavaScript:(NSString*)javaScript;
 - (void)emitToolbarActionDiagnosticsWithAction:(NSString*)action
                                          phase:(NSString*)phase NS_SWIFT_NAME(emitToolbarActionDiagnostics(action:phase:));

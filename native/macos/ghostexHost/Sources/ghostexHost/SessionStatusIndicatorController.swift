@@ -27,8 +27,8 @@ final class SessionStatusIndicatorController {
      CDXC:SessionStatusIndicators 2026-05-09-15:48
      The menu bar indicator must be a second presentation of the floating
      status indicator, not a separate state machine. Reuse the same computed
-     visible items and click callback so #95d7f6 routes to done/attention sessions
-     and orange routes to working sessions through the existing sidebar selector.
+     visible items and click callback so attention, working, and idle session
+     counts route through the existing sidebar selector.
      */
     let view = SessionStatusIndicatorView(
       onClick: { status in
@@ -106,34 +106,34 @@ final class SessionStatusIndicatorController {
     /**
      CDXC:SessionStatusIndicators 2026-05-05-19:47
      Attention and working counts are action states and should suppress the
-     gray available-session total whenever either exists. The gray circle is
+     idle available-session total whenever either exists. The idle square is
      only a quiet all-available summary for the fully idle case.
      CDXC:SessionStatusIndicators 2026-05-08-09:09
-     Floating status badges should use darker fills for calmer contrast against
-     transparent desktop content after the shared capsule backdrop was removed.
+     Floating status badges draw directly on a transparent panel without a
+     shared backdrop, so status color must live on each individual badge.
      CDXC:SessionStatusIndicators 2026-05-09-15:53
-     Orange status badges are `working`, not `running`. Keep native naming
+     Working status badges are `working`, not `running`. Keep native naming
      aligned with app terminology so `running` remains reserved for live
-     runtime state and the gray live-idle rail count.
+     runtime state and the idle available-session count.
 
-    CDXC:SessionStatusIndicators 2026-06-12-02:32:
-    Done and attention status must use #95d7f6 instead of the previous green,
-    matching the macOS sidebar, Android drawer/notifications, and iOS Ghostex
-    sidebar status token.
-    */
+     CDXC:SessionStatusIndicators 2026-06-13-07:20:
+     Floating and menu bar status badges must use a single solid square fill
+     with no border radius. Use #a0622c for working, #0093fe for attention,
+     and #1e1e1e for the idle available-session summary.
+     */
     if command.attentionCount > 0 || command.workingCount > 0 {
       return [
         command.attentionCount > 0
           ? SessionStatusIndicatorItem(
             status: .attention,
             count: command.attentionCount,
-            color: NSColor(calibratedRed: 0x95 / 255, green: 0xD7 / 255, blue: 0xF6 / 255, alpha: 1))
+            color: NSColor(calibratedRed: 0x00 / 255, green: 0x93 / 255, blue: 0xFE / 255, alpha: 1))
           : nil,
         command.workingCount > 0
           ? SessionStatusIndicatorItem(
             status: .working,
             count: command.workingCount,
-            color: NSColor(calibratedRed: 0.54, green: 0.27, blue: 0.07, alpha: 1))
+            color: NSColor(calibratedRed: 0xA0 / 255, green: 0x62 / 255, blue: 0x2C / 255, alpha: 1))
           : nil,
       ].compactMap { $0 }
     }
@@ -145,7 +145,7 @@ final class SessionStatusIndicatorController {
       SessionStatusIndicatorItem(
         status: .available,
         count: command.availableCount,
-        color: NSColor(calibratedWhite: 0.25, alpha: 1))
+        color: NSColor(calibratedRed: 0x1E / 255, green: 0x1E / 255, blue: 0x1E / 255, alpha: 1))
     ]
   }
 
@@ -231,7 +231,7 @@ private final class SessionStatusIndicatorView: NSView {
   private struct IndicatorMetrics {
     let scale: CGFloat
 
-    var circleDiameter: CGFloat { 52 * scale }
+    var badgeSide: CGFloat { 52 * scale }
     var horizontalInset: CGFloat { 11 * scale }
     var verticalInset: CGFloat { 8 * scale }
     var itemGap: CGFloat { 6 * scale }
@@ -240,10 +240,7 @@ private final class SessionStatusIndicatorView: NSView {
       NSFont.monospacedDigitSystemFont(ofSize: 25 * scale, weight: .bold)
     }
 
-    var badgeShadowBlur: CGFloat { 5 * scale }
-    var badgeShadowOffset: CGFloat { -1 * scale }
     var badgeFillInset: CGFloat { 3.5 * scale }
-    var badgeStrokeWidth: CGFloat { max(0.5, 0.8 * scale) }
     var textBaselineOffset: CGFloat { 0.5 * scale }
   }
 
@@ -261,34 +258,37 @@ private final class SessionStatusIndicatorView: NSView {
    setting should scale a small set of base metrics instead of rewriting draw
    logic. Keep the default number visually dominant inside the indicator.
    CDXC:SessionStatusIndicators 2026-05-07-17:36
-   The indicator should use a polished glass capsule with circular status
-   badges, matching the approved visual direction while preserving the
-   inactive-only-when-no-action-state visibility rule in visibleItems.
+   Preserve the inactive-only-when-no-action-state visibility rule in
+   visibleItems so idle counts appear only when no working or attention badge
+   needs priority.
    CDXC:SessionStatusIndicators 2026-05-07-18:02
-   A single visible status must not collapse the backdrop into a square-looking
-   button. Keep a horizontal capsule minimum and draw all shadows inside the
-   view so transparent NSPanel edges never create rectangular chrome.
+   A single visible status should remain easy to click and read. Keep explicit
+   view padding around each square badge so transparent NSPanel edges do not
+   crowd the count.
    CDXC:SessionStatusIndicators 2026-05-07-18:20
-   The current polished indicator size is X-Large. Medium is the default and
-   scales every drawing metric to 50% of X-Large; Large and Small are named
-   settings values that reuse the same AppKit drawing path.
+   Medium is the default and scales every drawing metric to 50% of X-Large;
+   Large and Small are named settings values that reuse the same AppKit drawing
+   path.
    CDXC:SessionStatusIndicators 2026-05-07-18:32
-   The capsule should fit the visible badges tightly, including the single
-   badge case. Badge fill colors stay darker for text contrast, and numbers
-   render as full white rather than tinted text.
+   The indicator should fit the visible square badges tightly, including the
+   single-badge case, and numbers render as full white rather than tinted text.
    CDXC:SessionStatusIndicators 2026-05-08-09:09
    The floating indicator must not draw a shared background behind the badges.
-   Keep the NSPanel and NSView clear so only the circular status pills render.
+   Keep the NSPanel and NSView clear so only individual status squares render.
    CDXC:SessionStatusIndicators 2026-05-08-09:17
-   Status buttons should not have a gray outer ring. Use a flatter colored
-   badge with subtle lighting and shadow so the control remains polished
-   without the heavy 3D button treatment.
+   Status buttons should not have a gray outer ring. Use a flat colored badge
+   so the control does not add extra background colors around the status token.
    CDXC:SessionStatusIndicators 2026-05-08-10:21
    Indicator numbers should render 2px larger at the base drawing scale while
    preserving the existing Small/Medium/Large/X-Large size scaling behavior.
    CDXC:SessionStatusIndicators 2026-05-08-10:27
    Repositioning must not require a Shift modifier. Track ordinary drags from
    mouse-down and reserve click activation for mouse-up without panel movement.
+   CDXC:SessionStatusIndicators 2026-06-13-07:20
+   Floating and menu bar running-session indicators must render as solid,
+   fully square status backgrounds. Do not use rounded paths, gradients,
+   strokes, or shadow fills for the badge background because status color must
+   stay exactly #a0622c, #0093fe, or #1e1e1e.
    */
   private static func metrics(for size: NativeSessionStatusIndicatorSize) -> IndicatorMetrics {
     switch size {
@@ -330,7 +330,7 @@ private final class SessionStatusIndicatorView: NSView {
       + CGFloat(max(items.count - 1, 0)) * metrics.itemGap
       + metrics.horizontalInset * 2
     let width = contentWidth
-    let height = (itemWidths.max() ?? metrics.circleDiameter) + metrics.verticalInset * 2
+    let height = (itemWidths.max() ?? metrics.badgeSide) + metrics.verticalInset * 2
     return NSSize(width: width, height: height)
   }
 
@@ -415,41 +415,8 @@ private final class SessionStatusIndicatorView: NSView {
     metrics: IndicatorMetrics
   ) {
     let badgeRect = rect.insetBy(dx: metrics.badgeFillInset, dy: metrics.badgeFillInset)
-    let badgePath = NSBezierPath(ovalIn: badgeRect)
-    NSGraphicsContext.saveGraphicsState()
-    let shadow = NSShadow()
-    shadow.shadowBlurRadius = metrics.badgeShadowBlur
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.38)
-    shadow.shadowOffset = NSSize(width: 0, height: metrics.badgeShadowOffset)
-    shadow.set()
-    (item.color.shadow(withLevel: 0.20) ?? item.color).withAlphaComponent(0.92).setFill()
-    badgePath.fill()
-    NSGraphicsContext.restoreGraphicsState()
-
-    NSGradient(colors: [
-      item.color.highlight(withLevel: 0.10) ?? item.color,
-      item.color,
-      item.color.shadow(withLevel: 0.22) ?? item.color,
-    ])?.draw(in: badgePath, angle: -90)
-
-    NSColor.black.withAlphaComponent(0.18).setStroke()
-    badgePath.lineWidth = metrics.badgeStrokeWidth
-    badgePath.stroke()
-
-    item.color.highlight(withLevel: 0.16)?.withAlphaComponent(0.38).setStroke()
-    NSBezierPath(ovalIn: badgeRect.insetBy(dx: 1, dy: 1)).stroke()
-
-    let highlightRect = NSRect(
-      x: badgeRect.minX + badgeRect.width * 0.20,
-      y: badgeRect.midY + badgeRect.height * 0.12,
-      width: badgeRect.width * 0.60,
-      height: badgeRect.height * 0.28)
-    NSGradient(colors: [
-      NSColor.white.withAlphaComponent(0.14),
-      NSColor.white.withAlphaComponent(0.0),
-    ])?.draw(
-      in: NSBezierPath(ovalIn: highlightRect),
-      angle: -90)
+    item.color.setFill()
+    NSBezierPath(rect: badgeRect).fill()
   }
 
   private static func textAttributes(metrics: IndicatorMetrics) -> [NSAttributedString.Key: Any] {
@@ -566,7 +533,7 @@ private final class SessionStatusIndicatorView: NSView {
     let label = NSAttributedString(
       string: "\(item.count)",
       attributes: [.font: metrics.countFont])
-    return max(metrics.circleDiameter, ceil(label.size().width + metrics.minimumTextPadding))
+    return max(metrics.badgeSide, ceil(label.size().width + metrics.minimumTextPadding))
   }
 }
 

@@ -22,4 +22,23 @@ describe("native sidebar hotkey source", () => {
       'nativeHostEventSource.addEventListener("ghostex-native-host-event", handleNativeHostEvent);',
     );
   });
+
+  test("resolves session slot hotkeys from the rendered sidebar list", () => {
+    /*
+     * CDXC:Hotkeys 2026-06-13-07:33:
+     * Cmd+1..9 in the macOS app must count the visible sidebar session rows,
+     * not native tab or pane chrome that also carries session IDs. This keeps
+     * slot numbers aligned with the Last Active order shown in the sidebar.
+     */
+    expect(nativeSidebarSource).toContain(
+      'document.querySelector(".native-sidebar-main .session-groups-content")',
+    );
+    expect(nativeSidebarSource).toContain("readRenderedSidebarSessionSlots(root)");
+    expect(nativeSidebarSource).toContain(
+      'logNativeHotkeyDebug("nativeHotkeys.sessionSlotRootMissing"',
+    );
+    expect(nativeSidebarSource).not.toContain(
+      'document.querySelector(".native-sidebar-main") ?? document',
+    );
+  });
 });
