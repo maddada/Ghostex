@@ -982,7 +982,7 @@ printf '%s\\n' "$@" > ${JSON.stringify(markerFile)}
       expect(skillMarkdown).toContain('ghostex_session_selector="${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}"');
       expect(skillMarkdown).toContain('ghostex rename-command --session-id "$ghostex_session_selector" --title "<generated title>"');
       expect(skillMarkdown).toContain("not guess a session by title, alias, project, or recent activity");
-      expect(skillMarkdown).toContain("same native Enter path used by Delayed Send");
+      expect(skillMarkdown).toContain("supported session input path");
       expect(skillMarkdown).not.toContain("Do not press Enter");
     } finally {
       await rm(tempDir, { force: true, recursive: true });
@@ -1789,6 +1789,222 @@ printf '%s\\n' "$@" > ${JSON.stringify(markerFile)}
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
+  });
+
+  test("rename-command stages a provider rename and submits enter through gxserver", async () => {
+    const requests = [];
+    const server = http.createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) {
+        chunks.push(chunk);
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      requests.push({ body, url: request.url });
+      const result =
+        request.url === "/api/listProjects"
+          ? { projects: [{ name: "Ghostex", path: "/tmp/ghostex", projectId: "P1a" }] }
+          : request.url === "/api/listSessions"
+            ? {
+                sessions: [
+                  {
+                    kind: "agent",
+                    lifecycleState: "running",
+                    projectId: "P1a",
+                    providerState: { lifecycleState: "exists", zmxName: "S90-P1a-G9a" },
+                    sessionId: "G9a",
+                    title: "Current Session",
+                    zmxName: "S90-P1a-G9a",
+                  },
+                ],
+              }
+            : request.url === "/api/readPresentationSnapshot"
+              ? { sessions: [] }
+              : {
+                  session: {
+                    kind: "agent",
+                    lifecycleState: "running",
+                    projectId: body.params.projectId,
+                    sessionId: body.params.sessionId,
+                  },
+                };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        ok: true,
+        product: "gxserver",
+        protocolVersion: 1,
+        requestId: "rename-command-fixture",
+        result,
+      }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    try {
+      /*
+       * CDXC:GenerateTitleSkill 2026-06-13-01:55:
+       * `$ghostex-generate-title` depends on `ghostex rename-command` being a real
+       * gxserver-backed CLI action after the macOS bridge cutover. Exercise the
+       * public command, including selector resolution, so the command table cannot
+       * advertise rename-command while the dispatcher rejects renameCommand.
+       */
+      const result = await execFileAsync(process.execPath, [
+        path.resolve("scripts/ghostex-cli.mjs"),
+        "rename-command",
+        "--session-id",
+        "G9a",
+        "--project-id",
+        "P1a",
+        "--title",
+        "Ghostex Native IME Fix",
+        "--rename-submit-delay-ms",
+        "0",
+        "--server",
+        `http://127.0.0.1:${address.port}`,
+        "--token",
+        "test-token",
+        "--json",
+      ]);
+
+      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+      expect(requests.map((entry) => entry.url)).toEqual([
+        "/api/listProjects",
+        "/api/listSessions",
+        "/api/readPresentationSnapshot",
+        "/api/sendSessionText",
+        "/api/sendSessionEnter",
+      ]);
+      expect(requests[3].body.params).toMatchObject({
+        projectId: "P1a",
+        sessionId: "G9a",
+        text: "/rename Ghostex Native IME Fix",
+      });
+      expect(requests[4].body.params).toMatchObject({
+        projectId: "P1a",
+        sessionId: "G9a",
+      });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  test("send-key maps supported keys to gxserver terminal text", async () => {
+    const requests = [];
+    const server = http.createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) {
+        chunks.push(chunk);
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      requests.push({ body, url: request.url });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        ok: true,
+        product: "gxserver",
+        protocolVersion: 1,
+        requestId: "send-key-fixture",
+        result: {
+          session: {
+            kind: "agent",
+            lifecycleState: "running",
+            projectId: body.params.projectId,
+            sessionId: body.params.sessionId,
+          },
+        },
+      }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    try {
+      const result = await sendGxserverCliAction(
+        "sendKey",
+        { key: "arrow-up", projectId: "P1a", sessionId: "G9a" },
+        { server: `http://127.0.0.1:${address.port}`, token: "test-token" },
+      );
+
+      expect(result).toMatchObject({ ok: true });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        url: "/api/sendSessionText",
+        body: {
+          params: {
+            key: "arrow-up",
+            projectId: "P1a",
+            sessionId: "G9a",
+            text: "\u001b[A",
+          },
+          protocolVersion: 1,
+        },
+      });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  test("routes renderer-only CLI commands through gxserver renderer endpoint", async () => {
+    const requests = [];
+    const server = http.createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) {
+        chunks.push(chunk);
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      requests.push({ body, url: request.url });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        ok: true,
+        product: "gxserver",
+        protocolVersion: 1,
+        requestId: "renderer-command-fixture",
+        result: { ok: true, state: { sidebarCollapsed: true } },
+      }));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    try {
+      /*
+       * CDXC:GxserverRendererCommands 2026-06-13-02:24:
+       * The CLI must not fall back to the retired native app bridge for visible
+       * sidebar commands. It should call gxserver's renderer-command endpoint so
+       * the daemon owns auth, protocol, and unavailable-renderer failures.
+       */
+      const result = await sendGxserverCliAction(
+        "toggleSidebarCollapsed",
+        {},
+        { server: `http://127.0.0.1:${address.port}`, token: "test-token" },
+      );
+
+      expect(result).toMatchObject({ ok: true });
+      expect(requests).toEqual([
+        {
+          url: "/api/dispatchRendererCommand",
+          body: {
+            params: {
+              action: "toggleSidebarCollapsed",
+              payload: {},
+            },
+            protocolVersion: 1,
+          },
+        },
+      ]);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  test("keeps every advertised bridge action covered by the gxserver dispatcher", async () => {
+    const source = await readFile(path.resolve("scripts/ghostex-cli.mjs"), "utf8");
+    const bridgeActions = [
+      ...source.matchAll(/\["[^"]+",\s*(?:resolvedSessionBridgeAction|bridgeAction)\("([^"]+)"/g),
+    ].map((match) => match[1]);
+    const dispatcherSource = source.slice(
+      source.indexOf("async function sendGxserverCliAction"),
+      source.indexOf("async function fetchGxserverState"),
+    );
+    const dispatcherActions = new Set(
+      [...dispatcherSource.matchAll(/case "([^"]+)":/g)].map((match) => match[1]),
+    );
+    const missingActions = [...new Set(bridgeActions.filter((action) => !dispatcherActions.has(action)))].sort();
+
+    expect(missingActions).toEqual([]);
   });
 
   test("hard-fails gxserver protocol mismatch with update guidance", async () => {

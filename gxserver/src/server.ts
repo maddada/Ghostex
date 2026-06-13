@@ -28,7 +28,11 @@ import {
   readGxserverAuthToken,
 } from "./auth.js";
 import { GxserverDomainRepository, GxserverDomainStateError } from "./domain-state.js";
-import { GxserverEventHub } from "./events.js";
+import {
+  GxserverEventHub,
+  GxserverRendererCommandTimeoutError,
+  GxserverRendererCommandUnavailableError,
+} from "./events.js";
 import { resolveGitRootForExistingDirectory } from "./git-root.js";
 import { detectRegisteredGitWorktreeMetadata } from "./git-worktrees.js";
 import { isGxserverProjectId, isGxserverSessionId } from "./ids.js";
@@ -124,6 +128,7 @@ import {
   type GxserverZmxProcessIdentityReader,
 } from "./zmx-lifecycle.js";
 import { GxserverZmxTitleObserver, type GxserverZmxTitleObservationStateChange } from "./zmx-title-observer.js";
+import { GXSERVER_RENDERER_COMMAND_ACTIONS } from "../protocol/index.js";
 import type {
   GxserverAttachSessionMetadataParams,
   GxserverAttachSessionMetadataResult,
@@ -155,6 +160,7 @@ import type {
   GxserverRunBeadsActionParams,
   GxserverRepositoryCloneJobRpcResult,
   GxserverRepositoryClonePreviewRpcResult,
+  GxserverRendererCommandAction,
   GxserverRunGitActionParams,
   GxserverRunGitHubActionParams,
   GxserverRunProjectSetupCommandParams,
@@ -709,6 +715,21 @@ async function routeRequest(options: HandleRequestOptions, requestId: string): P
     return endpoint.path;
   }
 
+  if (endpoint.path === "/api/dispatchRendererCommand") {
+    try {
+      sendJson(response, 200, await handleRendererCommandEndpoint(runtime, body, requestId));
+    } catch (caught) {
+      if (caught instanceof GxserverTypedOperationError) {
+        sendJson(response, statusForOperationError(caught.code), createRpcError(caught.code, caught.message, requestId));
+      } else if (isRendererCommandDispatchError(caught)) {
+        sendJson(response, 503, createRpcError("dependencyUnavailable", caught.message, requestId));
+      } else {
+        throw caught;
+      }
+    }
+    return endpoint.path;
+  }
+
   if (isAgentHookEndpoint(endpoint.path)) {
     const result = await handleAgentHookEndpoint(runtime, endpoint.path, body, requestId);
     sendJson(response, 200, result);
@@ -762,7 +783,7 @@ async function routeRequest(options: HandleRequestOptions, requestId: string): P
 
   /*
   CDXC:GxserverSessionInteraction 2026-05-30-20:53:
-  gx/ghostex session interaction commands must terminate at gxserver after the hard cutover. zmx-backed read/send/send-enter/session-targeted send-message use the bundled zmx binary directly; renderer focus and agent-targeted message creation stay explicitly unsupported until gxserver has a client event channel that can focus or create visible macOS panes without reviving the retired app bridge.
+  gx/ghostex session interaction commands must terminate at gxserver after the hard cutover. zmx-backed read/send/send-enter/session-targeted send-message use the bundled zmx binary directly; renderer focus goes through gxserver's authenticated event channel so the macOS app executes only the visible-pane UI effect instead of receiving direct CLI bridge traffic.
   */
   if (isZmxSessionInteractionEndpoint(endpoint.path)) {
     try {
@@ -773,6 +794,8 @@ async function routeRequest(options: HandleRequestOptions, requestId: string): P
         sendJson(response, statusForDomainStateError(caught.code), createRpcError(caught.code, caught.message, requestId));
       } else if (caught instanceof GxserverTypedOperationError) {
         sendJson(response, statusForOperationError(caught.code), createRpcError(caught.code, caught.message, requestId));
+      } else if (isRendererCommandDispatchError(caught)) {
+        sendJson(response, 503, createRpcError("dependencyUnavailable", caught.message, requestId));
       } else {
         throw caught;
       }
@@ -990,6 +1013,55 @@ function shouldStopAllKillSession(session: GxserverSessionDomainState): boolean 
   return session.lifecycleState !== "stopped" && session.providerState.lifecycleState !== "missing";
 }
 
+async function handleRendererCommandEndpoint(
+  runtime: GxserverApiRuntime,
+  body: unknown,
+  requestId: string,
+): Promise<GxserverRpcSuccessResponse> {
+  const params = readRendererCommandRpcParams(body);
+  /*
+  CDXC:GxserverRendererCommands 2026-06-13-02:24:
+  Keep the command contract in gxserver even when execution still belongs to the macOS renderer. This lets the daemon own auth, remote access, action allow-listing, timeouts, and HTTP result shape while native code only handles UI/AppKit/CEF/sidebar-local effects.
+  */
+  const result = await runtime.eventHub.dispatchRendererCommand(params);
+  return {
+    ok: true,
+    product: GXSERVER_PRODUCT,
+    protocolVersion: GXSERVER_PROTOCOL_VERSION,
+    requestId,
+    result,
+  };
+}
+
+function readRendererCommandRpcParams(body: unknown): {
+  action: GxserverRendererCommandAction;
+  payload: Record<string, unknown>;
+  timeoutMs?: number;
+} {
+  const params = readOperationRpcParams(body);
+  const action = typeof params.action === "string" ? params.action : "";
+  if (!isGxserverRendererCommandAction(action)) {
+    throw new GxserverTypedOperationError("badRequest", `Unsupported renderer command action: ${String(params.action)}`);
+  }
+  const payload = params.payload === undefined ? {} : params.payload;
+  if (!isRecord(payload)) {
+    throw new GxserverTypedOperationError("badRequest", "Renderer command payload must be an object.");
+  }
+  const timeoutMs = params.timeoutMs === undefined ? undefined : Number(params.timeoutMs);
+  if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+    throw new GxserverTypedOperationError("badRequest", "Renderer command timeoutMs must be a positive number.");
+  }
+  return {
+    action,
+    payload,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  };
+}
+
+function isGxserverRendererCommandAction(value: string): value is GxserverRendererCommandAction {
+  return (GXSERVER_RENDERER_COMMAND_ACTIONS as readonly string[]).includes(value);
+}
+
 async function handleDomainStateEndpoint(
   runtime: GxserverApiRuntime,
   endpointPath: GxserverEndpointPath,
@@ -1139,7 +1211,7 @@ async function dispatchDomainStateEndpoint(
         title: createParams.title,
         titleSource: readRuntimeText(createParams.runtimeSettings, "titleSource") as GxserverSessionStateEventParams["titleSource"],
       });
-      const suppressedSession = applyCreatedTerminalActivitySuppression(runtime, repository, presentation.session, requestId);
+      const suppressedSession = applyCreatedSessionActivitySuppression(runtime, repository, presentation.session, requestId);
       const reconciled = scheduleAgentTitleMetadataCheck(runtime, repository, {
         force: true,
         projectId: suppressedSession.projectId,
@@ -3451,13 +3523,13 @@ async function dispatchZmxLifecycleEndpoint(
   }
 }
 
-function applyCreatedTerminalActivitySuppression(
+function applyCreatedSessionActivitySuppression(
   runtime: GxserverApiRuntime,
   repository: GxserverDomainRepository,
   session: GxserverSessionDomainState,
   requestId: string,
 ): GxserverSessionDomainState {
-  if (session.kind !== "terminal" || session.lifecycleState !== "running") {
+  if ((session.kind !== "terminal" && session.kind !== "agent") || session.lifecycleState !== "running") {
     return session;
   }
   const previous = normalizeAgentActivityState(session.runtimeSettings.agentActivity, { activity: "idle" });
@@ -3479,7 +3551,7 @@ function applyCreatedTerminalActivitySuppression(
     : session;
   /*
   CDXC:GxserverSessionStatus 2026-06-11-08:32:
-  Freshly-created running terminal sessions can emit stale zmx terminal-title status before the shell or foreground process has produced new activity. Apply the shared gxserver launch suppression before title observation starts so macOS, remote, CLI/TUI, and mobile clients do not play false done status from create-time title replay.
+  Freshly-created running sessions can emit stale zmx terminal-title status before the shell or foreground process has produced new activity. Apply the shared gxserver launch suppression before title observation starts so macOS, remote, CLI/TUI, and mobile clients do not play false done status from create-time title replay.
   */
   void runtime.logger.log({
     details: {
@@ -3605,16 +3677,31 @@ async function dispatchZmxSessionInteractionEndpoint(
   readSessionText must never return unbounded `zmx history` output, and sendSessionText/sendSessionMessage must never embed user text in the shell script passed to `/bin/zsh -lc`. Cap history responses with truncation metadata and pass send payload bytes through zmx stdin after an explicit request-size check.
   */
   if (endpointPath === "/api/focusSession") {
-    throw new GxserverTypedOperationError(
-      "dependencyUnavailable",
-      "gxserver focusSession is not available until a renderer event channel can focus visible macOS panes through gxserver. Use gx attach for terminal access.",
-    );
+    const lifecycle = readSessionLifecycleParams(params);
+    const session = requireSession(repository, lifecycle);
+    /*
+    CDXC:GxserverRendererCommands 2026-06-13-02:24:
+    Focus is a daemon-owned command with renderer-owned execution. gxserver validates the target session and sends only the canonical project/session ids to the connected macOS renderer instead of letting the CLI reach the old app bridge directly.
+    */
+    const result = await runtime.eventHub.dispatchRendererCommand({
+      action: "focusSession",
+      payload: {
+        ...params,
+        projectId: session.projectId,
+        sessionId: session.sessionId,
+      },
+    });
+    return { session, ...result };
   }
   if (endpointPath === "/api/sendSessionMessage" && params.sessionId === undefined) {
-    throw new GxserverTypedOperationError(
-      "dependencyUnavailable",
-      "gxserver sendSessionMessage currently requires projectId and sessionId. Agent-targeted visible session creation needs a renderer event channel and is not available through gxserver yet.",
-    );
+    /*
+    CDXC:GxserverRendererCommands 2026-06-13-02:24:
+    Agent-targeted send-message may need to create and focus a visible macOS agent pane before staging the prompt. Keep the public API at gxserver and use the renderer channel only for that native workspace effect.
+    */
+    return runtime.eventHub.dispatchRendererCommand({
+      action: "sendMessage",
+      payload: params,
+    });
   }
 
   const zmx = await (runtime.zmxLifecycle?.requireZmx ?? requireBundledZmx)();
@@ -3812,6 +3899,19 @@ function scheduleGxserverFirstPromptAutoTitleJob(
   timeout.unref();
 }
 
+/*
+CDXC:GxserverSessionTitle 2026-06-13-00:00:
+Codex's first-prompt path stays in `running` long enough for the 250ms presentation coalescer (#GxserverPresentationEvents) to flush an observable `isGeneratingFirstPromptTitle: true` delta before it applies, so native macOS records the running→applied transition that gates its real Enter submit (`first-prompt-title-submit.ts`). Claude's bare `/rename` does no title generation and would otherwise apply within the same coalescer window, collapsing running and applied into a single applied delta — native never sees the transition and never submits Enter. Hold the bare-rename job past one presentation cadence so the staged command is submitted exactly like a generated Codex title.
+*/
+const GXSERVER_BARE_RENAME_GENERATING_WINDOW_MS = 400;
+
+function delayGxserverBareRenameGeneratingWindow(): Promise<void> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(resolve, GXSERVER_BARE_RENAME_GENERATING_WINDOW_MS);
+    timeout.unref();
+  });
+}
+
 async function runGxserverFirstPromptAutoTitleJob(
   runtime: GxserverApiRuntime,
   input: {
@@ -3838,6 +3938,13 @@ async function runGxserverFirstPromptAutoTitleJob(
         sessionId: input.sessionId,
       });
       return;
+    }
+    if (decision.strategy === "sendBareRenameCommand") {
+      /*
+      CDXC:GxserverSessionTitle 2026-06-13-00:00:
+      Keep the bare-rename job in `running` for one presentation cadence so native observes the generating→applied transition that gates its Enter submit. Re-reading `latestSession` below still runs after this wait, so an Escape cancellation during the window is honored before the staged `/rename` is submitted.
+      */
+      await delayGxserverBareRenameGeneratingWindow();
     }
     const title = decision.strategy === "sendBareRenameCommand"
       ? undefined
@@ -5149,6 +5256,12 @@ function statusForRepositoryCloneError(code: GxserverRepositoryCloneError["code"
     default:
       return 400;
   }
+}
+
+function isRendererCommandDispatchError(
+  error: unknown,
+): error is GxserverRendererCommandUnavailableError | GxserverRendererCommandTimeoutError {
+  return error instanceof GxserverRendererCommandUnavailableError || error instanceof GxserverRendererCommandTimeoutError;
 }
 
 function statusForDomainStateError(code: GxserverDomainStateError["code"]): number {

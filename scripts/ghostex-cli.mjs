@@ -25,6 +25,7 @@ const GXSERVER_SSH_FORWARD_PORT_SCAN_LIMIT = 25;
 const GXSERVER_SSH_TUNNEL_READY_TIMEOUT_MS = 8_000;
 const GXSERVER_SSH_COMMAND_TIMEOUT_MS = 12_000;
 const GXSERVER_SSH_TUNNEL_IDLE_KILL_MS = 500;
+const GXSERVER_RENAME_COMMAND_SUBMIT_DELAY_MS = 1_000;
 const activeGxserverSshTunnels = new Map();
 let gxserverSshTunnelExitHooksInstalled = false;
 /**
@@ -519,13 +520,18 @@ async function installGenerateTitleSkillCommand(args) {
    *
    * CDXC:GenerateTitleSkill 2026-06-09-17:49:
    * Generated title sessions should not leave `/rename <title>` staged in the
-   * agent CLI. Use `rename-command` so macOS stages the command and sends Enter
-   * through the same native bridge path used by Delayed Send.
+   * agent CLI. Use `rename-command` so Ghostex stages the command and sends
+   * Enter through the supported session input path.
    *
    * CDXC:GenerateTitleSkill 2026-06-12-04:10:
    * zmx-backed terminals can expose the exact gxserver global ref or provider
    * session name without GHOSTEX_SESSION_ID. The installed skill must prefer
    * stable self-session selectors and never fall back to title/alias guessing.
+   *
+   * CDXC:GenerateTitleSkill 2026-06-13-01:55:
+   * `rename-command` is implemented by the gxserver CLI dispatcher after the
+   * bridge cutover, so installed skill wording should describe the command
+   * contract instead of promising a macOS-only native bridge route.
    */
   await installGhostexAgentSkill({
     args,
@@ -1518,9 +1524,9 @@ async function sendGxserverCliAction(action, payload = {}, flags = {}) {
   /**
    * CDXC:GxserverCliCutover 2026-05-30-15:15:
    * gx/ghostex remains the Node user CLI, but hard-cutover commands must talk
-   * to gxserver instead of the macOS app bridge. Commands without a gxserver
-   * endpoint fail with an update-required error so behavior does not silently
-   * depend on the retired bridge.
+   * to gxserver instead of the macOS app bridge. Renderer-only commands still
+   * enter through a gxserver API endpoint so auth, protocol, remote access, and
+   * unsupported-action failures stay daemon-owned.
    */
   switch (action) {
     case "listSessions":
@@ -1537,6 +1543,8 @@ async function sendGxserverCliAction(action, payload = {}, flags = {}) {
       return createGxserverAgentSession(payload, flags);
     case "addProject":
       return callGxserverRpc("/api/addProjectPath", payload, flags);
+    case "removeProject":
+      return callGxserverRpc("/api/removeProject", payload, flags);
     case "closeSession":
       return callGxserverRpc("/api/killSession", await withResolvedGxserverSessionParams(payload, flags), flags);
     case "sleepSession":
@@ -1575,10 +1583,128 @@ async function sendGxserverCliAction(action, payload = {}, flags = {}) {
       return callGxserverRpc("/api/sendSessionText", await withResolvedGxserverSessionParams(payload, flags), flags);
     case "sendEnter":
       return callGxserverRpc("/api/sendSessionEnter", await withResolvedGxserverSessionParams(payload, flags), flags);
+    case "sendKey":
+      return sendGxserverSessionKey(payload, flags);
+    case "renameCommand":
+      return sendGxserverRenameCommand(payload, flags);
     case "sendMessage":
       return callGxserverRpc("/api/sendSessionMessage", payload, flags);
+    case "assertSidebarCard":
+    case "automationArchiveRun":
+    case "automationMarkRunRead":
+    case "automationRunNow":
+    case "automationSave":
+    case "automationSetEnabled":
+    case "automationState":
+    case "clickButton":
+    case "focusGroup":
+    case "fullReloadSession":
+    case "moveProject":
+    case "moveSidebar":
+    case "openBrowser":
+    case "openBrowserPane":
+    case "openPaths":
+    case "restartSession":
+    case "runCommand":
+    case "saveAgent":
+    case "setViewMode":
+    case "setVisibleCount":
+    case "switchProject":
+    case "toggleSidebarCollapsed":
+    case "waitFor":
+      return dispatchGxserverRendererCommand(action, payload, flags);
     default:
       throw new GxserverCliUnsupportedError(action);
+  }
+}
+
+function dispatchGxserverRendererCommand(action, payload = {}, flags = {}) {
+  /*
+   * CDXC:GxserverRendererCommands 2026-06-13-02:24:
+   * CLI commands that still need visible macOS workspace state route through
+   * gxserver's renderer-command endpoint. Do not reconnect the old native CLI
+   * bridge; gxserver owns the command contract and macOS is only the executor.
+   */
+  return callGxserverRpc("/api/dispatchRendererCommand", { action, payload }, flags);
+}
+
+async function sendGxserverSessionKey(payload = {}, flags = {}) {
+  const text = terminalTextForCliKey(payload.key);
+  if (!text) {
+    throw new Error(`Unsupported key: ${String(payload.key)}`);
+  }
+  return callGxserverRpc(
+    "/api/sendSessionText",
+    await withResolvedGxserverSessionParams({ ...payload, text }, flags),
+    flags,
+  );
+}
+
+async function sendGxserverRenameCommand(payload = {}, flags = {}) {
+  const title = String(payload.title ?? "").trim();
+  if (!title) {
+    throw new Error("rename-command requires --title or a positional title.");
+  }
+  const params = await withResolvedGxserverSessionParams(payload, flags);
+  /*
+   * CDXC:GenerateTitleSkill 2026-06-13-01:55:
+   * Agent-generated session titles call `ghostex rename-command` from inside the
+   * current pane. The gxserver CLI cutover must keep that exposed command working
+   * by staging `/rename <title>` through the session text endpoint, then submitting
+   * Enter as a second interaction so the Agent CLI receives the same command shape
+   * as the old native bridge path.
+   */
+  const textResult = await callGxserverRpc(
+    "/api/sendSessionText",
+    { ...params, text: `/rename ${title}` },
+    flags,
+  );
+  const delayMs = renameCommandSubmitDelayMs(flags);
+  if (delayMs > 0) {
+    await sleep(delayMs);
+  }
+  const enterResult = await callGxserverRpc("/api/sendSessionEnter", params, flags);
+  return {
+    ok: true,
+    enter: enterResult,
+    session: enterResult.session ?? textResult.session,
+    text: textResult,
+  };
+}
+
+function renameCommandSubmitDelayMs(flags = {}) {
+  const override = Number(flags.renameSubmitDelayMs ?? flags.submitDelayMs);
+  if (Number.isFinite(override)) {
+    return Math.max(0, override);
+  }
+  return GXSERVER_RENAME_COMMAND_SUBMIT_DELAY_MS;
+}
+
+function terminalTextForCliKey(key) {
+  switch (String(key)) {
+    case "ctrl-c":
+    case "Control+C":
+      return "\u0003";
+    case "escape":
+    case "Escape":
+      return "\u001b";
+    case "tab":
+    case "Tab":
+      return "\t";
+    case "arrow-up":
+    case "ArrowUp":
+      return "\u001b[A";
+    case "arrow-down":
+    case "ArrowDown":
+      return "\u001b[B";
+    case "arrow-right":
+    case "ArrowRight":
+      return "\u001b[C";
+    case "arrow-left":
+    case "ArrowLeft":
+      return "\u001b[D";
+    default:
+      return undefined;
   }
 }
 
@@ -5460,7 +5586,8 @@ function generateTitleUsage() {
    *
    * CDXC:GenerateTitleSkill 2026-06-09-17:49:
    * Document `rename-command` rather than `send-text` because generated titles
-   * must submit through the macOS native Enter bridge used by Delayed Send.
+   * need Ghostex to stage `/rename <title>` and submit Enter as one supported
+   * command contract.
    *
    * CDXC:GenerateTitleSkill 2026-06-12-04:10:
    * Document the same stable self-selector chain as the installed skill so zmx

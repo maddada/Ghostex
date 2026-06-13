@@ -1125,8 +1125,8 @@ test("presentation snapshot applies stale spinner activity semantics", () => {
     revision: 3 as GxserverPresentationRevision,
     sessions: [session],
   });
-  assert.equal(staleSnapshot.sessions[0]?.activity, "attention");
-  assert.equal(staleSnapshot.sessions[0]?.actions.acknowledgeAttention, true);
+  assert.equal(staleSnapshot.sessions[0]?.activity, "idle");
+  assert.equal(staleSnapshot.sessions[0]?.actions.acknowledgeAttention, false);
 });
 
 test("presentation attention includes a stable event id", () => {

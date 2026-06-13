@@ -56,6 +56,7 @@ export const GXSERVER_ENDPOINTS: readonly GxserverEndpointDescriptor[] = [
   descriptor("/api/sendSessionMessage", "remoteAllowed", true, true, "http"),
   descriptor("/api/sendSessionEnter", "remoteAllowed", true, true, "http"),
   descriptor("/api/focusSession", "remoteAllowed", true, true, "http"),
+  descriptor("/api/dispatchRendererCommand", "remoteAllowed", true, true, "http"),
   descriptor("/api/attachSessionMetadata", "remoteAllowed", true, true, "http"),
   descriptor("/api/createProject", "remoteAllowed", true, true, "http"),
   descriptor("/api/updateProject", "remoteAllowed", true, true, "http"),

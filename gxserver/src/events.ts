@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   GXSERVER_PROTOCOL_VERSION,
   type GxserverEvent,
   type GxserverPresentationRevision,
   type GxserverPresentationSnapshot,
+  type GxserverRendererCommand,
+  type GxserverRendererCommandAction,
   type GxserverServerId,
 } from "../protocol/index.js";
 
@@ -12,10 +15,31 @@ export type GxserverPresentationSnapshotProvider = (input: {
   lastRevision?: GxserverPresentationRevision;
 }) => Promise<GxserverPresentationSnapshot> | GxserverPresentationSnapshot;
 
+export class GxserverRendererCommandUnavailableError extends Error {
+  constructor() {
+    super("No macOS renderer is connected to gxserver for renderer-only commands.");
+    this.name = "GxserverRendererCommandUnavailableError";
+  }
+}
+
+export class GxserverRendererCommandTimeoutError extends Error {
+  constructor(action: GxserverRendererCommandAction, timeoutMs: number) {
+    super(`Timed out waiting ${timeoutMs}ms for macOS renderer command ${action}.`);
+    this.name = "GxserverRendererCommandTimeoutError";
+  }
+}
+
+type PendingRendererCommand = {
+  resolve: (result: Record<string, unknown>) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 export class GxserverEventHub {
   readonly server: WebSocketServer;
   readonly serverId: GxserverServerId;
   #presentationSnapshotProvider?: GxserverPresentationSnapshotProvider;
+  #pendingRendererCommands = new Map<string, PendingRendererCommand>();
+  #rendererCommandSockets = new Set<WebSocket>();
 
   constructor(serverId: GxserverServerId) {
     this.serverId = serverId;
@@ -28,6 +52,9 @@ export class GxserverEventHub {
       });
       socket.on("message", (message) => {
         void this.#handleMessage(socket, message);
+      });
+      socket.on("close", () => {
+        this.#rendererCommandSockets.delete(socket);
       });
     });
   }
@@ -46,6 +73,11 @@ export class GxserverEventHub {
   }
 
   close(): Promise<void> {
+    for (const pending of this.#pendingRendererCommands.values()) {
+      clearTimeout(pending.timer);
+      pending.resolve({ error: "gxserver event stream closed before renderer command completed.", ok: false });
+    }
+    this.#pendingRendererCommands.clear();
     for (const client of this.server.clients) {
       client.terminate();
     }
@@ -60,6 +92,44 @@ export class GxserverEventHub {
     });
   }
 
+  dispatchRendererCommand(input: {
+    action: GxserverRendererCommandAction;
+    payload?: Record<string, unknown>;
+    timeoutMs?: number;
+  }): Promise<Record<string, unknown>> {
+    const socket = this.#openRendererCommandSocket();
+    if (!socket) {
+      throw new GxserverRendererCommandUnavailableError();
+    }
+    const timeoutMs = normalizeRendererCommandTimeoutMs(input.timeoutMs);
+    const command: GxserverRendererCommand = {
+      action: input.action,
+      commandId: `renderer-${randomUUID()}`,
+      createdAt: new Date().toISOString(),
+      payload: input.payload ?? {},
+      timeoutMs,
+    };
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.#pendingRendererCommands.delete(command.commandId);
+        reject(new GxserverRendererCommandTimeoutError(command.action, timeoutMs));
+      }, timeoutMs);
+      this.#pendingRendererCommands.set(command.commandId, { resolve, timer });
+      try {
+        this.send(socket, {
+          command,
+          protocolVersion: GXSERVER_PROTOCOL_VERSION,
+          serverId: this.serverId,
+          type: "rendererCommand",
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.#pendingRendererCommands.delete(command.commandId);
+        reject(error);
+      }
+    });
+  }
+
   private send(socket: WebSocket, event: GxserverEvent): void {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(`${JSON.stringify(event)}\n`);
@@ -68,7 +138,20 @@ export class GxserverEventHub {
 
   async #handleMessage(socket: WebSocket, message: WebSocket.RawData): Promise<void> {
     const parsed = parseEventStreamMessage(message);
-    if (parsed?.type !== "subscribePresentation" || !this.#presentationSnapshotProvider) {
+    if (!parsed) {
+      return;
+    }
+    if (parsed.type === "rendererCommandResult") {
+      this.#handleRendererCommandResult(parsed);
+      return;
+    }
+    if (parsed.type !== "subscribePresentation") {
+      return;
+    }
+    if (parsed.rendererCommands === true) {
+      this.#rendererCommandSockets.add(socket);
+    }
+    if (!this.#presentationSnapshotProvider) {
       return;
     }
     /*
@@ -88,6 +171,34 @@ export class GxserverEventHub {
       type: "presentationSnapshot",
     });
   }
+
+  #handleRendererCommandResult(parsed: Record<string, unknown>): void {
+    const commandId = typeof parsed.commandId === "string" ? parsed.commandId : "";
+    const pending = this.#pendingRendererCommands.get(commandId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.#pendingRendererCommands.delete(commandId);
+    if (parsed.ok === false) {
+      pending.resolve({
+        error: typeof parsed.error === "string" ? parsed.error : "macOS renderer command failed.",
+        ok: false,
+      });
+      return;
+    }
+    pending.resolve(isObjectRecord(parsed.result) ? parsed.result : { ok: true });
+  }
+
+  #openRendererCommandSocket(): WebSocket | undefined {
+    for (const socket of this.#rendererCommandSockets) {
+      if (socket.readyState === WebSocket.OPEN) {
+        return socket;
+      }
+      this.#rendererCommandSockets.delete(socket);
+    }
+    return undefined;
+  }
 }
 
 function parseEventStreamMessage(message: WebSocket.RawData): Record<string, unknown> | undefined {
@@ -100,4 +211,16 @@ function parseEventStreamMessage(message: WebSocket.RawData): Record<string, unk
   } catch {
     return undefined;
   }
+}
+
+function normalizeRendererCommandTimeoutMs(value: unknown): number {
+  const timeoutMs = Number(value ?? 15_000);
+  if (!Number.isFinite(timeoutMs)) {
+    return 15_000;
+  }
+  return Math.min(60_000, Math.max(1_000, Math.round(timeoutMs)));
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

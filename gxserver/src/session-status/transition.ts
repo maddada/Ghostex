@@ -403,13 +403,15 @@ function activityFromTitleSignal(
       return "idle";
     }
     const sameAgent = previous.agentName === undefined || agentName === undefined || previous.agentName === agentName;
-    return sameAgent && previous.hasSeenWorking && !previous.isAcknowledged ? "attention" : "idle";
+    return sameAgent && previous.workingSource === "explicit" && previous.hasSeenWorking && !previous.isAcknowledged
+      ? "attention"
+      : "idle";
   }
   if (event === "title" && previous.hasSeenWorking) {
     if (previous.agentName === "claude") {
       return "idle";
     }
-    return previous.isAcknowledged ? "idle" : "attention";
+    return !previous.isAcknowledged && previous.workingSource === "explicit" ? "attention" : "idle";
   }
   return undefined;
 }
@@ -495,16 +497,11 @@ function stateForStaleTitleWorking(
   titleTransition: Pick<GxserverAgentActivityState, "lastTitle" | "lastTitleChangeAt">,
   nowIso: string,
 ): GxserverAgentActivityState {
-  const nextActivity = agentName === "claude"
-    ? "idle"
-    : previous.hasSeenWorking && !previous.isAcknowledged
-      ? "attention"
-      : "idle";
   return {
     ...previous,
-    activity: nextActivity,
+    activity: "idle",
     agentName,
-    lastChangedAt: previous.activity === nextActivity ? previous.lastChangedAt ?? nowIso : nowIso,
+    lastChangedAt: previous.activity === "idle" ? previous.lastChangedAt ?? nowIso : nowIso,
     ...titleTransition,
     workingSource: undefined,
     workingStartedAt: undefined,

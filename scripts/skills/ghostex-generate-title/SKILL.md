@@ -22,8 +22,8 @@ fi
 ```
 
 Use `rename-command` instead of `send-text` alone. It stages `/rename <title>`
-and submits Enter through Ghostex's supported session bridge; in the macOS app,
-that reaches the same native Enter path used by Delayed Send.
+and submits Enter through Ghostex's supported session input path, so the agent
+should not call `send-enter` separately.
 
 ## Rules
 

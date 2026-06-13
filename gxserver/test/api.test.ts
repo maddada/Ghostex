@@ -2107,6 +2107,51 @@ test("createSession suppresses fresh terminal title attention and logs safe diag
   });
 });
 
+test("createAgentSession suppresses startup title activity", async () => {
+  await withApiServer("local", async ({ baseUrl, paths, token }) => {
+    await writeNativeSidebarSettings(paths.homeDir, { debuggingMode: true });
+    await delay(1_100);
+    const project = (
+      await requestJson(baseUrl, "/api/createProject", {
+        body: { params: { name: "Ghostex", path: paths.rootDir }, protocolVersion: GXSERVER_PROTOCOL_VERSION },
+        method: "POST",
+        token,
+      })
+    ).body.result.project;
+
+    const beforeCreateMs = Date.now();
+    const created = await requestJson(baseUrl, "/api/createAgentSession", {
+      body: {
+        params: {
+          agentId: "codex",
+          projectId: project.projectId,
+          title: "Agent Detection Sync",
+        },
+        protocolVersion: GXSERVER_PROTOCOL_VERSION,
+      },
+      method: "POST",
+      token,
+    });
+    assert.equal(created.status, 200);
+    const session = created.body.result.session;
+    assert.equal(session.kind, "agent");
+    assert.equal(session.runtimeSettings.agentActivity.activity, "idle");
+    assert.equal(session.runtimeSettings.agentActivity.hasSeenWorking, false);
+    assert.equal(session.runtimeSettings.agentActivity.isAcknowledged, true);
+    const suppressedUntil = Date.parse(session.runtimeSettings.agentActivity.suppressedUntil);
+    assert.equal(Number.isFinite(suppressedUntil), true);
+    assert.ok(suppressedUntil - beforeCreateMs > 10_000);
+
+    const { entry: createLog } = await waitForLogEvent(
+      paths.logFile,
+      "sessionActivity.createSuppressionStarted",
+      1_000,
+    );
+    assert.equal(createLog.details.changed, true);
+    assert.equal(createLog.details.sessionKind, "agent");
+  });
+});
+
 test("wakeSession suppresses wake-time title attention and logs safe diagnostics", async () => {
   const calls: string[] = [];
   await withApiServer(
@@ -2287,7 +2332,7 @@ test("zmx lifecycle API starts missing providers through detached zmx run withou
   );
 });
 
-test("zmx session interaction APIs read and send through bundled zmx, with explicit unsupported focus", async () => {
+test("zmx session interaction APIs read/send through zmx and report missing renderer for visible UI commands", async () => {
   const calls: string[] = [];
   const sendInputs: string[] = [];
   await withApiServer(
@@ -2367,7 +2412,7 @@ test("zmx session interaction APIs read and send through bundled zmx, with expli
       });
       assert.equal(focus.status, 503);
       assert.equal(focus.body.error, "dependencyUnavailable");
-      assert.match(focus.body.message, /renderer event channel/);
+      assert.match(focus.body.message, /No macOS renderer is connected/);
 
       const agentMessage = await requestJson(baseUrl, "/api/sendSessionMessage", {
         body: {
@@ -2379,7 +2424,7 @@ test("zmx session interaction APIs read and send through bundled zmx, with expli
       });
       assert.equal(agentMessage.status, 503);
       assert.equal(agentMessage.body.error, "dependencyUnavailable");
-      assert.match(agentMessage.body.message, /requires projectId and sessionId/);
+      assert.match(agentMessage.body.message, /No macOS renderer is connected/);
       assert.ok(calls.some((script) => script.includes('exec "$zmx_bin" history "$zmx_session"')));
       assert.ok(calls.some((script) => script.includes('exec "$zmx_bin" send "$zmx_session"')));
       assert.equal(calls.some((script) => script.includes("hello 'agent'") || script.includes("ship it")), false);
@@ -3388,6 +3433,22 @@ test("terminal title API clears explicit working on same-title Codex spinner sto
       CDXC:SessionStatus 2026-06-07-09:22:
       The terminal-title API must preserve hook-owned explicit working across unrelated titles, but a same-title Codex spinner stop is trusted completion evidence because Codex may not send a hook stop event for every completed turn.
       */
+      const explicit = await requestJson(baseUrl, "/api/updateAgentActivity", {
+        body: {
+          params: {
+            activity: "working",
+            agentName: "codex",
+            projectId: project.projectId,
+            sessionId: session.sessionId,
+          },
+          protocolVersion: GXSERVER_PROTOCOL_VERSION,
+        },
+        method: "POST",
+        token,
+      });
+      assert.equal(explicit.status, 200);
+      assert.equal(explicit.body.result.activity.workingSource, "explicit");
+
       const spinner = await requestJson(baseUrl, "/api/ingestTerminalTitleEvent", {
         body: {
           params: {
@@ -3404,23 +3465,7 @@ test("terminal title API clears explicit working on same-title Codex spinner sto
       });
       assert.equal(spinner.status, 200);
       assert.equal(spinner.body.result.activity.activity, "working");
-      assert.equal(spinner.body.result.activity.workingSource, "title");
-
-      const explicit = await requestJson(baseUrl, "/api/updateAgentActivity", {
-        body: {
-          params: {
-            activity: "working",
-            agentName: "codex",
-            projectId: project.projectId,
-            sessionId: session.sessionId,
-          },
-          protocolVersion: GXSERVER_PROTOCOL_VERSION,
-        },
-        method: "POST",
-        token,
-      });
-      assert.equal(explicit.status, 200);
-      assert.equal(explicit.body.result.activity.workingSource, "explicit");
+      assert.equal(spinner.body.result.activity.workingSource, "explicit");
 
       const unrelated = await requestJson(baseUrl, "/api/ingestTerminalTitleEvent", {
         body: {
@@ -3466,6 +3511,57 @@ test("terminal title API clears explicit working on same-title Codex spinner sto
   );
 });
 
+test("terminal title API keeps launch-suppressed title-only Codex spinner idle", async () => {
+  await withApiServer(
+    "local",
+    async ({ baseUrl, paths, token }) => {
+      const project = (
+        await requestJson(baseUrl, "/api/createProject", {
+          body: { params: { name: "Ghostex", path: paths.rootDir }, protocolVersion: GXSERVER_PROTOCOL_VERSION },
+          method: "POST",
+          token,
+        })
+      ).body.result.project;
+      const session = (
+        await requestJson(baseUrl, "/api/createAgentSession", {
+          body: {
+            params: {
+              agentId: "codex",
+              projectId: project.projectId,
+              title: "Agent Detection Sync",
+            },
+            protocolVersion: GXSERVER_PROTOCOL_VERSION,
+          },
+          method: "POST",
+          token,
+        })
+      ).body.result.session;
+
+      const spinner = await requestJson(baseUrl, "/api/ingestTerminalTitleEvent", {
+        body: {
+          params: {
+            agentName: "codex",
+            projectId: project.projectId,
+            rawTitle: "⠦ Agent Detection Sync",
+            sessionId: session.sessionId,
+            sessionPersistenceProvider: "zmx",
+          },
+          protocolVersion: GXSERVER_PROTOCOL_VERSION,
+        },
+        method: "POST",
+        token,
+      });
+      assert.equal(spinner.status, 200);
+      assert.equal(spinner.body.result.activity.activity, "idle");
+      assert.equal(spinner.body.result.enteredAttention, false);
+      assert.equal(spinner.body.result.session.runtimeSettings.agentActivity.activity, "idle");
+    },
+    {
+      zmxLifecycle: fakeZmxLifecycle([], () => 0),
+    },
+  );
+});
+
 test("terminal title API clears missed Codex Stop from trusted metadata title", async () => {
   await withApiServer(
     "local",
@@ -3500,16 +3596,14 @@ test("terminal title API clears missed Codex Stop from trusted metadata title", 
       CDXC:SessionStatus 2026-06-12-04:06:
       A Codex Stop hook can be missed after UserPromptSubmit starts explicit working. If gxserver later observes the same trusted metadata title without spinner state, the terminal-title API should settle the row instead of leaving every client in working forever.
       */
-      const working = await requestJson(baseUrl, "/api/ingestAgentHookEvent", {
+      const working = await requestJson(baseUrl, "/api/updateAgentActivity", {
         body: {
           params: {
+            activity: "working",
             agentName: "codex",
-            eventName: "UserPromptSubmit",
+            nowMs: Date.parse("2026-06-12T00:02:06.814Z"),
             projectId: project.projectId,
-            rawEventName: "UserPromptSubmit",
             sessionId: session.sessionId,
-            status: "working",
-            statusUpdatedAt: "2026-06-12T00:02:06.814Z",
           },
           protocolVersion: GXSERVER_PROTOCOL_VERSION,
         },
@@ -4888,6 +4982,73 @@ test("WebSocket events require auth and protocol version, then stream JSON serve
     assert.equal(handled.type, "apiRequestHandled");
     assert.equal(handled.path, "/api/listSessions");
     socket.close();
+  });
+});
+
+test("renderer command endpoint dispatches through subscribed macOS event clients", async () => {
+  await withApiServer("local", async ({ baseUrl, token }) => {
+    const socket = new WebSocket(toWebSocketUrl(baseUrl, "/api/events"), {
+      headers: authHeaders(token, GXSERVER_PROTOCOL_VERSION),
+    });
+    const readyMessage = onceMessage(socket);
+    await waitFor(once(socket, "open"), "WebSocket open");
+    assert.equal((JSON.parse(String(await readyMessage)) as Record<string, unknown>).type, "eventStreamReady");
+    /*
+    CDXC:GxserverRendererCommands 2026-06-13-02:24:
+    Renderer-only commands use gxserver's authenticated event stream instead of the retired native CLI bridge. The HTTP request waits for a matching renderer result so callers get the same structured command outcome through the daemon contract.
+    */
+    socket.send(JSON.stringify({
+      clientId: "macos-renderer-test",
+      rendererCommands: true,
+      type: "subscribePresentation",
+    }));
+
+    const commandEventPromise = nextWebSocketEvent(socket, "rendererCommand");
+    const responsePromise = requestJson(baseUrl, "/api/dispatchRendererCommand", {
+      body: {
+        params: {
+          action: "toggleSidebarCollapsed",
+          payload: { source: "test" },
+        },
+        protocolVersion: GXSERVER_PROTOCOL_VERSION,
+      },
+      method: "POST",
+      token,
+    });
+    const commandEvent = await commandEventPromise;
+    const command = commandEvent.command as Record<string, unknown>;
+    assert.equal(command.action, "toggleSidebarCollapsed");
+    assert.deepEqual(command.payload, { source: "test" });
+    assert.equal(typeof command.commandId, "string");
+
+    socket.send(JSON.stringify({
+      commandId: command.commandId,
+      ok: true,
+      result: { ok: true, toggled: true },
+      type: "rendererCommandResult",
+    }));
+    const response = await responsePromise;
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.result, { ok: true, toggled: true });
+    socket.close();
+  });
+});
+
+test("renderer command endpoint reports unavailable when no renderer is connected", async () => {
+  await withApiServer("local", async ({ baseUrl, token }) => {
+    const response = await requestJson(baseUrl, "/api/dispatchRendererCommand", {
+      body: {
+        params: {
+          action: "toggleSidebarCollapsed",
+          payload: {},
+        },
+        protocolVersion: GXSERVER_PROTOCOL_VERSION,
+      },
+      method: "POST",
+      token,
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error, "dependencyUnavailable");
   });
 });
 

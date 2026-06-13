@@ -221,6 +221,39 @@ test("same-title Codex spinner stop clears explicit hook working", () => {
   assert.equal(stoppedSpinner.lastTitle, "Ghostex 4.0.0 Beta");
 });
 
+test("title-only Codex spinner stop settles idle without attention", () => {
+  const titleWorking = applyAgentActivityTransition({
+    agentId: "codex",
+    event: "title",
+    nowMs: Date.parse("2026-06-12T15:46:50.000Z"),
+    title: "⠦ Agent Detection Sync",
+  });
+  assert.equal(titleWorking.activity, "working");
+  assert.equal(titleWorking.workingSource, "title");
+
+  const settledTitle = applyAgentActivityTransition({
+    agentId: "codex",
+    event: "title",
+    nowMs: Date.parse("2026-06-12T15:46:58.000Z"),
+    previous: titleWorking,
+    title: "Agent Detection Sync",
+  });
+  assert.equal(settledTitle.activity, "idle");
+  assert.equal(settledTitle.attentionEventId, undefined);
+  assert.equal(settledTitle.workingSource, undefined);
+
+  const staleTitle = applyAgentActivityTransition({
+    agentId: "codex",
+    event: "title",
+    nowMs: Date.parse("2026-06-12T15:46:58.000Z"),
+    previous: titleWorking,
+    title: "⠦ Agent Detection Sync",
+  });
+  assert.equal(staleTitle.activity, "idle");
+  assert.equal(staleTitle.attentionEventId, undefined);
+  assert.equal(staleTitle.workingSource, undefined);
+});
+
 test("trusted settled Codex title clears explicit working when spinner was missed", () => {
   /*
   CDXC:SessionStatus 2026-06-12-04:06:

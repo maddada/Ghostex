@@ -700,7 +700,8 @@ test("Codex spinner title working expires when the title frame is stuck", () => 
   /*
   CDXC:SessionStatus 2026-06-06-23:26:
   The old 3s stale boundary is too close to zmx's 2s coalesced heartbeat and
-  can show active sessions as attention between sparse title observations.
+  previously could show active sessions as attention between sparse title
+  observations.
   Keep the session working inside the 5s slow-spinner freshness window, then
   expire a truly frozen title-derived working state after that window.
   */
@@ -712,7 +713,7 @@ test("Codex spinner title working expires when the title frame is stuck", () => 
     previous: sameFrameInsideWindow,
     title: "⠏ Skip migration issue 2 options",
   });
-  assert.equal(sameFrameAfterFreshnessWindow.activity, "attention");
+  assert.equal(sameFrameAfterFreshnessWindow.activity, "idle");
   assert.equal(sameFrameAfterFreshnessWindow.workingSource, undefined);
 
   const refreshedSpinnerFrame = applyAgentActivityTransition({
@@ -742,7 +743,7 @@ test("presentation activity expires stale title-derived working without expiring
     { activity: "idle" },
     Date.parse("2026-06-01T12:00:06.000Z"),
   );
-  assert.equal(titleDerived.activity, "attention");
+  assert.equal(titleDerived.activity, "idle");
 
   const explicit = getEffectiveAgentActivityState(
     {

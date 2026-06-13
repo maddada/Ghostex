@@ -4,6 +4,9 @@ The gxserver protocol is the shared contract for the daemon, future gx/ghostex C
 
 CDXC:GxserverProtocol 2026-06-04-03:20:
 `zmxName` is the canonical provider identity and must carry the full server-project-session id. Clients should treat shorter project/session or compact g-* names as legacy display/state data, not as the reconnect target for gxserver zmx sessions.
+
+CDXC:GxserverRendererCommands 2026-06-13-02:24:
+CLI commands that still require visible macOS UI, AppKit, CEF, or sidebar-local workspace state must enter through a typed gxserver command contract. gxserver owns auth, protocol checks, dispatch, timeouts, and the supported action list; the macOS app is only the renderer-side executor for behavior that cannot live in the daemon yet.
 */
 
 export const GXSERVER_PRODUCT = "gxserver" as const;
@@ -39,6 +42,36 @@ export type GxserverRpcErrorCode =
   | "notImplemented"
   | "protocolMismatch"
   | "unauthorized";
+
+export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
+  "assertSidebarCard",
+  "automationArchiveRun",
+  "automationMarkRunRead",
+  "automationRunNow",
+  "automationSave",
+  "automationSetEnabled",
+  "automationState",
+  "clickButton",
+  "focusGroup",
+  "focusSession",
+  "fullReloadSession",
+  "moveProject",
+  "moveSidebar",
+  "openBrowser",
+  "openBrowserPane",
+  "openPaths",
+  "restartSession",
+  "runCommand",
+  "saveAgent",
+  "sendMessage",
+  "setViewMode",
+  "setVisibleCount",
+  "switchProject",
+  "toggleSidebarCollapsed",
+  "waitFor",
+] as const;
+
+export type GxserverRendererCommandAction = typeof GXSERVER_RENDERER_COMMAND_ACTIONS[number];
 
 export type GxserverEndpointPath =
   | "/api/health"
@@ -77,6 +110,7 @@ export type GxserverEndpointPath =
   | "/api/sendSessionMessage"
   | "/api/sendSessionEnter"
   | "/api/focusSession"
+  | "/api/dispatchRendererCommand"
   | "/api/attachSessionMetadata"
   | "/api/createProject"
   | "/api/updateProject"
@@ -319,6 +353,14 @@ export interface GxserverEndpointDescriptor {
   requiresAuth: boolean;
   requiresProtocolVersion: boolean;
   transport: "http" | "webSocket";
+}
+
+export interface GxserverRendererCommand {
+  action: GxserverRendererCommandAction;
+  commandId: string;
+  createdAt: string;
+  payload: Record<string, unknown>;
+  timeoutMs: number;
 }
 
 export interface GxserverProjectDirectoryBrowseParams {
@@ -1426,4 +1468,10 @@ export type GxserverEvent =
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
       type: "presentationDelta";
+    }
+  | {
+      command: GxserverRendererCommand;
+      protocolVersion: GxserverProtocolVersion;
+      serverId: GxserverServerId;
+      type: "rendererCommand";
     };

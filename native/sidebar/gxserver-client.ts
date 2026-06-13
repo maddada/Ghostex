@@ -31,6 +31,7 @@ import {
   type GxserverSessionProviderProbeResponse,
   type GxserverProjectDomainState,
   type GxserverRemoveSessionParams,
+  type GxserverRendererCommand,
   type GxserverRpcErrorResponse,
   type GxserverRpcSuccessResponse,
   type GxserverServerHealthResponse,
@@ -109,6 +110,9 @@ export type NativeSidebarPresentationSubscriptionHandlers = {
   onClose?: (event: CloseEvent) => void;
   onDelta?: (delta: GxserverPresentationDelta, revision: number) => void;
   onError?: (error: Event) => void;
+  onRendererCommand?: (
+    command: GxserverRendererCommand,
+  ) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void;
   onSnapshot?: (snapshot: GxserverPresentationSnapshot) => void;
 };
 
@@ -371,6 +375,9 @@ export function createNativeSidebarGxserverClient(
     /*
     CDXC:GxserverPresentationEvents 2026-06-01-15:08:
     The native sidebar consumes gxserver presentation as snapshot plus WebSocket deltas. WebKit cannot attach bearer headers to WebSocket, so the server accepts the same token in the event-stream query string and this client sends the subscription message immediately after open.
+
+    CDXC:GxserverRendererCommands 2026-06-13-02:24:
+    Renderer-only CLI actions share this authenticated gxserver event stream. The sidebar opts in explicitly and returns one structured result per command so gxserver stays the command owner while macOS executes only native UI/sidebar effects.
     */
     const url = new URL(`${config.baseUrl}/api/events`);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -382,6 +389,7 @@ export function createNativeSidebarGxserverClient(
       socket.send(JSON.stringify({
         clientId,
         ...(lastRevision !== undefined ? { lastRevision } : {}),
+        ...(handlers.onRendererCommand ? { rendererCommands: true } : {}),
         type: "subscribePresentation",
       }));
     });
@@ -394,6 +402,8 @@ export function createNativeSidebarGxserverClient(
         handlers.onSnapshot?.(parsed.snapshot);
       } else if (parsed.type === "presentationDelta") {
         handlers.onDelta?.(parsed.delta, parsed.revision);
+      } else if (parsed.type === "rendererCommand" && handlers.onRendererCommand) {
+        void handleRendererCommand(socket, parsed.command, handlers.onRendererCommand);
       }
     });
     socket.addEventListener("error", (event) => {
@@ -730,6 +740,35 @@ function parseObject(payloadJson: string): Record<string, unknown> | undefined {
   }
 }
 
+async function handleRendererCommand(
+  socket: WebSocket,
+  command: GxserverRendererCommand,
+  handler: NonNullable<NativeSidebarPresentationSubscriptionHandlers["onRendererCommand"]>,
+): Promise<void> {
+  try {
+    const result = await handler(command);
+    sendRendererCommandResult(socket, {
+      commandId: command.commandId,
+      ok: true,
+      result: isObjectRecord(result) ? result : { ok: true },
+      type: "rendererCommandResult",
+    });
+  } catch (error) {
+    sendRendererCommandResult(socket, {
+      commandId: command.commandId,
+      error: error instanceof Error ? error.message : String(error),
+      ok: false,
+      type: "rendererCommandResult",
+    });
+  }
+}
+
+function sendRendererCommandResult(socket: WebSocket, payload: Record<string, unknown>): void {
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(payload));
+  }
+}
+
 function parseGxserverEvent(value: unknown): GxserverEvent | undefined {
   try {
     const text = typeof value === "string" ? value : String(value);
@@ -746,6 +785,10 @@ function parseGxserverEvent(value: unknown): GxserverEvent | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseHealth(value: unknown): GxserverServerHealthResponse {
@@ -937,6 +980,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "send text to the session";
     case "/api/focusSession":
       return "focus the session";
+    case "/api/dispatchRendererCommand":
+      return "run the renderer command";
     case "/api/attachSessionMetadata":
       return "prepare the terminal attach command";
     case "/api/createProject":
