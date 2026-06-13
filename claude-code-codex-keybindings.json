@@ -1,0 +1,315 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    {
+      "context": "Global",
+      "bindings": {
+        "ctrl+shift+t": "app:toggleTodos",
+        "ctrl+t": "app:toggleTranscript",
+        "ctrl+shift+b": "app:toggleBrief",
+        "ctrl+shift+o": "app:toggleTeammatePreview",
+        "ctrl+r": "history:search",
+        "ctrl+]": "app:openArtifact"
+      }
+    },
+    {
+      "context": "Chat",
+      "bindings": {
+        "escape": "chat:cancel",
+        "ctrl+c": "chat:clearInput",
+        "ctrl+l": "chat:clearScreen",
+        "ctrl+x ctrl+k": "chat:killAgents",
+        "shift+tab": "chat:cycleMode",
+        "meta+p": "chat:modelPicker",
+        "meta+o": "chat:fastMode",
+        "meta+t": "chat:thinkingToggle",
+        "meta+w": "chat:workflowKeywordToggle",
+        "enter": "chat:submit",
+        "ctrl+j": "chat:newline",
+        "ctrl+m": "chat:newline",
+        "shift+enter": "chat:newline",
+        "alt+enter": "chat:newline",
+        "up": "history:previous",
+        "down": "history:next",
+        "ctrl+_": "chat:undo",
+        "ctrl+-": "chat:undo",
+        "ctrl+shift+-": "chat:undo",
+        "ctrl+shift+_": "chat:undo",
+        "ctrl+g": "chat:externalEditor",
+        "ctrl+s": "chat:stash",
+        "ctrl+v": "chat:imagePaste",
+        "ctrl+alt+v": "chat:imagePaste",
+        "space": "voice:pushToTalk"
+      }
+    },
+    {
+      "context": "Autocomplete",
+      "bindings": {
+        "tab": "autocomplete:accept",
+        "enter": "autocomplete:accept",
+        "escape": "autocomplete:dismiss",
+        "up": "autocomplete:previous",
+        "ctrl+p": "autocomplete:previous",
+        "down": "autocomplete:next",
+        "ctrl+n": "autocomplete:next"
+      }
+    },
+    {
+      "context": "Settings",
+      "bindings": {
+        "escape": "confirm:no",
+        "up": "select:previous",
+        "down": "select:next",
+        "k": "select:previous",
+        "j": "select:next",
+        "ctrl+p": "select:previous",
+        "ctrl+n": "select:next",
+        "ctrl+k": "select:previous",
+        "ctrl+j": "select:next",
+        "space": "select:accept",
+        "enter": "settings:close",
+        "/": "settings:search",
+        "r": "settings:retry",
+        "d": "settings:periodDay",
+        "w": "settings:periodWeek",
+        "t": "settings:sortByTokens",
+        "ctrl+u": "scroll:halfPageUp"
+      }
+    },
+    {
+      "context": "Doctor",
+      "bindings": {
+        "f": "doctor:fix"
+      }
+    },
+    {
+      "context": "Confirmation",
+      "bindings": {
+        "y": "confirm:yes",
+        "n": "confirm:no",
+        "enter": "confirm:yes",
+        "escape": "confirm:no",
+        "up": "confirm:previous",
+        "k": "confirm:previous",
+        "ctrl+p": "confirm:previous",
+        "ctrl+k": "confirm:previous",
+        "down": "confirm:next",
+        "j": "confirm:next",
+        "ctrl+n": "confirm:next",
+        "ctrl+j": "confirm:next",
+        "tab": "confirm:nextField",
+        "space": "confirm:toggle",
+        "shift+tab": "confirm:cycleMode",
+        "ctrl+e": "confirm:toggleExplanation"
+      }
+    },
+    {
+      "context": "Tabs",
+      "bindings": {
+        "tab": "tabs:next",
+        "shift+tab": "tabs:previous",
+        "right": "tabs:next",
+        "ctrl+l": "tabs:next",
+        "left": "tabs:previous",
+        "ctrl+h": "tabs:previous"
+      }
+    },
+    {
+      "context": "Transcript",
+      "bindings": {
+        "ctrl+e": "transcript:toggleShowAll",
+        "ctrl+t": "transcript:exit",
+        "ctrl+c": "transcript:exit",
+        "q": "transcript:exit",
+        "ctrl+u": "scroll:halfPageUp",
+        "ctrl+d": "scroll:halfPageDown",
+        "ctrl+b": "scroll:fullPageUp",
+        "shift+space": "scroll:fullPageUp",
+        "pageup": "scroll:fullPageUp",
+        "ctrl+f": "scroll:fullPageDown",
+        "space": "scroll:fullPageDown",
+        "pagedown": "scroll:fullPageDown",
+        "ctrl+n": "scroll:lineDown",
+        "ctrl+p": "scroll:lineUp",
+        "j": "scroll:lineDown",
+        "k": "scroll:lineUp",
+        "up": "scroll:lineUp",
+        "down": "scroll:lineDown",
+        "home": "scroll:top",
+        "end": "scroll:bottom"
+      }
+    },
+    {
+      "context": "HistorySearch",
+      "bindings": {
+        "ctrl+r": "historySearch:next",
+        "up": "historySearch:next",
+        "ctrl+s": "historySearch:next",
+        "down": "historySearch:next",
+        "enter": "historySearch:execute",
+        "escape": "historySearch:accept",
+        "backspace": "historySearch:accept",
+        "ctrl+h": "historySearch:accept",
+        "ctrl+u": "historySearch:cycleScope"
+      }
+    },
+    {
+      "context": "Task",
+      "bindings": {
+        "ctrl+x ctrl+b": "task:background",
+        "ctrl+b": "task:background"
+      }
+    },
+    {
+      "context": "ThemePicker",
+      "bindings": {
+        "ctrl+t": "theme:toggleSyntaxHighlighting",
+        "ctrl+e": "theme:editCustom"
+      }
+    },
+    {
+      "context": "Scroll",
+      "bindings": {
+        "pageup": "scroll:pageUp",
+        "ctrl+b": "scroll:pageUp",
+        "shift+space": "scroll:pageUp",
+        "pagedown": "scroll:pageDown",
+        "ctrl+f": "scroll:pageDown",
+        "space": "scroll:pageDown",
+        "wheelup": "scroll:lineUp",
+        "wheeldown": "scroll:lineDown",
+        "home": "scroll:top",
+        "end": "scroll:bottom",
+        "ctrl+shift+c": "selection:copy",
+        "shift+left": "selection:extendLeft",
+        "shift+right": "selection:extendRight",
+        "shift+up": "selection:extendUp",
+        "shift+down": "selection:extendDown",
+        "shift+home": "selection:extendLineStart",
+        "shift+end": "selection:extendLineEnd"
+      }
+    },
+    {
+      "context": "Help",
+      "bindings": {
+        "escape": "help:dismiss",
+        "q": "help:dismiss",
+        "ctrl+c": "help:dismiss"
+      }
+    },
+    {
+      "context": "Attachments",
+      "bindings": {
+        "right": "attachments:next",
+        "ctrl+l": "attachments:next",
+        "left": "attachments:previous",
+        "ctrl+h": "attachments:previous",
+        "backspace": "attachments:remove",
+        "delete": "attachments:remove",
+        "down": "attachments:exit",
+        "escape": "attachments:exit"
+      }
+    },
+    {
+      "context": "Footer",
+      "bindings": {
+        "up": "footer:up",
+        "k": "footer:up",
+        "ctrl+p": "footer:up",
+        "ctrl+k": "footer:up",
+        "down": "footer:down",
+        "j": "footer:down",
+        "ctrl+n": "footer:down",
+        "ctrl+j": "footer:down",
+        "right": "footer:next",
+        "ctrl+l": "footer:next",
+        "left": "footer:previous",
+        "ctrl+h": "footer:previous",
+        "enter": "footer:openSelected",
+        "escape": "footer:clearSelection",
+        "x": "footer:close"
+      }
+    },
+    {
+      "context": "MessageSelector",
+      "bindings": {
+        "up": "messageSelector:up",
+        "down": "messageSelector:down",
+        "k": "messageSelector:up",
+        "j": "messageSelector:down",
+        "ctrl+p": "messageSelector:up",
+        "ctrl+n": "messageSelector:down",
+        "ctrl+k": "messageSelector:up",
+        "ctrl+j": "messageSelector:down",
+        "home": "messageSelector:top",
+        "end": "messageSelector:bottom",
+        "pageup": "messageSelector:top",
+        "pagedown": "messageSelector:bottom",
+        "enter": "messageSelector:select"
+      }
+    },
+    {
+      "context": "DiffDialog",
+      "bindings": {
+        "escape": "diff:dismiss",
+        "left": "diff:previousSource",
+        "right": "diff:nextSource",
+        "up": "diff:previousFile",
+        "down": "diff:nextFile",
+        "enter": "diff:viewDetails",
+        "j": "diff:nextFile",
+        "k": "diff:previousFile",
+        "pageup": "scroll:pageUp",
+        "ctrl+b": "scroll:pageUp",
+        "shift+space": "scroll:pageUp",
+        "pagedown": "scroll:pageDown",
+        "ctrl+f": "scroll:pageDown",
+        "space": "scroll:fullPageDown",
+        "home": "scroll:top",
+        "end": "scroll:bottom"
+      }
+    },
+    {
+      "context": "ModelPicker",
+      "bindings": {
+        "alt+,": "modelPicker:decreaseEffort",
+        "alt+.": "modelPicker:increaseEffort",
+        "s": "modelPicker:thisSessionOnly"
+      }
+    },
+    {
+      "context": "Select",
+      "bindings": {
+        "up": "select:previous",
+        "down": "select:next",
+        "j": "select:next",
+        "k": "select:previous",
+        "ctrl+n": "select:next",
+        "ctrl+p": "select:previous",
+        "ctrl+j": "select:next",
+        "ctrl+k": "select:previous",
+        "left": "select:previous",
+        "ctrl+h": "select:previous",
+        "right": "select:next",
+        "ctrl+l": "select:next",
+        "pageup": "select:pageUp",
+        "ctrl+b": "select:pageUp",
+        "pagedown": "select:pageDown",
+        "ctrl+f": "select:pageDown",
+        "home": "select:first",
+        "end": "select:last",
+        "enter": "select:accept",
+        "escape": "select:cancel"
+      }
+    },
+    {
+      "context": "Plugin",
+      "bindings": {
+        "space": "plugin:toggle",
+        "i": "plugin:install",
+        "f": "plugin:favorite"
+      }
+    }
+  ]
+}
