@@ -121,6 +121,42 @@ describe("chromium browser source", () => {
     expect(cefBridgeSource).not.toContain("[cefView_ scrollWheel:event]");
   });
 
+  test("creates async CEF browser panes with a real frame and the first URL", () => {
+    /*
+     * CDXC:ChromiumBrowserPanes 2026-06-15-23:10:
+     * Cmd+N browser panes can appear as a black surface when async GPUI CEF creation starts before AppKit assigns a real child-view frame, or when the requested URL is replayed after Chromium is already bootstrapping the first navigation.
+     * Keep the first browser load attached to CEF creation itself and guard creation until the wrapper has non-zero bounds so the rendered page and address bar are initialized from the same navigation.
+     */
+    const didCreateBrowserSource = sourceBetween(
+      cefBridgeSource,
+      "- (void)ghostexCEFDidCreateBrowser:(CefRefPtr<CefBrowser>)browser",
+      "- (void)ghostexCEFPinHostedViewToBoundsWithReason:(NSString*)reason",
+    );
+    const createBrowserSource = sourceBetween(
+      cefBridgeSource,
+      "- (void)createBrowserIfNeeded",
+      "- (void)loadURLString:(NSString*)urlString",
+    );
+
+    expect(createBrowserSource).toContain(
+      "if (self.bounds.size.width <= 0 || self.bounds.size.height <= 0)",
+    );
+    expect(createBrowserSource).toContain("Wait for a real AppKit size");
+    expect(createBrowserSource).toContain(
+      'bool runsUnderGPUI = NSApp && [NSStringFromClass([NSApp class]) isEqualToString:@"GPUIApplication"];',
+    );
+    expect(createBrowserSource).toContain(
+      'NSString* creationURL = initialURL_.length > 0 ? initialURL_ : @"about:blank";',
+    );
+    expect(createBrowserSource).toContain("didGiveInitialURLToBrowserCreate_ = initialURL_.length > 0;");
+    expect(createBrowserSource).toContain("CefBrowserHost::CreateBrowser(");
+    expect(createBrowserSource).toContain("CefString([creationURL UTF8String])");
+    expect(didCreateBrowserSource).toContain(
+      "if (initialURL_.length > 0 && !didGiveInitialURLToBrowserCreate_)",
+    );
+    expect(didCreateBrowserSource).toContain("[self loadURLString:initialURL_];");
+  });
+
   test("converts CEF new-window intents into current-surface Ghostex tabs", () => {
     /*
      * CDXC:BrowserTabs 2026-06-13-00:00:
