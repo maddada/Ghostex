@@ -410,7 +410,7 @@ const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = "ghostex.titlebar.gitState.";
 const TITLEBAR_TIPS_READ_STORAGE_KEY = "ghostex.titlebar.tips.readIds";
 const KEEP_AWAKE_POWER_CHECK_INTERVAL_MS = 30_000;
 const KEEP_AWAKE_ADMIN_PROCESS_TIMEOUT_MS = 120_000;
-const CUSTOM_TITLEBAR_BACKGROUND_BRIGHTNESS_FACTOR = 0.85;
+const CUSTOM_TITLEBAR_BACKGROUND_BRIGHTNESS_FACTOR = 0.80;
 /**
  * CDXC:NativeWindowChrome 2026-05-25-07:16:
  * The macOS app titlebar should now be 35px tall, not the earlier 45px. Keep the React titlebar height in sync with Swift's native reservation so web controls and AppKit traffic-light centering share one chrome height.
@@ -3187,11 +3187,11 @@ function App() {
        * Custom titlebar separators darken as the slider-selected background gets
        * lighter, but only inside the real titlebar host.
        *
-       * CDXC:SidebarTitlebarColors 2026-06-16-18:46:
+       * CDXC:SidebarTitlebarColors 2026-06-17-12:50:
        * The visual trial keeps the sidebar at the selected custom background
-       * while rendering the titlebar 15% darker. Compute the titlebar token
-       * here so imported sidebar styles inside this WKWebView align with the
-       * AppKit titlebar backing layer.
+       * while rendering the titlebar 20% darker, replacing the earlier 15%
+       * offset. Compute the titlebar token here so imported sidebar styles
+       * inside this WKWebView align with the AppKit titlebar backing layer.
        */
       document.body.dataset.customSidebarTitlebarColors = "true";
       document.body.style.setProperty(
@@ -4197,11 +4197,11 @@ function formatTitlebarHexRgbColor({ red, green, blue }: TitlebarRgbColor): stri
 
 function getCustomTitlebarBackgroundForSidebarBackground(backgroundColor: string): string {
   /**
-   * CDXC:SidebarTitlebarColors 2026-06-16-18:46:
+   * CDXC:SidebarTitlebarColors 2026-06-17-12:50:
    * The custom titlebar visual trial should be derived from the selected
-   * sidebar background at 85% brightness, not persisted as a second setting.
-   * Keep invalid values unchanged so the existing theme fallback path remains
-   * responsible for bad input.
+   * sidebar background at 80% brightness, replacing the earlier 85% brightness
+   * offset, not persisted as a second setting. Keep invalid values unchanged so
+   * the existing theme fallback path remains responsible for bad input.
    */
   const color = parseTitlebarHexRgbColor(backgroundColor);
   if (!color) {
@@ -4234,8 +4234,8 @@ function getTitlebarButtonSeparatorColorForBackground(backgroundColor: string): 
    * separator curve, then switch to the dark divider floor once the background
    * reaches the new default range.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-16-19:36:
-   * After the titlebar became 15% darker than the sidebar, the 93 contrast
+   * CDXC:SidebarTitlebarColors 2026-06-17-12:50:
+   * After the titlebar became 20% darker than the sidebar, the 93 contrast
    * titlebar resolves near #111111 and should not use the near-black separator
    * floor. Keep very dark titlebars on a lighter divider floor so separators
    * between titlebar items stay visible instead of blending into the chrome.

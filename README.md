@@ -41,7 +41,7 @@ Use the mobile apps to connect live to your Ghostex agent CLI sessions. APKs are
 [![Download Android APK](https://img.shields.io/badge/Android-APK-3DDC84?logo=android&logoColor=white)](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk) [![iPhone App Discord](https://img.shields.io/badge/iPhone-Test%20Flight-000000?logo=apple&logoColor=white)](https://discord.gg/df7b3G92CS)
 
 <p>
-  <img width="250" alt="Ghostex Android companion app" src="https://github.com/user-attachments/assets/e7af9c54-e8ef-4e0b-a934-8b2f9ea56c70" />
+  <img width="250" alt="Ghostex Android companion app" src="/Users/madda/dev/_active/zmux/media/readme/iphone_app.png" />
   <img width="250" alt="Ghostex iPhone companion app" src="https://github.com/user-attachments/assets/563dbb8a-5a9d-4db7-8946-1dfc383e09c8" />
 </p>
 
@@ -49,7 +49,7 @@ Use the mobile apps to connect live to your Ghostex agent CLI sessions. APKs are
 
 ### Architecture (client apps <-> gxserver daemon <-> zmx persistence)
 
-<img width="3326" height="1514" alt="2026-06-12_Google Chrome_23-43-07@2x" src="https://github.com/user-attachments/assets/ecc84149-a9fc-4ec8-a387-af5ce35aa7be" />
+<img width="1200" alt="2026-06-12_Google Chrome_23-43-07@2x" src="https://github.com/user-attachments/assets/ecc84149-a9fc-4ec8-a387-af5ce35aa7be" />
 
 <!--
 CDXC:ReadmeScreenshots 2026-06-15-03:04:
@@ -64,42 +64,42 @@ Duplicate gallery entries should be merged into their first occurrence. Keep the
 
 Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!). It also loads on demand for file edits, PR checks, and git workflows.
 
-<img width="3456" height="2068" alt="image" src="https://github.com/user-attachments/assets/986fbece-d0de-4739-8515-f3c2a7437b92" />
+<img width="1200" alt="image" src="https://github.com/user-attachments/assets/986fbece-d0de-4739-8515-f3c2a7437b92" />
 
 ### Split your terminals and use keyboard hotkeys to jump between terminals in the Agents view
 
-<img width="3456" height="2068" alt="image" src="https://github.com/user-attachments/assets/c92c5ec9-0021-42fb-9628-0cee62c48e86" />
+<img width="1200" alt="image" src="https://github.com/user-attachments/assets/c92c5ec9-0021-42fb-9628-0cee62c48e86" />
 
 ### Embedded Chromium Browser with Design mode
 
 Also Comes with Devtools, Agent Browser Control, Profiles, and MCP access.
 
-<img width="3456" height="2068" alt="image" src="https://github.com/user-attachments/assets/ce9fbe6b-8c2b-41f1-88f6-67d8254846e5" />
+<img width="1200" alt="image" src="https://github.com/user-attachments/assets/ce9fbe6b-8c2b-41f1-88f6-67d8254846e5" />
 
 ### Kanban board based on beads!
 
 Dump your notes here then let an orchestrator agent hand them off to other agents
 (App supports cross agent orchestration too)
 
-<img width="3456" height="2068" alt="image" src="https://github.com/user-attachments/assets/85543937-85f1-4171-b2d0-6ee7264beddd" />
+<img width="1200" alt="image" src="https://github.com/user-attachments/assets/85543937-85f1-4171-b2d0-6ee7264beddd" />
 
 ### Rich Prompt Editor with ctrl + g
 
 Edit your agent prompts with full hotkeys support and even image previews! Includes Monaco-based and TUI-based editor modes.
 
-<img width="2048" height="1221" alt="image" src="https://github.com/user-attachments/assets/b51ec92e-04cf-4d8f-933c-fc2a13638a1d" />
+<img width="1200" alt="image" src="https://github.com/user-attachments/assets/b51ec92e-04cf-4d8f-933c-fc2a13638a1d" />
 
 ### T3code GUI panes and supported terminal CLIs
 
 Ghostex works with Claude Code, Codex CLI, OpenCode, Pi Agent, Gemini, Copilot, and other terminal-based agent CLIs.
 
-<img width="3322" height="2060" alt="Ghostex T3code panes and supported terminal CLIs" src="https://github.com/user-attachments/assets/49862e2d-1edd-4647-8161-5afb25ed8341" />
+<img width="1200" alt="Ghostex T3code panes and supported terminal CLIs" src="https://github.com/user-attachments/assets/49862e2d-1edd-4647-8161-5afb25ed8341" />
 
 ### Notifications and status
 
-Ghostex supports notifications, menu bar indicators, minimal floating counters, and session status at a glance.
+Ghostex supports notifications, pets, menu bar indicators (running/done agents), and phone app notifications.
 
-<img width="331" height="309" alt="Ghostex notification indicator" src="https://github.com/user-attachments/assets/ad0f7af5-b0e9-4b24-988c-cb6bf02c6c9f" />
+<img width="300" alt="Ghostex notification indicator" src="https://github.com/user-attachments/assets/ad0f7af5-b0e9-4b24-988c-cb6bf02c6c9f" />
 
 ## Highlights
 

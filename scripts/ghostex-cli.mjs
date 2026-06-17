@@ -32,7 +32,6 @@ const GXSERVER_SSH_FORWARD_PORT_SCAN_LIMIT = 25;
 const GXSERVER_SSH_TUNNEL_READY_TIMEOUT_MS = 8_000;
 const GXSERVER_SSH_COMMAND_TIMEOUT_MS = 12_000;
 const GXSERVER_SSH_TUNNEL_IDLE_KILL_MS = 500;
-const GXSERVER_RENAME_COMMAND_SUBMIT_DELAY_MS = 1_000;
 const activeGxserverSshTunnels = new Map();
 let gxserverSshTunnelExitHooksInstalled = false;
 /**
@@ -1658,34 +1657,16 @@ async function sendGxserverRenameCommand(payload = {}, flags = {}) {
    * CDXC:GenerateTitleSkill 2026-06-13-01:55:
    * Agent-generated session titles call `ghostex rename-command` from inside the
    * current pane. The gxserver CLI cutover must keep that exposed command working
-   * by staging `/rename <title>` through the session text endpoint, then submitting
-   * Enter as a second interaction so the Agent CLI receives the same command shape
-   * as the old native bridge path.
+   * through the renderer-command endpoint so gxserver owns auth and targeting while
+   * macOS still performs the prompt-editor interaction.
+   *
+   * CDXC:GenerateTitleSkill 2026-06-17-16:17:
+   * Claude Code leaves `/rename <title>` staged when Enter is sent as zmx text.
+   * Route generated-title renames through the native renderer command so the macOS
+   * host sends the same real `sendTerminalEnter` event used before the gxserver
+   * cutover.
    */
-  const textResult = await callGxserverRpc(
-    "/api/sendSessionText",
-    { ...params, text: `/rename ${title}` },
-    flags,
-  );
-  const delayMs = renameCommandSubmitDelayMs(flags);
-  if (delayMs > 0) {
-    await sleep(delayMs);
-  }
-  const enterResult = await callGxserverRpc("/api/sendSessionEnter", params, flags);
-  return {
-    ok: true,
-    enter: enterResult,
-    session: enterResult.session ?? textResult.session,
-    text: textResult,
-  };
-}
-
-function renameCommandSubmitDelayMs(flags = {}) {
-  const override = Number(flags.renameSubmitDelayMs ?? flags.submitDelayMs);
-  if (Number.isFinite(override)) {
-    return Math.max(0, override);
-  }
-  return GXSERVER_RENAME_COMMAND_SUBMIT_DELAY_MS;
+  return dispatchGxserverRendererCommand("renameCommand", { ...params, title }, flags);
 }
 
 function terminalTextForCliKey(key) {

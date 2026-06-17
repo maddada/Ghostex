@@ -1746,12 +1746,11 @@ button,
 /*
  CDXC:HighlightedFeatures 2026-06-16-08:17:
  The Highlighted Features modal should reuse the first-launch modal surface while
- presenting a replayable feature tour with five bottom thumbnail selectors.
+ presenting a replayable feature tour.
 
  CDXC:DiscoverGhostex 2026-06-16-02:01:
- The tour should use README screenshots with short, balanced thumbnail labels.
- Use fixed thumbnail title rows and image-cropped visual slots so the five
- picture labels do not jump around or overflow when the modal is narrow.
+ Superseded by the 2026-06-17 bottom-strip removal. The tour should use README
+ screenshots without rendering the old five-tile thumbnail selector.
 
  CDXC:HighlightedFeatures 2026-06-16-08:54:
  The feature title and copy should sit side by side above the main screenshot.
@@ -1764,21 +1763,21 @@ button,
  thin outline on the actual screenshot image instead of the empty fit area.
 
  CDXC:HighlightedFeatures 2026-06-16-11:24:
- The content revamp treats the thumbnail label, page title, page subtitle, and
- screenshot as the authored content for each feature page.
+ Superseded by the 2026-06-17 bottom-strip removal. The content revamp treats
+ the page title, page subtitle, and screenshot as the authored content for each
+ feature page.
 
  CDXC:HighlightedFeatures 2026-06-16-11:45:
  The header should not stretch into a banner-length line. Reduce the icon/title
  scale and use thin 1px borders for every bordered surface inside the modal.
 
  CDXC:HighlightedFeatures 2026-06-16-12:15:
- The modal should not render a top-right close button, and the feature icon
- should stay compact beside the title stack.
+ Superseded by the 2026-06-16-19:50 close-button change and the 2026-06-16-18:48
+ icon removal.
 
  CDXC:HighlightedFeatures 2026-06-16-12:26:
  Match Settings roundness by using the existing settings radius tokens for the
- feature icon, screenshot frame, thumbnail frames, and thumbnail overlay icon
- instead of adding modal-specific radius values.
+ screenshot frame instead of adding modal-specific radius values.
 
  CDXC:HighlightedFeatures 2026-06-16-12:31:
  Superseded by 2026-06-16-12:35; the title is no longer fixed-width.
@@ -1789,27 +1788,31 @@ button,
 
  CDXC:HighlightedFeatures 2026-06-16-12:45:
  Image outlines should be thinner-looking and less bright than the screenshots.
- Thumbnail previews should be slightly darker and should not show overlay icons.
+ Superseded by the 2026-06-17 bottom-strip removal.
 
  CDXC:HighlightedFeatures 2026-06-16-13:45:
- Thumbnail labels should live inside each preview as a dark bottom caption.
- Main image navigation should expose left/right arrow buttons and loop through
- the authored feature order.
+ Superseded by the 2026-06-17 bottom-strip removal. Main image navigation
+ should expose left/right arrow buttons and loop through the authored feature
+ order.
 
  CDXC:HighlightedFeatures 2026-06-16-14:08:
  Keep carousel arrows outside the main screenshot so controls do not cover
  product detail. Use an even shadow outline on the screenshot itself to avoid
- heavy rounded-corner artifacts, and remove persistent thumbnail outlines.
+ heavy rounded-corner artifacts.
 
  CDXC:HighlightedFeatures 2026-06-16-18:27:
  Several highlighted-feature screenshots include alpha at their rounded window
- corners. Keep screenshot and thumbnail frames transparent so no artificial
- tile background bleeds through those transparent image corners.
+ corners. Keep screenshot frames transparent so no artificial tile background
+ bleeds through those transparent image corners.
 
  CDXC:HighlightedFeatures 2026-06-16-18:48:
  The highlighted-feature header should not show a leading feature icon. Let the
  title/subtitle own the full header width and keep the modal visually focused
  on the screenshots.
+
+ CDXC:HighlightedFeatures 2026-06-17-12:45:
+ The bottom thumbnail strip is no longer needed. Let the main feature stage own
+ the full modal body height, with only the side arrow buttons changing pages.
 */
 .ghostex-settings-shadcn.discover-ghostex-modal-dialog {
   grid-template-rows: minmax(0, 1fr);
@@ -1819,7 +1822,7 @@ button,
   display: grid;
   flex: 1 1 auto;
   gap: 0.875rem;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 1.25rem;
@@ -1939,91 +1942,6 @@ button,
   outline-offset: 2px;
 }
 
-.ghostex-settings-shadcn .discover-ghostex-feature-strip {
-  align-items: stretch;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  min-width: 0;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-button {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  display: grid;
-  font: inherit;
-  grid-template-rows: minmax(0, 8.75rem);
-  height: 8.75rem;
-  min-width: 0;
-  padding: 0;
-  text-align: center;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-title {
-  background: rgb(0 0 0 / 68%);
-  bottom: 0;
-  color: #fff;
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 750;
-  left: 0;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-  padding: 0.5rem 0.625rem;
-  position: absolute;
-  right: 0;
-  overflow: hidden;
-  text-align: center;
-  text-wrap: balance;
-  z-index: 1;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-visual {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--settings-radius-section);
-  color: var(--muted-foreground);
-  display: flex;
-  justify-content: center;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-image {
-  display: block;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  opacity: 0.58;
-  width: 100%;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active="true"] {
-  color: var(--foreground);
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active="true"]
-  .discover-ghostex-thumbnail-visual {
-  background: transparent;
-  color: var(--foreground);
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active="true"]
-  .discover-ghostex-thumbnail-image {
-  opacity: 0.76;
-}
-
-.ghostex-settings-shadcn .discover-ghostex-thumbnail-button:focus-visible
-  .discover-ghostex-thumbnail-visual {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
 @container settings-modal (max-width: 820px) {
   .ghostex-settings-shadcn .discover-ghostex-body {
     overflow: auto;
@@ -2035,12 +1953,6 @@ button,
 
   .ghostex-settings-shadcn .discover-ghostex-feature-copy {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ghostex-settings-shadcn .discover-ghostex-feature-strip {
-    grid-template-columns: repeat(5, minmax(10rem, 1fr));
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
   }
 }
 

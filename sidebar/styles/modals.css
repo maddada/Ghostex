@@ -932,6 +932,15 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 8px;
 }
 
+.app-modal-host-native-window-body .confirm-modal-root:has(.previous-sessions-modal) {
+  /*
+   * CDXC:PreviousSessions 2026-06-17-12:02:
+   * The macOS Previous Sessions child window has fixed spare vertical room for result growth. Anchor the picker content to the top instead of inheriting the shared centered confirm-modal overlay placement when the current result list is short.
+   */
+  align-items: start;
+  justify-items: center;
+}
+
 .app-modal-host-body .previous-sessions-modal {
   /**
    * CDXC:PreviousSessions 2026-04-28-05:36
@@ -954,6 +963,7 @@ html:has(body.app-modal-host-native-window-body) {
    * the fitted window height instead of the old 80vh cap, which centered a
    * smaller React modal inside an oversized native window.
    */
+  margin: 0 auto auto;
   max-height: calc(100vh - 16px);
 }
 

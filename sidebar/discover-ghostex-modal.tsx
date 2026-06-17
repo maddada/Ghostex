@@ -24,7 +24,6 @@ type DiscoverGhostexFeature = {
   id: string;
   imageAlt: string;
   imageSrc: string;
-  thumbnailTitle: string;
   title: string;
 };
 
@@ -32,10 +31,12 @@ type DiscoverGhostexFeature = {
  * CDXC:DiscoverGhostex 2026-06-16-00:26:
  * The discoverGhostex modal is a replayable feature tour, not first-run setup.
  * It intentionally copies the first-launch modal shell while using a replayable
- * feature-tour layout with README screenshots and bottom thumbnail selectors.
+ * feature-tour layout with README screenshots.
  *
  * CDXC:DiscoverGhostex 2026-06-16-02:01:
- * The tour must use real README.md product screenshots and fitting README copy instead of placeholder image blocks. Keep thumbnail labels short so the five-tile strip stays balanced, while the main panel can use the longer README-derived headings and descriptions.
+ * Superseded by the 2026-06-17 bottom-strip removal. The tour still uses real
+ * README.md product screenshots and fitting README copy, but no longer renders
+ * thumbnail labels or the five-tile strip.
  *
  * CDXC:HighlightedFeatures 2026-06-16-08:17:
  * The replayable feature-tour modal is user-facing as Highlighted Features.
@@ -66,18 +67,16 @@ type DiscoverGhostexFeature = {
  * the title in the same text stack.
  *
  * CDXC:HighlightedFeatures 2026-06-16-12:45:
- * Thumbnail previews should not carry extra overlay icons. Keep the thumbnails
- * slightly darker and make image outlines quieter so the screenshots, not the
- * frames, dominate the tour.
+ * Superseded by the 2026-06-17 bottom-strip removal. Image outlines should stay
+ * quiet so screenshots, not frames, dominate the tour.
  *
  * CDXC:HighlightedFeatures 2026-06-16-13:45:
- * Put thumbnail labels inside each thumbnail as a dark bottom caption and add
- * left/right image navigation buttons that loop across the five feature pages.
+ * Superseded by the 2026-06-17 bottom-strip removal. Keep left/right image
+ * navigation buttons that loop across the five feature pages.
  *
  * CDXC:HighlightedFeatures 2026-06-16-14:08:
  * Keep carousel arrows beside the main screenshot instead of over it. The main
- * screenshot should render with an even quiet outline, and bottom thumbnails
- * should not have persistent outlines.
+ * screenshot should render with an even quiet outline.
  *
  * CDXC:HighlightedFeatures 2026-06-16-18:27:
  * Some authored screenshots have transparent rounded window corners. Do not
@@ -98,11 +97,15 @@ type DiscoverGhostexFeature = {
  * Use the exact supplied PNG screenshots copied into media/readme for the five
  * feature images. Do not generate replacement imagery or substitute derived
  * variants, because the modal is meant to show those specific product captures.
+ *
+ * CDXC:HighlightedFeatures 2026-06-17-12:45:
+ * Remove the bottom thumbnail strip from Highlighted Features. The modal should
+ * navigate only with the main image arrow buttons so the bottom of the dialog
+ * stays focused on the active screenshot.
  */
 const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   {
     id: "rich-prompt-editor",
-    thumbnailTitle: "Rich Prompt Editor",
     title: "Rich Prompt Editor with Ctrl + G",
     description: "Edit your agent prompts with full hotkeys support and even image previews!",
     imageAlt: "Ghostex Rich Prompt Editor with Ctrl + G",
@@ -110,7 +113,6 @@ const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   },
   {
     id: "chromium-design-mode",
-    thumbnailTitle: "Browser & Design Mode",
     title: "Chromium Browser with Design Mode",
     description:
       "Comes with Devtools, Agent Browser Control, and Profiles mgmt. You agent can control it with the /ghostex-browser-use skill.",
@@ -119,7 +121,6 @@ const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   },
   {
     id: "embedded-vscode-editor",
-    thumbnailTitle: "Full Embedded Editor",
     title: "Full VS Code Based Editor Built-in",
     description:
       "Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!)",
@@ -128,7 +129,6 @@ const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   },
   {
     id: "beads-kanban-board",
-    thumbnailTitle: "Kanban Board & Beads",
     title: "Manage Your Project on a Kanban board",
     description:
       "Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)",
@@ -137,7 +137,6 @@ const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
   },
   {
     id: "layout-freedom",
-    thumbnailTitle: "Full Layout Freedom",
     title: "Full Layout Freedom",
     description:
       "Split your agent terminals anyway you like. Use the same hotkeys from ghostty to navigate the UI with keyboard only.",
@@ -248,38 +247,6 @@ export function DiscoverGhostexModal({
               </button>
             </div>
           </section>
-
-          <div className="discover-ghostex-feature-strip" role="tablist" aria-label="Highlighted features">
-            {DISCOVER_GHOSTEX_FEATURES.map((feature) => {
-              const isActive = feature.id === activeFeature.id;
-              return (
-                <button
-                  aria-controls="discover-ghostex-feature-panel"
-                  aria-label={feature.thumbnailTitle}
-                  aria-selected={isActive}
-                  className="discover-ghostex-thumbnail-button"
-                  data-active={isActive}
-                  key={feature.id}
-                  onClick={() => setActiveFeatureId(feature.id)}
-                  role="tab"
-                  type="button"
-                >
-                  <span className="discover-ghostex-thumbnail-visual" aria-hidden="true">
-                    <img
-                      alt=""
-                      className="discover-ghostex-thumbnail-image"
-                      decoding="async"
-                      loading="lazy"
-                      src={feature.imageSrc}
-                    />
-                    <span className="discover-ghostex-thumbnail-title">
-                      {feature.thumbnailTitle}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -81,7 +81,7 @@ private let ghostexDefaultSidebarTitlebarBackgroundDarknessPercent = 93
 private let ghostexMinimumSidebarTitlebarBackgroundDarknessPercent = 85
 private let ghostexMaximumSidebarTitlebarBackgroundDarknessPercent = 100
 private let ghostexSidebarTitlebarBackgroundTintStrength = 0.12
-private let ghostexCustomTitlebarBackgroundBrightnessFactor: CGFloat = 0.85
+private let ghostexCustomTitlebarBackgroundBrightnessFactor: CGFloat = 0.80
 
 private struct SidebarTitlebarCustomChromeColors {
   let enabled: Bool
@@ -7892,11 +7892,12 @@ final class ghostexRootView: NSView {
       return sidebarColor
     }
     /*
-     CDXC:SidebarTitlebarColors 2026-06-16-18:46:
-     The custom titlebar visual trial should render the titlebar 15% darker
-     than the sidebar while leaving preset themes, modals, dropdowns, and the
-     sidebar background unchanged. Derive it from the resolved sidebar color so
-     contrast and tint settings still have one persisted source of truth.
+     CDXC:SidebarTitlebarColors 2026-06-17-12:50:
+     The custom titlebar visual trial should render the titlebar 20% darker
+     than the sidebar, replacing the earlier 15% offset, while leaving preset
+     themes, modals, dropdowns, and the sidebar background unchanged. Derive it
+     from the resolved sidebar color so contrast and tint settings still have
+     one persisted source of truth.
      */
     return NSColor(
       srgbRed: max(0, min(1, rgbColor.redComponent * ghostexCustomTitlebarBackgroundBrightnessFactor)),

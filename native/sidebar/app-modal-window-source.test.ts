@@ -889,6 +889,28 @@ describe("native app modal window source", () => {
     expect(appModalWindowController).toContain("removeOutsideEventMonitor()");
   });
 
+  test("top-aligns Previous Sessions inside its macOS native child window", () => {
+    /*
+    CDXC:PreviousSessions 2026-06-17-12:02:
+    The macOS Previous Sessions modal should keep the title, search field, and rows at the top of the fixed child window instead of centering the shorter result list vertically.
+    */
+    const previousSessionsRootRule = sourceBetween(
+      modalStylesSource,
+      ".app-modal-host-native-window-body .confirm-modal-root:has(.previous-sessions-modal) {",
+      ".app-modal-host-body .previous-sessions-modal {",
+    );
+    expect(previousSessionsRootRule).toContain("align-items: start");
+    expect(previousSessionsRootRule).toContain("justify-items: center");
+
+    const previousSessionsNativeRule = sourceBetween(
+      modalStylesSource,
+      ".app-modal-host-native-window-body .previous-sessions-modal {",
+      ".app-modal-host-body .pinned-prompts-modal,",
+    );
+    expect(previousSessionsNativeRule).toContain("margin: 0 auto auto");
+    expect(previousSessionsNativeRule).toContain("max-height: calc(100vh - 16px)");
+  });
+
   test("shows an AppKit backdrop behind first-launch and highlighted-feature modals", () => {
     /*
     CDXC:AppModals 2026-06-16-19:50:

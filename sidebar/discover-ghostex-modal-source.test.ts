@@ -48,32 +48,25 @@ describe("discover ghostex modal source", () => {
     /*
     CDXC:HighlightedFeatures 2026-06-16-11:24:
     The Highlighted Features tour should follow the authored content order:
-    thumbnail label, page title, subtitle, and image for Rich Prompt Editor,
-    Browser & Design Mode, Full Embedded Editor, Kanban Board & Beads, and Full
-    Layout Freedom.
+    page title, subtitle, and image for Rich Prompt Editor, Browser & Design
+    Mode, Full Embedded Editor, Kanban Board & Beads, and Full Layout Freedom.
     */
     for (const screenshotPath of featureScreenshotPaths) {
       expect(discoverModalSource).toContain(screenshotPath);
     }
     expectSourceOrder(discoverModalSource, [
-      'thumbnailTitle: "Rich Prompt Editor"',
       'title: "Rich Prompt Editor with Ctrl + G"',
       "Edit your agent prompts with full hotkeys support and even image previews!",
-      'thumbnailTitle: "Browser & Design Mode"',
       'title: "Chromium Browser with Design Mode"',
       "Comes with Devtools, Agent Browser Control, and Profiles mgmt. You agent can control it with the /ghostex-browser-use skill.",
-      'thumbnailTitle: "Full Embedded Editor"',
       'title: "Full VS Code Based Editor Built-in"',
       "Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!)",
-      'thumbnailTitle: "Kanban Board & Beads"',
       'title: "Manage Your Project on a Kanban board"',
       "Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)",
-      'thumbnailTitle: "Full Layout Freedom"',
       'title: "Full Layout Freedom"',
       "Split your agent terminals anyway you like. Use the same hotkeys from ghostty to navigate the UI with keyboard only.",
     ]);
     expect(discoverModalSource).toContain("Highlighted Features");
-    expect(discoverModalSource).toContain("Highlighted features");
     expect(discoverModalSource).not.toContain("<DialogTitle id={titleId}>Discover Ghostex</DialogTitle>");
     expect(discoverModalSource).not.toContain("Image showing the feature");
     expect(discoverModalSource).not.toContain("Placeholder until screenshots are added");
@@ -249,79 +242,18 @@ describe("discover ghostex modal source", () => {
     expect(sidebarStylesSource).not.toMatch(/discover-ghostex[\s\S]{0,320}border:\s*2px/);
   });
 
-  test("keeps thumbnail labels inside borderless image tiles", () => {
+  test("does not render the removed bottom thumbnail strip", () => {
     /*
-    CDXC:HighlightedFeatures 2026-06-16-13:45:
-    The bottom picture strip should keep equal tile widths and put each label
-    inside the thumbnail image as a dark bottom caption.
-
-    CDXC:HighlightedFeatures 2026-06-16-14:08:
-    Thumbnail previews should not have persistent outlines, including the active
-    thumbnail state.
-
-    CDXC:HighlightedFeatures 2026-06-16-18:27:
-    Thumbnail visuals should not add tile backgrounds behind alpha-cornered
-    screenshots; only the bottom caption owns a dark text background.
+    CDXC:HighlightedFeatures 2026-06-17-12:45:
+    Highlighted Features should not render the old bottom thumbnail strip. Keep
+    the feature pages reachable through the main image arrow buttons only.
     */
-    const firstThumbnailMarkup = sourceBetween(
-      discoverModalSource,
-      '<span className="discover-ghostex-thumbnail-visual" aria-hidden="true">',
-      "</span>\n                </button>",
-    );
-    expect(firstThumbnailMarkup).toContain("discover-ghostex-thumbnail-image");
-    expect(firstThumbnailMarkup).toContain("discover-ghostex-thumbnail-title");
-    expect(discoverModalSource).toContain("aria-label={feature.thumbnailTitle}");
-
-    const thumbnailButtonStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-title {",
-    );
-    expect(thumbnailButtonStyles).toContain("grid-template-rows: minmax(0, 8.75rem);");
-    expect(thumbnailButtonStyles).toContain("height: 8.75rem;");
-
-    const thumbnailTitleStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-title {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-visual {",
-    );
-    expect(thumbnailTitleStyles).toContain("background: rgb(0 0 0 / 68%);");
-    expect(thumbnailTitleStyles).toContain("bottom: 0;");
-    expect(thumbnailTitleStyles).toContain("position: absolute;");
-    expect(thumbnailTitleStyles).toContain("text-wrap: balance;");
-
-    const thumbnailImageStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-image {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active=\"true\"] {",
-    );
-    expect(thumbnailImageStyles).toContain("object-fit: cover;");
-    expect(thumbnailImageStyles).toContain("object-position: top center;");
-    expect(thumbnailImageStyles).toContain("opacity: 0.58;");
-
-    const thumbnailVisualStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-visual {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-image {",
-    );
-    expect(thumbnailVisualStyles).toContain("background: transparent;");
-    expect(thumbnailVisualStyles).toContain("border: 0;");
-    expect(thumbnailVisualStyles).toContain("border-radius: var(--settings-radius-section);");
-
-    const thumbnailActiveVisualStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active=\"true\"]\n  .discover-ghostex-thumbnail-visual {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active=\"true\"]\n  .discover-ghostex-thumbnail-image {",
-    );
-    expect(thumbnailActiveVisualStyles).toContain("background: transparent;");
-    expect(thumbnailActiveVisualStyles).not.toContain("border-color:");
-
-    const thumbnailActiveImageStyles = sourceBetween(
-      sidebarStylesSource,
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button[data-active=\"true\"]\n  .discover-ghostex-thumbnail-image {",
-      ".ghostex-settings-shadcn .discover-ghostex-thumbnail-button:focus-visible",
-    );
-    expect(thumbnailActiveImageStyles).toContain("opacity: 0.76;");
-    expect(sidebarStylesSource).not.toContain(".discover-ghostex-thumbnail-icon");
+    expect(discoverModalSource).not.toContain("thumbnailTitle");
+    expect(discoverModalSource).not.toContain("discover-ghostex-feature-strip");
+    expect(discoverModalSource).not.toContain("discover-ghostex-thumbnail");
+    expect(discoverModalSource).not.toContain('role="tablist"');
+    expect(discoverModalSource).not.toContain('role="tab"');
+    expect(sidebarStylesSource).not.toMatch(/\.ghostex-settings-shadcn \.discover-ghostex-feature-strip/);
+    expect(sidebarStylesSource).not.toMatch(/\.ghostex-settings-shadcn \.discover-ghostex-thumbnail/);
   });
 });

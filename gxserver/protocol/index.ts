@@ -61,6 +61,7 @@ export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
   "openBrowserPane",
   "openPaths",
   "restartSession",
+  "renameCommand",
   "runCommand",
   "saveAgent",
   "sendMessage",

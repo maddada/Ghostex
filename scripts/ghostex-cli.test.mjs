@@ -2012,7 +2012,7 @@ printf '%s\\n' "$@" > ${JSON.stringify(markerFile)}
     }
   });
 
-  test("rename-command stages a provider rename and submits enter through gxserver", async () => {
+  test("rename-command stages a provider rename and submits native Enter through gxserver", async () => {
     const requests = [];
     const server = http.createServer(async (request, response) => {
       const chunks = [];
@@ -2063,44 +2063,34 @@ printf '%s\\n' "$@" > ${JSON.stringify(markerFile)}
       /*
        * CDXC:GenerateTitleSkill 2026-06-13-01:55:
        * `$ghostex-generate-title` depends on `ghostex rename-command` being a real
-       * gxserver-backed CLI action after the macOS bridge cutover. Exercise the
-       * public command, including selector resolution, so the command table cannot
-       * advertise rename-command while the dispatcher rejects renameCommand.
+       * gxserver-backed CLI action after the macOS bridge cutover.
+       *
+       * CDXC:GenerateTitleSkill 2026-06-17-16:17:
+       * Claude Code needs generated-title `/rename <title>` submitted by the macOS
+       * native Enter event, not zmx carriage-return text. Exercise the dispatcher
+       * path used by the public command through the renderer-command endpoint so
+       * the CLI cannot regress to staging only.
        */
-      const result = await execFileAsync(process.execPath, [
-        path.resolve("scripts/ghostex-cli.mjs"),
-        "rename-command",
-        "--session-id",
-        "G9a",
-        "--project-id",
-        "P1a",
-        "--title",
-        "Ghostex Native IME Fix",
-        "--rename-submit-delay-ms",
-        "0",
-        "--server",
-        `http://127.0.0.1:${address.port}`,
-        "--token",
-        "test-token",
-        "--json",
-      ]);
+      const result = await sendGxserverCliAction(
+        "renameCommand",
+        { sessionId: "G9a", title: "Ghostex Native IME Fix" },
+        { server: `http://127.0.0.1:${address.port}`, token: "test-token" },
+      );
 
-      expect(JSON.parse(result.stdout)).toMatchObject({ ok: true });
+      expect(result).toMatchObject({ ok: true });
       expect(requests.map((entry) => entry.url)).toEqual([
         "/api/listProjects",
         "/api/listSessions",
         "/api/readPresentationSnapshot",
-        "/api/sendSessionText",
-        "/api/sendSessionEnter",
+        "/api/dispatchRendererCommand",
       ]);
       expect(requests[3].body.params).toMatchObject({
-        projectId: "P1a",
-        sessionId: "G9a",
-        text: "/rename Ghostex Native IME Fix",
-      });
-      expect(requests[4].body.params).toMatchObject({
-        projectId: "P1a",
-        sessionId: "G9a",
+        action: "renameCommand",
+        payload: {
+          projectId: "P1a",
+          sessionId: "G9a",
+          title: "Ghostex Native IME Fix",
+        },
       });
     } finally {
       await new Promise((resolve) => server.close(resolve));
