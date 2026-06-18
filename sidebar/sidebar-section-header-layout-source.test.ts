@@ -20,7 +20,9 @@ describe("reference sidebar section header layout source", () => {
      * painting underneath their hover action buttons in the narrow native
      * sidebar.
      */
-    expect(sidebarAppSource).toContain('<span className="reference-sidebar-section-title">{title}</span>');
+    expect(sidebarAppSource).toMatch(
+      /<span\s+className="reference-sidebar-section-title">\s*\{title\}\s*<\/span>/u,
+    );
 
     const sectionRowRule = sourceBetween(
       groupPanelsSource,
@@ -43,7 +45,7 @@ describe("reference sidebar section header layout source", () => {
     const hiddenActionsRule = sourceBetween(
       groupPanelsSource,
       ".reference-sidebar-section-actions {",
-      ".sidebar-reference-layout[data-reference-sidebar=\"true\"]\n  .reference-sidebar-section-actions",
+      ".sidebar-reference-layout[data-reference-sidebar=\"true\"]",
     );
     expect(hiddenActionsRule).toContain("max-width: 0;");
     expect(hiddenActionsRule).toContain("overflow: hidden;");
@@ -51,7 +53,7 @@ describe("reference sidebar section header layout source", () => {
     const visibleActionsRule = sourceBetween(
       groupPanelsSource,
       ".reference-sidebar-section-row:hover .reference-sidebar-section-actions,",
-      "\n\n.reference-sidebar-section-action {",
+      ".reference-sidebar-section-action {",
     );
     expect(visibleActionsRule).toContain(
       "max-width: var(--reference-sidebar-section-actions-max-width);",
