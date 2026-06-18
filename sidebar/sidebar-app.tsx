@@ -5007,7 +5007,7 @@ function SidebarReferenceSectionHeader({
         onClick={onToggleCollapsed}
         type="button"
       >
-        <span>{title}</span>
+        <span className="reference-sidebar-section-title">{title}</span>
         <IconCaretRightFilled
           aria-hidden="true"
           className="reference-sidebar-section-chevron"

@@ -1529,6 +1529,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 }
 
 .reference-sidebar-section-row {
+  --reference-sidebar-section-actions-max-width: 132px;
   align-items: center;
   background: var(--app-background);
   box-sizing: border-box;
@@ -1558,6 +1559,12 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
    * CDXC:SidebarReferenceBounds 2026-05-31-18:24:
    * Quick and Projects section header contents need another 7px of left inset
    * only, while the right-side spacing and full-width row surface stay fixed.
+   *
+   * CDXC:SidebarHeaderActions 2026-06-17-23:21:
+   * Quick and Projects labels must collapse like the Search row when hover
+   * actions appear. Keep the action buttons in normal flex layout, but remove
+   * their hidden-state width and let the title ellipsize once the visible
+   * action cluster needs room.
    */
 }
 
@@ -1820,6 +1827,13 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   outline: none;
 }
 
+.reference-sidebar-section-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .reference-sidebar-section-chevron {
   color: #727982;
   flex: none;
@@ -1851,7 +1865,9 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   display: flex;
   flex: none;
   gap: 2px;
+  max-width: 0;
   opacity: 0;
+  overflow: hidden;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
@@ -1875,7 +1891,9 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 .reference-sidebar-section-row:hover .reference-sidebar-section-actions,
 .reference-sidebar-section-row:focus-within .reference-sidebar-section-actions,
 .reference-sidebar-section-row[data-actions-always-visible="true"] .reference-sidebar-section-actions {
+  max-width: var(--reference-sidebar-section-actions-max-width);
   opacity: 1;
+  overflow: visible;
   pointer-events: auto;
 }
 
