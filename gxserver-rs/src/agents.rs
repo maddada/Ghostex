@@ -8,7 +8,9 @@ use crate::{
     zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext},
 };
 
-const AGENT_SETTINGS_METADATA_KEY: &str = "gxserverAgentSettings";
+const AGENT_SETTINGS_METADATA_KEY: &str = "agents.settings.v1";
+const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
+const MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH: usize = 120;
 const INITIAL_ACTIVITY_SUPPRESSION_MS: i64 = 12_000;
 const ESCAPE_ATTENTION_SUPPRESSION_MS: i64 = 5_000;
 
@@ -43,6 +45,9 @@ pub struct AgentEndpointOutput {
 /*
 CDXC:GxserverRustPort 2026-06-16-10:00:
 Phase 6 moves agent policy, launch/resume planning, passive title/status ingestion, and fork planning into Rust while keeping the TypeScript RPC shape. These handlers mutate only durable session metadata and never log raw titles, prompts, hook payloads, or command output.
+
+CDXC:GxserverAgentSettings 2026-06-19-13:59:
+Agent settings parity uses the TypeScript metadata key `agents.settings.v1` and stores Default Prompt Agent beside global Accept All. Normalize the prompt-agent id at the daemon boundary by trimming whitespace, falling back to `codex`, and capping it to 120 chars without validating against a client-local agent registry.
 */
 pub fn dispatch_agent_endpoint(
     repository: &DomainRepository<'_>,
@@ -185,6 +190,12 @@ fn update_agent_settings(
     if let Some(value) = params.get("agentAcceptAllEnabled").and_then(Value::as_bool) {
         settings.insert("agentAcceptAllEnabled".to_string(), Value::Bool(value));
     }
+    if let Some(value) = params.get("defaultPromptAgentId").and_then(Value::as_str) {
+        settings.insert(
+            "defaultPromptAgentId".to_string(),
+            Value::String(value.to_string()),
+        );
+    }
     let value = Value::Object(normalize_agent_settings(Some(&Value::Object(settings))));
     db.execute(
         r#"
@@ -214,7 +225,28 @@ fn normalize_agent_settings(value: Option<&Value>) -> Map<String, Value> {
         .unwrap_or(true);
     let mut settings = Map::new();
     settings.insert("agentAcceptAllEnabled".to_string(), Value::Bool(accept_all));
+    settings.insert(
+        "defaultPromptAgentId".to_string(),
+        Value::String(normalize_default_prompt_agent_id(
+            object
+                .and_then(|settings| settings.get("defaultPromptAgentId"))
+                .and_then(Value::as_str),
+        )),
+    );
     settings
+}
+
+fn normalize_default_prompt_agent_id(value: Option<&str>) -> String {
+    let trimmed = value.unwrap_or_default().trim();
+    let normalized = if trimmed.is_empty() {
+        DEFAULT_PROMPT_AGENT_ID
+    } else {
+        trimmed
+    };
+    normalized
+        .chars()
+        .take(MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH)
+        .collect()
 }
 
 fn build_project_agent_launch_plan(
@@ -2437,6 +2469,84 @@ mod tests {
         initialize_gxserver_storage(&paths).expect("storage init");
         let db = open_gxserver_database(&paths).expect("open db");
         (temp, db)
+    }
+
+    #[test]
+    fn agent_settings_use_current_metadata_key_and_default_prompt_agent() {
+        let (_temp, db) = open_test_database();
+        let initial = read_agent_settings_with_metadata(&db).expect("initial settings");
+        assert_eq!(initial.get("isPersisted"), Some(&json!(false)));
+        assert_eq!(
+            initial
+                .get("settings")
+                .and_then(|settings| settings.get("agentAcceptAllEnabled")),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            initial
+                .get("settings")
+                .and_then(|settings| settings.get("defaultPromptAgentId")),
+            Some(&json!("codex"))
+        );
+
+        let updated = update_agent_settings(
+            &db,
+            json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": " claude " })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("update settings");
+        assert_eq!(updated.get("agentAcceptAllEnabled"), Some(&json!(false)));
+        assert_eq!(updated.get("defaultPromptAgentId"), Some(&json!("claude")));
+        let persisted: String = db
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                [AGENT_SETTINGS_METADATA_KEY],
+                |row| row.get(0),
+            )
+            .expect("persisted settings");
+        let persisted_value = parse_json_object(&persisted);
+        assert_eq!(
+            persisted_value
+                .get("defaultPromptAgentId")
+                .and_then(Value::as_str),
+            Some("claude")
+        );
+        let legacy_count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM metadata WHERE key = 'gxserverAgentSettings'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("legacy count");
+        assert_eq!(legacy_count, 0);
+    }
+
+    #[test]
+    fn agent_settings_normalize_default_prompt_agent_id() {
+        let (_temp, db) = open_test_database();
+        let blank = update_agent_settings(
+            &db,
+            json!({ "defaultPromptAgentId": "   " })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("blank update");
+        assert_eq!(blank.get("defaultPromptAgentId"), Some(&json!("codex")));
+
+        let long_id = "x".repeat(MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH + 10);
+        let capped = update_agent_settings(
+            &db,
+            json!({ "defaultPromptAgentId": long_id })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("long update");
+        let stored = capped
+            .get("defaultPromptAgentId")
+            .and_then(Value::as_str)
+            .expect("stored id");
+        assert_eq!(stored.len(), MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH);
     }
 
     #[test]

@@ -30,6 +30,24 @@ pub fn search_presentation_sessions(
     Ok(search_sessions(projects, sessions, params))
 }
 
+pub fn list_previous_sessions(
+    db: &Connection,
+    server_id: &str,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let repository = DomainRepository::new(db, server_id);
+    let projects = repository.list_projects()?;
+    let sessions = repository.list_sessions(None)?;
+    let mut previous_params = params.clone();
+    previous_params.insert("includeActive".to_string(), Value::Bool(false));
+    previous_params.insert("includePrevious".to_string(), Value::Bool(true));
+    Ok(search_previous_sessions(
+        projects,
+        sessions,
+        &previous_params,
+    ))
+}
+
 pub fn build_presentation_project_delta(
     repository: &DomainRepository<'_>,
     project_id: &str,
@@ -382,6 +400,127 @@ fn search_sessions(
     Value::Object(output)
 }
 
+fn search_previous_sessions(
+    projects: Vec<Value>,
+    sessions: Vec<Value>,
+    params: &Map<String, Value>,
+) -> Value {
+    /*
+    CDXC:PreviousSessions 2026-06-19-14:30:
+    Rust listPreviousSessions must be the same previous-only restore surface as TypeScript: exclude active rows and command-pane sessions, keep pinned/favorite/tagged history, return closedAt, and rank by provider close time instead of last activity or metadata edits.
+    */
+    let limit = normalize_limit(params.get("limit"));
+    let offset = normalize_cursor(params.get("cursor"));
+    let include_active = params.get("includeActive").and_then(Value::as_bool) != Some(false);
+    let include_previous = params.get("includePrevious").and_then(Value::as_bool) != Some(false);
+    let query = params
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let project_id_filter = params.get("projectId").and_then(Value::as_str);
+    let tags = params
+        .get("sessionTags")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let mut candidates = sessions
+        .into_iter()
+        .filter(is_previous_session_history_candidate)
+        .filter(|session| {
+            project_id_filter
+                .map(|project_id| string_field(session, "projectId").as_deref() == Some(project_id))
+                .unwrap_or(true)
+        })
+        .filter(|session| {
+            tags.is_empty()
+                || string_field(session, "sessionTag")
+                    .map(|tag| tags.iter().any(|expected| *expected == tag))
+                    .unwrap_or(false)
+        })
+        .filter(|session| {
+            let active = is_active(session);
+            (active && include_active) || (!active && include_previous)
+        })
+        .filter_map(|session| {
+            let project = projects.iter().find(|project| {
+                string_field(project, "projectId") == string_field(&session, "projectId")
+            });
+            match_session(project, &session, &query).map(|matched| (session, matched))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|(left, _), (right, _)| {
+        previous_session_closed_at(right)
+            .cmp(&previous_session_closed_at(left))
+            .then_with(|| string_field(left, "sessionId").cmp(&string_field(right, "sessionId")))
+    });
+    let total = candidates.len();
+    let page = candidates
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(|(session, matched)| {
+            let project = projects.iter().find(|project| {
+                string_field(project, "projectId") == string_field(&session, "projectId")
+            });
+            let mut result = search_result(project, &session, matched);
+            if let Some(output) = result.as_object_mut() {
+                output.insert(
+                    "closedAt".to_string(),
+                    Value::String(previous_session_closed_at(&session)),
+                );
+            }
+            result
+        })
+        .collect::<Vec<_>>();
+    let mut output = Map::new();
+    if offset + limit < total {
+        output.insert(
+            "cursor".to_string(),
+            Value::String((offset + limit).to_string()),
+        );
+    }
+    output.insert("results".to_string(), Value::Array(page));
+    Value::Object(output)
+}
+
+fn is_previous_session_history_candidate(session: &Value) -> bool {
+    if string_field(session, "surface").as_deref() != Some("workspace") {
+        return false;
+    }
+    if is_active(session) {
+        return false;
+    }
+    if session.get("isPinned").and_then(Value::as_bool) == Some(true)
+        || is_favorite(session)
+        || session.get("sessionTag").is_some()
+    {
+        return true;
+    }
+    if string_field(session, "lifecycleState").as_deref() != Some("stopped") {
+        return false;
+    }
+    project_session_title(session)
+        .get("trustedResumeTitle")
+        .is_some()
+}
+
+fn previous_session_closed_at(session: &Value) -> String {
+    let provider_closed_at = if string_field(session, "lifecycleState").as_deref()
+        == Some("stopped")
+        && read_provider_trimmed_text(session, "lifecycleState").as_deref() == Some("missing")
+    {
+        read_provider_trimmed_text(session, "probedAt")
+    } else {
+        None
+    };
+    provider_closed_at
+        .or_else(|| string_field(session, "updatedAt"))
+        .or_else(|| string_field(session, "createdAt"))
+        .unwrap_or_default()
+}
+
 fn search_result(project: Option<&Value>, session: &Value, matched: Value) -> Value {
     let mut output = Map::new();
     if let Some(agent_id) = string_field(session, "agentId") {
@@ -501,6 +640,7 @@ fn match_session(project: Option<&Value>, session: &Value, query: &str) -> Optio
     push_owned_field(&mut fields, "id", string_field(session, "globalRef"));
     push_owned_field(&mut fields, "timestamp", string_field(session, "createdAt"));
     push_owned_field(&mut fields, "timestamp", string_field(session, "updatedAt"));
+    push_owned_field(&mut fields, "timestamp", Some(last_active_at(session)));
     for (field, value) in fields {
         if value.to_ascii_lowercase().contains(query) {
             return Some(json!({ "field": field, "snippet": value }));
@@ -818,6 +958,17 @@ fn read_provider_text(session: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+fn read_provider_trimmed_text(session: &Value, key: &str) -> Option<String> {
+    session
+        .get("providerState")
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get(key))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 fn string_field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
 }
@@ -849,6 +1000,11 @@ fn now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        domain::DomainRepository,
+        paths::get_gxserver_paths,
+        storage::{initialize_gxserver_storage, open_gxserver_database},
+    };
 
     #[test]
     fn snapshot_sorts_projects_and_sessions_for_sidebar_projection() {
@@ -909,6 +1065,278 @@ mod tests {
         );
     }
 
+    #[test]
+    fn list_previous_sessions_reads_domain_rows_with_closed_at() {
+        let (_temp, db) = open_test_database();
+        let repository = DomainRepository::new(&db, "S7k");
+        let project = repository
+            .create_project(
+                json!({
+                    "name": "History",
+                })
+                .as_object()
+                .expect("project params"),
+            )
+            .expect("project created");
+        let project_id = string_field(&project, "projectId").expect("project id");
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "codex",
+                    "kind": "agent",
+                    "lifecycleState": "stopped",
+                    "projectId": project_id,
+                    "providerState": {
+                        "lifecycleState": "missing",
+                        "probedAt": "2026-06-06T12:00:00.000Z",
+                        "provider": "zmx",
+                    },
+                    "runtimeSettings": {
+                        "titleSource": "terminal-auto",
+                    },
+                    "title": "Restorable session",
+                })
+                .as_object()
+                .expect("session params"),
+                false,
+            )
+            .expect("session created");
+
+        let result = list_previous_sessions(&db, "S7k", &Map::new()).expect("previous sessions");
+        let results = result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("results");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].get("sessionId"), session.get("sessionId"));
+        assert_eq!(
+            results[0].get("closedAt").and_then(Value::as_str),
+            Some("2026-06-06T12:00:00.000Z")
+        );
+    }
+
+    #[test]
+    fn previous_sessions_filter_candidates_and_return_closed_at() {
+        let projects = vec![project("P100", "History", false, false)];
+        let trusted = previous_session(
+            "G100",
+            "Trusted title",
+            "stopped",
+            "workspace",
+            Some("2026-06-06T12:00:00.000Z"),
+            "2026-06-06T12:30:00.000Z",
+            "2026-06-01T09:00:00.000Z",
+        );
+        let placeholder = previous_session(
+            "G101",
+            "Search by Text",
+            "stopped",
+            "workspace",
+            Some("2026-06-07T12:00:00.000Z"),
+            "2026-06-07T12:30:00.000Z",
+            "2026-06-07T09:00:00.000Z",
+        );
+        let mut favorite_placeholder = previous_session(
+            "G102",
+            "Search by Text",
+            "stopped",
+            "workspace",
+            None,
+            "2026-06-05T12:30:00.000Z",
+            "2026-06-05T09:00:00.000Z",
+        );
+        favorite_placeholder
+            .as_object_mut()
+            .expect("favorite object")
+            .insert(
+                "sessionTag".to_string(),
+                Value::String("favorite".to_string()),
+            );
+        let mut command_pinned = previous_session(
+            "G103",
+            "Pinned command",
+            "stopped",
+            "commands",
+            Some("2026-06-08T12:00:00.000Z"),
+            "2026-06-08T12:30:00.000Z",
+            "2026-06-08T09:00:00.000Z",
+        );
+        command_pinned
+            .as_object_mut()
+            .expect("command object")
+            .insert("isPinned".to_string(), Value::Bool(true));
+        let running = previous_session(
+            "G104",
+            "Running",
+            "running",
+            "workspace",
+            Some("2026-06-09T12:00:00.000Z"),
+            "2026-06-09T12:30:00.000Z",
+            "2026-06-09T09:00:00.000Z",
+        );
+
+        let result = search_previous_sessions(
+            projects,
+            vec![
+                trusted,
+                placeholder,
+                favorite_placeholder,
+                command_pinned,
+                running,
+            ],
+            &Map::new(),
+        );
+        let results = result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("results");
+
+        assert_eq!(
+            results
+                .iter()
+                .filter_map(|result| result.get("sessionId").and_then(Value::as_str))
+                .collect::<Vec<_>>(),
+            vec!["G100", "G102"]
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter_map(|result| result.get("closedAt").and_then(Value::as_str))
+                .collect::<Vec<_>>(),
+            vec!["2026-06-06T12:00:00.000Z", "2026-06-05T12:30:00.000Z"]
+        );
+
+        let query_params = json!({ "query": "09:00:00.000Z" });
+        let query_result = search_previous_sessions(
+            vec![project("P100", "History", false, false)],
+            vec![
+                previous_session(
+                    "G100",
+                    "Trusted title",
+                    "stopped",
+                    "workspace",
+                    Some("2026-06-06T12:00:00.000Z"),
+                    "2026-06-06T12:30:00.000Z",
+                    "2026-06-01T09:00:00.000Z",
+                ),
+                previous_session(
+                    "G102",
+                    "Favorite title",
+                    "stopped",
+                    "workspace",
+                    None,
+                    "2026-06-05T12:30:00.000Z",
+                    "2026-06-05T10:00:00.000Z",
+                ),
+            ],
+            query_params.as_object().expect("query params"),
+        );
+        let query_results = query_result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("query results");
+        assert_eq!(query_results.len(), 1);
+        assert_eq!(
+            query_results[0].get("sessionId").and_then(Value::as_str),
+            Some("G100")
+        );
+        assert_eq!(
+            query_results[0]
+                .get("match")
+                .and_then(Value::as_object)
+                .and_then(|matched| matched.get("field"))
+                .and_then(Value::as_str),
+            Some("timestamp")
+        );
+    }
+
+    #[test]
+    fn previous_sessions_rank_by_close_time_then_session_id() {
+        let projects = vec![project("P100", "History", false, false)];
+        let closed_recent = previous_session(
+            "G1close",
+            "Closed recently",
+            "stopped",
+            "workspace",
+            Some("2026-06-06T12:00:00.000Z"),
+            "2026-06-06T12:00:00.000Z",
+            "2026-06-01T09:00:00.000Z",
+        );
+        let active_before_close = previous_session(
+            "G2active",
+            "Active before close",
+            "stopped",
+            "workspace",
+            Some("2026-06-05T12:00:00.000Z"),
+            "2026-06-05T12:00:00.000Z",
+            "2026-06-07T09:00:00.000Z",
+        );
+        let metadata_edited = previous_session(
+            "G3meta",
+            "Metadata edited after close",
+            "stopped",
+            "workspace",
+            Some("2026-06-04T12:00:00.000Z"),
+            "2026-06-08T12:00:00.000Z",
+            "2026-06-04T09:00:00.000Z",
+        );
+        let same_time_later_id = previous_session(
+            "G9same",
+            "Same close later id",
+            "stopped",
+            "workspace",
+            Some("2026-06-06T12:00:00.000Z"),
+            "2026-06-06T12:00:00.000Z",
+            "2026-06-06T09:00:00.000Z",
+        );
+        let same_time_earlier_id = previous_session(
+            "G0same",
+            "Same close earlier id",
+            "stopped",
+            "workspace",
+            Some("2026-06-06T12:00:00.000Z"),
+            "2026-06-06T12:00:00.000Z",
+            "2026-06-06T09:00:00.000Z",
+        );
+
+        let result = search_previous_sessions(
+            projects,
+            vec![
+                active_before_close,
+                metadata_edited,
+                same_time_later_id,
+                closed_recent,
+                same_time_earlier_id,
+            ],
+            &Map::new(),
+        );
+        let results = result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("results");
+
+        assert_eq!(
+            results
+                .iter()
+                .filter_map(|result| result.get("sessionId").and_then(Value::as_str))
+                .collect::<Vec<_>>(),
+            vec!["G0same", "G1close", "G9same", "G2active", "G3meta"]
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter_map(|result| result.get("closedAt").and_then(Value::as_str))
+                .collect::<Vec<_>>(),
+            vec![
+                "2026-06-06T12:00:00.000Z",
+                "2026-06-06T12:00:00.000Z",
+                "2026-06-06T12:00:00.000Z",
+                "2026-06-05T12:00:00.000Z",
+                "2026-06-04T12:00:00.000Z"
+            ]
+        );
+    }
+
     fn project(project_id: &str, name: &str, is_pinned: bool, is_favorite: bool) -> Value {
         json!({
             "createdAt": "2026-06-15T09:55:00.000Z",
@@ -943,5 +1371,56 @@ mod tests {
             "updatedAt": "2026-06-15T09:55:00.000Z",
             "zmxName": format!("S7k-{project_id}-{session_id}"),
         })
+    }
+
+    fn previous_session(
+        session_id: &str,
+        title: &str,
+        lifecycle_state: &str,
+        surface: &str,
+        probed_at: Option<&str>,
+        updated_at: &str,
+        last_active_at: &str,
+    ) -> Value {
+        let provider_state = match probed_at {
+            Some(probed_at) => json!({
+                "lifecycleState": "missing",
+                "probedAt": probed_at,
+                "provider": "zmx",
+                "zmxName": format!("S7k-P100-{session_id}"),
+            }),
+            None => json!({
+                "lifecycleState": "missing",
+                "provider": "zmx",
+                "zmxName": format!("S7k-P100-{session_id}"),
+            }),
+        };
+        json!({
+            "agentId": "codex",
+            "createdAt": "2026-06-01T08:00:00.000Z",
+            "isFavorite": false,
+            "isPinned": false,
+            "kind": "agent",
+            "lastActiveAt": last_active_at,
+            "lifecycleState": lifecycle_state,
+            "projectId": "P100",
+            "providerState": provider_state,
+            "runtimeSettings": {
+                "titleSource": if title == "Search by Text" { "placeholder" } else { "terminal-auto" },
+            },
+            "sessionId": session_id,
+            "surface": surface,
+            "title": title,
+            "updatedAt": updated_at,
+            "zmxName": format!("S7k-P100-{session_id}"),
+        })
+    }
+
+    fn open_test_database() -> (tempfile::TempDir, Connection) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        (temp, db)
     }
 }

@@ -21,7 +21,8 @@ use tokio::{net::TcpListener, sync::broadcast};
 use uuid::Uuid;
 
 use crate::{
-    agent_hooks::{install_agent_hooks, read_agent_hook_status},
+    agent_hooks::{install_agent_hooks, read_agent_hook_status, uninstall_agent_hooks},
+    agent_skills::{install_agent_skills, read_agent_skill_status},
     agents::{dispatch_agent_endpoint, AgentEndpointError},
     auth::{
         ensure_gxserver_auth_token, is_authorized_headers, is_expected_gxserver_auth_token,
@@ -39,11 +40,14 @@ use crate::{
     events::{EventClientSender, GxserverEventHub},
     http_client,
     identity::ensure_gxserver_identity,
-    logging::{log_level_from_status, GxserverLogInput, GxserverLogger},
+    logging::{
+        log_level_from_status, query_gxserver_logs, GxserverLogInput, GxserverLogger, LogQueryError,
+    },
     paths::{get_gxserver_paths, GxserverPaths},
     presentation::{
         build_presentation_project_delta, build_presentation_session_delta,
-        increment_presentation_revision, read_presentation_snapshot, search_presentation_sessions,
+        increment_presentation_revision, list_previous_sessions, read_presentation_snapshot,
+        search_presentation_sessions,
     },
     protocol::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error, rpc_success,
@@ -667,6 +671,13 @@ async fn route_http(
             &body_json,
             |_, db, params, server_id| search_presentation_sessions(db, server_id, params),
         ),
+        "/api/listPreviousSessions" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, server_id| list_previous_sessions(db, server_id, params),
+        ),
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/readAgentLaunchPlan"
@@ -680,7 +691,10 @@ async fn route_http(
         | "/api/ingestAgentHookEvent" => {
             handle_agent_http(&state, endpoint.path, request_id, &body_json).await
         }
-        "/api/readAgentHookStatus" | "/api/installAgentHooks" => {
+        "/api/readAgentSkillStatus" | "/api/installAgentSkills" => {
+            handle_agent_skill_http(&state, endpoint.path, request_id, &body_json).await
+        }
+        "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             handle_agent_hook_http(&state, endpoint.path, request_id, &body_json)
         }
         "/api/attachSessionMetadata"
@@ -709,6 +723,7 @@ async fn route_http(
         | "/api/runBeadsAction" => {
             handle_typed_operation_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/queryLogs" => handle_query_logs_http(&state, endpoint.path, request_id, &body_json),
         "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"
         | "/api/readRepositoryCloneJob"
@@ -752,6 +767,43 @@ async fn route_http(
                     "{} is defined but not implemented in this milestone.",
                     endpoint.path
                 ),
+                Some(request_id),
+            ),
+        ),
+    }
+}
+
+/*
+CDXC:GxserverLogs 2026-06-19-14:45:
+Rust must route `/api/queryLogs` instead of returning milestone `notImplemented`. Keep the TypeScript RPC envelope and local authenticated gates while returning only sanitized JSONL entries already present in the support log file.
+*/
+fn handle_query_logs_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    match query_gxserver_logs(&state.paths, &params) {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(LogQueryError::Input(message)) => routed_json(
+            Some(endpoint_path),
+            StatusCode::BAD_REQUEST,
+            rpc_error("badRequest", message, Some(request_id)),
+        ),
+        Err(LogQueryError::Io(_)) => routed_json(
+            Some(endpoint_path),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            rpc_error(
+                "internalError",
+                "Failed to query gxserver logs.",
                 Some(request_id),
             ),
         ),
@@ -892,10 +944,43 @@ fn handle_agent_hook_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let result = if endpoint_path == "/api/installAgentHooks" {
-        install_agent_hooks(&state.paths, &params)
+    /*
+    CDXC:AgentHooks 2026-06-19-14:15:
+    Hook uninstall is routed with read/install through the local authenticated RPC envelope. The handler returns the TypeScript-compatible status payload plus removedPaths without writing provider paths, hook commands, or hook file contents to persistent logs.
+    */
+    let result = match endpoint_path.as_str() {
+        "/api/installAgentHooks" => install_agent_hooks(&state.paths, &params),
+        "/api/uninstallAgentHooks" => uninstall_agent_hooks(&state.paths, &params),
+        _ => read_agent_hook_status(&state.paths, &params),
+    };
+    match result {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+/*
+CDXC:AgentSkills 2026-06-19-13:59:
+Agent skill status/install endpoints are local-only because they inspect or mutate user-local agent skill directories. Route them outside domain-state handlers so install stdout/stderr are returned only in the RPC response and are not written to persistent gxserver logs.
+*/
+async fn handle_agent_skill_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let result = if endpoint_path == "/api/installAgentSkills" {
+        install_agent_skills(&state.paths, &params).await
     } else {
-        read_agent_hook_status(&state.paths, &params)
+        read_agent_skill_status(&state.paths, &params)
     };
     match result {
         Ok(result) => routed_json(
@@ -1785,7 +1870,13 @@ fn _permission_name(permission: ApiPermission) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::RENDERER_COMMAND_ACTIONS;
+    use super::*;
+    use crate::{
+        config::create_default_gxserver_config,
+        constants::GXSERVER_PROTOCOL_HEADER,
+        storage::{create_gxserver_migration_status, initialize_gxserver_storage},
+    };
+    use std::fs;
 
     #[test]
     fn renderer_command_actions_include_generated_title_rename() {
@@ -1794,5 +1885,135 @@ mod tests {
         Rust gxserver must accept the same renderer `renameCommand` action as the TypeScript daemon so a full cutover keeps Claude Code generated-title renames on the native Enter path.
         */
         assert!(RENDERER_COMMAND_ACTIONS.contains(&"renameCommand"));
+    }
+
+    #[tokio::test]
+    async fn query_logs_route_returns_filtered_logs_and_bad_request_errors() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        fs::create_dir_all(&paths.logs_dir).expect("logs dir");
+        fs::write(
+            &paths.log_file,
+            [
+                serde_json::to_string(&json!({
+                    "client": "cli",
+                    "event": "agent.detected",
+                    "level": "info",
+                    "projectId": "P3a91",
+                    "serverId": "S7k",
+                    "sessionId": "G8v20",
+                    "ts": "2026-05-30T10:00:00.000Z"
+                }))
+                .unwrap(),
+                serde_json::to_string(&json!({
+                    "client": "api",
+                    "event": "zmx.kill.failed",
+                    "level": "error",
+                    "projectId": "P3a91",
+                    "serverId": "S7k",
+                    "sessionId": "G8v20",
+                    "ts": "2026-05-30T10:01:00.000Z"
+                }))
+                .unwrap(),
+            ]
+            .join("\n")
+                + "\n",
+        )
+        .expect("write logs");
+        let state = test_app_state(paths.clone());
+        let token = state.auth_token.clone();
+
+        let filtered = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/queryLogs",
+                &token,
+                json!({
+                    "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                    "params": {
+                        "eventPrefix": "agent.",
+                        "limit": 1,
+                        "order": "desc"
+                    }
+                }),
+            ),
+            "request-1".to_string(),
+        )
+        .await;
+        assert_eq!(filtered.response.status(), StatusCode::OK);
+        let body = response_json(filtered.response).await;
+        assert_eq!(body["ok"], json!(true));
+        assert_eq!(body["result"]["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            body["result"]["entries"][0]["event"],
+            json!("agent.detected")
+        );
+        assert_eq!(body["result"]["malformedLineCount"], json!(0));
+
+        let bad_params = route_http(
+            state,
+            rpc_request(
+                "/api/queryLogs",
+                &token,
+                json!({
+                    "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                    "params": { "limit": 0 }
+                }),
+            ),
+            "request-2".to_string(),
+        )
+        .await;
+        assert_eq!(bad_params.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(bad_params.response).await;
+        assert_eq!(body["error"], json!("badRequest"));
+    }
+
+    fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
+        let storage = initialize_gxserver_storage(&paths).expect("storage");
+        let config = create_default_gxserver_config().expect("config");
+        let metadata = RuntimeMetadata {
+            build_identity: "test-build".to_string(),
+            pid: std::process::id(),
+            port: config.listeners.local.port,
+            protocol_version: GXSERVER_PROTOCOL_VERSION,
+            server_id: "S7k".to_string(),
+            started_at: "2026-05-30T10:00:00.000Z".to_string(),
+            version: "0.0.0-test".to_string(),
+        };
+        let (shutdown_tx, _) = broadcast::channel(8);
+        Arc::new(AppState {
+            auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            build_identity: "test-build".to_string(),
+            config,
+            event_hub: GxserverEventHub::new(metadata.server_id.clone()),
+            logger: Arc::new(GxserverLogger::new(paths.clone())),
+            metadata,
+            migration: create_gxserver_migration_status(&storage),
+            paths,
+            repository_clone_jobs: RepositoryCloneJobManager::default(),
+            shutdown_tx,
+            version: "0.0.0-test".to_string(),
+        })
+    }
+
+    fn rpc_request(path: &str, token: &str, body: Value) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(
+                GXSERVER_PROTOCOL_HEADER,
+                GXSERVER_PROTOCOL_VERSION.to_string(),
+            )
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .expect("request")
+    }
+
+    async fn response_json(response: Response<Body>) -> Value {
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        serde_json::from_slice(&bytes).expect("json body")
     }
 }

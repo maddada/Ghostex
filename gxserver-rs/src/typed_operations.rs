@@ -1,4 +1,6 @@
 use std::{
+    cmp::Ordering,
+    collections::HashMap,
     env, fmt, fs,
     io::Read,
     path::{Path, PathBuf},
@@ -17,6 +19,7 @@ use crate::toolchain::require_bundled_bd;
 const TYPED_OPERATION_TIMEOUT_MS: u64 = 120_000;
 const TYPED_OPERATION_STDOUT_LIMIT_BYTES: usize = 4 * 1024 * 1024;
 const TYPED_OPERATION_STDERR_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+const BEADS_BOARD_RESPONSE_LIMIT_BYTES: usize = TYPED_OPERATION_STDOUT_LIMIT_BYTES;
 const BEADS_BOARD_ROW_LIMIT: usize = 5_000;
 const COMMIT_MESSAGE_LIMIT_BYTES: usize = 64 * 1024;
 const SETUP_COMMAND_LIMIT_BYTES: usize = 16 * 1024;
@@ -96,6 +99,12 @@ struct CommandOutput {
     exit_code: i32,
     stderr: String,
     stdout: String,
+}
+
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+struct BeadsLabelCount {
+    count: usize,
+    label: String,
 }
 
 /*
@@ -418,8 +427,21 @@ async fn run_beads_action(
     }
     let command = build_beads_command(&action, params, context)?;
     let output = run_process_command(&command, context).await?;
-    if action == "board" && output.exit_code == 0 {
+    if matches!(action.as_str(), "board" | "listAllLabels") && output.exit_code == 0 {
         let (issues, stdout) = parse_beads_board_output(&output.stdout)?;
+        if action == "listAllLabels" {
+            let labels_stdout = serde_json::to_string(&derive_beads_label_counts(&issues))
+                .map_err(|_| {
+                    TypedOperationError::bad_request("Could not serialize Beads label counts.")
+                })?;
+            return Ok(json!({
+                "action": action,
+                "command": command_summary_json(&command.summary()),
+                "exitCode": 0,
+                "stderr": output.stderr,
+                "stdout": labels_stdout,
+            }));
+        }
         return Ok(json!({
             "action": action,
             "command": command_summary_json(&command.summary()),
@@ -619,6 +641,13 @@ fn build_git_command(
                 }))
                 .with_stdin(message)
         }
+        "pullFastForward" => {
+            /*
+            CDXC:GitOperations 2026-06-19-14:38:
+            The titlebar remote-sync workflow must update the current branch only through Git's fast-forward pull contract. Rust keeps the typed operation to `git pull --ff-only` so merge, rebase, dirty-worktree, and divergent-history failures remain visible to callers instead of being hidden by fallback behavior.
+            */
+            ProcessCommand::new("git", vec!["pull", "--ff-only"], cwd)
+        }
         "push" => ProcessCommand::new("git", vec!["push"], cwd),
         "pushSetUpstream" => ProcessCommand::new(
             "git",
@@ -738,13 +767,22 @@ fn build_beads_command(
     context: &TypedOperationContext,
 ) -> Result<ProcessCommand, TypedOperationError> {
     let bd = require_bundled_bd().map_err(TypedOperationError::dependency_unavailable)?;
+    build_beads_command_with_executable(action, params, context, &bd.executable_path)
+}
+
+fn build_beads_command_with_executable(
+    action: &str,
+    params: &Map<String, Value>,
+    context: &TypedOperationContext,
+    bd_executable_path: &str,
+) -> Result<ProcessCommand, TypedOperationError> {
     let cwd = resolve_beads_cwd(context);
     Ok(match action {
         "board" | "list" => {
-            ProcessCommand::new(&bd.executable_path, vec!["list", "--all", "--json"], &cwd)
+            ProcessCommand::new(bd_executable_path, vec!["list", "--all", "--json"], &cwd)
         }
         "addLabel" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "label".to_string(),
                 "add".to_string(),
@@ -755,7 +793,7 @@ fn build_beads_command(
             &cwd,
         ),
         "close" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "close".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -764,7 +802,7 @@ fn build_beads_command(
             &cwd,
         ),
         "comment" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "comments".to_string(),
                 "add".to_string(),
@@ -775,17 +813,17 @@ fn build_beads_command(
             &cwd,
         ),
         "configGet" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec!["config", "get", "status.custom", "--json"],
             &cwd,
         ),
         "configGetIssuePrefix" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec!["config", "get", "issue_prefix", "--json"],
             &cwd,
         ),
         "configSet" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "config".to_string(),
                 "set".to_string(),
@@ -796,7 +834,7 @@ fn build_beads_command(
             &cwd,
         ),
         "renamePrefix" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "rename-prefix".to_string(),
                 normalize_beads_rename_prefix(params.get("value"))?,
@@ -805,11 +843,9 @@ fn build_beads_command(
             ],
             &cwd,
         ),
-        "create" => {
-            ProcessCommand::new(&bd.executable_path, build_beads_create_args(params)?, &cwd)
-        }
+        "create" => ProcessCommand::new(bd_executable_path, build_beads_create_args(params)?, &cwd),
         "delete" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "delete".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -819,7 +855,7 @@ fn build_beads_command(
             &cwd,
         ),
         "depAdd" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "dep".to_string(),
                 "add".to_string(),
@@ -832,7 +868,7 @@ fn build_beads_command(
             &cwd,
         ),
         "depRemove" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "dep".to_string(),
                 "remove".to_string(),
@@ -842,13 +878,15 @@ fn build_beads_command(
             ],
             &cwd,
         ),
-        "listAllLabels" => ProcessCommand::new(
-            &bd.executable_path,
-            vec!["label", "list-all", "--json"],
-            &cwd,
-        ),
+        "listAllLabels" => {
+            /*
+            CDXC:ProjectBoardLabels 2026-06-19-14:38:
+            Beads label vocabulary requests must share the board list read path instead of calling `label list-all`, because the board list output already contains the labels needed by the UI and avoids the slower issue-by-issue inventory path.
+            */
+            ProcessCommand::new(bd_executable_path, vec!["list", "--all", "--json"], &cwd)
+        }
         "removeLabel" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "label".to_string(),
                 "remove".to_string(),
@@ -859,7 +897,7 @@ fn build_beads_command(
             &cwd,
         ),
         "search" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "search".to_string(),
                 normalize_required_text(params.get("query"), "query")?,
@@ -874,10 +912,10 @@ fn build_beads_command(
             ];
             args.extend(build_beads_set_label_args(params.get("labels"))?);
             args.push("--json".to_string());
-            ProcessCommand::new(&bd.executable_path, args, &cwd)
+            ProcessCommand::new(bd_executable_path, args, &cwd)
         }
         "show" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "show".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -885,7 +923,7 @@ fn build_beads_command(
             ],
             &cwd,
         ),
-        "status" => ProcessCommand::new(&bd.executable_path, vec!["status"], &cwd),
+        "status" => ProcessCommand::new(bd_executable_path, vec!["status"], &cwd),
         "update" => {
             let mut args = vec![
                 "update".to_string(),
@@ -893,10 +931,10 @@ fn build_beads_command(
             ];
             args.extend(build_beads_update_args(params)?);
             args.push("--json".to_string());
-            ProcessCommand::new(&bd.executable_path, args, &cwd)
+            ProcessCommand::new(bd_executable_path, args, &cwd)
         }
         "updateDescription" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "update".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -910,7 +948,7 @@ fn build_beads_command(
             &cwd,
         ),
         "updateEstimate" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "update".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -921,7 +959,7 @@ fn build_beads_command(
             &cwd,
         ),
         "updatePriority" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "update".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -932,7 +970,7 @@ fn build_beads_command(
             &cwd,
         ),
         "updateStatus" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "update".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -943,7 +981,7 @@ fn build_beads_command(
             &cwd,
         ),
         "updateTitle" => ProcessCommand::new(
-            &bd.executable_path,
+            bd_executable_path,
             vec![
                 "update".to_string(),
                 normalize_issue_id(params.get("issueId"))?,
@@ -1718,6 +1756,7 @@ fn normalize_git_action(input: Option<&Value>) -> Result<String, TypedOperationE
         | "listRemotes"
         | "listUntracked"
         | "merge"
+        | "pullFastForward"
         | "push"
         | "pushSetUpstream"
         | "remoteBranchExists"
@@ -1934,20 +1973,125 @@ fn parse_beads_board_output(stdout: &str) -> Result<(Vec<Value>, String), TypedO
         })?;
     let mut issues = Vec::new();
     let mut serialized = Vec::new();
+    let mut response_bytes = 2usize;
+    let mut row_count = 0usize;
     for item in payload {
         if !item.is_object() {
             continue;
         }
-        if issues.len() + 1 > BEADS_BOARD_ROW_LIMIT {
+        row_count += 1;
+        if row_count > BEADS_BOARD_ROW_LIMIT {
             return Err(TypedOperationError::bad_request(format!(
                 "Beads board state exceeds the {BEADS_BOARD_ROW_LIMIT}-row limit; refusing to return oversized board data."
             )));
         }
         let text = serde_json::to_string(&item).unwrap_or_else(|_| "{}".to_string());
+        let next_response_bytes =
+            response_bytes + text.len() + if serialized.is_empty() { 0 } else { 1 };
+        if next_response_bytes > BEADS_BOARD_RESPONSE_LIMIT_BYTES {
+            return Err(TypedOperationError::bad_request(format!(
+                "Beads board response exceeds the {BEADS_BOARD_RESPONSE_LIMIT_BYTES}-byte serialized JSON limit; refusing to return oversized board data."
+            )));
+        }
+        response_bytes = next_response_bytes;
         issues.push(item);
         serialized.push(text);
     }
     Ok((issues, format!("[{}]", serialized.join(","))))
+}
+
+fn derive_beads_label_counts(issues: &[Value]) -> Vec<BeadsLabelCount> {
+    let mut counts = HashMap::<String, usize>::new();
+    for issue in issues {
+        let labels = issue
+            .get("labels")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten();
+        for label in labels {
+            let normalized = label.as_str().map(str::trim).unwrap_or("");
+            if normalized.is_empty() {
+                continue;
+            }
+            *counts.entry(normalized.to_string()).or_insert(0) += 1;
+        }
+    }
+    let mut labels = counts
+        .into_iter()
+        .map(|(label, count)| BeadsLabelCount { count, label })
+        .collect::<Vec<_>>();
+    labels.sort_by(|left, right| compare_beads_label_locale_order(&left.label, &right.label));
+    labels
+}
+
+fn compare_beads_label_locale_order(left: &str, right: &str) -> Ordering {
+    /*
+    CDXC:ProjectBoardLabels 2026-06-19-14:44:
+    TypeScript sorts derived Beads labels with `localeCompare`. Keep Rust's common ASCII label ordering aligned without adding an ICU dependency to this typed-operation path; uncommon Unicode labels still fall back to deterministic string ordering after the ASCII-compatible pass.
+    */
+    let primary = compare_label_primary_order(left, right);
+    if primary != Ordering::Equal {
+        return primary;
+    }
+    compare_label_case_order(left, right).then_with(|| left.cmp(right))
+}
+
+fn compare_label_primary_order(left: &str, right: &str) -> Ordering {
+    let mut left_chars = left.chars();
+    let mut right_chars = right.chars();
+    loop {
+        match (left_chars.next(), right_chars.next()) {
+            (Some(left_char), Some(right_char)) => {
+                let ordering =
+                    label_char_primary_key(left_char).cmp(&label_char_primary_key(right_char));
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (None, None) => return Ordering::Equal,
+        }
+    }
+}
+
+fn label_char_primary_key(ch: char) -> (u8, char) {
+    match ch {
+        '_' => (0, '\0'),
+        '-' => (1, '\0'),
+        ':' => (2, '\0'),
+        '.' => (3, '\0'),
+        '/' => (4, '\0'),
+        ch if ch.is_ascii_digit() => (5, ch),
+        ch if ch.is_ascii_alphabetic() => (6, ch.to_ascii_lowercase()),
+        ch => (7, ch.to_lowercase().next().unwrap_or(ch)),
+    }
+}
+
+fn compare_label_case_order(left: &str, right: &str) -> Ordering {
+    let mut left_chars = left.chars();
+    let mut right_chars = right.chars();
+    loop {
+        match (left_chars.next(), right_chars.next()) {
+            (Some(left_char), Some(right_char)) => {
+                let ordering = label_char_case_key(left_char).cmp(&label_char_case_key(right_char));
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (None, None) => return Ordering::Equal,
+        }
+    }
+}
+
+fn label_char_case_key(ch: char) -> u8 {
+    if ch.is_uppercase() {
+        1
+    } else {
+        0
+    }
 }
 
 fn count_project_file_lines(
@@ -2056,6 +2200,7 @@ fn display_unknown_value(value: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command as StdCommand;
     use tempfile::tempdir;
 
     fn context(cwd: &Path) -> TypedOperationContext {
@@ -2089,6 +2234,84 @@ mod tests {
     }
 
     #[test]
+    fn git_pull_fast_forward_plans_ff_only_command() {
+        let dir = tempdir().unwrap();
+        let command = build_git_command(
+            "pullFastForward",
+            &Map::new(),
+            &dir.path().to_string_lossy(),
+        )
+        .unwrap();
+        assert_eq!(command.args, vec!["pull", "--ff-only"]);
+        assert_eq!(command.summary().args, vec!["pull", "--ff-only"]);
+        assert_eq!(
+            normalize_git_action(Some(&json!("pullFastForward"))).unwrap(),
+            "pullFastForward"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_pull_fast_forward_executes_local_remote_update() {
+        let root = tempdir().unwrap();
+        let remote = root.path().join("remote.git");
+        let seed = root.path().join("seed");
+        let repo = root.path().join("repo");
+        fs::create_dir(&seed).unwrap();
+
+        run_git(["init", "--bare", remote.to_str().unwrap()], root.path());
+        run_git(["init"], &seed);
+        run_git(["checkout", "-b", "main"], &seed);
+        run_git(["config", "user.email", "typed@example.invalid"], &seed);
+        run_git(["config", "user.name", "Typed Operation Test"], &seed);
+        fs::write(seed.join("file.txt"), "one\n").unwrap();
+        run_git(["add", "file.txt"], &seed);
+        run_git(["commit", "-m", "initial"], &seed);
+        run_git(["remote", "add", "origin", remote.to_str().unwrap()], &seed);
+        run_git(["push", "-u", "origin", "main"], &seed);
+        run_git(
+            [
+                "--git-dir",
+                remote.to_str().unwrap(),
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/main",
+            ],
+            root.path(),
+        );
+        run_git(
+            ["clone", remote.to_str().unwrap(), repo.to_str().unwrap()],
+            root.path(),
+        );
+
+        fs::write(seed.join("file.txt"), "one\ntwo\n").unwrap();
+        run_git(["add", "file.txt"], &seed);
+        run_git(["commit", "-m", "second"], &seed);
+        run_git(["push"], &seed);
+
+        let ctx = context(&repo);
+        let mut params = Map::new();
+        params.insert("action".to_string(), json!("pullFastForward"));
+        let result = run_git_action(&params, &ctx).await.unwrap();
+        assert_eq!(
+            result.get("action").and_then(Value::as_str),
+            Some("pullFastForward")
+        );
+        assert_eq!(result.get("exitCode").and_then(Value::as_i64), Some(0));
+        assert_eq!(
+            result
+                .get("command")
+                .and_then(|command| command.get("args"))
+                .cloned()
+                .unwrap(),
+            json!(["pull", "--ff-only"])
+        );
+        assert_eq!(
+            fs::read_to_string(repo.join("file.txt")).unwrap(),
+            "one\ntwo\n"
+        );
+    }
+
+    #[test]
     fn worktree_target_stays_inside_family_root() {
         let dir = tempdir().unwrap();
         let source = dir.path().join("repo");
@@ -2118,5 +2341,60 @@ mod tests {
             parse_beads_board_output(r#"{"data":[{"id":"A"},1,{"id":"B"}]}"#).unwrap();
         assert_eq!(issues.len(), 2);
         assert_eq!(stdout, r#"[{"id":"A"},{"id":"B"}]"#);
+    }
+
+    #[test]
+    fn beads_list_all_labels_plans_board_list_command() {
+        let dir = tempdir().unwrap();
+        let ctx = context(dir.path());
+        let command =
+            build_beads_command_with_executable("listAllLabels", &Map::new(), &ctx, "/tmp/bd")
+                .unwrap();
+        assert_eq!(command.args, vec!["list", "--all", "--json"]);
+    }
+
+    #[test]
+    fn beads_label_counts_derive_sorted_counts_from_board_output() {
+        let (issues, _) = parse_beads_board_output(
+            r#"{"data":[{"id":"gxserver-1","labels":["ui"," mac ","",null,"ui"]},{"id":"gxserver-2","labels":["backend","Backend"]},{"id":"gxserver-3","labels":"ignored"},{"id":"gxserver-4","labels":["z","Z","a","A","aa"]},1]}"#,
+        )
+        .unwrap();
+        let labels = derive_beads_label_counts(&issues);
+        assert_eq!(
+            serde_json::to_string(&labels).unwrap(),
+            r#"[{"count":1,"label":"a"},{"count":1,"label":"A"},{"count":1,"label":"aa"},{"count":1,"label":"backend"},{"count":1,"label":"Backend"},{"count":1,"label":"mac"},{"count":2,"label":"ui"},{"count":1,"label":"z"},{"count":1,"label":"Z"}]"#
+        );
+
+        let (empty_issues, _) = parse_beads_board_output("").unwrap();
+        assert_eq!(
+            serde_json::to_string(&derive_beads_label_counts(&empty_issues)).unwrap(),
+            "[]"
+        );
+        let error = parse_beads_board_output("{").unwrap_err();
+        assert_eq!(error.code, "badRequest");
+        assert_eq!(error.message, "Beads board output was not valid JSON.");
+    }
+
+    fn run_git<I, S>(args: I, cwd: &Path)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let args = args
+            .into_iter()
+            .map(|arg| arg.as_ref().to_os_string())
+            .collect::<Vec<_>>();
+        let output = StdCommand::new("git")
+            .args(&args)
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

@@ -1302,6 +1302,7 @@ async function runPhase6AgentChecks({ homeDir, observations, paths, token }) {
   assert.equal(readSettings.status, 200);
   assert.equal(readSettings.body.result.isPersisted, false);
   assert.equal(readSettings.body.result.settings.agentAcceptAllEnabled, true);
+  assert.equal(readSettings.body.result.settings.defaultPromptAgentId, "codex");
   recordObservation(observations, "phase6ReadDefaultAgentSettings", normalizeValue({
     isPersisted: readSettings.body.result.isPersisted,
     settings: readSettings.body.result.settings,
@@ -1309,7 +1310,7 @@ async function runPhase6AgentChecks({ homeDir, observations, paths, token }) {
 
   const updateSettingsOff = await requestJson("/api/updateAgentSettings", {
     body: {
-      params: { agentAcceptAllEnabled: false },
+      params: { agentAcceptAllEnabled: false, defaultPromptAgentId: " claude " },
       protocolVersion: PROTOCOL_VERSION,
     },
     method: "POST",
@@ -1317,6 +1318,7 @@ async function runPhase6AgentChecks({ homeDir, observations, paths, token }) {
   });
   assert.equal(updateSettingsOff.status, 200);
   assert.equal(updateSettingsOff.body.result.settings.agentAcceptAllEnabled, false);
+  assert.equal(updateSettingsOff.body.result.settings.defaultPromptAgentId, "claude");
   recordObservation(observations, "phase6UpdateAgentSettingsOff", normalizeValue(updateSettingsOff.body.result, homeDir));
 
   const createProject = await requestJson("/api/createProject", {

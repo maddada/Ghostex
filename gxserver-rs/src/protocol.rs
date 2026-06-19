@@ -364,9 +364,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readRepositoryCloneJob"
         | "/api/cancelRepositoryCloneJob"
         | "/api/browseProjectDirectories" => remote_allowed(path),
-        "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/queryLogs" => {
-            full_local(path)
-        }
+        /*
+        CDXC:AgentHooks 2026-06-19-14:15:
+        Hook read/install/uninstall endpoints inspect or mutate user-local provider config files, so Rust keeps the TypeScript contract as full-local HTTP APIs requiring auth and protocol-version gates.
+        */
+        "/api/readAgentHookStatus"
+        | "/api/installAgentHooks"
+        | "/api/uninstallAgentHooks"
+        | "/api/readAgentSkillStatus"
+        | "/api/installAgentSkills"
+        | "/api/queryLogs" => full_local(path),
         "/api/resolveGitRootForPath"
         | "/api/updateAuth"
         | "/api/updateListenerConfig"

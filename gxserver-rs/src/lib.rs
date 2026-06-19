@@ -1,4 +1,5 @@
 pub mod agent_hooks;
+pub mod agent_skills;
 pub mod agents;
 pub mod auth;
 pub mod cli;

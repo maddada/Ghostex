@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     env,
     net::TcpListener,
     path::PathBuf,
@@ -7,9 +8,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::{
+    agent_skills::{install_agent_skills, read_agent_skill_status},
     auth::read_gxserver_auth_token,
     config::read_selected_local_api_port,
     constants::{GXSERVER_LOCAL_API_HOST, GXSERVER_PRODUCT, GXSERVER_VERSION},
@@ -71,6 +73,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
                 &get_gxserver_status(&build_identity, &version).await?,
                 args.iter().skip(1).any(|arg| arg == "--json"),
             )?;
+        }
+        Some("agent-skills") => {
+            run_agent_skills_command(args.iter().skip(1).cloned().collect()).await?;
         }
         Some("--version") | Some("version") => {
             println!("{version}");
@@ -326,9 +331,206 @@ Usage:
   gxserver stop      Stop only the gxserver control plane
   gxserver stop-all  Stop gxserver and kill tracked zmx sessions
   gxserver status    Print gxserver runtime state
+  gxserver agent-skills status [skill...] [--json]
+  gxserver agent-skills install <skill...> --source <path> [--json]
   gxserver --version Print the gxserver package version
 "
     );
+}
+
+/*
+CDXC:AgentSkills 2026-06-19-13:59:
+The Rust CLI mirrors TypeScript's direct agent-skill setup commands so app and shell callers can check/install Ghostex skills without constructing gxserver RPC bodies or duplicating discovery/install argument rules.
+*/
+async fn run_agent_skills_command(args: Vec<String>) -> Result<()> {
+    let subcommand = args.first().map(String::as_str).unwrap_or("status");
+    if matches!(subcommand, "help" | "-h" | "--help") {
+        print_agent_skills_help();
+        return Ok(());
+    }
+    let parsed = parse_cli_args(&args.iter().skip(1).cloned().collect::<Vec<_>>());
+    let paths = get_gxserver_paths(None);
+    match subcommand {
+        "status" => {
+            let mut params = Map::new();
+            if !parsed.rest.is_empty() {
+                params.insert("skillNames".to_string(), json_array(parsed.rest));
+            }
+            if let Some(repository_paths) = parsed.values.get("repository") {
+                params.insert(
+                    "repositoryPaths".to_string(),
+                    json_array(repository_paths.clone()),
+                );
+            }
+            let result = read_agent_skill_status(&paths, &params)?;
+            if parsed.flags.contains("json") {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                print_agent_skill_status(&result);
+            }
+        }
+        "install" => {
+            let source = parsed
+                .values
+                .get("source")
+                .or_else(|| parsed.values.get("packageSource"))
+                .and_then(|values| values.first())
+                .cloned();
+            let mut params = Map::new();
+            params.insert("skillNames".to_string(), json_array(parsed.rest));
+            if let Some(source) = source {
+                params.insert("packageSource".to_string(), Value::String(source));
+            }
+            if let Some(agent_ids) = parsed
+                .values
+                .get("agent")
+                .or_else(|| parsed.values.get("agents"))
+            {
+                params.insert("agentIds".to_string(), json_array(agent_ids.clone()));
+            }
+            if let Some(repository_paths) = parsed.values.get("repository") {
+                params.insert(
+                    "repositoryPaths".to_string(),
+                    json_array(repository_paths.clone()),
+                );
+            }
+            let result = install_agent_skills(&paths, &params).await?;
+            if parsed.flags.contains("json") {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                if let Some(stdout) = result.get("stdout").and_then(Value::as_str) {
+                    print!("{stdout}");
+                }
+                if let Some(stderr) = result.get("stderr").and_then(Value::as_str) {
+                    eprint!("{stderr}");
+                }
+                print_agent_skill_status(&result);
+            }
+        }
+        other => return Err(anyhow!("Unknown gxserver agent-skills command: {other}")),
+    }
+    Ok(())
+}
+
+fn print_agent_skill_status(status: &Value) {
+    if let Some(skills) = status.get("skills").and_then(Value::as_array) {
+        for skill in skills {
+            let skill_name = skill
+                .get("skillName")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let marker = if skill
+                .get("installed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                "installed"
+            } else {
+                "missing"
+            };
+            println!("{skill_name}: {marker}");
+            if let Some(locations) = skill.get("locations").and_then(Value::as_array) {
+                for location in locations {
+                    if let Some(directory_path) =
+                        location.get("directoryPath").and_then(Value::as_str)
+                    {
+                        println!("  {directory_path}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn print_agent_skills_help() {
+    println!(
+        "gxserver agent-skills
+
+Usage:
+  gxserver agent-skills status [skill...] [--repository path] [--json]
+  gxserver agent-skills install <skill...> --source <skills-package-path> [--agent id...] [--json]
+"
+    );
+}
+
+#[derive(Debug, Default)]
+struct ParsedCliArgs {
+    flags: HashSet<String>,
+    rest: Vec<String>,
+    values: HashMap<String, Vec<String>>,
+}
+
+fn parse_cli_args(args: &[String]) -> ParsedCliArgs {
+    let mut parsed = ParsedCliArgs::default();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "--" {
+            parsed.rest.extend(args.iter().skip(index + 1).cloned());
+            break;
+        }
+        if !arg.starts_with("--") {
+            parsed.rest.push(arg.clone());
+            index += 1;
+            continue;
+        }
+        let body = &arg[2..];
+        let (key, value) = if let Some((key, value)) = body.split_once('=') {
+            (to_camel_case(key), Some(value.to_string()))
+        } else {
+            (to_camel_case(body), None)
+        };
+        if let Some(value) = value {
+            push_cli_value(&mut parsed.values, key, value);
+            index += 1;
+            continue;
+        }
+        let next = args.get(index + 1);
+        if next.map(|value| value.starts_with("--")).unwrap_or(true) {
+            parsed.flags.insert(key);
+            index += 1;
+            continue;
+        }
+        push_cli_value(
+            &mut parsed.values,
+            key.clone(),
+            next.cloned().unwrap_or_default(),
+        );
+        index += 2;
+        if key == "agent" || key == "agents" {
+            while index < args.len() && !args[index].starts_with("--") {
+                push_cli_value(&mut parsed.values, key.clone(), args[index].clone());
+                index += 1;
+            }
+        }
+    }
+    parsed
+}
+
+fn push_cli_value(values: &mut HashMap<String, Vec<String>>, key: String, value: String) {
+    values.entry(key).or_default().push(value);
+}
+
+fn to_camel_case(value: &str) -> String {
+    let mut output = String::new();
+    let mut uppercase_next = false;
+    for character in value.chars() {
+        if character == '-' {
+            uppercase_next = true;
+            continue;
+        }
+        if uppercase_next {
+            output.extend(character.to_uppercase());
+            uppercase_next = false;
+        } else {
+            output.push(character);
+        }
+    }
+    output
+}
+
+fn json_array(values: Vec<String>) -> Value {
+    Value::Array(values.into_iter().map(Value::String).collect())
 }
 
 fn spawn_detached(command: &mut Command) -> Result<()> {
