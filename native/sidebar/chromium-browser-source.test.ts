@@ -126,11 +126,14 @@ describe("chromium browser source", () => {
     expect(cefBridgeSource).not.toContain("[cefView_ scrollWheel:event]");
   });
 
-  test("creates async CEF browser panes with a real frame and the first URL", () => {
+  test("creates CEF browser panes with a real frame and the first URL", () => {
     /*
      * CDXC:ChromiumBrowserPanes 2026-06-15-23:10:
      * Cmd+N browser panes can appear as a black surface when async GPUI CEF creation starts before AppKit assigns a real child-view frame, or when the requested URL is replayed after Chromium is already bootstrapping the first navigation.
      * Keep the first browser load attached to CEF creation itself and guard creation until the wrapper has non-zero bounds so the rendered page and address bar are initialized from the same navigation.
+     *
+     * CDXC:ChromiumBrowserPanes 2026-06-18-23:58:
+     * The production CreateBrowserSync path needs the same first-URL behavior as GPUI async creation. Starting on about:blank and then calling LoadURL adds a visible blank render turn when Cmd+N opens a new browser pane.
      */
     const didCreateBrowserSource = sourceBetween(
       cefBridgeSource,
@@ -156,6 +159,8 @@ describe("chromium browser source", () => {
     expect(createBrowserSource).toContain("didGiveInitialURLToBrowserCreate_ = initialURL_.length > 0;");
     expect(createBrowserSource).toContain("CefBrowserHost::CreateBrowser(");
     expect(createBrowserSource).toContain("CefString([creationURL UTF8String])");
+    expect(createBrowserSource).toContain("CefBrowserHost::CreateBrowserSync(");
+    expect(createBrowserSource).not.toContain('CefString("about:blank")');
     expect(didCreateBrowserSource).toContain(
       "if (initialURL_.length > 0 && !didGiveInitialURLToBrowserCreate_)",
     );

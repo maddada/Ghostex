@@ -1599,6 +1599,8 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
   }
 
   client_ = new GhostexCEFBrowserClient(self);
+  NSString* creationURL = initialURL_.length > 0 ? initialURL_ : @"about:blank";
+  didGiveInitialURLToBrowserCreate_ = initialURL_.length > 0;
   bool runsUnderGPUI = NSApp && [NSStringFromClass([NSApp class]) isEqualToString:@"GPUIApplication"];
   if (runsUnderGPUI) {
     /*
@@ -1608,8 +1610,6 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
     CDXC:GPUIPhase1 2026-06-14-13:15:
     Async GPUI browser creation must receive the intended initial URL directly. Creating about:blank first and loading from OnAfterCreated can lose the first navigation while Chromium is still finishing browser-info wiring, leaving the main browser target blank even though later address-bar navigation works.
     */
-    NSString* creationURL = initialURL_.length > 0 ? initialURL_ : @"about:blank";
-    didGiveInitialURLToBrowserCreate_ = initialURL_.length > 0;
     bool started = CefBrowserHost::CreateBrowser(
       windowInfo,
       client_,
@@ -1631,10 +1631,14 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
     return;
   }
 
+  /*
+  CDXC:ChromiumBrowserPanes 2026-06-18-23:58:
+  Cmd+N browser panes in the normal app should start CEF on the requested page, not about:blank followed by a second LoadURL. Passing the initial URL into CreateBrowserSync removes one visible blank-render turn while preserving the GPUI async behavior above.
+  */
   browser_ = CefBrowserHost::CreateBrowserSync(
     windowInfo,
     client_,
-    CefString("about:blank"),
+    CefString([creationURL UTF8String]),
     browserSettings,
     nullptr,
     requestContext);
@@ -1657,7 +1661,7 @@ static void GhostexCEFGrantTrustedClipboardContentSetting(CefRefPtr<CefRequestCo
   [self setNeedsLayout:YES];
   [self ghostexCEFApplyPreferredColorSchemeIfPossible];
 
-  if (initialURL_.length > 0) {
+  if (initialURL_.length > 0 && !didGiveInitialURLToBrowserCreate_) {
     [self loadURLString:initialURL_];
   }
 }
