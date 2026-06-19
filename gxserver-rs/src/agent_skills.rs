@@ -1,11 +1,19 @@
 use std::{
     collections::{BTreeMap, HashSet},
-    env, fs,
+    env, fs, io,
     path::{Component, Path, PathBuf},
+    process::{ExitStatus, Output, Stdio},
+    sync::{Arc, Mutex},
 };
 
 use serde_json::{json, Map, Value};
-use tokio::process::Command;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    process::Command,
+    sync::mpsc,
+    task::JoinHandle,
+    time::{sleep, Duration},
+};
 
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 
@@ -43,6 +51,11 @@ const AGENT_SKILL_INSTALL_ENV_OVERRIDES: &[&str] = &[
     "CODEX_PROFILE",
 ];
 const AGENT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
+const AGENT_SKILL_INSTALL_EXITED_READER_DRAIN_MS: u64 = 1_000;
+const AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
+const AGENT_SKILL_INSTALL_POLL_MS: u64 = 25;
+const AGENT_SKILL_INSTALL_TERMINATED_READER_DRAIN_MS: u64 = 250;
+const AGENT_SKILL_INSTALL_TIMEOUT_MS: u64 = 5 * 60 * 1000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentSkillDiscoveryRoot {
@@ -80,6 +93,11 @@ pub async fn install_agent_skills(
     let package_source =
         normalize_package_source(params.get("packageSource").and_then(Value::as_str))?;
     let skill_names = normalize_agent_skill_names(read_string_array(params, "skillNames")?)?;
+    if skill_names.is_empty() {
+        return Err(DomainStateError::bad_request(
+            "Agent skill installs require at least one Ghostex agent skill.",
+        ));
+    }
     let install_command = build_gxserver_agent_skill_install_command(
         &package_source,
         &skill_names,
@@ -283,7 +301,29 @@ async fn run_agent_skill_install_command(
     paths: &GxserverPaths,
     package_source: &str,
     install_command: &[String],
-) -> Result<std::process::Output, DomainStateError> {
+) -> Result<Output, DomainStateError> {
+    run_agent_skill_install_command_with_limits(
+        paths,
+        package_source,
+        install_command,
+        Duration::from_millis(AGENT_SKILL_INSTALL_TIMEOUT_MS),
+        AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES,
+    )
+    .await
+}
+
+/*
+CDXC:AgentSkills 2026-06-19-18:45:
+Agent skill installs run third-party CLI code through a local RPC. Reject a normalized-empty skill list before command construction, and collect bounded stdout/stderr with a timeout so a stalled or noisy installer cannot hang gxserver or allocate unbounded memory. Return captured output to the caller only; persistent logs must not receive command text or raw output.
+Package and repository sources accept the same leading-tilde shorthand users type elsewhere; expand `~` before absolutizing so bundled skill installs and status checks resolve against the user home instead of the process cwd.
+*/
+async fn run_agent_skill_install_command_with_limits(
+    paths: &GxserverPaths,
+    package_source: &str,
+    install_command: &[String],
+    timeout_duration: Duration,
+    output_limit_bytes: usize,
+) -> Result<Output, DomainStateError> {
     let Some((executable, args)) = install_command.split_first() else {
         return Err(DomainStateError::bad_request(
             "Agent skill install command is empty.",
@@ -301,26 +341,301 @@ async fn run_agent_skill_install_command(
         create_gxserver_agent_skill_install_environment(paths, &current_environment);
     command.env_clear();
     command.envs(install_environment);
-    let output = command.output().await.map_err(|error| DomainStateError {
+    configure_agent_skill_install_command_process_group(&mut command);
+    command
+        .kill_on_drop(true)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| DomainStateError {
         code: "internalError",
         message: format!("Agent skill install command could not start: {error}"),
     })?;
+    let stdout = child.stdout.take().ok_or_else(|| DomainStateError {
+        code: "internalError",
+        message: "Agent skill install command stdout pipe was unavailable.".to_string(),
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| DomainStateError {
+        code: "internalError",
+        message: "Agent skill install command stderr pipe was unavailable.".to_string(),
+    })?;
+    let (limit_sender, mut limit_receiver) = mpsc::unbounded_channel();
+    let stdout_output = SharedCappedChildOutput::new();
+    let stderr_output = SharedCappedChildOutput::new();
+    let stdout_reader = tokio::spawn(read_capped_child_output(
+        stdout,
+        "stdout",
+        output_limit_bytes,
+        limit_sender.clone(),
+        stdout_output.clone(),
+    ));
+    let stderr_reader = tokio::spawn(read_capped_child_output(
+        stderr,
+        "stderr",
+        output_limit_bytes,
+        limit_sender,
+        stderr_output.clone(),
+    ));
+    let mut timeout_sleep = Box::pin(sleep(timeout_duration));
+    let mut termination = None;
+    let status = loop {
+        match child.try_wait().map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Agent skill install command wait failed: {error}"),
+        })? {
+            Some(status) => break status,
+            None => {}
+        }
+        tokio::select! {
+            _ = &mut timeout_sleep => {
+                termination = Some(AgentSkillInstallTermination::Timeout);
+                break terminate_agent_skill_install_child(&mut child).await?;
+            }
+            stream_name = limit_receiver.recv() => {
+                if let Some(stream_name) = stream_name {
+                    termination = Some(AgentSkillInstallTermination::OutputLimit { stream_name });
+                    break terminate_agent_skill_install_child(&mut child).await?;
+                }
+            }
+            _ = sleep(Duration::from_millis(AGENT_SKILL_INSTALL_POLL_MS)) => {}
+        }
+    };
+    let reader_drain_timeout = Some(Duration::from_millis(if termination.is_some() {
+        AGENT_SKILL_INSTALL_TERMINATED_READER_DRAIN_MS
+    } else {
+        AGENT_SKILL_INSTALL_EXITED_READER_DRAIN_MS
+    }));
+    finish_capped_child_output_reader(stdout_reader, "stdout", reader_drain_timeout).await?;
+    finish_capped_child_output_reader(stderr_reader, "stderr", reader_drain_timeout).await?;
+    let stdout = stdout_output.snapshot();
+    let stderr = stderr_output.snapshot();
+    let output_limit_termination = termination.or_else(|| {
+        if stdout.limit_exceeded {
+            Some(AgentSkillInstallTermination::OutputLimit {
+                stream_name: "stdout",
+            })
+        } else if stderr.limit_exceeded {
+            Some(AgentSkillInstallTermination::OutputLimit {
+                stream_name: "stderr",
+            })
+        } else {
+            None
+        }
+    });
+    let output = Output {
+        status,
+        stdout: stdout.bytes,
+        stderr: stderr.bytes,
+    };
+    if let Some(termination) = output_limit_termination {
+        return Err(agent_skill_install_termination_error(
+            termination,
+            timeout_duration,
+            output_limit_bytes,
+            &output,
+        ));
+    }
     if output.status.success() {
         Ok(output)
     } else {
         Err(DomainStateError {
             code: "internalError",
-            message: format!(
-                "Agent skill install command failed with exit code {}.",
-                output
-                    .status
-                    .code()
-                    .map(|code| code.to_string())
-                    .unwrap_or_else(|| "unknown".to_string())
+            message: append_agent_skill_install_output(
+                format!(
+                    "Agent skill install command failed with exit code {}.",
+                    output
+                        .status
+                        .code()
+                        .map(|code| code.to_string())
+                        .unwrap_or_else(|| "unknown".to_string())
+                ),
+                &output,
             ),
         })
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AgentSkillInstallTermination {
+    OutputLimit { stream_name: &'static str },
+    Timeout,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CappedChildOutput {
+    bytes: Vec<u8>,
+    limit_exceeded: bool,
+}
+
+#[derive(Clone, Debug)]
+struct SharedCappedChildOutput {
+    state: Arc<Mutex<CappedChildOutput>>,
+}
+
+impl SharedCappedChildOutput {
+    fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(CappedChildOutput {
+                bytes: Vec::new(),
+                limit_exceeded: false,
+            })),
+        }
+    }
+
+    fn append(&self, bytes: &[u8], limit_bytes: usize) -> bool {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let remaining = limit_bytes.saturating_sub(state.bytes.len());
+        if remaining > 0 {
+            state
+                .bytes
+                .extend_from_slice(&bytes[..bytes.len().min(remaining)]);
+        }
+        if bytes.len() > remaining {
+            state.limit_exceeded = true;
+        }
+        state.limit_exceeded
+    }
+
+    fn snapshot(&self) -> CappedChildOutput {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+}
+
+async fn read_capped_child_output<R>(
+    mut stream: R,
+    stream_name: &'static str,
+    limit_bytes: usize,
+    limit_sender: mpsc::UnboundedSender<&'static str>,
+    output: SharedCappedChildOutput,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = stream.read(&mut chunk).await?;
+        if read == 0 {
+            return Ok(());
+        }
+        if output.append(&chunk[..read], limit_bytes) {
+            let _ = limit_sender.send(stream_name);
+            return Ok(());
+        }
+    }
+}
+
+async fn finish_capped_child_output_reader(
+    mut reader: JoinHandle<io::Result<()>>,
+    stream_name: &str,
+    drain_timeout: Option<Duration>,
+) -> Result<(), DomainStateError> {
+    let result = if let Some(drain_timeout) = drain_timeout {
+        tokio::select! {
+            result = &mut reader => result,
+            _ = sleep(drain_timeout) => {
+                reader.abort();
+                return Ok(());
+            }
+        }
+    } else {
+        reader.await
+    };
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(DomainStateError {
+            code: "internalError",
+            message: format!("Agent skill install command {stream_name} read failed: {error}"),
+        }),
+        Err(error) => Err(DomainStateError {
+            code: "internalError",
+            message: format!("Agent skill install command {stream_name} reader failed: {error}"),
+        }),
+    }
+}
+
+async fn terminate_agent_skill_install_child(
+    child: &mut tokio::process::Child,
+) -> Result<ExitStatus, DomainStateError> {
+    kill_agent_skill_install_process_group(child);
+    let _ = child.start_kill();
+    child.wait().await.map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Agent skill install command termination failed: {error}"),
+    })
+}
+
+fn agent_skill_install_termination_error(
+    termination: AgentSkillInstallTermination,
+    timeout_duration: Duration,
+    output_limit_bytes: usize,
+    output: &Output,
+) -> DomainStateError {
+    let message = match termination {
+        AgentSkillInstallTermination::Timeout => format!(
+            "Agent skill install command timed out after {}ms.",
+            timeout_duration.as_millis()
+        ),
+        AgentSkillInstallTermination::OutputLimit { stream_name } => format!(
+            "Agent skill install command {stream_name} exceeded {output_limit_bytes} bytes and was terminated."
+        ),
+    };
+    DomainStateError {
+        code: "internalError",
+        message: append_agent_skill_install_output(message, output),
+    }
+}
+
+fn append_agent_skill_install_output(message: String, output: &Output) -> String {
+    let mut parts = vec![message];
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !stderr.is_empty() {
+        parts.push(format!("stderr:\n{stderr}"));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !stdout.is_empty() {
+        parts.push(format!("stdout:\n{stdout}"));
+    }
+    parts.join("\n")
+}
+
+fn configure_agent_skill_install_command_process_group(command: &mut Command) {
+    #[cfg(unix)]
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        });
+    }
+
+    #[cfg(not(unix))]
+    let _ = command;
+}
+
+#[cfg(unix)]
+fn kill_agent_skill_install_process_group(child: &tokio::process::Child) {
+    let Some(process_id) = child.id() else {
+        return;
+    };
+    let process_group_id = process_id as libc::pid_t;
+    if process_group_id <= 0 {
+        return;
+    }
+    unsafe {
+        libc::kill(-process_group_id, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_agent_skill_install_process_group(_child: &tokio::process::Child) {}
 
 fn discover_skill_locations(
     root: &AgentSkillDiscoveryRoot,
@@ -493,8 +808,8 @@ fn normalize_package_source(package_source: Option<&str>) -> Result<String, Doma
     if is_uri_like(normalized) {
         return Ok(normalized.to_string());
     }
-    Ok(path_string(&normalize_absolute_path(PathBuf::from(
-        normalized,
+    Ok(path_string(&normalize_absolute_path(expand_home_prefix(
+        PathBuf::from(normalized),
     ))))
 }
 
@@ -503,7 +818,7 @@ fn normalize_existing_absolute_path(candidate: &str) -> PathBuf {
     if normalized.is_empty() {
         return PathBuf::new();
     }
-    normalize_absolute_path(PathBuf::from(normalized))
+    normalize_absolute_path(expand_home_prefix(PathBuf::from(normalized)))
 }
 
 fn normalize_absolute_path(path: PathBuf) -> PathBuf {
@@ -712,6 +1027,116 @@ mod tests {
         assert_eq!(install_environment.get("CODEX_PROFILE"), None);
     }
 
+    #[tokio::test]
+    async fn install_agent_skills_rejects_explicit_empty_skill_names() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        for skill_names in [json!([]), json!([" ", "\n"])] {
+            let params = json!({
+                "packageSource": path_string(temp.path()),
+                "skillNames": skill_names,
+            });
+            let error = install_agent_skills(&paths, params.as_object().expect("params"))
+                .await
+                .expect_err("empty skills should fail before command execution");
+            assert_eq!(error.code, "badRequest");
+            assert!(error.message.contains("at least one Ghostex agent skill"));
+        }
+    }
+
+    #[test]
+    fn package_and_repository_paths_expand_home_before_absolutizing() {
+        let Some(home) = env::var_os("HOME") else {
+            return;
+        };
+        let home = PathBuf::from(home);
+        assert_eq!(
+            normalize_package_source(Some("~/skills")).expect("package source"),
+            path_string(&home.join("skills"))
+        );
+        assert_eq!(
+            normalize_existing_absolute_path("~/repo"),
+            home.join("repo")
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn install_command_success_returns_bounded_stdout_and_stderr() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let output = run_agent_skill_install_command_with_limits(
+            &paths,
+            &path_string(temp.path()),
+            &shell_command("printf success; printf diagnostic >&2"),
+            Duration::from_secs(2),
+            1024,
+        )
+        .await
+        .expect("command output");
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "success");
+        assert_eq!(String::from_utf8_lossy(&output.stderr), "diagnostic");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn install_command_error_preserves_bounded_stdout_and_stderr() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let error = run_agent_skill_install_command_with_limits(
+            &paths,
+            &path_string(temp.path()),
+            &shell_command("printf before-fail; printf install-error >&2; exit 7"),
+            Duration::from_secs(2),
+            1024,
+        )
+        .await
+        .expect_err("command should fail");
+        assert_eq!(error.code, "internalError");
+        assert!(error.message.contains("exit code 7"));
+        assert!(error.message.contains("stdout:\nbefore-fail"));
+        assert!(error.message.contains("stderr:\ninstall-error"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn install_command_times_out_and_returns_captured_output() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let error = run_agent_skill_install_command_with_limits(
+            &paths,
+            &path_string(temp.path()),
+            &shell_command("printf started; sleep 2"),
+            Duration::from_millis(150),
+            1024,
+        )
+        .await
+        .expect_err("command should time out");
+        assert_eq!(error.code, "internalError");
+        assert!(error.message.contains("timed out"));
+        assert!(error.message.contains("stdout:\nstarted"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn install_command_kills_process_on_output_limit() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let error = run_agent_skill_install_command_with_limits(
+            &paths,
+            &path_string(temp.path()),
+            &shell_command("yes agent-skill-output-limit"),
+            Duration::from_secs(5),
+            128,
+        )
+        .await
+        .expect_err("command should exceed output cap");
+        assert_eq!(error.code, "internalError");
+        assert!(error.message.contains("stdout exceeded 128 bytes"));
+        assert!(error.message.contains("stdout:\nagent-skill"));
+    }
+
     #[test]
     fn agent_skill_status_checks_global_repository_and_plugin_roots() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -851,6 +1276,11 @@ mod tests {
             .find(|skill| skill.get("skillName").and_then(Value::as_str) == Some(skill_name))
             .and_then(|skill| skill.get("installed"))
             .and_then(Value::as_bool)
+    }
+
+    #[cfg(unix)]
+    fn shell_command(script: &str) -> Vec<String> {
+        vec!["sh".to_string(), "-c".to_string(), script.to_string()]
     }
 
     #[cfg(unix)]

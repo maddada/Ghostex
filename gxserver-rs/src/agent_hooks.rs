@@ -248,16 +248,25 @@ fn read_hook_status(
     hook_paths: &HookPaths,
 ) -> Result<Value, DomainStateError> {
     let cli_installed = command_exists(definition.cli_command, &hook_paths.home_dir);
-    let paths = provider_hook_path(definition.agent_id, hook_paths)
-        .map(|path| vec![path_string(&path)])
-        .unwrap_or_default();
+    /*
+    CDXC:AgentHooks 2026-06-19-18:43:
+    Hook status must report every candidate provider config path and inspect all candidates for Ghostex-owned hooks so profile-only Codex and Claude installs are not misreported as missing.
+    Keep first-time install conservative, but status reads should treat any current provider candidate as installed once the shared notify hook is current.
+    */
+    let provider_paths = provider_hook_paths(definition.agent_id, hook_paths);
+    let provider_texts = provider_paths
+        .iter()
+        .map(|path| read_file_text(path))
+        .collect::<Vec<_>>();
+    let paths = provider_paths
+        .iter()
+        .map(|path| path_string(path))
+        .collect::<Vec<_>>();
     let notify_current = is_notify_hook_current(&hook_paths.notify_hook_path);
-    let provider_current = provider_hook_path(definition.agent_id, hook_paths)
-        .map(|path| provider_hook_current(&path, &hook_paths.notify_hook_path))
-        .unwrap_or(false);
-    let ghostex_hook_present = provider_hook_path(definition.agent_id, hook_paths)
-        .map(|path| read_file_text(&path).contains("ghostex"))
-        .unwrap_or(false)
+    let provider_current = provider_texts
+        .iter()
+        .any(|text| provider_hook_text_current(text, &hook_paths.notify_hook_path));
+    let ghostex_hook_present = provider_texts.iter().any(|text| text.contains("ghostex"))
         || read_file_text(&hook_paths.notify_hook_path).contains(NOTIFY_HOOK_MARKER);
     let hook_installed = notify_current && provider_current;
     let status = if !cli_installed {
@@ -656,17 +665,31 @@ fn without_marked_block(lines: &[String], begin_marker: &str, end_marker: &str) 
             index += 1;
             continue;
         }
-        while index < lines.len() && lines[index].trim() != end_marker {
-            index += 1;
-        }
-        if index < lines.len() {
-            index += 1;
-        }
+        /*
+        CDXC:AgentHooks 2026-06-19-18:43:
+        Marked YAML uninstall must be lossless when a Ghostex begin marker has no matching end marker. Preserve the whole file instead of assuming the rest of the user's YAML belongs to Ghostex.
+        */
+        let Some(end_index) =
+            lines
+                .iter()
+                .enumerate()
+                .skip(index + 1)
+                .find_map(|(candidate_index, line)| {
+                    (line.trim() == end_marker).then_some(candidate_index)
+                })
+        else {
+            return lines.to_vec();
+        };
+        index = end_index + 1;
     }
     while result.last().map(|line| line.trim().is_empty()) == Some(true) {
         result.pop();
     }
     result
+}
+
+fn provider_hook_text_current(text: &str, notify_hook_path: &Path) -> bool {
+    !text.is_empty() && text.contains(&path_string(notify_hook_path))
 }
 
 fn read_json_object(text: &str) -> Value {
@@ -727,11 +750,6 @@ fn write_provider_hook(
         .to_string()
     };
     fs::write(path, source).map_err(io_error)
-}
-
-fn provider_hook_current(path: &Path, notify_hook_path: &Path) -> bool {
-    let text = read_file_text(path);
-    !text.is_empty() && text.contains(&path_string(notify_hook_path))
 }
 
 fn install_notify_hook(hook_paths: &HookPaths) -> Result<(), DomainStateError> {
@@ -895,11 +913,11 @@ fn is_opencode_session_plugin_registration(value: &Value) -> bool {
         .as_str()
         .or_else(|| value.as_array().and_then(|items| items.first()?.as_str()))
         .unwrap_or_default();
-    plugin == OPENCODE_PLUGIN_SPEC
-        || plugin == "ghostex-session"
-        || plugin == "./plugins/ghostex-session.js"
-        || plugin.ends_with("/plugins/ghostex-session.js")
-        || plugin.ends_with("/ghostex-session.js")
+    /*
+    CDXC:AgentHooks 2026-06-19-18:43:
+    OpenCode uninstall may remove only Ghostex's generated plugin identifiers from opencode.json. User plugins that merely end in ghostex-session.js are not Ghostex-owned.
+    */
+    plugin == OPENCODE_PLUGIN_SPEC || plugin == "ghostex-session"
 }
 
 fn is_ghostex_owned_hook_command(value: &Value, command: &str) -> bool {
@@ -1115,6 +1133,7 @@ fn io_error(error: std::io::Error) -> DomainStateError {
 mod tests {
     use super::*;
     use crate::paths::get_gxserver_paths;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn hook_status_uses_home_scoped_paths() {
@@ -1133,6 +1152,93 @@ mod tests {
             .and_then(Value::as_str)
             .expect("notify path")
             .starts_with(temp.path().to_str().expect("temp path")));
+    }
+
+    #[test]
+    fn hook_status_reports_profile_only_provider_hook_paths() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let hook_paths = HookPaths::new(paths.home_dir.clone());
+        write_test_executable(&temp.path().join(".local").join("bin").join("codex"));
+        install_notify_hook(&hook_paths).expect("notify hook");
+        let profile_path = temp
+            .path()
+            .join(".codex-profiles")
+            .join("work")
+            .join("hooks.json");
+        write_test_file(
+            &profile_path,
+            &format!(
+                "{}\n",
+                json!({
+                    "ghostex": {
+                        "command": path_string(&hook_paths.notify_hook_path),
+                        "agent": "codex"
+                    }
+                })
+            ),
+        );
+        let expected_paths = provider_hook_paths("codex", &hook_paths)
+            .iter()
+            .map(|path| path_string(path))
+            .collect::<Vec<_>>();
+
+        let status = read_agent_hook_status(
+            &paths,
+            json!({ "agentIds": ["codex"], "autoUpgradeInstalled": false })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("status");
+        let row = status
+            .get("agents")
+            .and_then(Value::as_array)
+            .and_then(|agents| agents.first())
+            .expect("codex row");
+        assert_eq!(row.get("status"), Some(&json!("installed")));
+        assert_eq!(row.get("hookInstalled"), Some(&json!(true)));
+        assert_eq!(row.get("paths"), Some(&json!(expected_paths)));
+        assert!(row
+            .get("paths")
+            .and_then(Value::as_array)
+            .expect("paths")
+            .contains(&json!(path_string(&profile_path))));
+    }
+
+    #[test]
+    fn hook_status_detects_stale_profile_only_provider_hook() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        write_test_executable(&temp.path().join(".local").join("bin").join("codex"));
+        let profile_path = temp
+            .path()
+            .join(".codex-profiles")
+            .join("work")
+            .join("hooks.json");
+        write_test_file(
+            &profile_path,
+            r#"{"ghostex":{"command":"legacy ~/.ghostexterm/agent-shell-notify.sh","agent":"codex"}}"#,
+        );
+
+        let status = read_agent_hook_status(
+            &paths,
+            json!({ "agentIds": ["codex"], "autoUpgradeInstalled": false })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("status");
+        let row = status
+            .get("agents")
+            .and_then(Value::as_array)
+            .and_then(|agents| agents.first())
+            .expect("codex row");
+        assert_eq!(row.get("status"), Some(&json!("updateRequired")));
+        assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
+        assert!(row
+            .get("paths")
+            .and_then(Value::as_array)
+            .expect("paths")
+            .contains(&json!(path_string(&profile_path))));
     }
 
     #[test]
@@ -1199,6 +1305,26 @@ mod tests {
         let cursor_text = fs::read_to_string(cursor_path).expect("cursor config");
         assert!(!cursor_text.contains("agent-shell-notify"));
         assert!(cursor_text.contains("user-managed-cursor-hook"));
+    }
+
+    #[test]
+    fn uninstall_marked_yaml_preserves_file_when_end_marker_is_missing() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let rovodev = HookDefinition {
+            agent_id: "rovodev",
+            cli_command: "acli",
+        };
+        let yaml_path = temp.path().join("config.yml");
+        let yaml_text = "user_before: true\n# ghostex hooks rovodev begin\nnotify: ~/.ghostex/hooks/agent-shell-notify.sh\nuser_after: true\n";
+        write_test_file(&yaml_path, yaml_text);
+
+        let removed =
+            uninstall_marked_yaml_hook(&rovodev, vec![yaml_path.clone()]).expect("yaml uninstall");
+        assert!(removed.is_empty());
+        assert_eq!(
+            fs::read_to_string(&yaml_path).expect("yaml text"),
+            yaml_text
+        );
     }
 
     #[test]
@@ -1397,6 +1523,7 @@ mod tests {
                         "./plugins/ghostex-session.js",
                         ["ghostex-session", { "enabled": true }],
                         "/tmp/plugins/ghostex-session.js",
+                        "/tmp/ghostex-session.js",
                         "not-ghostex"
                     ]
                 })
@@ -1418,7 +1545,12 @@ mod tests {
         .expect("opencode json");
         assert_eq!(
             opencode_config.get("plugin"),
-            Some(&json!(["./plugins/other.js", "not-ghostex"]))
+            Some(&json!([
+                "./plugins/other.js",
+                "/tmp/plugins/ghostex-session.js",
+                "/tmp/ghostex-session.js",
+                "not-ghostex"
+            ]))
         );
     }
 
@@ -1427,5 +1559,11 @@ mod tests {
             fs::create_dir_all(parent).expect("parent");
         }
         fs::write(path, text).expect("write test file");
+    }
+
+    fn write_test_executable(path: &Path) {
+        write_test_file(path, "#!/bin/sh\nexit 0\n");
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+            .expect("chmod test executable");
     }
 }

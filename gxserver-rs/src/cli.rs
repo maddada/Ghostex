@@ -485,6 +485,11 @@ fn parse_cli_args(args: &[String]) -> ParsedCliArgs {
             index += 1;
             continue;
         }
+        if is_value_less_cli_flag(&key) {
+            parsed.flags.insert(key);
+            index += 1;
+            continue;
+        }
         let next = args.get(index + 1);
         if next.map(|value| value.starts_with("--")).unwrap_or(true) {
             parsed.flags.insert(key);
@@ -505,6 +510,14 @@ fn parse_cli_args(args: &[String]) -> ParsedCliArgs {
         }
     }
     parsed
+}
+
+/*
+CDXC:AgentSkillsCli 2026-06-19-18:44:
+Agent-skill commands must treat known value-less switches such as --json as flags even when a positional skill name follows, so `gxserver agent-skills status --json ghostex-browser-use` keeps the skill name in rest while enabling JSON output.
+*/
+fn is_value_less_cli_flag(key: &str) -> bool {
+    matches!(key, "json")
 }
 
 fn push_cli_value(values: &mut HashMap<String, Vec<String>>, key: String, value: String) {
@@ -556,5 +569,40 @@ fn _home_dir_for_tests(path: PathBuf) -> GxserverForegroundOptions {
         build_identity: Some(create_source_build_identity(GXSERVER_VERSION)),
         home_dir: Some(path),
         version: GXSERVER_VERSION.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_cli_args_keeps_skill_name_after_json_flag() {
+        let parsed = parse_cli_args(&args(&["--json", "ghostex-browser-use"]));
+
+        assert!(parsed.flags.contains("json"));
+        assert_eq!(parsed.rest, vec!["ghostex-browser-use".to_string()]);
+        assert_eq!(parsed.values.get("json"), None);
+    }
+
+    #[test]
+    fn parse_cli_args_still_consumes_known_value_options() {
+        let parsed = parse_cli_args(&args(&[
+            "--repository",
+            "/tmp/skills",
+            "--json",
+            "ghostex-browser-use",
+        ]));
+
+        assert!(parsed.flags.contains("json"));
+        assert_eq!(parsed.rest, vec!["ghostex-browser-use".to_string()]);
+        assert_eq!(
+            parsed.values.get("repository"),
+            Some(&vec!["/tmp/skills".to_string()])
+        );
     }
 }

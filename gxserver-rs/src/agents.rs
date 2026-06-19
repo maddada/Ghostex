@@ -9,6 +9,7 @@ use crate::{
 };
 
 const AGENT_SETTINGS_METADATA_KEY: &str = "agents.settings.v1";
+const LEGACY_AGENT_SETTINGS_METADATA_KEY: &str = "gxserverAgentSettings";
 const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
 const MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH: usize = 120;
 const INITIAL_ACTIVITY_SUPPRESSION_MS: i64 = 12_000;
@@ -48,6 +49,9 @@ Phase 6 moves agent policy, launch/resume planning, passive title/status ingesti
 
 CDXC:GxserverAgentSettings 2026-06-19-13:59:
 Agent settings parity uses the TypeScript metadata key `agents.settings.v1` and stores Default Prompt Agent beside global Accept All. Normalize the prompt-agent id at the daemon boundary by trimming whitespace, falling back to `codex`, and capping it to 120 chars without validating against a client-local agent registry.
+
+CDXC:GxserverAgentSettings 2026-06-19-18:44:
+Rust must treat legacy `gxserverAgentSettings` metadata as persisted when `agents.settings.v1` is absent so upgrades do not overwrite user choices during startup seeding. Updates migrate by reading that legacy value and writing only the current key while leaving the legacy row untouched.
 */
 pub fn dispatch_agent_endpoint(
     repository: &DomainRepository<'_>,
@@ -163,18 +167,27 @@ pub fn dispatch_agent_endpoint(
 }
 
 fn read_agent_settings_with_metadata(db: &Connection) -> Result<Value, DomainStateError> {
-    let row = db
-        .query_row(
-            "SELECT value FROM metadata WHERE key = ?1",
-            [AGENT_SETTINGS_METADATA_KEY],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(sql_error)?;
+    let row = read_agent_settings_metadata_value(db)?;
+    let parsed = row.as_deref().map(parse_json_object);
     Ok(json!({
         "isPersisted": row.is_some(),
-        "settings": normalize_agent_settings(row.as_deref().map(parse_json_object).as_ref()),
+        "settings": normalize_agent_settings(parsed.as_ref()),
     }))
+}
+
+fn read_agent_settings_metadata_value(db: &Connection) -> Result<Option<String>, DomainStateError> {
+    if let Some(value) = read_metadata_value(db, AGENT_SETTINGS_METADATA_KEY)? {
+        return Ok(Some(value));
+    }
+    read_metadata_value(db, LEGACY_AGENT_SETTINGS_METADATA_KEY)
+}
+
+fn read_metadata_value(db: &Connection, key: &str) -> Result<Option<String>, DomainStateError> {
+    db.query_row("SELECT value FROM metadata WHERE key = ?1", [key], |row| {
+        row.get::<_, String>(0)
+    })
+    .optional()
+    .map_err(sql_error)
 }
 
 fn read_agent_settings(db: &Connection) -> Result<Map<String, Value>, DomainStateError> {
@@ -2471,6 +2484,18 @@ mod tests {
         (temp, db)
     }
 
+    fn write_metadata_value(db: &Connection, key: &str, value: Value) {
+        db.execute(
+            "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                key,
+                serde_json::to_string(&value).expect("serialize metadata value"),
+                "2026-06-19T00:00:00.000Z"
+            ],
+        )
+        .expect("write metadata value");
+    }
+
     #[test]
     fn agent_settings_use_current_metadata_key_and_default_prompt_agent() {
         let (_temp, db) = open_test_database();
@@ -2520,6 +2545,113 @@ mod tests {
             )
             .expect("legacy count");
         assert_eq!(legacy_count, 0);
+    }
+
+    #[test]
+    fn agent_settings_read_legacy_metadata_key_when_current_missing() {
+        let (_temp, db) = open_test_database();
+        write_metadata_value(
+            &db,
+            LEGACY_AGENT_SETTINGS_METADATA_KEY,
+            json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": " claude " }),
+        );
+
+        let settings = read_agent_settings_with_metadata(&db).expect("legacy settings");
+        assert_eq!(settings.get("isPersisted"), Some(&json!(true)));
+        assert_eq!(
+            settings
+                .get("settings")
+                .and_then(|settings| settings.get("agentAcceptAllEnabled")),
+            Some(&json!(false))
+        );
+        assert_eq!(
+            settings
+                .get("settings")
+                .and_then(|settings| settings.get("defaultPromptAgentId")),
+            Some(&json!("claude"))
+        );
+    }
+
+    #[test]
+    fn agent_settings_prefer_current_metadata_key_over_legacy() {
+        let (_temp, db) = open_test_database();
+        write_metadata_value(
+            &db,
+            LEGACY_AGENT_SETTINGS_METADATA_KEY,
+            json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": "claude" }),
+        );
+        write_metadata_value(
+            &db,
+            AGENT_SETTINGS_METADATA_KEY,
+            json!({ "agentAcceptAllEnabled": true, "defaultPromptAgentId": "codex" }),
+        );
+
+        let settings = read_agent_settings_with_metadata(&db).expect("current settings");
+        assert_eq!(settings.get("isPersisted"), Some(&json!(true)));
+        assert_eq!(
+            settings
+                .get("settings")
+                .and_then(|settings| settings.get("agentAcceptAllEnabled")),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            settings
+                .get("settings")
+                .and_then(|settings| settings.get("defaultPromptAgentId")),
+            Some(&json!("codex"))
+        );
+    }
+
+    #[test]
+    fn agent_settings_update_migrates_legacy_values_to_current_key_without_deleting_legacy() {
+        let (_temp, db) = open_test_database();
+        let legacy_value =
+            json!({ "agentAcceptAllEnabled": false, "defaultPromptAgentId": "claude" });
+        write_metadata_value(
+            &db,
+            LEGACY_AGENT_SETTINGS_METADATA_KEY,
+            legacy_value.clone(),
+        );
+
+        let updated = update_agent_settings(
+            &db,
+            json!({ "defaultPromptAgentId": " codex " })
+                .as_object()
+                .expect("params"),
+        )
+        .expect("update settings from legacy");
+        assert_eq!(updated.get("agentAcceptAllEnabled"), Some(&json!(false)));
+        assert_eq!(updated.get("defaultPromptAgentId"), Some(&json!("codex")));
+
+        let current: String = db
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                [AGENT_SETTINGS_METADATA_KEY],
+                |row| row.get(0),
+            )
+            .expect("current metadata");
+        let current_value = parse_json_object(&current);
+        assert_eq!(
+            current_value
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            current_value
+                .get("defaultPromptAgentId")
+                .and_then(Value::as_str),
+            Some("codex")
+        );
+
+        let legacy: String = db
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                [LEGACY_AGENT_SETTINGS_METADATA_KEY],
+                |row| row.get(0),
+            )
+            .expect("legacy metadata");
+        assert_eq!(parse_json_object(&legacy), legacy_value);
     }
 
     #[test]

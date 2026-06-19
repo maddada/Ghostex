@@ -1,9 +1,9 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant},
 };
@@ -27,6 +27,7 @@ const LOG_QUERY_WINDOW_BASE_BYTES: u64 = 2 * 1024 * 1024;
 const LOG_QUERY_MAX_WINDOW_BYTES: u64 = 16 * 1024 * 1024;
 const LOG_QUERY_ESTIMATED_BYTES_PER_ENTRY: u64 = 1024;
 static SCHEDULED_RETENTION_LOG_FILES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static LOG_FILE_WRITE_LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -81,6 +82,9 @@ Persistent Rust logs must be safe for support bundles. Persist only warn/error u
 
 CDXC:GxserverLogs 2026-06-19-14:45:
 Rust logger startup must match TypeScript support-bundle retention: schedule a one-minute delayed cleanup, keep only the active or newest gxserver JSONL split file, delete older rotations, and trim the retained file to 25,000 lines without logging cleanup failures back into the same file.
+
+CDXC:GxserverLogs 2026-06-19-18:44:
+Retention rewrites the retained JSONL file, so append, rotation, and prune must share a per-log-file writer lock. Do not replace this with stale temp-and-rename pruning unless concurrent appends are blocked or merged before the rewrite commits.
 */
 impl GxserverLogger {
     pub fn new(paths: GxserverPaths) -> Self {
@@ -105,14 +109,7 @@ impl GxserverLogger {
         fs::create_dir_all(&self.paths.logs_dir)
             .with_context(|| "create gxserver logs directory")?;
         let line = serde_json::to_string(&normalize_log_entry(entry))?;
-        rotate_log_if_needed(&self.paths.log_file, line.as_bytes().len() as u64 + 1)?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.paths.log_file)
-            .with_context(|| "open gxserver log file")?;
-        writeln!(file, "{line}")?;
-        Ok(())
+        write_gxserver_log_line(&self.paths, &line)
     }
 
     fn should_persist(&self, level: LogLevel) -> bool {
@@ -152,6 +149,16 @@ pub fn schedule_gxserver_log_line_retention(paths: &GxserverPaths, options: LogR
 }
 
 pub fn prune_gxserver_log_lines(paths: &GxserverPaths, max_lines: usize) -> Result<()> {
+    prune_gxserver_log_lines_with_before_rewrite(paths, max_lines, || {})
+}
+
+fn prune_gxserver_log_lines_with_before_rewrite(
+    paths: &GxserverPaths,
+    max_lines: usize,
+    before_rewrite: impl FnOnce(),
+) -> Result<()> {
+    let write_lock = log_file_write_lock(&paths.log_file);
+    let _write_guard = write_lock.lock().expect("gxserver log writer poisoned");
     let log_files = gxserver_log_files(&paths.log_file);
     let Some(retained_log_file) = retained_gxserver_log_file(&paths.log_file, &log_files)? else {
         return Ok(());
@@ -166,7 +173,7 @@ pub fn prune_gxserver_log_lines(paths: &GxserverPaths, max_lines: usize) -> Resu
             Err(error) => return Err(error).with_context(|| "prune gxserver log rotations"),
         }
     }
-    prune_log_file_to_max_lines(&retained_log_file, max_lines)
+    prune_log_file_to_max_lines_with_before_rewrite(&retained_log_file, max_lines, before_rewrite)
 }
 
 pub fn log_level_from_status(status: u16) -> LogLevel {
@@ -556,6 +563,30 @@ fn read_debugging_mode_settings_file(paths: &GxserverPaths) -> bool {
         == Some(true)
 }
 
+fn write_gxserver_log_line(paths: &GxserverPaths, line: &str) -> Result<()> {
+    let write_lock = log_file_write_lock(&paths.log_file);
+    let _write_guard = write_lock.lock().expect("gxserver log writer poisoned");
+    rotate_log_if_needed(&paths.log_file, line.as_bytes().len() as u64 + 1)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&paths.log_file)
+        .with_context(|| "open gxserver log file")?;
+    writeln!(file, "{line}")?;
+    Ok(())
+}
+
+fn log_file_write_lock(log_file: &Path) -> Arc<Mutex<()>> {
+    let locks = LOG_FILE_WRITE_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = locks
+        .lock()
+        .expect("gxserver log writer lock registry poisoned");
+    guard
+        .entry(log_file.to_path_buf())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
 fn rotate_log_if_needed(log_file: &Path, incoming_byte_count: u64) -> Result<()> {
     let size = fs::metadata(log_file)
         .map(|metadata| metadata.len())
@@ -627,7 +658,11 @@ fn is_file_if_exists(path: &Path) -> Result<bool> {
     }
 }
 
-fn prune_log_file_to_max_lines(log_file: &Path, max_lines: usize) -> Result<()> {
+fn prune_log_file_to_max_lines_with_before_rewrite(
+    log_file: &Path,
+    max_lines: usize,
+    before_rewrite: impl FnOnce(),
+) -> Result<()> {
     if max_lines == 0 {
         return Ok(());
     }
@@ -649,6 +684,7 @@ fn prune_log_file_to_max_lines(log_file: &Path, max_lines: usize) -> Result<()> 
     }
     let start = lines.len() - max_lines;
     lines.drain(0..start);
+    before_rewrite();
     fs::write(log_file, format!("{}\n", lines.join("\n")))
         .with_context(|| "write retained gxserver log lines")
 }
@@ -1187,6 +1223,7 @@ fn contains_secret_marker(value: &str) -> bool {
 mod tests {
     use super::*;
     use crate::paths::get_gxserver_paths;
+    use std::sync::{mpsc, Arc, Barrier};
 
     #[test]
     fn warn_log_redacts_private_values() {
@@ -1387,6 +1424,118 @@ mod tests {
     }
 
     #[test]
+    fn retention_prune_blocks_logger_appends_until_rewrite_finishes() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        fs::create_dir_all(&paths.logs_dir).expect("logs dir");
+        fs::write(&paths.log_file, "old-0\nold-1\nold-2\nold-3\n").expect("active");
+        let logger = Arc::new(test_logger(paths.clone()));
+        let (append_started_tx, append_started_rx) = mpsc::channel();
+        let (append_done_tx, append_done_rx) = mpsc::channel();
+        let (append_handle_tx, append_handle_rx) = mpsc::channel();
+        let logger_for_append = Arc::clone(&logger);
+
+        prune_gxserver_log_lines_with_before_rewrite(&paths, 2, move || {
+            let append_handle = thread::spawn(move || {
+                append_started_tx.send(()).expect("append started");
+                logger_for_append
+                    .log(GxserverLogInput {
+                        level: LogLevel::Warn,
+                        event: "retention.append.during-prune".to_string(),
+                        server_id: None,
+                        request_id: None,
+                        client: None,
+                        duration_ms: None,
+                        error: None,
+                        details: None,
+                    })
+                    .expect("append log");
+                let _ = append_done_tx.send(());
+            });
+            append_handle_tx.send(append_handle).expect("append handle");
+            append_started_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("append attempted");
+            match append_done_rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(()) => panic!("logger append completed while retention held the write lock"),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(error) => panic!("append done channel failed: {error}"),
+            }
+        })
+        .expect("prune");
+
+        append_handle_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("append handle")
+            .join()
+            .expect("append thread");
+        let text = fs::read_to_string(&paths.log_file).expect("read active");
+        assert!(text.contains("\"retention.append.during-prune\""));
+    }
+
+    #[test]
+    fn concurrent_retention_prune_keeps_logger_appends() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        fs::create_dir_all(&paths.logs_dir).expect("logs dir");
+        let old_lines = (0..200)
+            .map(|index| {
+                log_line(json!({
+                    "event": format!("old.{index}"),
+                    "level": "warn"
+                }))
+            })
+            .collect::<Vec<_>>();
+        fs::write(&paths.log_file, format!("{}\n", old_lines.join("\n"))).expect("active");
+        let append_count = 32;
+        let prune_count = 8;
+        let max_lines = append_count + 8;
+        let logger = Arc::new(test_logger(paths.clone()));
+        let start = Arc::new(Barrier::new(append_count + prune_count + 1));
+        let mut handles = Vec::new();
+
+        for index in 0..append_count {
+            let logger = Arc::clone(&logger);
+            let start = Arc::clone(&start);
+            handles.push(thread::spawn(move || {
+                start.wait();
+                logger
+                    .log(GxserverLogInput {
+                        level: LogLevel::Warn,
+                        event: format!("retention.append.{index}"),
+                        server_id: None,
+                        request_id: None,
+                        client: None,
+                        duration_ms: None,
+                        error: None,
+                        details: None,
+                    })
+                    .expect("append log");
+            }));
+        }
+        for _ in 0..prune_count {
+            let paths = paths.clone();
+            let start = Arc::clone(&start);
+            handles.push(thread::spawn(move || {
+                start.wait();
+                prune_gxserver_log_lines(&paths, max_lines).expect("prune");
+            }));
+        }
+
+        start.wait();
+        for handle in handles {
+            handle.join().expect("worker thread");
+        }
+        let text = fs::read_to_string(&paths.log_file).expect("read active");
+        for index in 0..append_count {
+            assert!(
+                text.contains(&format!("\"retention.append.{index}\"")),
+                "missing append {index}"
+            );
+        }
+    }
+
+    #[test]
     fn logger_startup_schedules_line_retention() {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
@@ -1400,12 +1549,31 @@ mod tests {
                 max_lines: 2,
             },
         );
-        std::thread::sleep(Duration::from_millis(50));
+        wait_for_log_file_text(&paths.log_file, "new-1\nnew-2\n");
+    }
 
-        assert_eq!(
-            fs::read_to_string(&paths.log_file).expect("read active"),
-            "new-1\nnew-2\n"
-        );
+    fn test_logger(paths: GxserverPaths) -> GxserverLogger {
+        GxserverLogger {
+            paths,
+            debugging_mode_cache: Mutex::new(DebuggingModeCache {
+                checked_at: Instant::now(),
+                enabled: false,
+            }),
+        }
+    }
+
+    fn wait_for_log_file_text(log_file: &Path, expected: &str) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let current = fs::read_to_string(log_file).unwrap_or_default();
+            if current == expected {
+                return;
+            }
+            if Instant::now() >= deadline {
+                assert_eq!(current, expected);
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
     }
 
     fn log_line(value: Value) -> String {
