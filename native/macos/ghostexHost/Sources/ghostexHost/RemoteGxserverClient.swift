@@ -303,11 +303,20 @@ final class RemoteGxserverClient {
     do {
       try storeTokenInKeychain(token, remoteMachineId: command.remoteMachineId)
     } catch {
-      return statusEvent(
-        command,
-        state: "keychainFailed",
-        ok: false,
-        message: "Could not store the remote gxserver token in Keychain."
+      /*
+       * CDXC:RemoteMachines 2026-06-13: The remote gxserver token is read fresh
+       * over SSH on every connect and is never read back from Keychain, so
+       * persisting it is best-effort. A Keychain ACL conflict — common with
+       * ad-hoc-signed dev builds across rebuilds, where a prior build owns the
+       * item — must not abort an otherwise-healthy connection. Log and continue
+       * to the tunnel instead of returning keychainFailed.
+       */
+      let status = OSStatus((error as NSError).code)
+      let detail = SecCopyErrorMessageString(status, nil) as String? ?? "unknown error"
+      NSLog(
+        "[ghostex] Remote gxserver token Keychain store failed (OSStatus %d: %@); continuing without persistence.",
+        Int(status),
+        detail
       )
     }
 
@@ -719,10 +728,22 @@ final class RemoteGxserverClient {
       arguments.append(contentsOf: sshClientOptions(target))
       arguments.append(contentsOf: [
         "-o", "ExitOnForwardFailure=yes",
+        /*
+         * CDXC:RemoteMachines 2026-06-13: Force a dedicated, non-multiplexed
+         * connection for the tunnel. If the user's ~/.ssh/config enables
+         * ControlMaster/ControlPath, an earlier gxserver SSH call opens a
+         * persistent master; this `ssh -N -L` then attaches as a slave, hands
+         * its forward to the master, and exits 0 immediately — tearing down the
+         * -L listener so the health probe can never connect. Owning a private
+         * connection keeps `-N` in the foreground holding the forward.
+         */
+        "-o", "ControlMaster=no",
+        "-o", "ControlPath=none",
         "-L", "\(localPort):127.0.0.1:58744",
       ])
       arguments.append(contentsOf: sshTargetArguments(target))
       process.arguments = arguments
+      appendTunnelDebugLog("attempt localPort=\(localPort) argv=/usr/bin/ssh \(arguments.joined(separator: " "))")
       process.standardInput = FileHandle.nullDevice
       process.standardOutput = Pipe()
       process.standardError = Pipe()
@@ -747,16 +768,19 @@ final class RemoteGxserverClient {
 
       Thread.sleep(forTimeInterval: 0.35)
       if !process.isRunning {
+        let stderrText = drainPipeString(process.standardError)
+        appendTunnelDebugLog("code1 tunnel exited early status=\(process.terminationStatus) stderr=\(stderrText.isEmpty ? "<empty>" : stderrText)")
         lastError = NSError(
           domain: "RemoteGxserverTunnel",
           code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "SSH tunnel exited before remote gxserver became reachable."]
+          userInfo: [NSLocalizedDescriptionKey: "SSH tunnel exited before remote gxserver became reachable.\(stderrText.isEmpty ? "" : " ssh: \(stderrText)")"]
         )
         continue
       }
 
       let baseURL = "http://127.0.0.1:\(localPort)"
-      if waitForAuthenticatedHealth(baseURL: baseURL, token: token) {
+      let health = waitForAuthenticatedHealth(baseURL: baseURL, token: token)
+      if health.ok {
         let connection = RemoteGxserverConnection(
           baseURL: baseURL,
           localPort: localPort,
@@ -767,14 +791,29 @@ final class RemoteGxserverClient {
         lock.lock()
         connections[command.remoteMachineId] = connection
         lock.unlock()
+        appendTunnelDebugLog("connected localPort=\(localPort)")
         return connection
       }
 
       process.terminate()
+      process.waitUntilExit()
+      var detailParts: [String] = []
+      if let statusCode = health.lastStatusCode {
+        detailParts.append("last health HTTP \(statusCode)")
+      }
+      if let probeError = health.lastErrorDescription {
+        detailParts.append("probe error: \(probeError)")
+      }
+      let stderrText = drainPipeString(process.standardError)
+      if !stderrText.isEmpty {
+        detailParts.append("ssh: \(stderrText)")
+      }
+      let detail = detailParts.isEmpty ? "" : " (\(detailParts.joined(separator: "; ")))"
+      appendTunnelDebugLog("code2 health unreachable localPort=\(localPort)\(detail)")
       lastError = NSError(
         domain: "RemoteGxserverTunnel",
         code: 2,
-        userInfo: [NSLocalizedDescriptionKey: "SSH tunnel opened, but remote gxserver health did not become reachable."]
+        userInfo: [NSLocalizedDescriptionKey: "SSH tunnel opened, but remote gxserver health did not become reachable.\(detail)"]
       )
     }
 
@@ -886,22 +925,77 @@ final class RemoteGxserverClient {
     }
   }
 
-  private func waitForAuthenticatedHealth(baseURL: String, token: String) -> Bool {
+  private struct RemoteHealthProbeResult {
+    let ok: Bool
+    let lastStatusCode: Int?
+    let lastErrorDescription: String?
+  }
+
+  private func waitForAuthenticatedHealth(baseURL: String, token: String) -> RemoteHealthProbeResult {
     let deadline = Date().addingTimeInterval(7)
+    var lastStatusCode: Int?
+    var lastErrorDescription: String?
     while Date() < deadline {
-      if let response = try? performRequest(
-        path: "/api/health/server",
-        method: "GET",
-        paramsJson: nil,
-        baseURL: baseURL,
-        token: token,
-        timeoutSeconds: 1
-      ), (200..<300).contains(response.statusCode) {
-        return true
+      do {
+        let response = try performRequest(
+          path: "/api/health/server",
+          method: "GET",
+          paramsJson: nil,
+          baseURL: baseURL,
+          token: token,
+          timeoutSeconds: 1
+        )
+        lastStatusCode = response.statusCode
+        if (200..<300).contains(response.statusCode) {
+          return RemoteHealthProbeResult(ok: true, lastStatusCode: response.statusCode, lastErrorDescription: nil)
+        }
+      } catch {
+        lastErrorDescription = (error as NSError).localizedDescription
       }
       Thread.sleep(forTimeInterval: 0.2)
     }
-    return false
+    return RemoteHealthProbeResult(
+      ok: false,
+      lastStatusCode: lastStatusCode,
+      lastErrorDescription: lastErrorDescription
+    )
+  }
+
+  /*
+   * CDXC:RemoteMachines 2026-06-13: Drain a finished process's pipe so the
+   * tunnelFailed toast can carry the real ssh stderr / health detail. Only call
+   * after the process has exited or been terminated, or availableData blocks.
+   */
+  private func drainPipeString(_ source: Any?, limit: Int = 400) -> String {
+    guard let pipe = source as? Pipe else { return "" }
+    let data = pipe.fileHandleForReading.availableData
+    let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return text.count > limit ? String(text.prefix(limit)) + "…" : text
+  }
+
+  /*
+   * CDXC:RemoteMachines 2026-06-13: tunnelFailed toasts truncate, hiding the
+   * ssh argv / stderr / health detail needed to tell an ssh-forward failure
+   * apart from a URLSession probe failure. Mirror the diagnostics to a dedicated
+   * client-side log file so they survive regardless of toast length.
+   */
+  private func appendTunnelDebugLog(_ message: String) {
+    let logsDirectory = GhostexAppStorage.logsDirectory
+    let logURL = logsDirectory.appendingPathComponent("remote-gxserver-tunnel-debug.log")
+    let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+    do {
+      try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+      if FileManager.default.fileExists(atPath: logURL.path) {
+        let handle = try FileHandle(forWritingTo: logURL)
+        defer { try? handle.close() }
+        handle.seekToEndOfFile()
+        handle.write(Data(line.utf8))
+      } else {
+        try line.write(to: logURL, atomically: true, encoding: .utf8)
+      }
+    } catch {
+      // Best-effort diagnostics only.
+    }
   }
 
   private func performRequest(_ command: RemoteGxserverRequest, connection: RemoteGxserverConnection) throws -> (statusCode: Int, body: String?) {
@@ -976,6 +1070,18 @@ final class RemoteGxserverClient {
       "-o", "AddKeysToAgent=yes",
       "-o", "ConnectTimeout=8",
       "-o", "StrictHostKeyChecking=accept-new",
+      /*
+       * CDXC:RemoteMachines 2026-06-13: The presentation tunnel is a long-lived
+       * `ssh -N -L`. Without keepalive, idle NAT/firewall timeouts or a
+       * half-open TCP death silently drop it, surfacing as alternating
+       * "sidebar stream failed" (WS receive error) and "could not reach
+       * gxserver" (next health probe) toasts. Probe every 15s and tear the
+       * connection down after 3 misses so the client detects the drop and
+       * reconnects instead of flapping.
+       */
+      "-o", "ServerAliveInterval=15",
+      "-o", "ServerAliveCountMax=3",
+      "-o", "TCPKeepAlive=yes",
     ]
     if target.sshPasswordAccount?.isEmpty == false {
       /*
@@ -1199,11 +1305,32 @@ final class RemoteGxserverClient {
       kSecAttrAccount as String: remoteMachineId,
       kSecAttrService as String: Self.keychainService,
       kSecClass as String: kSecClassGenericPassword,
+      /*
+       * CDXC:RemoteMachines 2026-06-13: Target the file/login keychain
+       * explicitly. Ad-hoc-signed dev builds have no keychain-access-groups
+       * entitlement, so SecItemAdd into the data-protection keychain returns
+       * errSecMissingEntitlement (-34018). The login keychain needs no
+       * entitlement and matches the `security` CLI used by the SSH askpass.
+       */
+      kSecUseDataProtectionKeychain as String: false,
     ]
     SecItemDelete(query as CFDictionary)
     var addQuery = query
     addQuery[kSecValueData as String] = tokenData
-    let status = SecItemAdd(addQuery as CFDictionary, nil)
+    var status = SecItemAdd(addQuery as CFDictionary, nil)
+    if status == errSecDuplicateItem {
+      /*
+       * CDXC:RemoteMachines 2026-06-13: A token item written by a previous build
+       * stays ACL-bound to that build's code signature. Ad-hoc dev builds get a
+       * new signature each rebuild, so SecItemDelete cannot remove the old item
+       * and SecItemAdd then returns errSecDuplicateItem. Update the existing
+       * item's value in place rather than failing the connection.
+       */
+      status = SecItemUpdate(
+        query as CFDictionary,
+        [kSecValueData as String: tokenData] as CFDictionary
+      )
+    }
     guard status == errSecSuccess else {
       throw NSError(domain: "RemoteGxserverKeychain", code: Int(status))
     }
@@ -1243,6 +1370,13 @@ final class RemoteGxserverClient {
       kSecAttrAccount as String: remoteMachineId,
       kSecAttrService as String: Self.sshPasswordKeychainService,
       kSecClass as String: kSecClassGenericPassword,
+      /*
+       * CDXC:RemoteMachines 2026-06-13: Use the file/login keychain so the SSH
+       * askpass helper (which reads via `security find-generic-password`) can
+       * find the saved password, and so ad-hoc dev builds avoid the
+       * data-protection keychain's entitlement requirement (-34018).
+       */
+      kSecUseDataProtectionKeychain as String: false,
     ]
   }
 
