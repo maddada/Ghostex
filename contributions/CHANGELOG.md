@@ -4,10 +4,83 @@ Work delivered on top of the cloned Ghostex tree (base commit `5c73715b`).
 This file documents only *our* contributions; it is separate from the
 project's own root `CHANGELOG.md`.
 
-Toolchain note: no Rust / Swift / Zig toolchain was available in the working
-environment, so all code edits are inspection-verified and were **not compiled
-here**. Validate with `cargo build && cargo test -p gxserver` (Rust) and an
-Xcode build (Swift).
+---
+
+## Ghostex hardening pass — five features
+
+Five additive hardening features shipped as independent slices. Each
+addresses a concrete failure documented in `spec/ghostex-hardening/`.
+
+### ghostex doctor (Feature 1)
+
+- **`gxserver-rs/src/doctor.rs`** — `DoctorCheck` / `DoctorFix` structs, five
+  check functions (skills, hooks, toolchain, daemon, T3 runtime), invariant
+  validator, CLI with `--json` support. Works in-process without the daemon
+  running.
+- **`gxserver-rs/src/server.rs`** — `POST /api/doctor/run` returns all checks,
+  `POST /api/doctor/fix` applies a fix given a confirmation token. Both
+  FullLocal only.
+- **`sidebar/settings-modal.tsx`** — SupportSettingsTab: Run Doctor button,
+  Copy Diagnostics button, check result cards with status icons, two-step fix
+  confirmation flow.
+- **`native/sidebar/modal-host.tsx`** — Doctor state, type guards, message
+  handlers, SettingsModal props.
+- **`native/sidebar/native-sidebar.tsx`** — RPC handlers for `/api/doctor/run`,
+  `/api/doctor/fix`, `/api/doctor/exportDiagnostics`.
+- **`shared/session-grid-contract-sidebar.ts`** — `SidebarDoctorCheck` type,
+  result message types, request message types.
+- Commit: `4e3c600a`
+
+### Shared path source of truth (Feature 2)
+
+- **`gxserver-rs/src/paths.rs`** — `AgentPaths` struct centralizing all
+  `.agents`-prefixed paths (skills root, hooks root, profiles root, agents
+  root). Drift test asserts checked-in TS constants match Rust constants.
+- **`gxserver-rs/src/bin/generate-agent-paths.rs`** — Cargo bin that prints
+  resolved relative paths as JSON.
+- **`scripts/generate-agent-paths.mjs`** — Invokes the cargo bin and emits
+  `shared/agent-paths.generated.ts` from JSON output.
+- **`shared/agent-paths.generated.ts`** — Generated TS constants (checked in).
+- **`native/sidebar/native-sidebar.tsx`** — Replaced hardcoded `"agents"` path
+  strings with interpolated constants from the generated module.
+- **`gxserver-rs/src/agent_skills.rs`** — Migrated to `AgentPaths` instead of
+  inline `paths.home_dir.join(".agents").join("skills")`.
+- **`gxserver-rs/src/agent_hooks.rs`** — `HookPaths::new()` migrated to
+  `AgentPaths`.
+- Commit: `4e3c600a`
+
+### CI conformance test + capability discovery (Feature 3)
+
+- **`shared/gxserver-protocol-conformance.test.ts`** — TS test extracting
+  endpoint paths from `shared/gxserver-protocol.ts` and asserting set-equality
+  both ways with the Rust `endpoint_for()` routing table.
+- **`gxserver-rs/src/protocol.rs`** — Doctor and diagnostics endpoints added
+  to the routing table as FullLocal.
+- Commit: `4e3c600a`
+
+### Diagnostic bundle export (Feature 4)
+
+- **`gxserver-rs/src/server.rs`** — `handle_export_diagnostics_http` collects
+  version, config summary (export-time allowlist), last 50 error log entries,
+  T3 status, skills summary, server ID, and start timestamp. Returns a single
+  redacted JSON bundle.
+- Commit: `4e3c600a`
+
+### Unified subprocess policy (Feature 5)
+
+- **`gxserver-rs/src/subprocess_policy.rs`** — `SubprocessProfile` enum with
+  `Clone`, `Ssh`, and `ProjectSetup` profiles. Each defines an explicit env
+  allowlist. `write_secret_file` helper enforces 0600 mode on Unix.
+- **`gxserver-rs/src/repository_clone.rs`** — Migrated from local
+  `CLONE_ENVIRONMENT_ALLOWLIST` to `SubprocessProfile::Clone`.
+- T3 runtime env restriction deferred (inherits full login-shell env by design).
+- Commit: `4e3c600a`
+
+### Validation
+
+- 480 Rust tests passing (0 failures)
+- 4 TypeScript conformance tests passing (106 assertions)
+- Detail: `contributions/ghostex-hardening-features.md`
 
 ---
 
@@ -91,3 +164,5 @@ code findings.
 | `f253650f` | gxserver-rs: clone env allowlist + T3 loopback bind | security audit |
 | `6d9b46da` | native/sidebar: `.agents` path fix | #58 |
 | `d29722c0` | ghostexHost: actionable SSH errors | #61 |
+| `4e3c600a` | gxserver-rs + sidebar: hardening pass (doctor, paths, conformance, diagnostics, subprocess policy) | hardening spec |
+| `f8db15ba` | docs: hardening feature summary | hardening spec |
