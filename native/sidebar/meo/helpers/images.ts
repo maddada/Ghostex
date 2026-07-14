@@ -248,7 +248,9 @@ export class ImageWidget extends WidgetType {
     };
 
     const resolveAndSetSrc = (src: string) => {
-      img.src = src;
+      if (src.startsWith("http:") || src.startsWith("https:") || src.startsWith("data:image/")) {
+        img.src = src;
+      }
       if (img.complete) {
         hideLoadingPlaceholder();
       }

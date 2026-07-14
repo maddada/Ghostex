@@ -872,7 +872,7 @@ function SessionAgentIconDecoration({
   }
 
   if (agentIcon === "browser") {
-    if (faviconDataUrl) {
+    if (faviconDataUrl && faviconDataUrl.startsWith("data:image/")) {
       /**
        * CDXC:BrowserPanes 2026-05-03-11:28
        * Browser-pane cards identify the loaded tab with the page favicon when

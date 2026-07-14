@@ -6620,7 +6620,7 @@ function appendAnnotationDetails(lines: string[], annotation: ManageAnnotation):
 }
 
 function formatMarkdownQuote(text: string): string {
-  return `"${text.replace(/"/gu, '\\"')}"`;
+  return `"${text.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"')}"`;
 }
 
 async function writeTextToClipboard(text: string): Promise<void> {
