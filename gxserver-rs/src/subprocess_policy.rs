@@ -137,18 +137,17 @@ pub fn subprocess_environment(profile: SubprocessProfile) -> Vec<(String, String
     let allowlist: HashSet<&str> = profile.env_allowlist().iter().copied().collect();
     env::vars()
         .filter(|(key, _)| {
-            // Allowlist check: is this key allowed for this profile?
+            // Allowlist check: only allowlisted and LC_* keys pass this gate.
+            allowlist.contains(key.as_str()) || key.starts_with("LC_")
+        })
+        .filter(|(key, _)| {
+            // Allowlisted keys bypass the sensitive-key filter — the allowlist
+            // is authoritative (e.g. SSH_AUTH_SOCK contains "AUTH" but must be
+            // preserved for git-clone SSH-agent auth).
             if allowlist.contains(key.as_str()) {
                 return true;
             }
-            // LC_* locale variables are always allowed.
-            if key.starts_with("LC_") {
-                return true;
-            }
-            false
-        })
-        .filter(|(key, _)| {
-            // Block sensitive vars even if they happen to match the allowlist.
+            // Non-allowlisted keys: block anything matching a sensitive pattern.
             !SENSITIVE_KEY_PATTERNS
                 .iter()
                 .any(|pattern| key.to_ascii_uppercase().contains(pattern))
@@ -259,6 +258,30 @@ mod tests {
     }
 
     #[test]
+    fn clone_environment_preserves_ssh_auth_sock_when_set() {
+        // Regression test: SSH_AUTH_SOCK must survive the sensitive-key filter
+        // because it is explicitly allowlisted (Finding 1, 2026-07-14).
+        env::set_var("SSH_AUTH_SOCK", "/tmp/agent.sock");
+        let env = subprocess_environment(SubprocessProfile::Clone);
+        assert!(
+            env.iter().any(|(k, v)| k == "SSH_AUTH_SOCK" && v == "/tmp/agent.sock"),
+            "SSH_AUTH_SOCK must be preserved in Clone profile env; got: {:?}",
+            env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn ssh_profile_preserves_ssh_auth_sock_when_set() {
+        env::set_var("SSH_AUTH_SOCK", "/tmp/agent.sock");
+        let env = subprocess_environment(SubprocessProfile::Ssh);
+        assert!(
+            env.iter().any(|(k, v)| k == "SSH_AUTH_SOCK" && v == "/tmp/agent.sock"),
+            "SSH_AUTH_SOCK must be preserved in Ssh profile env; got: {:?}",
+            env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn clone_profile_allows_lc_locale_vars() {
         // Locale category variables like LC_CTYPE, LC_MESSAGES are allowed.
         let _env = subprocess_environment(SubprocessProfile::Clone);
@@ -266,19 +289,26 @@ mod tests {
 
     #[test]
     fn sensitive_vars_absent_from_all_profiles() {
+        // No non-allowlisted key in the resulting env should match a sensitive
+        // pattern.  Allowlisted keys (e.g. SSH_AUTH_SOCK) are permitted even if
+        // their name incidentally contains a sensitive substring — the allowlist
+        // is authoritative (Finding 1, 2026-07-14).
         for profile in &[
             SubprocessProfile::Clone,
             SubprocessProfile::Ssh,
             SubprocessProfile::ProjectSetup,
         ] {
+            let allowlist: HashSet<&str> = profile.env_allowlist().iter().copied().collect();
             let env = subprocess_environment(*profile);
+            let leaked: Vec<_> = env
+                .iter()
+                .filter(|(k, _)| !allowlist.contains(k.as_str()) && is_sensitive_env_key(k))
+                .collect();
             assert!(
-                !has_sensitive_env_vars(&env),
-                "Profile {:?} should not have sensitive env vars: {:?}",
+                leaked.is_empty(),
+                "Profile {:?} should not have non-allowlisted sensitive env vars: {:?}",
                 profile,
-                env.iter()
-                    .filter(|(k, _)| is_sensitive_env_key(k))
-                    .collect::<Vec<_>>()
+                leaked
             );
         }
     }

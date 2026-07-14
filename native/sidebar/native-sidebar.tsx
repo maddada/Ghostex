@@ -39593,7 +39593,7 @@ const linkedProfiles = profiles.slice();
 
 function profilesFor(candidatePath) {
   if (isRelativeTo(candidatePath, p(".agents")) || isRelativeTo(candidatePath, path.join(home, "agents"))) {
-    if (isRelativeTo(candidatePath, p(".agents", "hooks"))) {
+    if (isRelativeTo(candidatePath, p(HOOKS_ROOT))) {
       return linkedProfiles.concat([piAgent]);
     }
     return linkedProfiles;
@@ -39904,7 +39904,7 @@ for (const pluginsRoot of [p(".codex-profiles"), p(".claude-profiles")]) {
   }
 }
 
-const hooksRoot = p(".agents", "hooks");
+const hooksRoot = p(HOOKS_ROOT);
 addGroup("hooks", "hooks-shared", "Shared hooks", hooksRoot, "Shared hook scripts and documentation used by agent profiles.", walkFiles(hooksRoot, 3, (candidate) => textSuffixes.has(path.extname(candidate))), linkedProfiles.concat([piAgent]));
 /*
 CDXC:AgentsHub 2026-06-04-19:45:
