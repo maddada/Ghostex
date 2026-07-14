@@ -1647,7 +1647,7 @@ mod tests {
 
         assert!(script.starts_with("exec 3< '/tmp/t3/bootstrap-x.json'\nrm -f '/tmp/t3/bootstrap-x.json'\n("));
         assert!(script.contains(
-            "'/usr/local/bin/node' '/apps/t3code-server/dist/bin.mjs' --mode desktop --host 0.0.0.0 --port 3774 --no-browser --bootstrap-fd 3 &"
+            "'/usr/local/bin/node' '/apps/t3code-server/dist/bin.mjs' --mode desktop --host 127.0.0.1 --port 3774 --no-browser --bootstrap-fd 3 &"
         ));
         assert!(script.contains("last=$(cat '/tmp/t3/ghostex-app-heartbeat' 2>/dev/null || echo \"$now\")"));
         assert!(script.contains("if [ $((now - last)) -ge 180 ]; then"));
