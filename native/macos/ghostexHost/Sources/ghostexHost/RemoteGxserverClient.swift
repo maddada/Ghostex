@@ -1713,11 +1713,34 @@ final class RemoteGxserverClient {
     if stderr.isEmpty {
       return defaultMessage
     }
+    /*
+     CDXC:RemoteMachines 2026-07-14-00:00:
+     Remote connect always runs SSH non-interactively from the GUI helper, so
+     the raw failure is opaque to users. Map the common causes to specific,
+     actionable messages. This is the main diagnosability path (issue #61) for
+     connecting to another account on the same Mac: a terminal succeeds by
+     prompting for that account's password, but Ghostex only sends a password
+     when one is saved for the machine, so a key-only machine fails fast with
+     "Permission denied" and no prompt.
+     */
+    if stderr.localizedCaseInsensitiveContains("remote host identification has changed") {
+      return "The remote host key changed since Ghostex last connected. Verify the host is trusted, remove its old entry from ~/.ssh/known_hosts, then reconnect."
+    }
+    if stderr.localizedCaseInsensitiveContains("host key verification failed") {
+      return "SSH could not verify the remote host key. Connect once from a terminal to record the host in ~/.ssh/known_hosts, then reconnect."
+    }
     if stderr.localizedCaseInsensitiveContains("permission denied") {
-      return "SSH authentication failed for the remote machine."
+      return "SSH authentication was rejected. If this machine uses a password (common when connecting to another account on the same Mac), save its SSH password in Remote settings; otherwise add a key the remote account accepts."
+    }
+    if stderr.localizedCaseInsensitiveContains("connection refused") {
+      return "The remote host refused the SSH connection. Enable Remote Login (System Settings → General → Sharing) on it and confirm the port."
     }
     if stderr.localizedCaseInsensitiveContains("could not resolve hostname") {
-      return "SSH could not resolve the remote host."
+      return "SSH could not resolve the remote host. Check the host name or IP address."
+    }
+    if stderr.localizedCaseInsensitiveContains("no route to host") ||
+      stderr.localizedCaseInsensitiveContains("network is unreachable") {
+      return "SSH could not reach the remote host over the network. Check connectivity and the host address."
     }
     if stderr.localizedCaseInsensitiveContains("operation timed out") ||
       stderr.localizedCaseInsensitiveContains("connection timed out") {
