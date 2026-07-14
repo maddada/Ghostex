@@ -3,6 +3,13 @@ import { useEffect, useRef } from "react";
 import { installAppModalGlobalErrorLogging } from "../../sidebar/app-modal-error-log";
 import { AppTooltip, dismissSidebarTooltips, TooltipProvider } from "../../sidebar/app-tooltip";
 import { closeAppModal, openAppModal, postAppModalHostMessage } from "../../sidebar/app-modal-host-bridge";
+import {
+  AGENT_PATH_COMPONENTS,
+  AGENTS_ROOT,
+  HOOKS_ROOT,
+  PROFILES_ROOT,
+  SKILLS_ROOT,
+} from "../../shared/agent-paths.generated";
 import { dismissAllSidebarContextMenus } from "../../sidebar/sidebar-context-menu-portal";
 import { SidebarApp } from "../../sidebar/sidebar-app";
 import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "../../sidebar/agent-logos";
@@ -7597,7 +7604,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const skillNames = JSON.parse(process.argv[1] || "[]");
-const skillsRoot = path.join(os.homedir(), ".agents", "skills");
+const skillsRoot = path.join(os.homedir(), "${SKILLS_ROOT}");
 const removed = [];
 for (const skillName of skillNames) {
   const safeName = String(skillName || "").trim();
@@ -22282,6 +22289,74 @@ async function requestNativeAgentHookStatus(agentIds?: readonly string[]): Promi
   }
 }
 
+async function runDoctorChecks(): Promise<void> {
+  try {
+    const checks = await gxserverClient.rpc<{ checks: Array<{ id: string; status: string; detail: string; fix?: { id: string; description: string; confirmationToken: string } }> }>("/api/doctor/run");
+    postAppModalHost({
+      message: {
+        type: "doctorChecksResult",
+        checks: checks.checks.map((check) => ({
+          id: check.id,
+          status: check.status,
+          detail: check.detail,
+          fix: check.fix,
+        })),
+      },
+      type: "sidebarState",
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to run doctor checks";
+    showNativeMessage("error", errorMessage);
+    postAppModalHost({
+      message: { type: "doctorChecksResult", checks: [] },
+      type: "sidebarState",
+    });
+  }
+}
+
+async function applyDoctorFix(fixId: string, confirmationToken: string): Promise<void> {
+  try {
+    const result = await gxserverClient.rpc<{ applied?: boolean; fixId?: string }>("/api/doctor/fix", {
+      fixId,
+      confirmationToken,
+    });
+    if (result.applied) {
+      postAppModalHost({
+        message: { type: "doctorFixResult", ok: true },
+        type: "sidebarState",
+      });
+    } else {
+      postAppModalHost({
+        message: { type: "doctorFixResult", ok: false, error: "Fix was not applied" },
+        type: "sidebarState",
+      });
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to apply fix";
+    postAppModalHost({
+      message: { type: "doctorFixResult", ok: false, error: errorMessage },
+      type: "sidebarState",
+    });
+  }
+}
+
+async function exportDiagnosticsJson(): Promise<void> {
+  try {
+    const bundle = await gxserverClient.rpc<Record<string, unknown>>("/api/doctor/exportDiagnostics");
+    const jsonStr = JSON.stringify(bundle, null, 2);
+    postAppModalHost({
+      message: { type: "diagnosticsExportResult", ok: true, json: jsonStr },
+      type: "sidebarState",
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to export diagnostics";
+    postAppModalHost({
+      message: { type: "diagnosticsExportResult", ok: false, error: errorMessage },
+      type: "sidebarState",
+    });
+  }
+}
+
 function orderedNativeAgentHookStatusAgentIds(agentIds?: readonly string[]): string[] {
   const requestedAgentIds =
     agentIds && agentIds.length > 0
@@ -22523,17 +22598,17 @@ const gxBlocked = Boolean(gxPath && !gxUsable);
 // Skills install under ~/.agents/skills (see gxserver-rs agent_skills.rs), so
 // the status checks must read the dotted directory. Reading ~/agents (no dot)
 // left every badge stuck on "Not installed" even after a successful install.
-const browserSkillPath = path.join(home, ".agents", "skills", "ghostex-browser-use", "SKILL.md");
+const browserSkillPath = path.join(home, SKILLS_ROOT, "ghostex-browser-use", "SKILL.md");
 const browserSkillInstalled = isFile(browserSkillPath);
-const computerUseSkillPath = path.join(home, ".agents", "skills", "ghostex-computer-use", "SKILL.md");
+const computerUseSkillPath = path.join(home, SKILLS_ROOT, "ghostex-computer-use", "SKILL.md");
 const computerUseSkillInstalled = isFile(computerUseSkillPath);
-const agentOrchestrationSkillPath = path.join(home, ".agents", "skills", "ghostex-agent-orchestration", "SKILL.md");
+const agentOrchestrationSkillPath = path.join(home, SKILLS_ROOT, "ghostex-agent-orchestration", "SKILL.md");
 const agentOrchestrationSkillInstalled = isFile(agentOrchestrationSkillPath);
-const fable55OrchestrationSkillPath = path.join(home, ".agents", "skills", "ghostex-fable-5.5-orchestration", "SKILL.md");
+const fable55OrchestrationSkillPath = path.join(home, SKILLS_ROOT, "ghostex-fable-5.5-orchestration", "SKILL.md");
 const fable55OrchestrationSkillInstalled = isFile(fable55OrchestrationSkillPath);
-const generateTitleSkillPath = path.join(home, ".agents", "skills", "ghostex-generate-title", "SKILL.md");
+const generateTitleSkillPath = path.join(home, SKILLS_ROOT, "ghostex-generate-title", "SKILL.md");
 const generateTitleSkillInstalled = isFile(generateTitleSkillPath);
-const moveCodexSessionSkillPath = path.join(home, ".agents", "skills", "ghostex-move-codex-session", "SKILL.md");
+const moveCodexSessionSkillPath = path.join(home, SKILLS_ROOT, "ghostex-move-codex-session", "SKILL.md");
 const moveCodexSessionSkillInstalled = isFile(moveCodexSessionSkillPath);
 const webResourceDir = String(process.env.GHOSTEX_WEB_RESOURCE_DIR || "");
 function readJsonFile(filePath) {
@@ -39496,7 +39571,7 @@ function isRelativeTo(candidate, root) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-const mainTarget = p(".agents", "main.md");
+const mainTarget = p("${AGENTS_ROOT}", "main.md");
 const profiles = [];
 const mainClaude = profile("claude", "Claude Code main", p(".claude"), p(".claude", "CLAUDE.md"), mainTarget);
 profiles.push(mainClaude);
@@ -46482,6 +46557,15 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       return;
     case "revealAppIconsFolder":
       postNative({ type: "revealAppIconsFolder" });
+      return;
+    case "runDoctor":
+      void runDoctorChecks();
+      return;
+    case "applyDoctorFix":
+      void applyDoctorFix(message.fixId, message.confirmationToken);
+      return;
+    case "exportDiagnostics":
+      void exportDiagnosticsJson();
       return;
     case "openBrowserChat":
       void createNativeBrowserChat();

@@ -1004,6 +1004,31 @@ export type SidebarAppIconStateMessage = {
   type: "appIconState";
 };
 
+export type SidebarDoctorCheck = {
+  id: string;
+  status: "ok" | "warn" | "fail";
+  detail: string;
+  fix?: { id: string; description: string; confirmationToken: string };
+};
+
+export type SidebarDoctorChecksResultMessage = {
+  type: "doctorChecksResult";
+  checks: SidebarDoctorCheck[];
+};
+
+export type SidebarDoctorFixResultMessage = {
+  type: "doctorFixResult";
+  ok: boolean;
+  error?: string;
+};
+
+export type SidebarDiagnosticsExportResultMessage = {
+  type: "diagnosticsExportResult";
+  ok: boolean;
+  json?: string;
+  error?: string;
+};
+
 export type SidebarGpuiProjectSlotHotkeyMessage = {
   /**
    * CDXC:GPUIProjectHotkeys 2026-06-26-23:42:
@@ -1040,7 +1065,10 @@ export type ExtensionToSidebarMessage =
   | SidebarPreviousSessionsResultMessage
   | SidebarRemoteMachineStatusMessage
   // CDXC:AppIconPicker 2026-06-25-21:50: Native pushes App Icon list/selection state into Settings.
-  | SidebarAppIconStateMessage;
+  | SidebarAppIconStateMessage
+  | SidebarDoctorChecksResultMessage
+  | SidebarDoctorFixResultMessage
+  | SidebarDiagnosticsExportResultMessage;
 
 export type SidebarToExtensionMessage =
   | {
@@ -2293,6 +2321,17 @@ export type SidebarToExtensionMessage =
     }
   | {
       type: "revealAppIconsFolder";
+    }
+  | {
+      type: "runDoctor";
+    }
+  | {
+      type: "applyDoctorFix";
+      fixId: string;
+      confirmationToken: string;
+    }
+  | {
+      type: "exportDiagnostics";
     };
 
 export type SidebarHudSnapshot = Pick<

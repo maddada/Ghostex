@@ -85,7 +85,7 @@ use crate::{
     protocol::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error, rpc_success,
         ApiPermission, ListenerKind, MigrationStatus, MinimalHealthResponse, RuntimeMetadata,
-        ServerHealthResponse, Transport,
+        ServerHealthResponse, Transport, known_not_implemented_endpoints,
     },
     repository_clone::{
         dispatch_repository_clone_endpoint, RepositoryCloneError, RepositoryCloneJobManager,
@@ -1344,6 +1344,35 @@ async fn route_http(
             let _ = state.shutdown_tx.send(());
             response
         }
+        "/api/capabilities" => {
+            let not_impl = known_not_implemented_endpoints();
+            let mut endpoints = serde_json::Map::new();
+            for path in crate::protocol::all_ts_endpoint_paths() {
+                let status = if not_impl.contains(path) {
+                    "notImplemented"
+                } else {
+                    "implemented"
+                };
+                endpoints.insert(path.to_string(), json!(status));
+            }
+            routed_json(
+                Some(endpoint.path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({ "endpoints": endpoints }),
+                ),
+            )
+        }
+        "/api/doctor/exportDiagnostics" => {
+            handle_export_diagnostics_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/doctor/run" => {
+            handle_doctor_run_http(&state, endpoint.path, request_id)
+        }
+        "/api/doctor/fix" => {
+            handle_doctor_fix_http(&state, endpoint.path, request_id, &body_json).await
+        }
         _ => routed_json(
             Some(endpoint.path.clone()),
             StatusCode::NOT_IMPLEMENTED,
@@ -1393,6 +1422,160 @@ fn handle_query_logs_http(
                 Some(request_id),
             ),
         ),
+    }
+}
+
+fn handle_export_diagnostics_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    _body: &Value,
+) -> RoutedResponse {
+    // Config summary: export-time allowlist only.
+    let config_summary = json!({
+        "listeners": state.config.listeners,
+        "product": state.config.product,
+    });
+
+    // Recent error-level log entries (last 50).
+    let log_params = {
+        let mut m = serde_json::Map::new();
+        m.insert("level".to_string(), json!(["error"]));
+        m.insert("limit".to_string(), json!(50));
+        m.insert("order".to_string(), json!("desc"));
+        m
+    };
+    let recent_errors = match query_gxserver_logs(&state.paths, &log_params) {
+        Ok(value) => value,
+        Err(_) => json!({ "entries": [], "error": "log query failed" }),
+    };
+
+    // T3 runtime status.
+    let t3_status = state.t3_runtime.status_snapshot();
+    let t3_summary = json!({
+        "running": t3_status.running,
+        "pid": t3_status.pid,
+        "port": t3_status.port,
+    });
+
+    // Skills/hooks status summary (counts only).
+    let skill_status = read_agent_skill_status(
+        &state.paths,
+        &serde_json::Map::new(),
+    );
+    let skills_summary = match skill_status {
+        Ok(result) => {
+            let skills = result
+                .get("skills")
+                .and_then(Value::as_array)
+                .map(|arr| arr.len())
+                .unwrap_or(0);
+            let installed = result
+                .get("skills")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter(|s| {
+                            s.get("installed").and_then(Value::as_bool).unwrap_or(false)
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+            json!({ "total": skills, "installed": installed })
+        }
+        Err(_) => json!({ "total": 0, "installed": 0, "error": "skill status unavailable" }),
+    };
+
+    let bundle = json!({
+        "version": state.version,
+        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+        "configSummary": config_summary,
+        "recentErrors": recent_errors,
+        "t3Status": t3_summary,
+        "skillsSummary": skills_summary,
+        "serverId": state.metadata.server_id,
+        "startedAt": state.metadata.started_at,
+    });
+
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, bundle),
+    )
+}
+
+fn handle_doctor_run_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+) -> RoutedResponse {
+    let t3_status = state.t3_runtime.status_snapshot();
+    let checks = crate::doctor::run_all_checks(&state.paths, &t3_status);
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, json!({ "checks": checks })),
+    )
+}
+
+async fn handle_doctor_fix_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match body.get("params").and_then(|v| v.as_object()) {
+        Some(params) => params,
+        None => {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::BAD_REQUEST,
+                rpc_error("badRequest", "Missing params object.", Some(request_id)),
+            );
+        }
+    };
+    let fix_id = params.get("fixId").and_then(Value::as_str).unwrap_or("");
+    let confirmation_token = params
+        .get("confirmationToken")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    // Validate fix ID and confirmation token.
+    let applied = match (fix_id, confirmation_token) {
+        ("skills.reinstall", "reinstall-skills") => {
+            crate::agent_skills::install_agent_skills(
+                &state.paths,
+                &serde_json::Map::new(),
+            )
+            .await
+            .is_ok()
+        }
+        ("hooks.reinstall", "reinstall-hooks") => {
+            crate::agent_hooks::install_agent_hooks(
+                &state.paths,
+                &serde_json::Map::new(),
+            )
+            .is_ok()
+        }
+        _ => false,
+    };
+
+    if applied {
+        routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "applied": true, "fixId": fix_id })),
+        )
+    } else {
+        routed_json(
+            Some(endpoint_path),
+            StatusCode::BAD_REQUEST,
+            rpc_error(
+                "badRequest",
+                format!("Unknown fix or invalid confirmation token: {fix_id}"),
+                Some(request_id),
+            ),
+        )
     }
 }
 

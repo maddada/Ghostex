@@ -44,6 +44,10 @@ import type { SidebarAgentButton } from "../../shared/sidebar-agents";
 import type {
   ExtensionToSidebarMessage,
   SidebarAgentHookStatusMessage,
+  SidebarDoctorCheck,
+  SidebarDoctorChecksResultMessage,
+  SidebarDoctorFixResultMessage,
+  SidebarDiagnosticsExportResultMessage,
   SidebarGhostexCliStatusMessage,
   SidebarGhostexFolderStatsMessage,
   SidebarOSIntegrationStatusMessage,
@@ -691,6 +695,10 @@ function AppModalHost() {
   const [ghostexCliStatusLoading, setGhostexCliStatusLoading] = useState(false);
   const [ghostexFolderStatsLoading, setGhostexFolderStatsLoading] = useState(false);
   const [osIntegrationStatusLoading, setOSIntegrationStatusLoading] = useState(false);
+  const [doctorChecks, setDoctorChecks] = useState<SidebarDoctorCheck[]>();
+  const [doctorLoading, setDoctorLoading] = useState(false);
+  const [diagnosticsJson, setDiagnosticsJson] = useState<string>();
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [isPreviousSessionsInitialLoadReady, setIsPreviousSessionsInitialLoadReady] = useState(false);
   const sentNativeFitHeightMeasurementKeysRef = useRef<Set<string>>(new Set());
   const previousSettingsRenderStateLogRef = useRef("");
@@ -1621,6 +1629,21 @@ function AppModalHost() {
         osIntegrationStatusLoading={osIntegrationStatusLoading}
         // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state for Settings (mirrors osIntegrationStatus).
         appIconState={appIconState}
+        doctorChecks={doctorChecks}
+        doctorLoading={doctorLoading}
+        diagnosticsJson={diagnosticsJson}
+        diagnosticsLoading={diagnosticsLoading}
+        onRunDoctor={() => {
+          setDoctorLoading(true);
+          vscode.postMessage({ type: "runDoctor" });
+        }}
+        onApplyDoctorFix={(fixId, confirmationToken) => {
+          vscode.postMessage({ confirmationToken, fixId, type: "applyDoctorFix" });
+        }}
+        onExportDiagnostics={() => {
+          setDiagnosticsLoading(true);
+          vscode.postMessage({ type: "exportDiagnostics" });
+        }}
       />
       <DiscoverGhostexModal
         isOpen={activeModal === "discoverGhostex"}
@@ -2535,6 +2558,35 @@ function useModalStateFromNative() {
             setAppIconState(message.message);
             return;
           }
+          if (isDoctorChecksResultMessage(message.message)) {
+            setDoctorChecks(message.message.checks);
+            setDoctorLoading(false);
+            return;
+          }
+          if (isDoctorFixResultMessage(message.message)) {
+            if (message.message.ok) {
+              toast.success("Fix applied successfully");
+              setDoctorLoading(true);
+              postAppModalHostMessage({ type: "runDoctor" }, "AppModals:runDoctor");
+            } else {
+              toast.error(message.message.error ?? "Fix failed");
+            }
+            return;
+          }
+          if (isDiagnosticsExportResultMessage(message.message)) {
+            if (message.message.ok && message.message.json) {
+              setDiagnosticsJson(message.message.json);
+              setDiagnosticsLoading(false);
+              void navigator.clipboard.writeText(message.message.json).then(
+                () => toast.success("Diagnostics copied to clipboard"),
+                () => toast.error("Failed to copy diagnostics"),
+              );
+            } else {
+              toast.error(message.message.error ?? "Diagnostics export failed");
+              setDiagnosticsLoading(false);
+            }
+            return;
+          }
           if (isPreviousSessionsResultMessage(message.message)) {
             window.postMessage(message.message, "*");
             return;
@@ -2642,6 +2694,35 @@ function isAppIconStateMessage(message: unknown): message is SidebarAppIconState
       typeof message === "object" &&
       "type" in message &&
       message.type === "appIconState",
+  );
+}
+
+function isDoctorChecksResultMessage(message: unknown): message is SidebarDoctorChecksResultMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      "type" in message &&
+      message.type === "doctorChecksResult",
+  );
+}
+
+function isDoctorFixResultMessage(message: unknown): message is SidebarDoctorFixResultMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      "type" in message &&
+      message.type === "doctorFixResult",
+  );
+}
+
+function isDiagnosticsExportResultMessage(
+  message: unknown,
+): message is SidebarDiagnosticsExportResultMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      "type" in message &&
+      message.type === "diagnosticsExportResult",
   );
 }
 

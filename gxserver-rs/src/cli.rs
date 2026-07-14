@@ -89,6 +89,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         Some("resume-lookup") => {
             crate::resume_lookup::run_resume_lookup(args.iter().skip(1).cloned().collect())?;
         }
+        Some("doctor") => {
+            crate::doctor::run_doctor_cli(args.iter().skip(1).cloned().collect())?;
+        }
         Some("--version") | Some("version") => {
             println!("{version}");
         }

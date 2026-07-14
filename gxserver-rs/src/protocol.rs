@@ -463,6 +463,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createPullRequest"
         | "/api/updatePortlessState"
         | "/api/queryLogs" => full_local(path),
+        "/api/capabilities" => remote_allowed(path),
+        "/api/doctor/run" | "/api/doctor/fix" | "/api/doctor/exportDiagnostics" => full_local(path),
         "/api/resolveGitRootForPath"
         | "/api/updateAuth"
         | "/api/updateListenerConfig"
@@ -498,10 +500,140 @@ pub fn is_remote_endpoint_allowed(listener_kind: ListenerKind, permission: ApiPe
         || matches!(permission, ApiPermission::RemoteAllowed)
 }
 
+/// Paths declared in `endpoint_for()` that intentionally have no real handler
+/// yet (they fall through to the `_ => NOT_IMPLEMENTED` catch-all in server.rs).
+/// Each entry must be added with a dated comment explaining why it's deferred.
+pub fn known_not_implemented_endpoints() -> &'static [&'static str] {
+    &[
+        "/api/updateAuth",
+        "/api/updateListenerConfig",
+        "/api/installTool",
+        "/api/browseFilesystem",
+        "/api/destructiveAdminAction",
+    ]
+}
+
+/// Returns the complete TS-protocol path set that must be covered by
+/// `endpoint_for()`. This is the canonical enumeration matching
+/// `shared/gxserver-protocol.ts` `GxserverEndpointPath`.
+pub fn all_ts_endpoint_paths() -> &'static [&'static str] {
+    &[
+        "/api/health",
+        "/api/health/server",
+        "/api/events",
+        "/api/control/stop",
+        "/api/control/stopAll",
+        "/api/readAgentSettings",
+        "/api/updateAgentSettings",
+        "/api/readAppUserData",
+        "/api/saveScratchPad",
+        "/api/savePinnedPrompt",
+        "/api/readAgentSkillStatus",
+        "/api/installAgentSkills",
+        "/api/readAgentHookStatus",
+        "/api/installAgentHooks",
+        "/api/uninstallAgentHooks",
+        "/api/ingestAgentHookEvent",
+        "/api/createSession",
+        "/api/createAgentSession",
+        "/api/forkSession",
+        "/api/readAgentLaunchPlan",
+        "/api/readAgentResumePlan",
+        "/api/requestSessionRename",
+        "/api/cancelFirstPromptAutoTitle",
+        "/api/ingestSessionStateEvent",
+        "/api/ingestTerminalTitleEvent",
+        "/api/updateAgentActivity",
+        "/api/readPresentationSnapshot",
+        "/api/readSidebarHud",
+        "/api/mutateSidebarHudSettings",
+        "/api/readWorkspaceSessionGroups",
+        "/api/updateWorkspaceSessionGroups",
+        "/api/readAutomationState",
+        "/api/saveAutomation",
+        "/api/deleteAutomation",
+        "/api/runAutomationNow",
+        "/api/setAutomationEnabled",
+        "/api/archiveAutomationRun",
+        "/api/markAutomationRunRead",
+        "/api/searchSessions",
+        "/api/listPreviousSessions",
+        "/api/transitionSession",
+        "/api/sleepSession",
+        "/api/wakeSession",
+        "/api/startSessionProvider",
+        "/api/killSession",
+        "/api/probeSessionProvider",
+        "/api/listSessions",
+        "/api/removeSession",
+        "/api/readSessionText",
+        "/api/sendSessionText",
+        "/api/sendSessionMessage",
+        "/api/sendSessionEnter",
+        "/api/focusSession",
+        "/api/dispatchRendererCommand",
+        "/api/attachSessionMetadata",
+        "/api/createProject",
+        "/api/updateProject",
+        "/api/listProjects",
+        "/api/closeProjectToRecent",
+        "/api/listRecentProjects",
+        "/api/restoreRecentProject",
+        "/api/removeRecentProject",
+        "/api/readProjectStatus",
+        "/api/addProjectPath",
+        "/api/createQuickProject",
+        "/api/listProjectWorktrees",
+        "/api/createProjectWorktree",
+        "/api/openProjectWorktree",
+        "/api/mergeWorktreeIntoMain",
+        "/api/checkoutProjectNewBranch",
+        "/api/removeProject",
+        "/api/deleteWorktreeProject",
+        "/api/updateSession",
+        "/api/syncT3EmbeddedSession",
+        "/api/updateSessionOrder",
+        "/api/runGitAction",
+        "/api/generateCommitMessage",
+        "/api/createPullRequest",
+        "/api/runGitHubAction",
+        "/api/runWorktreeAction",
+        "/api/runProjectSetupCommand",
+        "/api/runBeadsAction",
+        "/api/previewRepositoryClone",
+        "/api/startRepositoryClone",
+        "/api/readRepositoryCloneJob",
+        "/api/cancelRepositoryCloneJob",
+        "/api/browseProjectDirectories",
+        "/api/resolveGitRootForPath",
+        "/api/queryLogs",
+        "/api/updateAuth",
+        "/api/updateListenerConfig",
+        "/api/updatePortlessState",
+        "/api/installTool",
+        "/api/browseFilesystem",
+        "/api/destructiveAdminAction",
+        "/api/t3Runtime/status",
+        "/api/t3Runtime/start",
+        "/api/t3Runtime/stop",
+        "/api/t3Runtime/panes",
+        "/api/capabilities",
+        "/api/doctor/exportDiagnostics",
+        "/api/doctor/fix",
+        "/api/doctor/run",
+    ]
+}
+
+/// Export-time allowlist for diagnostic bundle config summary.
+/// Only these top-level config keys are exported.
+pub const DIAGNOSTIC_EXPORT_ALLOWLISTED_CONFIG_KEYS: &[&str] =
+    &["listenerMode", "provider", "agentIds"];
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::HashSet;
 
     #[test]
     fn protocol_mismatch_message_uses_typescript_stringification() {
@@ -514,4 +646,160 @@ mod tests {
         let missing = protocol_mismatch_error(None, Some("r3".to_string()));
         assert!(missing.message.contains("got undefined."));
     }
+
+    #[test]
+    fn all_ts_endpoints_resolve_via_endpoint_for() {
+        // Set-equality direction: TS contract ⊆ Rust routing table.
+        for path in all_ts_endpoint_paths() {
+            assert!(
+                endpoint_for(path).is_some(),
+                "TS-contract path {} is not in Rust endpoint_for()",
+                path,
+            );
+        }
+    }
+
+    #[test]
+    fn every_endpoint_for_path_is_implemented_or_known_not_implemented() {
+        // Set-equality direction: Rust routing table ⊆ (implemented ∪ known-not-implemented).
+        // Every path in endpoint_for() must either have a real handler or
+        // be in known_not_implemented_endpoints().
+        let not_impl: HashSet<&str> =
+            known_not_implemented_endpoints().iter().copied().collect();
+        let implemented: HashSet<&str> = ALL_IMPLEMENTED_ENDPOINTS
+            .iter()
+            .copied()
+            .collect();
+        let mut known: HashSet<&str> = HashSet::new();
+        known.extend(&not_impl);
+        known.extend(&implemented);
+
+        for path in all_ts_endpoint_paths() {
+            let desc = endpoint_for(path);
+            assert!(
+                desc.is_some(),
+                "Path {} is in TS contract but not in endpoint_for()",
+                path,
+            );
+            assert!(
+                known.contains(path),
+                "Path {} is in endpoint_for() but has neither a handler nor is in known_not_implemented_endpoints()",
+                path,
+            );
+        }
+
+        // Also verify that known_not_implemented paths really resolve in endpoint_for().
+        for path in &not_impl {
+            assert!(
+                endpoint_for(path).is_some(),
+                "Known-not-implemented path {} is not in endpoint_for()",
+                path,
+            );
+        }
+    }
 }
+
+/// Canonical set of every endpoint path that has a real handler in server.rs
+/// (not the `_ => NOT_IMPLEMENTED` catch-all). The conformance test above
+/// asserts this set + known_not_implemented == all_ts_endpoint_paths.
+#[cfg(test)]
+const ALL_IMPLEMENTED_ENDPOINTS: &[&str] = &[
+    "/api/capabilities",
+    "/api/doctor/exportDiagnostics",
+    "/api/doctor/fix",
+    "/api/doctor/run",
+    "/api/health",
+    "/api/health/server",
+    "/api/events",
+    "/api/createProject",
+    "/api/updateProject",
+    "/api/listProjects",
+    "/api/listRecentProjects",
+    "/api/closeProjectToRecent",
+    "/api/restoreRecentProject",
+    "/api/removeRecentProject",
+    "/api/readProjectStatus",
+    "/api/addProjectPath",
+    "/api/createQuickProject",
+    "/api/listProjectWorktrees",
+    "/api/createProjectWorktree",
+    "/api/openProjectWorktree",
+    "/api/mergeWorktreeIntoMain",
+    "/api/checkoutProjectNewBranch",
+    "/api/removeProject",
+    "/api/deleteWorktreeProject",
+    "/api/createSession",
+    "/api/createAgentSession",
+    "/api/listSessions",
+    "/api/updateSession",
+    "/api/syncT3EmbeddedSession",
+    "/api/updateSessionOrder",
+    "/api/removeSession",
+    "/api/readPresentationSnapshot",
+    "/api/readSidebarHud",
+    "/api/mutateSidebarHudSettings",
+    "/api/readWorkspaceSessionGroups",
+    "/api/updateWorkspaceSessionGroups",
+    "/api/readAppUserData",
+    "/api/readAutomationState",
+    "/api/saveAutomation",
+    "/api/deleteAutomation",
+    "/api/runAutomationNow",
+    "/api/setAutomationEnabled",
+    "/api/archiveAutomationRun",
+    "/api/markAutomationRunRead",
+    "/api/saveScratchPad",
+    "/api/savePinnedPrompt",
+    "/api/searchSessions",
+    "/api/listPreviousSessions",
+    "/api/readAgentSettings",
+    "/api/updateAgentSettings",
+    "/api/readAgentLaunchPlan",
+    "/api/readAgentResumePlan",
+    "/api/forkSession",
+    "/api/requestSessionRename",
+    "/api/cancelFirstPromptAutoTitle",
+    "/api/ingestSessionStateEvent",
+    "/api/ingestTerminalTitleEvent",
+    "/api/updateAgentActivity",
+    "/api/ingestAgentHookEvent",
+    "/api/readAgentSkillStatus",
+    "/api/installAgentSkills",
+    "/api/readAgentHookStatus",
+    "/api/installAgentHooks",
+    "/api/uninstallAgentHooks",
+    "/api/attachSessionMetadata",
+    "/api/probeSessionProvider",
+    "/api/startSessionProvider",
+    "/api/transitionSession",
+    "/api/sleepSession",
+    "/api/wakeSession",
+    "/api/killSession",
+    "/api/readSessionText",
+    "/api/sendSessionText",
+    "/api/sendSessionMessage",
+    "/api/sendSessionEnter",
+    "/api/focusSession",
+    "/api/dispatchRendererCommand",
+    "/api/runGitAction",
+    "/api/runGitHubAction",
+    "/api/runWorktreeAction",
+    "/api/runProjectSetupCommand",
+    "/api/runBeadsAction",
+    "/api/generateCommitMessage",
+    "/api/createPullRequest",
+    "/api/queryLogs",
+    "/api/updatePortlessState",
+    "/api/previewRepositoryClone",
+    "/api/startRepositoryClone",
+    "/api/readRepositoryCloneJob",
+    "/api/cancelRepositoryCloneJob",
+    "/api/browseProjectDirectories",
+    "/api/resolveGitRootForPath",
+    "/api/t3Runtime/status",
+    "/api/t3Runtime/start",
+    "/api/t3Runtime/stop",
+    "/api/t3Runtime/panes",
+    "/api/control/stop",
+    "/api/control/stopAll",
+];

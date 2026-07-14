@@ -87,3 +87,6 @@ react-doctor.config.json
 docs/machines/ubuntu-vm.md
 # CDXC:LocalMachineDocs 2026-06-30-02:54: The Tart macOS sandbox VM notes include local NAT addresses, credentials, and VNC access details for this developer-only machine. Keep the exact machine note out of source control while preserving the local runbook.
 docs/machines/macOS-vm.md
+
+# Local spec/planning directory - not published with product source.
+spec/

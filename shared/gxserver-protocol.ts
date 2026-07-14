@@ -166,7 +166,11 @@ export type GxserverEndpointPath =
   | "/api/updatePortlessState"
   | "/api/installTool"
   | "/api/browseFilesystem"
-  | "/api/destructiveAdminAction";
+  | "/api/destructiveAdminAction"
+  | "/api/capabilities"
+  | "/api/doctor/exportDiagnostics"
+  | "/api/doctor/fix"
+  | "/api/doctor/run";
 
 export type GxserverRpcEndpointPath = Exclude<
   GxserverEndpointPath,

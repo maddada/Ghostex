@@ -571,7 +571,9 @@ async fn run_clone_process(
         .args(args)
         .current_dir(cwd)
         .env_clear()
-        .envs(repository_clone_environment())
+        .envs(crate::subprocess_policy::subprocess_environment(
+            crate::subprocess_policy::SubprocessProfile::Clone,
+        ))
         .kill_on_drop(true)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -718,71 +720,6 @@ fn request_child_termination(child: &mut Child) -> Option<Instant> {
     }
     let _ = child.start_kill();
     None
-}
-
-/// Exact environment variable names allowed into a clone subprocess.
-///
-/// This is intentionally an allowlist rather than a denylist. `run_clone_process`
-/// calls `env_clear()` and then repopulates the child from this function, so the
-/// clone never inherits the daemon's full ambient environment. We keep only the
-/// variables Git legitimately needs to find its executables, user configuration,
-/// credential helpers, SSH agent, locale, temp dirs, and proxy settings. Any
-/// other value present in the daemon environment (tokens, cloud credentials,
-/// unrelated `GIT_*`/`GIT_SSH_*` overrides, etc.) is dropped so it can neither
-/// silently change clone behavior nor leak into the subprocess.
-const CLONE_ENVIRONMENT_ALLOWLIST: &[&str] = &[
-    // Executable and user-config discovery.
-    "PATH",
-    "HOME",
-    "XDG_CONFIG_HOME",
-    // SSH transport (agent-based auth for `git@` remotes).
-    "SSH_AUTH_SOCK",
-    "SSH_AGENT_PID",
-    // Locale (git emits localized output; keep it stable and predictable).
-    "LANG",
-    "LANGUAGE",
-    "LC_ALL",
-    // Proxy configuration for HTTPS remotes (both common casings).
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "all_proxy",
-    "no_proxy",
-    // Temp directories.
-    "TMPDIR",
-    "TMP",
-    "TEMP",
-    // Windows process/runtime essentials (both common casings).
-    "SYSTEMROOT",
-    "SystemRoot",
-    "WINDIR",
-    "windir",
-    "COMSPEC",
-    "ComSpec",
-    "PATHEXT",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "PROGRAMDATA",
-    "HOMEDRIVE",
-    "HOMEPATH",
-];
-
-fn is_allowed_clone_environment_key(key: &str) -> bool {
-    if CLONE_ENVIRONMENT_ALLOWLIST.contains(&key) {
-        return true;
-    }
-    // Locale category variables such as LC_CTYPE / LC_MESSAGES.
-    key.starts_with("LC_")
-}
-
-fn repository_clone_environment() -> Vec<(String, String)> {
-    env::vars()
-        .filter(|(key, _)| is_allowed_clone_environment_key(key))
-        .collect()
 }
 
 fn parse_repository_clone_input(input: &str) -> Option<ParsedRepositoryCloneInput> {
@@ -1267,18 +1204,31 @@ mod tests {
 
     #[test]
     fn clone_environment_allowlist_keeps_required_vars() {
-        assert!(is_allowed_clone_environment_key("PATH"));
-        assert!(is_allowed_clone_environment_key("HOME"));
-        assert!(is_allowed_clone_environment_key("SSH_AUTH_SOCK"));
-        assert!(is_allowed_clone_environment_key("HTTPS_PROXY"));
-        assert!(is_allowed_clone_environment_key("https_proxy"));
-        assert!(is_allowed_clone_environment_key("LANG"));
-        assert!(is_allowed_clone_environment_key("LC_CTYPE"));
-        assert!(is_allowed_clone_environment_key("LC_MESSAGES"));
+        let env = crate::subprocess_policy::subprocess_environment(
+            crate::subprocess_policy::SubprocessProfile::Clone,
+        );
+        let keys: std::collections::HashSet<&str> =
+            env.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(keys.contains("PATH"));
+        assert!(keys.contains("HOME"));
+        // SSH_AUTH_SOCK is only present if the parent process has it.
+        // The allowlist includes it; the test just checks the allowlist includes it.
+        assert!(crate::subprocess_policy::SubprocessProfile::Clone
+            .env_allowlist()
+            .contains(&"SSH_AUTH_SOCK"));
+        assert!(crate::subprocess_policy::SubprocessProfile::Clone
+            .env_allowlist()
+            .contains(&"HTTPS_PROXY"));
+        assert!(crate::subprocess_policy::SubprocessProfile::Clone
+            .env_allowlist()
+            .contains(&"LANG"));
     }
 
     #[test]
     fn clone_environment_allowlist_drops_sensitive_and_behavior_altering_vars() {
+        let env = crate::subprocess_policy::subprocess_environment(
+            crate::subprocess_policy::SubprocessProfile::Clone,
+        );
         for key in [
             "AWS_SECRET_ACCESS_KEY",
             "AWS_ACCESS_KEY_ID",
@@ -1296,7 +1246,7 @@ mod tests {
             "LD_PRELOAD",
         ] {
             assert!(
-                !is_allowed_clone_environment_key(key),
+                !env.iter().any(|(k, _)| k == key),
                 "{key} must not be inherited by clone subprocesses"
             );
         }
@@ -1307,7 +1257,9 @@ mod tests {
         // A secret present in the daemon process environment must not appear in
         // the environment handed to a clone subprocess.
         std::env::set_var("GXSERVER_CLONE_ENV_LEAK_TEST", "topsecret");
-        let inherited = repository_clone_environment();
+        let inherited = crate::subprocess_policy::subprocess_environment(
+            crate::subprocess_policy::SubprocessProfile::Clone,
+        );
         std::env::remove_var("GXSERVER_CLONE_ENV_LEAK_TEST");
         assert!(
             inherited

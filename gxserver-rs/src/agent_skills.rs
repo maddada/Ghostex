@@ -15,7 +15,7 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-use crate::{domain::DomainStateError, paths::GxserverPaths};
+use crate::{domain::DomainStateError, paths::{AgentPaths, GxserverPaths}};
 
 pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     /*
@@ -177,7 +177,7 @@ pub fn create_gxserver_agent_skill_discovery_sources(
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths.home_dir.join(".agents").join("skills"),
+            path: AgentPaths::new(&paths.home_dir).skills_root,
             providers: vec!["agent-skills".to_string()],
             source_kind: "global",
         },
