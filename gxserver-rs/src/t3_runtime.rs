@@ -17,7 +17,12 @@ use uuid::Uuid;
 use crate::{domain::DomainStateError, paths::GxserverPaths, runtime::is_process_running};
 
 pub const T3_RUNTIME_HOST: &str = "127.0.0.1";
-const T3_RUNTIME_LISTEN_HOST: &str = "0.0.0.0";
+// The managed T3 runtime is only ever reached over loopback (see
+// `t3_http_request`, which connects to `T3_RUNTIME_HOST`). Bind the listener to
+// loopback as well so the runtime is not reachable from other hosts, containers,
+// or bridged interfaces. Do not widen this to `0.0.0.0` without an explicit,
+// documented remote opt-in and verified auth on every T3 endpoint.
+const T3_RUNTIME_LISTEN_HOST: &str = "127.0.0.1";
 pub const T3_RUNTIME_PORT: u16 = 3774;
 const T3_APP_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const T3_STARTUP_GRACE_INTERVAL: Duration = Duration::from_secs(30);
