@@ -7585,7 +7585,7 @@ async function installNativeMoveCodexSessionSkill(showSuccessMessage = true): Pr
 async function uninstallNativeBundledAgentSkills(): Promise<void> {
   /**
    * CDXC:AgentSkills 2026-06-18-02:54:
-   * Settings exposes one Uninstall Skills action for the bundled Ghostex agent skills. Remove only the shared catalog skill directories from ~/agents/skills so user-authored skills are not affected.
+   * Settings exposes one Uninstall Skills action for the bundled Ghostex agent skills. Remove only the shared catalog skill directories from ~/.agents/skills so user-authored skills are not affected.
    *
    * CDXC:IntegrationsSetup 2026-06-21-02:54:
    * Settings now presents this action at the bottom of Integrations, but native still owns the same bounded removal so the UI move does not broaden what can be deleted.
@@ -7597,7 +7597,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const skillNames = JSON.parse(process.argv[1] || "[]");
-const skillsRoot = path.join(os.homedir(), "agents", "skills");
+const skillsRoot = path.join(os.homedir(), ".agents", "skills");
 const removed = [];
 for (const skillName of skillNames) {
   const safeName = String(skillName || "").trim();
@@ -22520,17 +22520,20 @@ const gxRealpath = realpathOrNull(gxPath);
 const ghostexUsable = isGhostexCommandWrapper(ghostexPath) || isGhostexCommandRealpath(ghostexRealpath, "ghostex");
 const gxUsable = isGhostexCommandWrapper(gxPath) || isGhostexCommandRealpath(gxRealpath, "gx");
 const gxBlocked = Boolean(gxPath && !gxUsable);
-const browserSkillPath = path.join(home, "agents", "skills", "ghostex-browser-use", "SKILL.md");
+// Skills install under ~/.agents/skills (see gxserver-rs agent_skills.rs), so
+// the status checks must read the dotted directory. Reading ~/agents (no dot)
+// left every badge stuck on "Not installed" even after a successful install.
+const browserSkillPath = path.join(home, ".agents", "skills", "ghostex-browser-use", "SKILL.md");
 const browserSkillInstalled = isFile(browserSkillPath);
-const computerUseSkillPath = path.join(home, "agents", "skills", "ghostex-computer-use", "SKILL.md");
+const computerUseSkillPath = path.join(home, ".agents", "skills", "ghostex-computer-use", "SKILL.md");
 const computerUseSkillInstalled = isFile(computerUseSkillPath);
-const agentOrchestrationSkillPath = path.join(home, "agents", "skills", "ghostex-agent-orchestration", "SKILL.md");
+const agentOrchestrationSkillPath = path.join(home, ".agents", "skills", "ghostex-agent-orchestration", "SKILL.md");
 const agentOrchestrationSkillInstalled = isFile(agentOrchestrationSkillPath);
-const fable55OrchestrationSkillPath = path.join(home, "agents", "skills", "ghostex-fable-5.5-orchestration", "SKILL.md");
+const fable55OrchestrationSkillPath = path.join(home, ".agents", "skills", "ghostex-fable-5.5-orchestration", "SKILL.md");
 const fable55OrchestrationSkillInstalled = isFile(fable55OrchestrationSkillPath);
-const generateTitleSkillPath = path.join(home, "agents", "skills", "ghostex-generate-title", "SKILL.md");
+const generateTitleSkillPath = path.join(home, ".agents", "skills", "ghostex-generate-title", "SKILL.md");
 const generateTitleSkillInstalled = isFile(generateTitleSkillPath);
-const moveCodexSessionSkillPath = path.join(home, "agents", "skills", "ghostex-move-codex-session", "SKILL.md");
+const moveCodexSessionSkillPath = path.join(home, ".agents", "skills", "ghostex-move-codex-session", "SKILL.md");
 const moveCodexSessionSkillInstalled = isFile(moveCodexSessionSkillPath);
 const webResourceDir = String(process.env.GHOSTEX_WEB_RESOURCE_DIR || "");
 function readJsonFile(filePath) {
@@ -39515,7 +39518,7 @@ const linkedProfiles = profiles.slice();
 
 function profilesFor(candidatePath) {
   if (isRelativeTo(candidatePath, p(".agents")) || isRelativeTo(candidatePath, path.join(home, "agents"))) {
-    if (isRelativeTo(candidatePath, path.join(home, "agents", "hooks"))) {
+    if (isRelativeTo(candidatePath, p(".agents", "hooks"))) {
       return linkedProfiles.concat([piAgent]);
     }
     return linkedProfiles;
@@ -39826,7 +39829,7 @@ for (const pluginsRoot of [p(".codex-profiles"), p(".claude-profiles")]) {
   }
 }
 
-const hooksRoot = path.join(home, "agents", "hooks");
+const hooksRoot = p(".agents", "hooks");
 addGroup("hooks", "hooks-shared", "Shared hooks", hooksRoot, "Shared hook scripts and documentation used by agent profiles.", walkFiles(hooksRoot, 3, (candidate) => textSuffixes.has(path.extname(candidate))), linkedProfiles.concat([piAgent]));
 /*
 CDXC:AgentsHub 2026-06-04-19:45:
