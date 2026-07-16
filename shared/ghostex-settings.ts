@@ -75,7 +75,6 @@ export const SETTINGS_MODAL_NAVIGATION_TABS = [
   "actions",
   "openTargets",
   "hotkeys",
-  "support",
   "about",
 ] as const;
 export type SettingsModalNavigationTab = (typeof SETTINGS_MODAL_NAVIGATION_TABS)[number];

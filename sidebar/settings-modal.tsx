@@ -114,7 +114,6 @@ import {
   IconRefresh,
   IconSettings,
   IconDeviceFloppy,
-  IconStethoscope,
   IconTerminal2,
   IconTools,
   IconTrash,
@@ -129,7 +128,6 @@ import {
   type SidebarAppIconStateMessage,
   type SidebarAgentHookStatusMessage,
   type SidebarAgentHookStatusItem,
-  type SidebarDoctorCheck,
   type SidebarGhostexCliStatusMessage,
   type SidebarGhostexFolderStatsMessage,
   type SidebarOSIntegrationStatusMessage,
@@ -1217,13 +1215,6 @@ export type SettingsModalProps = {
   /** Hosts without a native App Icon subsystem hide the section entirely. */
   appIconPickerUnavailable?: boolean;
   portless?: SidebarPortlessState;
-  doctorChecks?: SidebarDoctorCheck[];
-  doctorLoading?: boolean;
-  diagnosticsJson?: string;
-  diagnosticsLoading?: boolean;
-  onRunDoctor?: () => void;
-  onApplyDoctorFix?: (fixId: string, confirmationToken: string) => void;
-  onExportDiagnostics?: () => void;
 };
 
 export function SettingsModal({
@@ -1277,13 +1268,6 @@ export function SettingsModal({
   appIconState,
   appIconPickerUnavailable = false,
   portless,
-  doctorChecks,
-  doctorLoading = false,
-  diagnosticsJson,
-  diagnosticsLoading = false,
-  onRunDoctor,
-  onApplyDoctorFix,
-  onExportDiagnostics,
 }: SettingsModalProps) {
   const isFirstLaunchSetup = presentation === "firstLaunchSetup";
   const normalizedInitialSettings = normalizeghostexSettings(settings);
@@ -2630,7 +2614,6 @@ export function SettingsModal({
     { icon: IconCodeDots, id: "agents", title: "Agents" },
     { icon: IconPlayerPlay, id: "actions", title: "Actions" },
     { icon: IconExternalLink, id: "openTargets", title: "Open In" },
-    { icon: IconStethoscope, id: "support", title: "Support" },
     ...(showOSIntegrationSettingsTab
       ? [{ icon: IconDeviceDesktop, id: "osIntegration" as const, title: "OS Integration" }]
       : []),
@@ -4980,20 +4963,6 @@ export function SettingsModal({
               onShowLessForExpandedProjectJumpsChange={(checked) =>
                 updateDraft("showLessForExpandedProjectJumps", checked)
               }
-            />
-          </TabsContent>
-          ) : null}
-          {!isFirstLaunchSetup ? (
-          <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="support">
-            <SupportSettingsTab
-              doctorChecks={doctorChecks}
-              doctorLoading={doctorLoading}
-              diagnosticsJson={diagnosticsJson}
-              diagnosticsLoading={diagnosticsLoading}
-              onRunDoctor={onRunDoctor}
-              onApplyDoctorFix={onApplyDoctorFix}
-              onExportDiagnostics={onExportDiagnostics}
-              vscode={vscode}
             />
           </TabsContent>
           ) : null}
@@ -11294,144 +11263,3 @@ function ModifiedSettingResetButton({
   );
 }
 
-function SupportSettingsTab({
-  doctorChecks,
-  doctorLoading,
-  diagnosticsJson,
-  diagnosticsLoading,
-  onRunDoctor,
-  onApplyDoctorFix,
-  onExportDiagnostics,
-  vscode,
-}: {
-  doctorChecks?: SidebarDoctorCheck[];
-  doctorLoading?: boolean;
-  diagnosticsJson?: string;
-  diagnosticsLoading?: boolean;
-  onRunDoctor?: () => void;
-  onApplyDoctorFix?: (fixId: string, confirmationToken: string) => void;
-  onExportDiagnostics?: () => void;
-  vscode?: WebviewApi;
-}) {
-  const [confirmingFixId, setConfirmingFixId] = useState<string | null>(null);
-  const [copiedDiagnostics, setCopiedDiagnostics] = useState(false);
-
-  const statusIcon = (status: SidebarDoctorCheck["status"]) => {
-    if (status === "ok") {
-      return <IconCircleCheckFilled className="size-4 text-green-500" aria-hidden="true" />;
-    }
-    if (status === "warn") {
-      return <IconAlertTriangle className="size-4 text-yellow-500" aria-hidden="true" />;
-    }
-    return <IconCircleX className="size-4 text-red-500" aria-hidden="true" />;
-  };
-
-  const handleCopyDiagnostics = async () => {
-    if (diagnosticsJson) {
-      try {
-        await navigator.clipboard.writeText(diagnosticsJson);
-        setCopiedDiagnostics(true);
-        toast.success("Diagnostics copied to clipboard");
-        window.setTimeout(() => setCopiedDiagnostics(false), 2000);
-      } catch {
-        toast.error("Failed to copy diagnostics");
-      }
-      return;
-    }
-    onExportDiagnostics?.();
-  };
-
-  const handleConfirmFix = (fixId: string, confirmationToken: string) => {
-    onApplyDoctorFix?.(fixId, confirmationToken);
-    setConfirmingFixId(null);
-  };
-
-  return (
-    <SettingsNativeScrollArea className="h-full min-h-0">
-      <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
-        <SettingsSection title="Diagnostics">
-          <p className="text-muted-foreground mb-3 text-sm">
-            Run health checks to verify your Ghostex installation. If issues are found, you can
-            apply fixes directly from here.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              className="h-10 px-4"
-              disabled={doctorLoading}
-              onClick={onRunDoctor}
-              type="button"
-              variant="outline"
-            >
-              {doctorLoading ? "Running..." : "Run Doctor"}
-            </Button>
-            <Button
-              className="h-10 px-4"
-              disabled={diagnosticsLoading}
-              onClick={handleCopyDiagnostics}
-              type="button"
-              variant="outline"
-            >
-              {copiedDiagnostics ? "Copied!" : diagnosticsLoading ? "Exporting..." : "Copy Diagnostics"}
-            </Button>
-          </div>
-        </SettingsSection>
-
-        {doctorChecks && doctorChecks.length > 0 && (
-          <SettingsSection title="Check Results">
-            <div className="flex flex-col gap-2">
-              {doctorChecks.map((check) => (
-                <div
-                  key={check.id}
-                  className="flex items-start justify-between gap-3 rounded-md border p-3"
-                >
-                  <div className="flex items-start gap-2 min-w-0">
-                    {statusIcon(check.status)}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{check.id}</p>
-                      <p className="text-muted-foreground text-xs">{check.detail}</p>
-                    </div>
-                  </div>
-                  {check.fix && (
-                    <div className="flex-shrink-0">
-                      {confirmingFixId === check.fix.id ? (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            className="h-7 px-2 text-xs"
-                            onClick={() =>
-                              handleConfirmFix(check.fix!.id, check.fix!.confirmationToken)
-                            }
-                            type="button"
-                            variant="destructive"
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            className="h-7 px-2 text-xs"
-                            onClick={() => setConfirmingFixId(null)}
-                            type="button"
-                            variant="ghost"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setConfirmingFixId(check.fix!.id)}
-                          type="button"
-                          variant="outline"
-                        >
-                          {check.fix.description}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </SettingsSection>
-        )}
-      </div>
-    </SettingsNativeScrollArea>
-  );
-}

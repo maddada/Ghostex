@@ -22298,74 +22298,6 @@ async function requestNativeAgentHookStatus(agentIds?: readonly string[]): Promi
   }
 }
 
-async function runDoctorChecks(): Promise<void> {
-  try {
-    const checks = await gxserverClient.rpc<{ checks: Array<{ id: string; status: string; detail: string; fix?: { id: string; description: string; confirmationToken: string } }> }>("/api/doctor/run");
-    postAppModalHost({
-      message: {
-        type: "doctorChecksResult",
-        checks: checks.checks.map((check) => ({
-          id: check.id,
-          status: check.status,
-          detail: check.detail,
-          fix: check.fix,
-        })),
-      },
-      type: "sidebarState",
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to run doctor checks";
-    showNativeMessage("error", errorMessage);
-    postAppModalHost({
-      message: { type: "doctorChecksResult", checks: [] },
-      type: "sidebarState",
-    });
-  }
-}
-
-async function applyDoctorFix(fixId: string, confirmationToken: string): Promise<void> {
-  try {
-    const result = await gxserverClient.rpc<{ applied?: boolean; fixId?: string }>("/api/doctor/fix", {
-      fixId,
-      confirmationToken,
-    });
-    if (result.applied) {
-      postAppModalHost({
-        message: { type: "doctorFixResult", ok: true },
-        type: "sidebarState",
-      });
-    } else {
-      postAppModalHost({
-        message: { type: "doctorFixResult", ok: false, error: "Fix was not applied" },
-        type: "sidebarState",
-      });
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to apply fix";
-    postAppModalHost({
-      message: { type: "doctorFixResult", ok: false, error: errorMessage },
-      type: "sidebarState",
-    });
-  }
-}
-
-async function exportDiagnosticsJson(): Promise<void> {
-  try {
-    const bundle = await gxserverClient.rpc<Record<string, unknown>>("/api/doctor/exportDiagnostics");
-    const jsonStr = JSON.stringify(bundle, null, 2);
-    postAppModalHost({
-      message: { type: "diagnosticsExportResult", ok: true, json: jsonStr },
-      type: "sidebarState",
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to export diagnostics";
-    postAppModalHost({
-      message: { type: "diagnosticsExportResult", ok: false, error: errorMessage },
-      type: "sidebarState",
-    });
-  }
-}
-
 function orderedNativeAgentHookStatusAgentIds(agentIds?: readonly string[]): string[] {
   const requestedAgentIds =
     agentIds && agentIds.length > 0
@@ -46569,15 +46501,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       return;
     case "revealAppIconsFolder":
       postNative({ type: "revealAppIconsFolder" });
-      return;
-    case "runDoctor":
-      void runDoctorChecks();
-      return;
-    case "applyDoctorFix":
-      void applyDoctorFix(message.fixId, message.confirmationToken);
-      return;
-    case "exportDiagnostics":
-      void exportDiagnosticsJson();
       return;
     case "openBrowserChat":
       void createNativeBrowserChat();
