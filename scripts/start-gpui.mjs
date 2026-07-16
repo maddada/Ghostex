@@ -21,9 +21,8 @@ import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
-const hostScriptDir = path.join(repoRoot, "native", "macos", "ghostexHost");
 const gpuiDir = path.join(repoRoot, "gpui");
-const appName = "GhostexGPUI";
+const appName = "Ghostex";
 const bundleId = "com.madda.ghostex.gpui";
 const isDarwin = process.platform === "darwin";
 const installDir = resolveGpuiInstallDir();
@@ -72,11 +71,9 @@ const buildEnvironment = {
       CONFIGURATION: configuration,
       GHOSTEX_APP_VARIANT: "prod",
       /*
-       * Keep the packager output path identical to appPath/installedAppPath.
-       * The packager's standalone default is Ghostex.app, while this command
-       * intentionally owns the separate GhostexGPUI.app development install.
-       * Without this explicit handoff, a fresh Ghostex.app is built and the
-       * stale GhostexGPUI.app from an earlier run is reinstalled and launched.
+       * Keep the packager output path identical to appPath/installedAppPath so
+       * the installed application and every macOS-owned label use the public
+       * Ghostex product name.
        */
       GHOSTEX_GPUI_APP_NAME: appName,
       GHOSTEX_GPUI_BUNDLE_ID: bundleId,
@@ -106,12 +103,12 @@ if (!isDarwin) {
   });
 }
 if (isDarwin) {
-  logStartStep("Building shared app resources...");
-  run("/bin/bash", [path.join(hostScriptDir, "build-ghostex-host.sh")], {
+  logStartStep("Building GPUI runtime resources...");
+  run("/bin/bash", [path.join(gpuiDir, "scripts", "prepare-macos-runtime.sh")], {
     env: buildEnvironment,
-    quietLabel: "Ghostex shared resource build",
+    quietLabel: "GPUI runtime resource build",
   });
-  logStartDetail("Shared app resources are ready.");
+  logStartDetail("GPUI runtime resources are ready.");
   await closeRunningGpuiBundle(appPath, {
     action: `before replacing staged build bundle ${appPath}`,
     includeBundleId: false,

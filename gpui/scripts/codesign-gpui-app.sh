@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# GPUI port of native/macos/ghostexHost/codesign-ghostex-host.sh (the
-# production-notarized macOS recipe): explicit inside-out signing of nested
+# GPUI-owned production-notarized macOS recipe: explicit inside-out signing of nested
 # Mach-O payloads, Chromium-safe V8 entitlements on CEF helpers and the
 # code-server Node runtime, hardened runtime everywhere, then the outer app.
 # Sparkle.framework handling is GPUI-specific because the Xcode build signs it
@@ -14,11 +13,11 @@ set -euo pipefail
 APP_PATH="${1:-}"
 CODE_SIGN_IDENTITY="${GHOSTEX_GPUI_SIGN_IDENTITY:--}"
 CODE_SIGN_TIMESTAMP_FLAG="${GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG:---timestamp}"
-HELPER_APP_GLOB="${GHOSTEX_GPUI_HELPER_APP_GLOB:-GhostexGPUI Helper*.app}"
+HELPER_APP_GLOB="${GHOSTEX_GPUI_HELPER_APP_GLOB:-Ghostex Helper*.app}"
 LID_SLEEP_HELPER_LABEL="${GHOSTEX_GPUI_LID_SLEEP_HELPER_LABEL:-}"
 
 if [[ -z "$APP_PATH" ]]; then
-	echo "Usage: $0 /path/to/GhostexGPUI.app" >&2
+	echo "Usage: $0 /path/to/Ghostex.app" >&2
 	exit 2
 fi
 if [[ ! -d "$APP_PATH" ]]; then

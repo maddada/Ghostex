@@ -40,6 +40,21 @@ foreach ($required in @("ghostex-gpui.exe", "ghostex-gpui-cef-helper.exe", "libc
         throw "Windows staged app is missing $required"
     }
 }
+$WslArchive = Join-Path $AppDir "resources/wsl/gxserver-linux-$Arch.tar.gz"
+$WslArchiveSha = "$WslArchive.sha256"
+if ($env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -ne "0") {
+    if (-not (Test-Path $WslArchive)) {
+        throw "Windows staged app is missing its WSL gxserver runtime: $WslArchive"
+    }
+    if (-not (Test-Path $WslArchiveSha)) {
+        throw "Windows staged app is missing its WSL gxserver checksum: $WslArchiveSha"
+    }
+    $ExpectedWslSha = (Get-Content -Raw $WslArchiveSha).Trim()
+    $ActualWslSha = (Get-FileHash -Algorithm SHA256 $WslArchive).Hash.ToLowerInvariant()
+    if ($ExpectedWslSha -cnotmatch '^[0-9a-f]{64}$' -or $ExpectedWslSha -cne $ActualWslSha) {
+        throw "Windows staged WSL gxserver checksum does not match its runtime archive"
+    }
+}
 
 $SigningPfx = $env:GHOSTEX_WINDOWS_SIGNING_PFX
 $SigningPassword = $env:GHOSTEX_WINDOWS_SIGNING_PASSWORD

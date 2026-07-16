@@ -19,7 +19,7 @@ builds install the skill version that matches their CLI commands.
 const GHOSTEX_BROWSER_SKILL_NAME: &str = "ghostex-browser-use";
 const GHOSTEX_COMPUTER_USE_SKILL_NAME: &str = "ghostex-computer-use";
 const GHOSTEX_AGENT_ORCHESTRATION_SKILL_NAME: &str = "ghostex-agent-orchestration";
-const GHOSTEX_FABLE_55_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-5.5-orchestration";
+const GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-5.6-orchestration";
 const GHOSTEX_GENERATE_TITLE_SKILL_NAME: &str = "ghostex-generate-title";
 const GHOSTEX_MANAGE_BEADS_SKILL_NAME: &str = "ghostex-manage-beads";
 const GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME: &str = "ghostex-move-codex-session";
@@ -319,27 +319,27 @@ pub fn install_agent_orchestration_skill_command(args: &[String]) -> CliResult<(
     )
 }
 
-pub fn fable55_orchestration_command(args: &[String]) -> CliResult<()> {
+pub fn fable56_orchestration_command(args: &[String]) -> CliResult<()> {
     skill_surface_command(
         args,
-        &usage::fable55_orchestration_usage(),
-        "fable-5.5-orchestration",
-        &install_fable55_orchestration_skill_command,
+        &usage::fable56_orchestration_usage(),
+        "fable-5.6-orchestration",
+        &install_fable56_orchestration_skill_command,
     )
 }
 
-pub fn install_fable55_orchestration_skill_command(args: &[String]) -> CliResult<()> {
+pub fn install_fable56_orchestration_skill_command(args: &[String]) -> CliResult<()> {
     /*
     Agents need a bundled pipeline skill on top of `$ghostex-agent-orchestration`:
-    plan a multi-phase task inline with Fable, launch one Codex gpt-5.5 worker
+    plan a multi-phase task inline with Fable, launch one Codex gpt-5.6 worker
     pane per phase through supported Ghostex CLI commands, then verify with a
     Fable pane and spawn targeted fixers until verification passes.
     */
     install_ghostex_agent_skill(
         args,
         "ghostex --help",
-        &["GHOSTEX_FABLE_55_ORCHESTRATION_SKILL_SOURCE"],
-        GHOSTEX_FABLE_55_ORCHESTRATION_SKILL_NAME,
+        &["GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_SOURCE"],
+        GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME,
     )
 }
 

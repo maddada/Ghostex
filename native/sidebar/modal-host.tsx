@@ -1541,9 +1541,9 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: "installAgentOrchestrationSkill" });
         }}
-        onInstallFable55OrchestrationSkill={() => {
+        onInstallFable56OrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFable55OrchestrationSkill" });
+          vscode.postMessage({ type: "installFable56OrchestrationSkill" });
         }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
@@ -1689,9 +1689,9 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: "installAgentOrchestrationSkill" });
         }}
-        onInstallFable55OrchestrationSkill={() => {
+        onInstallFable56OrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
-          vscode.postMessage({ type: "installFable55OrchestrationSkill" });
+          vscode.postMessage({ type: "installFable56OrchestrationSkill" });
         }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);

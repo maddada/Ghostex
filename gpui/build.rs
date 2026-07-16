@@ -1,5 +1,6 @@
 use std::{
     env,
+    fmt::Write as _,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -11,6 +12,11 @@ const GHOSTTYKIT_ARCHIVE: &str =
 const GPUI_MACOS_DEPLOYMENT_TARGET_FLAG: &str = "-mmacosx-version-min=13.0";
 const LIBGHOSTTY_VT_BUILD_SCRIPT: &str = "scripts/build-libghostty-vt.sh";
 
+struct LibGhosttyVtBuild {
+    archive: PathBuf,
+    themes_dir: PathBuf,
+}
+
 /*
 CDXC:GPUILibghosttyVt 2026-07-03:
 Phase 1 GPUI-composited terminals parse VT bytes through libghostty-vt, so
@@ -20,7 +26,7 @@ version selection and macOS SDK redirection; this function only runs it with
 an OUT_DIR install prefix and returns the archive path for direct link-arg
 linking, the same mechanism used for the GhosttyKit archive below.
 */
-fn build_libghostty_vt(manifest_dir: &Path) -> PathBuf {
+fn build_libghostty_vt(manifest_dir: &Path) -> LibGhosttyVtBuild {
     let script = manifest_dir.join(LIBGHOSTTY_VT_BUILD_SCRIPT);
     let ghostty_dir = manifest_dir.join("../ghostty");
     println!("cargo:rerun-if-changed={}", script.display());
@@ -44,7 +50,10 @@ fn build_libghostty_vt(manifest_dir: &Path) -> PathBuf {
         "libghostty-vt build did not produce {}",
         archive.display()
     );
-    archive
+    LibGhosttyVtBuild {
+        archive,
+        themes_dir: prefix.join("share/ghostty/themes"),
+    }
 }
 
 fn emit_libghostty_vt_rerun_hints(ghostty_dir: &Path) {
@@ -82,7 +91,10 @@ requireZig rejects mismatched versions with a clear message.
 NEEDS-DEVICE-VERIFY: written from code-reading on macOS, never executed on
 Windows or Linux hardware.
 */
-fn build_libghostty_vt_with_zig(manifest_dir: &Path, archive_relative_path: &str) -> PathBuf {
+fn build_libghostty_vt_with_zig(
+    manifest_dir: &Path,
+    archive_relative_path: &str,
+) -> LibGhosttyVtBuild {
     let ghostty_dir = manifest_dir.join("../ghostty");
     emit_libghostty_vt_rerun_hints(&ghostty_dir);
 
@@ -144,9 +156,57 @@ fn build_libghostty_vt_with_zig(manifest_dir: &Path, archive_relative_path: &str
                 archive.display()
             )
         });
-        return archive;
+        return LibGhosttyVtBuild {
+            archive,
+            themes_dir: build_prefix.join("share/ghostty/themes"),
+        };
     }
-    built_archive
+    LibGhosttyVtBuild {
+        archive: built_archive,
+        themes_dir: build_prefix.join("share/ghostty/themes"),
+    }
+}
+
+/// Generate a compact Rust lookup table from Ghostty's audited theme files.
+/// The files are fetched and installed by the same pinned Zig dependency that
+/// builds libghostty-vt, so macOS, Windows, and Linux all compile the exact
+/// theme definitions represented by Ghostex's Settings picker.
+fn generate_embedded_ghostty_themes(themes_dir: &Path) {
+    let mut theme_paths = std::fs::read_dir(themes_dir)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to read installed Ghostty themes at {}: {error}",
+                themes_dir.display()
+            )
+        })
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    theme_paths.sort();
+    assert!(
+        !theme_paths.is_empty(),
+        "Ghostty theme install produced no files at {}",
+        themes_dir.display()
+    );
+
+    let mut generated = String::from(
+        "fn embedded_ghostty_theme_source(name: &str) -> Option<&'static str> {\n    match name {\n",
+    );
+    for path in theme_paths {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_else(|| panic!("Ghostty theme name is not UTF-8: {}", path.display()));
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        writeln!(generated, "        {name:?} => Some({source:?}),").unwrap();
+    }
+    generated.push_str("        _ => None,\n    }\n}\n");
+
+    let output =
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("embedded_ghostty_themes.rs");
+    std::fs::write(&output, generated)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", output.display()));
 }
 
 /// Same version resolution as scripts/build-libghostty-vt.sh: the first
@@ -191,18 +251,19 @@ fn main() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let manifest_dir =
             PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-        let libghostty_vt_archive =
+        let libghostty_vt =
             build_libghostty_vt_with_zig(&manifest_dir, "lib/ghostty-vt-static.lib");
-        println!("cargo:rustc-link-arg={}", libghostty_vt_archive.display());
+        generate_embedded_ghostty_themes(&libghostty_vt.themes_dir);
+        println!("cargo:rustc-link-arg={}", libghostty_vt.archive.display());
         return;
     }
 
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         let manifest_dir =
             PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-        let libghostty_vt_archive =
-            build_libghostty_vt_with_zig(&manifest_dir, "lib/libghostty-vt.a");
-        println!("cargo:rustc-link-arg={}", libghostty_vt_archive.display());
+        let libghostty_vt = build_libghostty_vt_with_zig(&manifest_dir, "lib/libghostty-vt.a");
+        generate_embedded_ghostty_themes(&libghostty_vt.themes_dir);
+        println!("cargo:rustc-link-arg={}", libghostty_vt.archive.display());
         /*
         CDXC:GPUILinuxX11Backend 2026-07-04:
         cef-dll-sys links libcef.so dynamically (`rustc-link-lib=dylib=cef`)
@@ -390,8 +451,9 @@ fn main() {
     CDXC:GPUIGhosttyKitAdapter 2026-06-23-03:27:
     The Ghostty Metal renderer now pulls IOSurface symbols from the static GhosttyKit archive, so local GPUI builds must link IOSurface explicitly instead of relying on transitive framework flags from other crates.
     */
-    let libghostty_vt_archive = build_libghostty_vt(&manifest_dir);
-    println!("cargo:rustc-link-arg={}", libghostty_vt_archive.display());
+    let libghostty_vt = build_libghostty_vt(&manifest_dir);
+    generate_embedded_ghostty_themes(&libghostty_vt.themes_dir);
+    println!("cargo:rustc-link-arg={}", libghostty_vt.archive.display());
 
     if let Some(ghosttykit_archive_dir) = ghosttykit_archive.parent() {
         println!(

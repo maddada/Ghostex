@@ -1,5 +1,9 @@
 # Rules for Agents working in this Repository
 
+### General notes
+
+- Don't get stuck on stale git locks. You can delete those and continue on your work without confirmation.
+
 ### Repository Search Routing
 
 This repository contains Ghostex app code plus large imported/vendored terminal code. Start searches in the smallest app-owned area that matches the task, and only expand after the first pass doesn't find what you need.

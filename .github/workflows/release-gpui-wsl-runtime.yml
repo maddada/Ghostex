@@ -1,0 +1,65 @@
+name: GPUI release - WSL gxserver
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+      source_run_id:
+        required: false
+        default: ""
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semver release version
+        required: true
+        type: string
+      arch:
+        description: WSL runtime architecture
+        required: true
+        default: x64
+        type: choice
+        options: [x64, arm64]
+      source_run_id:
+        description: Workflow run containing release-gxserver-linux-<arch>
+        required: true
+        type: string
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.source_run_id == '' }}
+        with:
+          name: release-gxserver-linux-${{ inputs.arch }}
+          path: build/runtime-artifacts/${{ inputs.arch }}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.source_run_id != '' }}
+        with:
+          name: release-gxserver-linux-${{ inputs.arch }}
+          path: build/runtime-artifacts/${{ inputs.arch }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Package truthful WSL bootstrap
+        run: >-
+          scripts/release-gpui/wsl-runtime.sh
+          "${{ inputs.version }}"
+          "${{ inputs.arch }}"
+          "build/runtime-artifacts/${{ inputs.arch }}/gxserver-linux-${{ inputs.arch }}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-gxserver-wsl-windows-${{ inputs.arch }}
+          path: build/release-gpui/${{ inputs.version }}/gxserver-wsl-windows-${{ inputs.arch }}/
+          if-no-files-found: error
+          retention-days: 14

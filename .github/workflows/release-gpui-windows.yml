@@ -13,6 +13,10 @@ on:
         required: false
         default: true
         type: boolean
+      runtime_artifacts_ready:
+        required: false
+        default: false
+        type: boolean
     secrets:
       WINDOWS_CODE_SIGN_PFX_BASE64:
         required: false
@@ -41,6 +45,11 @@ jobs:
           fetch-depth: 0
           submodules: false
       - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: release-gxserver-linux-${{ inputs.arch }}
+          path: build/runtime-artifacts/${{ inputs.arch }}
       - name: Install pinned Zig
         shell: pwsh
         run: scripts/release-gpui/prepare-zig.ps1 -Arch "${{ inputs.arch }}"
@@ -65,6 +74,8 @@ jobs:
           GHOSTEX_WINDOWS_SIGNING_PFX: ${{ runner.temp }}\ghostex-code-signing.pfx
           GHOSTEX_WINDOWS_SIGNING_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGN_PFX_PASSWORD }}
           GHOSTEX_WINDOWS_REQUIRE_SIGNING: ${{ inputs.sign && '1' || '0' }}
+          GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: ${{ inputs.runtime_artifacts_ready && '1' || '0' }}
+          GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
         run: scripts/release-gpui/windows.ps1 -Version "${{ inputs.version }}" -Arch "${{ inputs.arch }}"
       - uses: actions/upload-artifact@v4
         with:

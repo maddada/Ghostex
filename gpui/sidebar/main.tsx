@@ -21,7 +21,7 @@ so no Rust-owned state file or startup seeding bridge is needed.
 */
 const rootElement = document.getElementById("root");
 if (!rootElement) {
-  throw new Error("Ghostex GPUI sidebar root element was not found.");
+  throw new Error("Ghostex sidebar root element was not found.");
 }
 
 const gpuiSidebarRuntime = createGpuiSidebarRuntime();
@@ -50,7 +50,7 @@ root.render(
   >
     <main className="native-sidebar-main">
       <SidebarApp
-        commandsPaneButtonOpensPalette={true}
+        commandsPaneButtonOpensPalette={false}
         enableProjectCollections={true}
         messageSource={gpuiSidebarRuntime.messageSource}
         nativeHostEventSource={null}

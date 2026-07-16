@@ -64,19 +64,19 @@ jobs:
       - uses: actions/download-artifact@v4
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
-          name: runtime-linux-x64
+          name: release-gxserver-linux-x64
           path: build/runtime-artifacts/x64
       - uses: actions/download-artifact@v4
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
-          name: runtime-linux-arm64
+          name: release-gxserver-linux-arm64
           path: build/runtime-artifacts/arm64
       - name: Restore remote runtime packages
         if: ${{ inputs.runtime_artifacts_ready }}
         run: |
           mkdir -p build/remote-gxserver-linux/x64/package build/remote-gxserver-linux/arm64/package
-          tar -xzf build/runtime-artifacts/x64/runtime-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
-          tar -xzf build/runtime-artifacts/arm64/runtime-linux-arm64.tar.gz -C build/remote-gxserver-linux/arm64/package
+          tar -xzf build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
+          tar -xzf build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz -C build/remote-gxserver-linux/arm64/package
       - name: Install build tools
         run: brew install cmake ninja rsync go xcodegen
       - name: Install pinned Zig toolchains
@@ -151,6 +151,8 @@ jobs:
           GHOSTEX_CODE_SIGN_IDENTITY: "Developer ID Application: Mohamad Youssef (KTKP595G3B)"
           GHOSTEX_NOTARY_PROFILE: notarytool-profile
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ inputs.update_sparkle && '1' || '0' }}
+          GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz
+          GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: scripts/release-gpui/macos.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@v4

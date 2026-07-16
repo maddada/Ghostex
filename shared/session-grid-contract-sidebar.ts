@@ -172,13 +172,13 @@ export type SidebarGhostexCliStatusMessage = {
   agentOrchestrationSkillInstalled: boolean;
   agentOrchestrationSkillPath?: string;
   /**
-   * CDXC:Fable55Orchestration 2026-07-04-00:00:
-   * `$ghostex-fable-5.5-orchestration` shipped after existing hosts, so its
+   * CDXC:Fable56Orchestration 2026-07-04-00:00:
+   * `$ghostex-fable-5.6-orchestration` shipped after existing hosts, so its
    * status fields stay optional and consumers must treat a missing value as
    * not installed instead of requiring every host build to send it.
    */
-  fable55OrchestrationSkillInstalled?: boolean;
-  fable55OrchestrationSkillPath?: string;
+  fable56OrchestrationSkillInstalled?: boolean;
+  fable56OrchestrationSkillPath?: string;
   generateTitleSkillInstalled: boolean;
   generateTitleSkillPath?: string;
   moveCodexSessionSkillInstalled: boolean;
@@ -1150,7 +1150,7 @@ export type SidebarToExtensionMessage =
         | "installBrowserControl"
         | "installComputerUseSkill"
         | "installAgentOrchestrationSkill"
-        | "installFable55OrchestrationSkill"
+        | "installFable56OrchestrationSkill"
         | "installGenerateTitleSkill"
         | "installMoveCodexSessionSkill"
         | "uninstallBundledAgentSkills"

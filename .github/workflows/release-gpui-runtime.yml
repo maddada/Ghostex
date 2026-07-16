@@ -3,9 +3,24 @@ name: GPUI release - remote runtime
 on:
   workflow_call:
     inputs:
+      version:
+        required: true
+        type: string
       arch:
         required: true
         type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semver release version
+        required: true
+        type: string
+      arch:
+        description: Linux runtime architecture
+        required: true
+        default: x64
+        type: choice
+        options: [x64, arm64]
 
 jobs:
   build:
@@ -35,11 +50,20 @@ jobs:
         run: |
           BEADS_ROOT="$(cd ../.. && pwd)/_references/beads" \
             scripts/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
-          tar -C "build/remote-gxserver-linux/${{ inputs.arch }}/package" \
-            -czf "build/runtime-linux-${{ inputs.arch }}.tar.gz" .
+          OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}"
+          mkdir -p "$OUTPUT"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -C "build/remote-gxserver-linux/${{ inputs.arch }}/package" \
+            -czf "$OUTPUT/gxserver-linux-${{ inputs.arch }}.tar.gz" .
+          source scripts/release-gpui/common.sh
+          release_gpui_write_manifest \
+            "$OUTPUT" \
+            "gxserver-linux-${{ inputs.arch }}" \
+            "${{ inputs.version }}" \
+            "$OUTPUT/gxserver-linux-${{ inputs.arch }}.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
-          name: runtime-linux-${{ inputs.arch }}
-          path: build/runtime-linux-${{ inputs.arch }}.tar.gz
+          name: release-gxserver-linux-${{ inputs.arch }}
+          path: build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}/
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 14

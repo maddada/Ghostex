@@ -30,8 +30,8 @@ const config = {
    the same Developer ID certificate (user decision 2026-07-03) and the same
    Sparkle EdDSA key; GHOSTEX_GPUI_SIGN_IDENTITY overrides the identity.
    */
-  gpuiAppName: "GhostexGPUI",
-  gpuiStagedAppName: "GhostexGPUI.app",
+  gpuiAppName: "Ghostex",
+  gpuiStagedAppName: "Ghostex.app",
   gpuiBundleId: "com.madda.ghostex.gpui",
   gpuiFeed: "appcast-gpui.xml",
   installCommand: "brew install --cask maddada/tap/ghostex",
@@ -82,7 +82,7 @@ function gpuiReleaseEntry(version) {
     bundleId: config.gpuiBundleId,
     dmgName: `ghostex-gpui-${version}-arm64.dmg`,
     volumeName: "ghostex-gpui",
-    releaseNotesTitle: "Ghostex GPUI",
+    releaseNotesTitle: "Ghostex",
     feed: config.gpuiFeed,
     feedUrl: `https://raw.githubusercontent.com/${config.githubRepo}/main/${config.gpuiFeed}`,
   };
@@ -2125,7 +2125,7 @@ async function buildGithubReleaseNotes(version, artifacts, { androidArtifact = n
   ];
   if (gpuiArtifact) {
     downloads.push(
-      "- Ghostex GPUI (Apple Silicon)",
+      "- Ghostex (Apple Silicon)",
       `  - \`${path.basename(gpuiArtifact.finalDmg)}\``,
       `  - SHA256: \`${gpuiArtifact.sha256}\``,
     );

@@ -1,4 +1,4 @@
-name: Release Ghostex GPUI
+name: Release Ghostex
 
 on:
   workflow_dispatch:
@@ -17,8 +17,13 @@ on:
         required: true
         default: true
         type: boolean
-      linux:
-        description: Build Linux x64 DEB and RPM
+      linux_deb:
+        description: Build Debian/Ubuntu x64 DEB
+        required: true
+        default: true
+        type: boolean
+      linux_rpm:
+        description: Build Fedora/RHEL x64 RPM
         required: true
         default: true
         type: boolean
@@ -39,6 +44,26 @@ on:
         type: boolean
       android:
         description: Build signed Android APK
+        required: true
+        default: true
+        type: boolean
+      gxserver_linux_x64:
+        description: Publish the static Linux x64 gxserver runtime
+        required: true
+        default: true
+        type: boolean
+      gxserver_linux_arm64:
+        description: Publish the static Linux ARM64 gxserver runtime
+        required: true
+        default: true
+        type: boolean
+      gxserver_wsl_windows_x64:
+        description: Publish the Windows x64 WSL gxserver bootstrap
+        required: true
+        default: true
+        type: boolean
+      gxserver_wsl_windows_arm64:
+        description: Publish the Windows ARM64 WSL gxserver bootstrap
         required: true
         default: true
         type: boolean
@@ -72,6 +97,14 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           MACOS: ${{ inputs.macos }}
+          LINUX_DEB: ${{ inputs.linux_deb }}
+          LINUX_RPM: ${{ inputs.linux_rpm }}
+          WINDOWS_X64: ${{ inputs.windows_x64 }}
+          WINDOWS_ARM64: ${{ inputs.windows_arm64 }}
+          GXSERVER_LINUX_X64: ${{ inputs.gxserver_linux_x64 }}
+          GXSERVER_LINUX_ARM64: ${{ inputs.gxserver_linux_arm64 }}
+          GXSERVER_WSL_WINDOWS_X64: ${{ inputs.gxserver_wsl_windows_x64 }}
+          GXSERVER_WSL_WINDOWS_ARM64: ${{ inputs.gxserver_wsl_windows_arm64 }}
           UPDATE_SPARKLE: ${{ inputs.update_sparkle }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
@@ -85,6 +118,16 @@ jobs:
           if (packageVersion !== version) throw new Error(`package.json is ${packageVersion}; expected ${version}`);
           if (process.env.PRERELEASE === "true" && process.env.MACOS === "true" && process.env.UPDATE_SPARKLE === "true") {
             throw new Error("A prerelease cannot advance the production macOS Sparkle feed; disable update_sparkle for this run");
+          }
+          const enabled = (name) => process.env[name] === "true";
+          if (enabled("MACOS") && (!enabled("GXSERVER_LINUX_X64") || !enabled("GXSERVER_LINUX_ARM64"))) {
+            throw new Error("macOS requires both gxserver Linux runtimes for its sealed on-demand manifest");
+          }
+          if ((enabled("LINUX_DEB") || enabled("LINUX_RPM") || enabled("WINDOWS_X64") || enabled("GXSERVER_WSL_WINDOWS_X64")) && !enabled("GXSERVER_LINUX_X64")) {
+            throw new Error("Enabled x64 Linux/Windows packages require gxserver_linux_x64");
+          }
+          if ((enabled("WINDOWS_ARM64") || enabled("GXSERVER_WSL_WINDOWS_ARM64")) && !enabled("GXSERVER_LINUX_ARM64")) {
+            throw new Error("Enabled ARM64 Windows packages require gxserver_linux_arm64");
           }
           const changelog = readFileSync("CHANGELOG.md", "utf8");
           if (!changelog.includes(`## ${version} -`)) throw new Error(`CHANGELOG.md has no ${version} section`);
@@ -100,25 +143,35 @@ jobs:
         id: expected
         env:
           MACOS: ${{ inputs.macos }}
-          LINUX: ${{ inputs.linux }}
+          LINUX_DEB: ${{ inputs.linux_deb }}
+          LINUX_RPM: ${{ inputs.linux_rpm }}
           WINDOWS_X64: ${{ inputs.windows_x64 }}
           WINDOWS_ARM64: ${{ inputs.windows_arm64 }}
           ANDROID: ${{ inputs.android }}
+          GXSERVER_LINUX_X64: ${{ inputs.gxserver_linux_x64 }}
+          GXSERVER_LINUX_ARM64: ${{ inputs.gxserver_linux_arm64 }}
+          GXSERVER_WSL_WINDOWS_X64: ${{ inputs.gxserver_wsl_windows_x64 }}
+          GXSERVER_WSL_WINDOWS_ARM64: ${{ inputs.gxserver_wsl_windows_arm64 }}
         run: |
           node - <<'JS' >> "$GITHUB_OUTPUT"
           const platforms = [];
           if (process.env.MACOS === "true") platforms.push("macos-arm64");
-          if (process.env.LINUX === "true") platforms.push("linux-x64");
+          if (process.env.LINUX_DEB === "true") platforms.push("linux-deb-x64");
+          if (process.env.LINUX_RPM === "true") platforms.push("linux-rpm-x64");
           if (process.env.WINDOWS_X64 === "true") platforms.push("windows-x64");
           if (process.env.WINDOWS_ARM64 === "true") platforms.push("windows-arm64");
           if (process.env.ANDROID === "true") platforms.push("android");
+          if (process.env.GXSERVER_LINUX_X64 === "true") platforms.push("gxserver-linux-x64");
+          if (process.env.GXSERVER_LINUX_ARM64 === "true") platforms.push("gxserver-linux-arm64");
+          if (process.env.GXSERVER_WSL_WINDOWS_X64 === "true") platforms.push("gxserver-wsl-windows-x64");
+          if (process.env.GXSERVER_WSL_WINDOWS_ARM64 === "true") platforms.push("gxserver-wsl-windows-arm64");
           if (platforms.length === 0) throw new Error("At least one platform must be enabled");
           console.log(`platforms=${platforms.join(",")}`);
           JS
 
   macos:
     if: ${{ inputs.macos }}
-    needs: [prepare, runtime_linux_x64, runtime_linux_arm64]
+    needs: [prepare, gxserver_linux_x64, gxserver_linux_arm64]
     uses: ./.github/workflows/release-gpui-macos.yml
     with:
       version: ${{ inputs.version }}
@@ -126,46 +179,76 @@ jobs:
       update_sparkle: ${{ inputs.update_sparkle }}
     secrets: inherit
 
-  linux:
-    if: ${{ inputs.linux }}
-    needs: [prepare, runtime_linux_x64]
+  linux_deb:
+    if: ${{ inputs.linux_deb }}
+    needs: [prepare, gxserver_linux_x64]
     uses: ./.github/workflows/release-gpui-linux.yml
     with:
       version: ${{ inputs.version }}
+      package: deb
       runtime_artifacts_ready: true
 
-  runtime_linux_x64:
-    if: ${{ inputs.macos || inputs.linux }}
+  linux_rpm:
+    if: ${{ inputs.linux_rpm }}
+    needs: [prepare, gxserver_linux_x64]
+    uses: ./.github/workflows/release-gpui-linux.yml
+    with:
+      version: ${{ inputs.version }}
+      package: rpm
+      runtime_artifacts_ready: true
+
+  gxserver_linux_x64:
+    if: ${{ inputs.gxserver_linux_x64 }}
     needs: prepare
     uses: ./.github/workflows/release-gpui-runtime.yml
     with:
+      version: ${{ inputs.version }}
       arch: x64
 
-  runtime_linux_arm64:
-    if: ${{ inputs.macos }}
+  gxserver_linux_arm64:
+    if: ${{ inputs.gxserver_linux_arm64 }}
     needs: prepare
     uses: ./.github/workflows/release-gpui-runtime.yml
     with:
+      version: ${{ inputs.version }}
+      arch: arm64
+
+  gxserver_wsl_windows_x64:
+    if: ${{ inputs.gxserver_wsl_windows_x64 }}
+    needs: [prepare, gxserver_linux_x64]
+    uses: ./.github/workflows/release-gpui-wsl-runtime.yml
+    with:
+      version: ${{ inputs.version }}
+      arch: x64
+
+  gxserver_wsl_windows_arm64:
+    if: ${{ inputs.gxserver_wsl_windows_arm64 }}
+    needs: [prepare, gxserver_linux_arm64]
+    uses: ./.github/workflows/release-gpui-wsl-runtime.yml
+    with:
+      version: ${{ inputs.version }}
       arch: arm64
 
   windows_x64:
     if: ${{ inputs.windows_x64 }}
-    needs: prepare
+    needs: [prepare, gxserver_linux_x64]
     uses: ./.github/workflows/release-gpui-windows.yml
     with:
       version: ${{ inputs.version }}
       arch: x64
       sign: ${{ inputs.sign_windows }}
+      runtime_artifacts_ready: true
     secrets: inherit
 
   windows_arm64:
     if: ${{ inputs.windows_arm64 }}
-    needs: prepare
+    needs: [prepare, gxserver_linux_arm64]
     uses: ./.github/workflows/release-gpui-windows.yml
     with:
       version: ${{ inputs.version }}
       arch: arm64
       sign: ${{ inputs.sign_windows }}
+      runtime_artifacts_ready: true
     secrets: inherit
 
   android:
@@ -182,12 +265,17 @@ jobs:
         always() &&
         needs.prepare.result == 'success' &&
         ((inputs.macos && needs.macos.result == 'success') || (!inputs.macos && needs.macos.result == 'skipped')) &&
-        ((inputs.linux && needs.linux.result == 'success') || (!inputs.linux && needs.linux.result == 'skipped')) &&
+        ((inputs.linux_deb && needs.linux_deb.result == 'success') || (!inputs.linux_deb && needs.linux_deb.result == 'skipped')) &&
+        ((inputs.linux_rpm && needs.linux_rpm.result == 'success') || (!inputs.linux_rpm && needs.linux_rpm.result == 'skipped')) &&
         ((inputs.windows_x64 && needs.windows_x64.result == 'success') || (!inputs.windows_x64 && needs.windows_x64.result == 'skipped')) &&
         ((inputs.windows_arm64 && needs.windows_arm64.result == 'success') || (!inputs.windows_arm64 && needs.windows_arm64.result == 'skipped')) &&
-        ((inputs.android && needs.android.result == 'success') || (!inputs.android && needs.android.result == 'skipped'))
+        ((inputs.android && needs.android.result == 'success') || (!inputs.android && needs.android.result == 'skipped')) &&
+        ((inputs.gxserver_linux_x64 && needs.gxserver_linux_x64.result == 'success') || (!inputs.gxserver_linux_x64 && needs.gxserver_linux_x64.result == 'skipped')) &&
+        ((inputs.gxserver_linux_arm64 && needs.gxserver_linux_arm64.result == 'success') || (!inputs.gxserver_linux_arm64 && needs.gxserver_linux_arm64.result == 'skipped')) &&
+        ((inputs.gxserver_wsl_windows_x64 && needs.gxserver_wsl_windows_x64.result == 'success') || (!inputs.gxserver_wsl_windows_x64 && needs.gxserver_wsl_windows_x64.result == 'skipped')) &&
+        ((inputs.gxserver_wsl_windows_arm64 && needs.gxserver_wsl_windows_arm64.result == 'success') || (!inputs.gxserver_wsl_windows_arm64 && needs.gxserver_wsl_windows_arm64.result == 'skipped'))
       }}
-    needs: [prepare, macos, linux, windows_x64, windows_arm64, android]
+    needs: [prepare, macos, linux_deb, linux_rpm, windows_x64, windows_arm64, android, gxserver_linux_x64, gxserver_linux_arm64, gxserver_wsl_windows_x64, gxserver_wsl_windows_arm64]
     uses: ./.github/workflows/release-gpui-publish.yml
     with:
       version: ${{ inputs.version }}

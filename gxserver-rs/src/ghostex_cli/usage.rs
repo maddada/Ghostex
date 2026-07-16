@@ -141,7 +141,7 @@ pub fn usage() -> String {
         format_help_command("browser --help", "Show embedded CEF browser control and MCP setup"),
         format_help_command("computer-use --help", "Show Ghostex Computer Use skill setup for Cua Driver"),
         format_help_command("agent-orchestration --help", "Show Ghostex Agent Orchestration skill setup"),
-        format_help_command("fable-5.5-orchestration --help", "Show Ghostex Fable 5.5 Orchestration skill setup"),
+        format_help_command("fable-5.6-orchestration --help", "Show Ghostex Fable 5.6 Orchestration skill setup"),
         format_help_command("generate-title --help", "Show Ghostex Generate Title skill setup"),
         format_help_command("manage-beads --help", "Show Ghostex Manage Beads skill setup"),
         format_help_command("move-codex-session --help", "Show Ghostex Move Codex Session skill setup"),
@@ -507,17 +507,17 @@ Boundary:
     .to_string()
 }
 
-pub fn fable55_orchestration_usage() -> String {
-    "Ghostex Fable 5.5 Orchestration - install the agent skill for the Fable plan / Codex implement / Fable verify pipeline
+pub fn fable56_orchestration_usage() -> String {
+    "Ghostex Fable 5.6 Orchestration - install the agent skill for the Fable plan / Codex implement / Fable verify pipeline
 
 Usage:
-  gx fable-5.5-orchestration --help
-  gx fable-5.5-orchestration install-skill [--json]
+  gx fable-5.6-orchestration --help
+  gx fable-5.6-orchestration install-skill [--json]
 
 Agent skill:
-  Use $ghostex-fable-5.5-orchestration to run a multi-phase coding task as a
+  Use $ghostex-fable-5.6-orchestration to run a multi-phase coding task as a
   pipeline over Ghostex panes: plan inline with Fable, launch one Codex
-  gpt-5.5 worker pane per phase, then verify with a Fable pane and spawn
+  gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn
   fixer panes until verification passes.
 
 What the skill teaches:

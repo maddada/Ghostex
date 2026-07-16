@@ -85,6 +85,15 @@ const GHOSTTY_CONFIG_CANDIDATE_RELATIVE_PATHS: &[&str] = &[
 ];
 const GHOSTEX_GHOSTTY_CONFIG_BLOCK_START: &str = "# BEGIN Ghostex managed terminal settings";
 const GHOSTEX_GHOSTTY_CONFIG_BLOCK_END: &str = "# END Ghostex managed terminal settings";
+const GHOSTTY_THEME_MANAGED_COLOR_KEYS: &[&str] = &[
+    "background",
+    "foreground",
+    "palette",
+    "selection-background",
+    "selection-foreground",
+    "cursor-color",
+    "cursor-text",
+];
 const GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES: &[&str] = &[
     "# Applied by Ghostex:",
     "theme = GitHub Dark",
@@ -249,6 +258,7 @@ pub struct SharedGpuiTerminalEngineSettings {
     pub font_family: String,
     pub font_size: f32,
     pub font_weight: f32,
+    pub ghostty_theme: String,
     pub letter_spacing: f32,
     pub line_height: f32,
     pub mouse_hide_while_typing: bool,
@@ -711,6 +721,11 @@ impl SharedSidebarSettingsSnapshot {
                     .and_then(json_number_value_to_f32),
             ),
             font_weight: font_weight as f32,
+            ghostty_theme: normalize_ghostty_theme(read_string_field(
+                &self.object,
+                "terminalGhosttyTheme",
+                DEFAULT_TERMINAL_GHOSTTY_THEME,
+            )),
             letter_spacing: read_finite_number_field(
                 &self.object,
                 "terminalLetterSpacing",
@@ -1686,9 +1701,17 @@ fn merge_ghostty_terminal_settings(
     values: &SharedGhosttyTerminalConfigValues,
     changed_keys: &[&str],
 ) -> String {
+    let mut replacing_keys = changed_keys.to_vec();
+    if changed_keys.contains(&"theme") {
+        for key in GHOSTTY_THEME_MANAGED_COLOR_KEYS {
+            if !replacing_keys.contains(key) {
+                replacing_keys.push(key);
+            }
+        }
+    }
     merge_ghostty_managed_config_block_entries(
         config,
-        changed_keys,
+        &replacing_keys,
         values.managed_config_lines_for_keys(changed_keys),
     )
 }

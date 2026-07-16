@@ -1574,6 +1574,13 @@ struct ZmxShellProviderCommandInput {
 }
 
 fn build_zmx_attach_command(input: ZmxAttachCommandInput) -> String {
+    /*
+    CDXC:GhostexZmxProviderOwnership 2026-07-15:
+    gxserver-generated attach commands may only connect to providers already
+    initialized through startSessionProvider. --require-existing closes the
+    probe/attach race without changing direct zmx CLI create-if-missing
+    behavior or the per-client prompt-editor capability decision.
+    */
     let shell = command_shell();
     let prompt_editor_attach_args = if input.prompt_editor.as_deref() == Some("monaco") {
         "--prompt-editor=monaco"
@@ -1617,13 +1624,13 @@ if "$zmx_bin" list --short 2>/dev/null | grep -F -x -- "$zmx_session" >/dev/null
   if [ -n "$zmx_title_notice_command" ]; then
     {} {} "$zmx_title_notice_command"
   fi
-  exec "$zmx_bin" attach $zmx_prompt_editor_attach_args "$zmx_session"
+  exec "$zmx_bin" attach --require-existing $zmx_prompt_editor_attach_args "$zmx_session"
 fi
 if [ -n "$zmx_persistence_notice_command" ]; then
   {} {} "$zmx_persistence_notice_command"
 fi
 cd "$zmx_cwd" || exit
-exec "$zmx_bin" attach $zmx_prompt_editor_attach_args "$zmx_session"
+exec "$zmx_bin" attach --require-existing $zmx_prompt_editor_attach_args "$zmx_session"
 "#,
         shell_quote(&input.session_name),
         shell_quote(&input.cwd),
@@ -2401,6 +2408,23 @@ mod tests {
             "provider": "local",
             "providerState": { "lifecycleState": "missing" },
         })));
+    }
+
+    #[test]
+    fn ghostex_attach_command_requires_a_prestarted_provider() {
+        let command = build_zmx_attach_command(ZmxAttachCommandInput {
+            cwd: "/tmp/project".to_string(),
+            global_session_ref: Some("S7k:P100:G100".to_string()),
+            gxserver_auth_token_file: Some("/tmp/home/.ghostex/gxserver/auth/token".to_string()),
+            gxserver_base_url: Some("http://127.0.0.1:58746".to_string()),
+            gxserver_protocol_version: Some(1),
+            prompt_editor: Some("monaco".to_string()),
+            session_name: "S7k-P100-G100".to_string(),
+            title: Some("Terminal".to_string()),
+            zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+        });
+        assert_eq!(command.matches("attach --require-existing").count(), 2);
+        assert!(command.contains("--prompt-editor=monaco"));
     }
 
     #[test]

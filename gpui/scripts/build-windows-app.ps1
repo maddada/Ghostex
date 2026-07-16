@@ -95,4 +95,25 @@ if ($CefResources -ne $CefRelease.FullName) {
 New-Item -ItemType Directory -Force -Path (Join-Path $AppDir "dist") | Out-Null
 Copy-Item -Recurse (Join-Path $GpuiDir "dist/sidebar") (Join-Path $AppDir "dist/sidebar")
 
+# The Windows app keeps its native ConPTY/PowerShell terminal mode, while WSL
+# persistence consumes the existing static Linux gxserver+zmx runtime. Release
+# jobs provide the archive built for the matching Windows CPU architecture.
+$WslArchive = $env:GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE
+$RequireWslArchive = $env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -eq "1"
+if ($WslArchive -and (Test-Path $WslArchive)) {
+    $WslResources = Join-Path $AppDir "resources/wsl"
+    New-Item -ItemType Directory -Force -Path $WslResources | Out-Null
+    $StagedWslArchive = Join-Path $WslResources "gxserver-linux-$ReleaseArch.tar.gz"
+    Copy-Item $WslArchive $StagedWslArchive
+    $StagedWslSha = (Get-FileHash -Algorithm SHA256 $StagedWslArchive).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText(
+        "$StagedWslArchive.sha256",
+        "$StagedWslSha`n",
+        [Text.UTF8Encoding]::new($false)
+    )
+}
+elseif ($RequireWslArchive) {
+    throw "Required WSL gxserver archive is missing: $WslArchive"
+}
+
 Write-Host "Staged $AppDir"

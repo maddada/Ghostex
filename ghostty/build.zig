@@ -79,6 +79,11 @@ pub fn build(b: *std.Build) !void {
 
     // Ghostty resources like terminfo, shell integration, themes, etc.
     const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
+    // Ghostex embeds the upstream theme files into its GPUI terminal renderer.
+    // A libghostty-vt-only build otherwise installs no resources at all, so
+    // expose just the audited themes to the Cargo build without pulling in the
+    // full Ghostty application resource set.
+    if (config.emit_lib_vt) resources.installThemes();
     const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b, &config) else null;
 
     // Ghostty executable, the actual runnable Ghostty program.

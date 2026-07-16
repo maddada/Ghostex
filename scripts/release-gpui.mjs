@@ -11,9 +11,15 @@ artifacts pass validation.
 Options:
   --disable-macos
   --disable-linux
+  --disable-linux-deb
+  --disable-linux-rpm
   --disable-windows-x64
   --disable-windows-arm64
   --disable-android
+  --disable-gxserver-linux-x64
+  --disable-gxserver-linux-arm64
+  --disable-gxserver-wsl-windows-x64
+  --disable-gxserver-wsl-windows-arm64
   --skip-sparkle
   --skip-windows-signing
   --prerelease
@@ -31,10 +37,15 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
 }
 const enabled = {
   macos: true,
-  linux: true,
+  linux_deb: true,
+  linux_rpm: true,
   windows_x64: true,
   windows_arm64: true,
   android: true,
+  gxserver_linux_x64: true,
+  gxserver_linux_arm64: true,
+  gxserver_wsl_windows_x64: true,
+  gxserver_wsl_windows_arm64: true,
 };
 let prerelease = false;
 let updateSparkle = true;
@@ -43,10 +54,16 @@ while (argv.length > 0) {
   const argument = argv.shift();
   switch (argument) {
     case "--disable-macos": enabled.macos = false; break;
-    case "--disable-linux": enabled.linux = false; break;
+    case "--disable-linux": enabled.linux_deb = enabled.linux_rpm = false; break;
+    case "--disable-linux-deb": enabled.linux_deb = false; break;
+    case "--disable-linux-rpm": enabled.linux_rpm = false; break;
     case "--disable-windows-x64": enabled.windows_x64 = false; break;
     case "--disable-windows-arm64": enabled.windows_arm64 = false; break;
     case "--disable-android": enabled.android = false; break;
+    case "--disable-gxserver-linux-x64": enabled.gxserver_linux_x64 = false; break;
+    case "--disable-gxserver-linux-arm64": enabled.gxserver_linux_arm64 = false; break;
+    case "--disable-gxserver-wsl-windows-x64": enabled.gxserver_wsl_windows_x64 = false; break;
+    case "--disable-gxserver-wsl-windows-arm64": enabled.gxserver_wsl_windows_arm64 = false; break;
     case "--skip-sparkle": updateSparkle = false; break;
     case "--skip-windows-signing": signWindows = false; break;
     case "--prerelease": prerelease = true; break;
@@ -58,6 +75,18 @@ if (!Object.values(enabled).some(Boolean)) {
 }
 if (prerelease && enabled.macos && updateSparkle) {
   throw new Error("A prerelease cannot advance the production macOS Sparkle feed; pass --skip-sparkle");
+}
+if (enabled.macos && (!enabled.gxserver_linux_x64 || !enabled.gxserver_linux_arm64)) {
+  throw new Error("macOS requires both gxserver Linux runtime assets");
+}
+if (
+  (enabled.linux_deb || enabled.linux_rpm || enabled.windows_x64 || enabled.gxserver_wsl_windows_x64) &&
+  !enabled.gxserver_linux_x64
+) {
+  throw new Error("Enabled x64 Linux/Windows packages require gxserver Linux x64");
+}
+if ((enabled.windows_arm64 || enabled.gxserver_wsl_windows_arm64) && !enabled.gxserver_linux_arm64) {
+  throw new Error("Enabled ARM64 Windows packages require gxserver Linux ARM64");
 }
 
 const args = [

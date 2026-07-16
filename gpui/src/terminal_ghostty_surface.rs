@@ -258,6 +258,7 @@ pub(crate) struct GhosttyKitFunctionTable {
     config_free: unsafe fn(ffi::ghostty_config_t),
     config_load_default_files: unsafe fn(ffi::ghostty_config_t),
     config_load_file: unsafe fn(ffi::ghostty_config_t, *const c_char),
+    config_load_string: unsafe fn(ffi::ghostty_config_t, *const c_char, usize),
     config_load_recursive_files: unsafe fn(ffi::ghostty_config_t),
     config_finalize: unsafe fn(ffi::ghostty_config_t),
     app_new: unsafe fn(
@@ -327,6 +328,7 @@ impl GhosttyKitFunctionTable {
             config_free: production_ghostty_config_free,
             config_load_default_files: production_ghostty_config_load_default_files,
             config_load_file: production_ghostty_config_load_file,
+            config_load_string: production_ghostty_config_load_string,
             config_load_recursive_files: production_ghostty_config_load_recursive_files,
             config_finalize: production_ghostty_config_finalize,
             app_new: production_ghostty_app_new,
@@ -387,6 +389,15 @@ unsafe fn production_ghostty_config_load_default_files(config: ffi::ghostty_conf
 #[cfg(target_os = "macos")]
 unsafe fn production_ghostty_config_load_file(config: ffi::ghostty_config_t, path: *const c_char) {
     unsafe { ffi::ghostty_config_load_file(config, path) }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn production_ghostty_config_load_string(
+    config: ffi::ghostty_config_t,
+    source: *const c_char,
+    len: usize,
+) {
+    unsafe { ffi::ghostty_config_load_string(config, source, len) }
 }
 
 #[cfg(target_os = "macos")]
@@ -723,6 +734,7 @@ pub(crate) fn load_default_ghostty_background_color() -> Option<ffi::ghostty_con
 #[cfg(target_os = "macos")]
 pub(crate) fn load_ghostty_terminal_engine_config_from_path(
     path: &Path,
+    selected_theme_source: Option<&str>,
 ) -> Result<GpuiTerminalEngineConfig, GhosttySurfaceRuntimeError> {
     let functions = GhosttyKitFunctionTable::production();
     initialize_production_ghostty_once(functions)?;
@@ -736,6 +748,19 @@ pub(crate) fn load_ghostty_terminal_engine_config_from_path(
     unsafe {
         (functions.config_load_file)(owner.as_raw(), path.as_ptr());
         (functions.config_load_recursive_files)(owner.as_raw());
+        // GPUI embeds the same pinned Ghostty theme files on every desktop
+        // platform. Apply an explicitly selected Ghostex theme after the
+        // user's config so it owns terminal colors; choosing Settings' “Use
+        // existing Ghostty config” sentinel supplies no source and preserves
+        // the config instead. Loading the raw audited theme also works when
+        // the host app is not installed with Ghostty.app's resource directory.
+        if let Some(source) = selected_theme_source {
+            (functions.config_load_string)(
+                owner.as_raw(),
+                source.as_ptr().cast::<c_char>(),
+                source.len(),
+            );
+        }
         (functions.config_finalize)(owner.as_raw());
     }
 

@@ -2187,6 +2187,10 @@ button,
   min-width: 0;
 }
 
+.ghostex-settings-shadcn .settings-sidebar-page-group-about {
+  margin-top: auto;
+}
+
 .ghostex-settings-shadcn .settings-sidebar-page-row {
   align-items: stretch;
   border-radius: var(--settings-radius-control);
@@ -2309,6 +2313,98 @@ button,
   padding-inline: 0.625rem !important;
   text-align: left;
   width: 100%;
+}
+
+.ghostex-settings-shadcn .settings-about-page {
+  padding: 2rem 1.5rem;
+}
+
+.ghostex-settings-shadcn .settings-about-header {
+  align-items: center;
+  display: flex;
+  gap: 0.875rem;
+}
+
+.ghostex-settings-shadcn .settings-about-mark {
+  align-items: center;
+  background: var(--foreground);
+  border-radius: 0.75rem;
+  color: var(--background);
+  display: flex;
+  font-size: 1.5rem;
+  font-weight: 750;
+  height: 3.25rem;
+  justify-content: center;
+  width: 3.25rem;
+}
+
+.ghostex-settings-shadcn .settings-about-title {
+  color: var(--foreground);
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.ghostex-settings-shadcn .settings-about-version,
+.ghostex-settings-shadcn .settings-about-description,
+.ghostex-settings-shadcn .settings-about-link-description {
+  color: var(--muted-foreground);
+}
+
+.ghostex-settings-shadcn .settings-about-version {
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0;
+}
+
+.ghostex-settings-shadcn .settings-about-description {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 1.25rem 0 1.5rem;
+}
+
+.ghostex-settings-shadcn .settings-about-links {
+  border: 1px solid var(--border);
+  border-radius: var(--settings-radius-section);
+  overflow: hidden;
+}
+
+.ghostex-settings-shadcn .settings-about-link {
+  align-items: center;
+  color: var(--foreground);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+}
+
+.ghostex-settings-shadcn .settings-about-link + .settings-about-link {
+  border-top: 1px solid var(--border);
+}
+
+.ghostex-settings-shadcn .settings-about-link:hover,
+.ghostex-settings-shadcn .settings-about-link:focus-visible {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.ghostex-settings-shadcn .settings-about-link-copy {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .settings-about-link-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ghostex-settings-shadcn .settings-about-link-description {
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .ghostex-settings-shadcn .settings-sidebar-subsection-button {

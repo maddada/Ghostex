@@ -342,6 +342,17 @@ async function buildBeads(config, workRoot) {
     cwd: config.beadsRoot,
     env: {
       CGO_ENABLED: "0",
+      // GitHub's Go module proxy has repeatedly reset HTTP/2 streams while
+      // fetching bd dependencies on the ARM64 cross-build. Keep every other
+      // caller-supplied Go debug option, but force the module client onto the
+      // reliable HTTP/1.1 transport for this network-dependent build.
+      GODEBUG: [
+        ...(process.env.GODEBUG || "")
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry && !entry.startsWith("http2client=")),
+        "http2client=0",
+      ].join(","),
       GOARCH: config.goArch,
       GOOS: "linux",
     },

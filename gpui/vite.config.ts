@@ -56,7 +56,7 @@ function inlineCefHtmlAssets(): Plugin {
       for (const htmlEntry of cefHtmlEntries) {
         const htmlPath = path.join(outDir, htmlEntry);
         if (!fs.existsSync(htmlPath)) {
-          throw new Error(`Ghostex GPUI CEF build did not emit ${htmlPath}.`);
+          throw new Error(`Ghostex CEF build did not emit ${htmlPath}.`);
         }
 
         let html = fs.readFileSync(htmlPath, "utf8");
@@ -66,7 +66,7 @@ function inlineCefHtmlAssets(): Plugin {
         ])) {
           const asset = bundle[cssFileName];
           if (!asset || asset.type !== "asset") {
-            throw new Error(`Ghostex GPUI CEF build did not emit CSS asset ${cssFileName}.`);
+            throw new Error(`Ghostex CEF build did not emit CSS asset ${cssFileName}.`);
           }
           const styleTag = `<style>\n${inlineStyleContent(String(asset.source))}\n</style>`;
           const linkPattern = new RegExp(
@@ -117,7 +117,7 @@ function collectCefEntryCssFileNames(
   );
   if (!entryChunk) {
     throw new Error(
-      `Ghostex GPUI CEF build did not emit an entry chunk for ${entryFacadeModuleIds[0]}.`,
+      `Ghostex CEF build did not emit an entry chunk for ${entryFacadeModuleIds[0]}.`,
     );
   }
   const cssFileNames: string[] = [];
@@ -189,7 +189,7 @@ function replaceCefEntryModuleScript(html: string, bundledScript: string): strin
     return html.replace(existingInlineModuleScript, () => inlineModuleScript);
   }
 
-  throw new Error("Ghostex GPUI CEF build did not emit a module script to inline.");
+  throw new Error("Ghostex CEF build did not emit a module script to inline.");
 }
 
 async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
@@ -226,7 +226,7 @@ async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
   });
   const script = result.outputFiles.find((file) => file.path === "<stdout>");
   if (!script) {
-    throw new Error(`Ghostex GPUI CEF esbuild bundle did not emit ${entryPoint}.`);
+    throw new Error(`Ghostex CEF esbuild bundle did not emit ${entryPoint}.`);
   }
   return script.text;
 }

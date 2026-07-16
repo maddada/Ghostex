@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.0.1 - 2026-07-15
+
+- Major
+  - Windows now prefers persistent WSL2 terminals with gxserver and zmx when available, while retaining native PowerShell as an automatic fallback and explicit setting.
+  - The modular nightly release now publishes separate Debian x64, Fedora x64, Windows x64 and ARM64, Android, macOS ARM64, Linux gxserver, and Windows WSL bootstrap artifacts.
+  - Ghostex-owned zmx attachments now require gxserver to initialize the provider first, preventing attach races from creating incomplete shell sessions.
+  - The GPUI app now fully adopts the Ghostex name across its macOS bundle, helper apps, window titles, and packaged surfaces.
+- Minor
+  - GPUI sidebar, titlebar, session loading, prompt-editor focus, zoom, and workspace visibility behavior is steadier across native and embedded surfaces.
+  - Settings adds a Windows terminal backend selector, an About page, and the updated Fable 5.6 orchestration skill.
+  - macOS release packaging consumes the same checksum-pinned Linux gxserver assets published for remote and WSL use.
+  - This 6.0.1 distribution is a nightly prerelease and does not notify existing macOS installations through Sparkle.
+
 ## 6.0.0 - 2026-07-13
 
 - Major

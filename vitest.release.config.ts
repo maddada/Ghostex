@@ -39,7 +39,6 @@ export default defineConfig({
       "code-server/lib/**",
       "code-server/test/**",
       "gxserver/test/**",
-      "native/macos/ghostexHost/Vendor/**",
       "storybook-static/**",
       "tmp/**",
       "t3code/**",

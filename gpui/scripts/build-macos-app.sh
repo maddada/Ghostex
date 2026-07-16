@@ -15,13 +15,13 @@ SOUND_SRC_DIR="$REPO_ROOT/media/sounds"
 SOUND_DEST_DIR="$APP_PATH/Contents/Resources/sidebar/sounds"
 CLI_DIR="$APP_PATH/Contents/Resources/CLI"
 WEB_DIR="$APP_PATH/Contents/Resources/Web"
-WEB_SOURCE_DIR="$REPO_ROOT/native/macos/ghostexHost/Web"
+WEB_SOURCE_DIR="$GPUI_DIR/runtime/macos/Web"
 WEB_BIN_SOURCE_DIR="$WEB_SOURCE_DIR/bin"
 GXSERVER_SOURCE_DIR="$WEB_SOURCE_DIR/gxserver"
-APP_ICON_SOURCE_SET="$REPO_ROOT/native/macos/ghostexHost/Resources/Assets.xcassets/AppIcon.appiconset"
+APP_ICON_SOURCE_SET="$GPUI_DIR/resources/AppIcon.appiconset"
 APP_ICON_BUILD_SET="$GPUI_DIR/build/macos/AppIcon.iconset"
 APP_ICON_DEST="$APP_PATH/Contents/Resources/AppIcon.icns"
-LID_SLEEP_HELPER_SOURCE_DIR="$REPO_ROOT/native/macos/ghostexHost/Sources"
+LID_SLEEP_HELPER_SOURCE_DIR="$GPUI_DIR/native/macos/lid-sleep-helper"
 LID_SLEEP_HELPER_BUILD_DIR="$GPUI_DIR/build/macos-lid-sleep-helper"
 GHOSTEX_REMOTE_GXSERVER_LINUX_X64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/x64/package"
 GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/arm64/package"
@@ -128,7 +128,7 @@ bundled_cli_skill_assets=(
 	ghostex-browser-use
 	ghostex-computer-use
 	ghostex-agent-orchestration
-	ghostex-fable-5.5-orchestration
+	ghostex-fable-5.6-orchestration
 	ghostex-generate-title
 	ghostex-manage-beads
 	ghostex-move-codex-session
@@ -151,7 +151,7 @@ validate_completion_sound_assets() {
 	done
 
 	if [[ "$missing" == "1" ]]; then
-		echo "Run \`bun run gpui\` from the repo root so shared resources are refreshed before GPUI packaging, or refresh them manually with native/macos/ghostexHost/build-ghostex-host.sh." >&2
+		echo "Run \`bun run gpui\` from the repo root so GPUI-owned shared resources are refreshed before packaging." >&2
 		exit 1
 	fi
 }
@@ -228,7 +228,7 @@ validate_local_gxserver_runtime_resources() {
 	local required_path executable_path
 
 	# CDXC:GPUIStartCommand 2026-07-08-04:55:
-	# `bun run gpui` refreshes native/macos/ghostexHost/Web through the same
+	# `bun run gpui` refreshes gpui/runtime/macos/Web through the GPUI-owned
 	# shared-resource build as `bun run start`, then this packager seals the
 	# app-owned gxserver package into the GPUI bundle. Runtime should resolve
 	# Contents/Resources/Web/gxserver first instead of depending on the main

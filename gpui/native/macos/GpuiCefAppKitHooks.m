@@ -801,6 +801,19 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event
     [window makeFirstResponder:self];
   }
   GhostexGpuiCEFMarkFocusedResponder(self);
+  /*
+   CDXC:GPUITitlebarDropdownCefDismissal 2026-07-15:
+   CEF child views receive mouseDown before GPUI's main-window mouse capture,
+   so clicking a Source/Browser/project-workarea pane cannot dismiss a GPUI
+   titlebar popup through the normal outside-click route. Report the current
+   first responder for every real CEF mouseDown, including when this view was
+   already first responder and AppKit therefore emits no KVO transition. Rust
+   uses the existing responder classification to dismiss app chrome; the
+   original event continues unchanged to Chromium below.
+  */
+  if (window) {
+    GhostexGpuiFirstResponderReportWindow(window);
+  }
 
   struct objc_super superInfo = {
     .receiver = self,

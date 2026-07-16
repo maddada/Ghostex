@@ -3,27 +3,28 @@
 The canonical GPUI release is dispatched with:
 
 ```bash
-bun run release:gpui -- 5.7.0
+bun run release:gpui -- 6.0.1
 ```
 
 The command starts `.github/workflows/release-gpui.yml`. The workflow validates
 that `package.json` and `CHANGELOG.md` already contain the requested version,
-then fans out independent macOS, Linux, Windows x64, Windows ARM64, and Android
-builds. Each job uploads a manifest containing the exact filename, byte size,
-and SHA-256 of every artifact. The publish job downloads and re-hashes all
-enabled artifacts before it creates the tag and GitHub release.
+then fans out independent macOS, Debian x64, Fedora x64, Windows x64, Windows
+ARM64, Android, Linux gxserver x64/ARM64, and Windows WSL bootstrap builds.
+Each job uploads a manifest containing the exact filename, byte size, and
+SHA-256 of every artifact. The publish job downloads and re-hashes all enabled
+artifacts before it creates the tag and GitHub release.
 
 Platforms can be disabled without editing workflow code:
 
 ```bash
-bun run release:gpui -- 5.7.0 --disable-linux --disable-windows-arm64
+bun run release:gpui -- 6.0.1 --disable-linux-rpm --disable-windows-arm64
 ```
 
 Nightly prereleases can include the notarized macOS build without advancing the
 production Sparkle feed:
 
 ```bash
-bun run release:gpui -- 6.0.0 --prerelease --skip-sparkle --skip-windows-signing
+bun run release:gpui -- 6.0.1 --prerelease --skip-sparkle
 ```
 
 `--skip-windows-signing` is intended only for explicitly labeled nightlies when
@@ -33,24 +34,31 @@ by default.
 The platform scripts can also be run directly when debugging a runner:
 
 ```bash
-scripts/release-gpui/macos.sh 5.7.0
-scripts/release-gpui/linux.sh 5.7.0
-scripts/release-gpui/android.sh 5.7.0
-pwsh scripts/release-gpui/windows.ps1 -Version 5.7.0 -Arch x64
+scripts/release-gpui/macos.sh 6.0.1
+scripts/release-gpui/linux-deb.sh 6.0.1
+scripts/release-gpui/linux-rpm.sh 6.0.1
+scripts/release-gpui/android.sh 6.0.1
+pwsh scripts/release-gpui/windows.ps1 -Version 6.0.1 -Arch x64
 ```
 
 ## Published artifacts
 
 - macOS arm64: `ghostex-<version>-arm64.dmg`, plus the existing three sealed
-  on-demand assets. This is GPUI packaged as `ghostex.app` with bundle ID
+  on-demand assets. This is GPUI packaged as `Ghostex.app` with bundle ID
   `com.madda.ghostex.host` and the primary `appcast.xml`, so it replaces the
   installed Swift-host app through Sparkle.
 - Linux x64: `ghostex_<version>_amd64.deb` and
   `ghostex-<version>-1.x86_64.rpm`.
 - Windows x64 and ARM64: an NSIS installer EXE and a portable ZIP per
   architecture. The portable archive is required because CEF cannot operate
-  as a standalone executable without its companion DLL and resource files.
+  as a standalone executable without its companion DLL and resource files;
+  each package also carries the matching Linux gxserver runtime for WSL2.
 - Android: signed universal `ghostex-android.apk`.
+- Linux gxserver: `gxserver-linux-x64.tar.gz` and
+  `gxserver-linux-arm64.tar.gz` static runtime archives.
+- Windows WSL bootstraps: `gxserver-wsl-windows-x64.zip` and
+  `gxserver-wsl-windows-arm64.zip`, each containing a checksum-pinned Linux
+  runtime and PowerShell installer for an initialized WSL2 distribution.
 
 The Sparkle feed is pushed to `main` only after the notarized DMG and all other
 enabled assets are live. This prevents installed Ghostex copies from observing

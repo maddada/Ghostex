@@ -4818,12 +4818,13 @@ function shouldStartZmxProviderBeforeNativeAttach(
   attach: GxserverAttachSessionMetadataResult,
 ): boolean {
   /*
-  CDXC:GxserverTerminalRestore 2026-06-08-20:49:
-  zmx restore/startup text is a provider-start responsibility, not terminal-ready input. A missing zmx provider with gxserver-approved startup text must be started through `/api/startSessionProvider` before Swift creates the attach surface so resume scripts never traverse an already-live interactive terminal.
+  CDXC:GxserverTerminalRestore 2026-07-15:
+  Every missing zmx provider is a provider-start responsibility, including a
+  blank terminal with no startup text. This guarantees gxserver installs the
+  prompt-editor wrapper before an app-owned attach begins, while zmx's current
+  client capability still decides Monaco versus the attaching machine's editor.
   */
-  return attach.providerState.lifecycleState === "missing" &&
-    attach.startupTextDisposition === "queueAfterTerminalReady" &&
-    Boolean(attach.startupText?.trim());
+  return attach.providerState.lifecycleState === "missing";
 }
 
 function currentZmxPromptEditorAttachMode(): "monaco" | undefined {
@@ -4957,7 +4958,7 @@ async function postNativeCreateTerminalWithGxserverAttach(
   Sleeping-session clicks are gxserver wake requests. Use `/api/wakeSession` for those restores so gxserver marks the shared session running and returns the daemon-built resume command instead of relying on macOS-local resume parsing.
 
   CDXC:GxserverTerminalRestore 2026-06-08-20:49:
-  When gxserver reports a missing zmx provider with startup text, start that provider through gxserver before creating the native Ghostty attach surface. Do not queue zmx restore text for terminalReady because the ready event only proves the renderer exists, not that an idle shell is safe for injected input.
+  When gxserver reports a missing zmx provider, start that provider through gxserver before creating the native Ghostty attach surface, whether or not startup text exists. Do not queue zmx restore text for terminalReady because the ready event only proves the renderer exists, not that an idle shell is safe for injected input.
   */
   let attach: GxserverAttachSessionMetadataResult;
   const promptEditorAttachMode = currentZmxPromptEditorAttachMode();
@@ -4995,7 +4996,7 @@ async function postNativeCreateTerminalWithGxserverAttach(
         ...(promptEditorAttachMode ? { promptEditor: promptEditorAttachMode } : {}),
         projectId: project.projectId as never,
         sessionId: sidebarSessionId as never,
-        startupText: attach.startupText,
+        ...(attach.startupText?.trim() ? { startupText: attach.startupText } : {}),
       });
       appendTerminalLaunchDebugLog("nativeSidebar.gxserverProviderStart.resolved", {
         projectId: project.projectId,
@@ -5029,6 +5030,14 @@ async function postNativeCreateTerminalWithGxserverAttach(
       project.projectId,
       sidebarSessionId,
       "gxserver did not return a zmx attach command for this session.",
+    );
+    return;
+  }
+  if (attach.providerState.lifecycleState !== "exists") {
+    markNativeTerminalCreateFailed(
+      project.projectId,
+      sidebarSessionId,
+      "gxserver did not confirm the zmx provider exists before terminal attach.",
     );
     return;
   }
@@ -7540,17 +7549,17 @@ async function installNativeAgentOrchestrationSkill(showSuccessMessage = true): 
   );
 }
 
-async function installNativeFable55OrchestrationSkill(showSuccessMessage = true): Promise<boolean> {
+async function installNativeFable56OrchestrationSkill(showSuccessMessage = true): Promise<boolean> {
   /**
-   * CDXC:Fable55Orchestration 2026-07-04-12:00:
-   * CLI setup should install `$ghostex-fable-5.5-orchestration` so agents can
-   * run the Fable plan -> Codex gpt-5.5 workers -> Fable verify pipeline over
+   * CDXC:Fable56Orchestration 2026-07-04-12:00:
+   * CLI setup should install `$ghostex-fable-5.6-orchestration` so agents can
+   * run the Fable plan -> Codex gpt-5.6 workers -> Fable verify pipeline over
    * Ghostex panes with the same supported session commands.
    */
   return installNativeBundledGhostexAgentSkill(
-    ["fable-5.5-orchestration", "install-skill"],
-    "Ghostex Fable 5.5 Orchestration installed.",
-    "Ghostex Fable 5.5 Orchestration install failed",
+    ["fable-5.6-orchestration", "install-skill"],
+    "Ghostex Fable 5.6 Orchestration installed.",
+    "Ghostex Fable 5.6 Orchestration install failed",
     showSuccessMessage,
   );
 }
@@ -22459,7 +22468,7 @@ async function requestNativeGhostexCliStatus(): Promise<void> {
       browserSkillInstalled: false,
       computerUseSkillInstalled: false,
       agentOrchestrationSkillInstalled: false,
-      fable55OrchestrationSkillInstalled: false,
+      fable56OrchestrationSkillInstalled: false,
       generateTitleSkillInstalled: false,
       moveCodexSessionSkillInstalled: false,
       cuaAppInstalled: false,
@@ -22484,7 +22493,7 @@ async function requestNativeGhostexCliStatus(): Promise<void> {
       browserSkillInstalled: false,
       computerUseSkillInstalled: false,
       agentOrchestrationSkillInstalled: false,
-      fable55OrchestrationSkillInstalled: false,
+      fable56OrchestrationSkillInstalled: false,
       generateTitleSkillInstalled: false,
       moveCodexSessionSkillInstalled: false,
       cuaAppInstalled: false,
@@ -22604,8 +22613,8 @@ const computerUseSkillPath = path.join(home, SKILLS_ROOT, "ghostex-computer-use"
 const computerUseSkillInstalled = isFile(computerUseSkillPath);
 const agentOrchestrationSkillPath = path.join(home, SKILLS_ROOT, "ghostex-agent-orchestration", "SKILL.md");
 const agentOrchestrationSkillInstalled = isFile(agentOrchestrationSkillPath);
-const fable55OrchestrationSkillPath = path.join(home, SKILLS_ROOT, "ghostex-fable-5.5-orchestration", "SKILL.md");
-const fable55OrchestrationSkillInstalled = isFile(fable55OrchestrationSkillPath);
+const fable56OrchestrationSkillPath = path.join(home, SKILLS_ROOT, "ghostex-fable-5.6-orchestration", "SKILL.md");
+const fable56OrchestrationSkillInstalled = isFile(fable56OrchestrationSkillPath);
 const generateTitleSkillPath = path.join(home, SKILLS_ROOT, "ghostex-generate-title", "SKILL.md");
 const generateTitleSkillInstalled = isFile(generateTitleSkillPath);
 const moveCodexSessionSkillPath = path.join(home, SKILLS_ROOT, "ghostex-move-codex-session", "SKILL.md");
@@ -22694,7 +22703,7 @@ if (ghostexUsable) {
   detail += browserSkillInstalled ? " Ghostex Browser Use skill is installed for agents." : " Ghostex Browser Use skill is not installed yet.";
   detail += computerUseSkillInstalled ? " Ghostex Computer Use skill is installed for agents." : " Ghostex Computer Use skill is not installed yet.";
   detail += agentOrchestrationSkillInstalled ? " Ghostex Agent Orchestration skill is installed for agents." : " Ghostex Agent Orchestration skill is not installed yet.";
-  detail += fable55OrchestrationSkillInstalled ? " Ghostex Fable 5.5 Orchestration skill is installed for agents." : " Ghostex Fable 5.5 Orchestration skill is not installed yet.";
+  detail += fable56OrchestrationSkillInstalled ? " Ghostex Fable 5.6 Orchestration skill is installed for agents." : " Ghostex Fable 5.6 Orchestration skill is not installed yet.";
   detail += generateTitleSkillInstalled ? " Ghostex Generate Title skill is installed for agents." : " Ghostex Generate Title skill is not installed yet.";
   detail += moveCodexSessionSkillInstalled ? " Ghostex Move Codex Session skill is installed for agents." : " Ghostex Move Codex Session skill is not installed yet.";
 }
@@ -22713,8 +22722,8 @@ console.log(JSON.stringify({
   computerUseSkillPath: computerUseSkillInstalled ? computerUseSkillPath : null,
   agentOrchestrationSkillInstalled,
   agentOrchestrationSkillPath: agentOrchestrationSkillInstalled ? agentOrchestrationSkillPath : null,
-  fable55OrchestrationSkillInstalled,
-  fable55OrchestrationSkillPath: fable55OrchestrationSkillInstalled ? fable55OrchestrationSkillPath : null,
+  fable56OrchestrationSkillInstalled,
+  fable56OrchestrationSkillPath: fable56OrchestrationSkillInstalled ? fable56OrchestrationSkillPath : null,
   generateTitleSkillInstalled,
   generateTitleSkillPath: generateTitleSkillInstalled ? generateTitleSkillPath : null,
   moveCodexSessionSkillInstalled,
@@ -35614,6 +35623,9 @@ async function resolveRemoteAttachMetadataForTarget(
       throw new Error(remoteAttachRestoreBlockedMessage(attach.restoreBlocked.reason));
     }
   }
+  if (attach.providerState.lifecycleState !== "exists") {
+    throw new Error("Remote gxserver did not confirm the zmx provider exists before terminal attach.");
+  }
   return attach;
 }
 
@@ -46512,8 +46524,8 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
     case "installAgentOrchestrationSkill":
       void installNativeAgentOrchestrationSkill();
       return;
-    case "installFable55OrchestrationSkill":
-      void installNativeFable55OrchestrationSkill();
+    case "installFable56OrchestrationSkill":
+      void installNativeFable56OrchestrationSkill();
       return;
     case "installGenerateTitleSkill":
       void installNativeGenerateTitleSkill();

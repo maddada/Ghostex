@@ -35,7 +35,7 @@ const RESOURCE_CWDS = [
 ].join("\n");
 
 function installTitlebarStoryHost(panel: "resources" | "tips") {
-  const storyWindow = window as Window & Record<string, unknown>;
+  const storyWindow = window as unknown as Record<string, unknown>;
   storyWindow.__ghostex_TITLEBAR_PANEL_KIND__ = panel;
   storyWindow.__ghostex_NATIVE_HOST__ = {
     activeMode: "agents",

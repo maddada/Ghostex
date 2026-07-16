@@ -2943,7 +2943,7 @@ export function SidebarApp({
           onClick={onStartGxserver}
           type="button"
         >
-          Start gxserver
+          Load Sessions
         </button>
       ) : (
         "Restart Ghostex to try again."

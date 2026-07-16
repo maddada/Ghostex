@@ -49,10 +49,8 @@ if [[ ! -d "$GHOSTTY_KIT" ]]; then
 fi
 [[ -d "$GHOSTTY_KIT" ]] || { echo "GhosttyKit build did not produce $GHOSTTY_KIT" >&2; exit 1; }
 
-# Prepare the full reviewed runtime tree without compiling the retired Swift
-# shell. GPUI then consumes the same resources and seals the same on-demand
-# checksums as the established macOS release contract.
-GHOSTEX_RESOURCES_ONLY=1 \
+# Prepare the GPUI-owned runtime tree and seal the on-demand checksums without
+# invoking the retired Swift host build.
 GHOSTEX_MACOS_ARCH=arm64 \
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=0 \
 GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1 \
@@ -62,7 +60,7 @@ GHOSTEX_ON_DEMAND_ASSETS=1 \
 GHOSTEX_CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
 GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
 BEADS_ROOT="$BEADS_ROOT" \
-  "$REPO_ROOT/native/macos/ghostexHost/build-ghostex-host.sh"
+  "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
 
 GHOSTEX_MACOS_ARCH=arm64 \
 GHOSTEX_GPUI_APP_NAME=Ghostex \
@@ -96,10 +94,10 @@ node --input-type=module -e \
 
 STAGE="$(mktemp -d "$REPO_ROOT/build/release-gpui/macos-stage-XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
-ditto "$APP_PATH" "$STAGE/ghostex.app"
+ditto "$APP_PATH" "$STAGE/Ghostex.app"
 ln -s /Applications "$STAGE/Applications"
 DMG="$OUTPUT/ghostex-$VERSION-arm64.dmg"
-hdiutil create -volname ghostex -srcfolder "$STAGE" -format UDZO "$DMG"
+hdiutil create -volname Ghostex -srcfolder "$STAGE" -format UDZO "$DMG"
 xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
@@ -143,17 +141,17 @@ ON_DEMAND_ROOT="$REPO_ROOT/build/on-demand-assets/$VERSION"
 ASSETS=("$DMG")
 for name in gxserver-linux-x64.tar.gz gxserver-linux-arm64.tar.gz bd-darwin-arm64.tar.gz; do
   [[ -f "$ON_DEMAND_ROOT/$name" ]] || { echo "Missing on-demand asset: $name" >&2; exit 1; }
-  cp "$ON_DEMAND_ROOT/$name" "$OUTPUT/$name"
-  ASSETS+=("$OUTPUT/$name")
 done
+cp "$ON_DEMAND_ROOT/bd-darwin-arm64.tar.gz" "$OUTPUT/bd-darwin-arm64.tar.gz"
+ASSETS+=("$OUTPUT/bd-darwin-arm64.tar.gz")
 MANIFEST_PATH="$APP_PATH/Contents/Resources/Web/on-demand-resources.json" \
-OUTPUT_PATH="$OUTPUT" node <<'JS'
+ASSET_PATH="$ON_DEMAND_ROOT" node <<'JS'
 const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const manifest = JSON.parse(readFileSync(process.env.MANIFEST_PATH, "utf8"));
 for (const asset of Object.values(manifest.assets ?? {})) {
-  const file = join(process.env.OUTPUT_PATH, asset.name);
+  const file = join(process.env.ASSET_PATH, asset.name);
   const actual = createHash("sha256").update(readFileSync(file)).digest("hex");
   if (actual !== asset.sha256) throw new Error(`Sealed on-demand checksum mismatch for ${asset.name}`);
 }

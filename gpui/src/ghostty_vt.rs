@@ -619,6 +619,7 @@ pub mod ffi {
     }
 
     unsafe extern "C" {
+        pub fn ghostty_color_palette_default(out: *mut GhosttyColorRgb);
         pub fn ghostty_terminal_new(
             allocator: *const c_void,
             terminal: *mut GhosttyTerminal,
@@ -870,6 +871,15 @@ fn check(result: ffi::GhosttyResult) -> Result<(), VtError> {
     } else {
         Err(VtError { code: result })
     }
+}
+
+/// Ghostty's canonical base16 + xterm extended 256-color palette. Theme
+/// loaders replace the entries they explicitly define while preserving the
+/// same extended colors Ghostty uses when `palette-generate` is disabled.
+pub fn default_color_palette() -> [ffi::GhosttyColorRgb; 256] {
+    let mut palette = [ffi::GhosttyColorRgb::default(); 256];
+    unsafe { ffi::ghostty_color_palette_default(palette.as_mut_ptr()) };
+    palette
 }
 
 /// Global render-state dirtiness after an update.

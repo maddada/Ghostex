@@ -37,7 +37,7 @@ mkdir -p \
   "$PACKAGE_ROOT/usr/share/applications" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps"
 cp -a "$APP_DIR/." "$PACKAGE_ROOT/opt/ghostex/"
-cp "$REPO_ROOT/native/macos/ghostexHost/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" \
+cp "$REPO_ROOT/gpui/resources/AppIcon.appiconset/icon_256x256.png" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'
 #!/usr/bin/env bash

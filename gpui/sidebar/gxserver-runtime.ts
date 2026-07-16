@@ -886,6 +886,17 @@ class GpuiSidebarRuntime {
     });
   }
 
+  private notifyNativeGxserverPresentationReady(): void {
+    window.requestAnimationFrame(() => {
+      if (!this.presentation) {
+        return;
+      }
+      window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
+        type: "gxserverPresentationReady",
+      });
+    });
+  }
+
   private activeProjectContextRetryId: number | undefined;
   private titlebarGitMenuStateRetryId: number | undefined;
   private lastTitlebarGitMenuStatePayload: string | undefined;
@@ -2613,7 +2624,11 @@ class GpuiSidebarRuntime {
       this.startFromBootstrap(bootstrap);
       return;
     }
-    if (!this.gxserverBootstrap || !hasSameGpuiGxserverBootstrapTransport(this.gxserverBootstrap, validated)) {
+    if (
+      !this.gxserverBootstrap ||
+      !hasSameGpuiGxserverBootstrapTransport(this.gxserverBootstrap, validated) ||
+      !this.presentation
+    ) {
       this.startFromBootstrap(bootstrap);
       return;
     }
@@ -3350,6 +3365,7 @@ class GpuiSidebarRuntime {
     this.presentation = projectedSnapshot;
     this.syncLocalPresentationAttentionTracking(previousSessions, projectedSnapshot.sessions);
     this.publishPresentation(kind);
+    this.notifyNativeGxserverPresentationReady();
     if (kind === "hydrate") {
       void this.runGpuiAutoSleepMonitor("startup");
       this.autoMaterializeStartupFocusedSession();

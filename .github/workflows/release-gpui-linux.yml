@@ -1,9 +1,12 @@
-name: GPUI release - Linux x64
+name: GPUI release - Linux package
 
 on:
   workflow_call:
     inputs:
       version:
+        required: true
+        type: string
+      package:
         required: true
         type: string
       runtime_artifacts_ready:
@@ -16,6 +19,12 @@ on:
         description: Semver release version
         required: true
         type: string
+      package:
+        description: Linux package format
+        required: true
+        default: deb
+        type: choice
+        options: [deb, rpm]
 
 jobs:
   build:
@@ -30,13 +39,13 @@ jobs:
       - uses: actions/download-artifact@v4
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
-          name: runtime-linux-x64
+          name: release-gxserver-linux-x64
           path: build/runtime-artifacts/x64
       - name: Restore remote runtime package
         if: ${{ inputs.runtime_artifacts_ready }}
         run: |
           mkdir -p build/remote-gxserver-linux/x64/package
-          tar -xzf build/runtime-artifacts/x64/runtime-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
+          tar -xzf build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
       - name: Install native packaging dependencies
         run: |
           sudo apt-get update
@@ -50,11 +59,11 @@ jobs:
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_015" "$ZIG_015" >> "$GITHUB_ENV"
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
-      - name: Build DEB and RPM
-        run: scripts/release-gpui/linux.sh "${{ inputs.version }}"
+      - name: Build Linux package
+        run: scripts/release-gpui/linux-${{ inputs.package }}.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: release-linux-x64
-          path: build/release-gpui/${{ inputs.version }}/linux-x64/
+          name: release-linux-${{ inputs.package }}-x64
+          path: build/release-gpui/${{ inputs.version }}/linux-${{ inputs.package }}-x64/
           if-no-files-found: error
           retention-days: 14
