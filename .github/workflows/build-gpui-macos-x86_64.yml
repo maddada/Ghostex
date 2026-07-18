@@ -294,5 +294,11 @@ jobs:
             echo ""
             echo "### Next step"
             echo ""
-            echo "Once this is green on minimal, re-run with **scope=full** to produce the complete DMG. Then parameterize \`scripts/release-gpui/macos.sh\` to fold x86_64 into the signed/notarized release flow."
+            if [[ "${{ inputs.scope }}" == "minimal" ]]; then
+              echo "Minimal is green — re-run with **scope=full** to add Zehn search and the TUI, producing the complete dev DMG (still minus Project board \`bd\`)."
+            else
+              echo "Full dev DMG is green. The durable deliverable is parameterizing \`scripts/release-gpui/macos.sh\` to fold x86_64 into the signed/notarized release flow (Developer ID + notarization + Sparkle \`appcast-x86_64.xml\` + on-demand \`bd\`). See \`docs/dual-arch-macos-release-handover.md\`."
+              echo ""
+              echo "**Shelf life:** GitHub is phasing Intel macOS out (macos-13 retired, macos-14 deprecated). macos-15-intel has limited runway; land the signed release flow before the Intel fleet disappears."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
