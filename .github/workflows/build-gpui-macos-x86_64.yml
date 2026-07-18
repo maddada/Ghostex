@@ -91,31 +91,6 @@ jobs:
         # of them at once. beads is also cloned but not consumed here (no
         # BEADS_ROOT set) — bd stays absent from the dev DMG by design.
 
-      - name: Build GhosttyKit.xcframework (universal — required by gpui/build.rs link path)
-        env:
-          GHOSTTY_ZIG: ${{ env.ZIG }}
-        run: |
-          set -euo pipefail
-          # gpui/build.rs hard-links the universal slice:
-          #   ../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a
-          # (a constant path, not arch-derived), so GhosttyKit must be built
-          # universal even for an x86_64 app — the linker selects the x86_64
-          # members out of the fat archive. This replicates
-          # scripts/release-gpui/macos.sh (which we skip because it's
-          # arm64/signing-coupled) lines 30-48.
-          GHOSTTY_ROOT="$GITHUB_WORKSPACE/ghostty"
-          [[ -x "$GHOSTTY_ZIG" ]] || { echo "GHOSTTY_ZIG is missing: $GHOSTTY_ZIG" >&2; exit 1; }
-          [[ "$("$GHOSTTY_ZIG" version)" == "0.15.2" ]] || { echo "GhosttyKit needs Zig 0.15.2, got $("$GHOSTTY_ZIG" version)" >&2; exit 1; }
-          DEV_DIR="$(xcode-select -p)"
-          SDK="$(DEVELOPER_DIR="$DEV_DIR" xcrun --sdk macosx --show-sdk-path)"
-          (
-            cd "$GHOSTTY_ROOT"
-            env DEVELOPER_DIR="$DEV_DIR" SDKROOT="$SDK" GHOSTTY_METAL_DEVELOPER_DIR="$DEV_DIR" \
-              "$GHOSTTY_ZIG" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false
-          )
-          test -f "$GHOSTTY_ROOT/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a" \
-            || { echo "GhosttyKit build did not produce the expected universal archive" >&2; exit 1; }
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
@@ -189,6 +164,33 @@ jobs:
           restore-keys: |
             gpui-macos-x86_64-${{ inputs.scope }}-
             gpui-macos-x86_64-
+
+      - name: Build GhosttyKit.xcframework (universal — required by gpui/build.rs link path)
+        env:
+          GHOSTTY_ZIG: ${{ env.ZIG }}
+        run: |
+          set -euo pipefail
+          # gpui/build.rs hard-links the universal slice:
+          #   ../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a
+          # (a constant path, not arch-derived), so GhosttyKit must be built
+          # universal even for an x86_64 app — the linker selects the x86_64
+          # members out of the fat archive. This replicates
+          # scripts/release-gpui/macos.sh (which we skip because it's
+          # arm64/signing-coupled) lines 30-48.
+          # Placed AFTER the Zig-install step (which sets ZIG) and AFTER the
+          # cache step (which restores ghostty/.zig-cache for fast retries).
+          GHOSTTY_ROOT="$GITHUB_WORKSPACE/ghostty"
+          [[ -x "$GHOSTTY_ZIG" ]] || { echo "GHOSTTY_ZIG is missing: $GHOSTTY_ZIG" >&2; exit 1; }
+          [[ "$("$GHOSTTY_ZIG" version)" == "0.15.2" ]] || { echo "GhosttyKit needs Zig 0.15.2, got $("$GHOSTTY_ZIG" version)" >&2; exit 1; }
+          DEV_DIR="$(xcode-select -p)"
+          SDK="$(DEVELOPER_DIR="$DEV_DIR" xcrun --sdk macosx --show-sdk-path)"
+          (
+            cd "$GHOSTTY_ROOT"
+            env DEVELOPER_DIR="$DEV_DIR" SDKROOT="$SDK" GHOSTTY_METAL_DEVELOPER_DIR="$DEV_DIR" \
+              "$GHOSTTY_ZIG" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false
+          )
+          test -f "$GHOSTTY_ROOT/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a" \
+            || { echo "GhosttyKit build did not produce the expected universal archive" >&2; exit 1; }
 
       - name: Prepare macOS runtime (x86_64)
         env:
