@@ -50,7 +50,6 @@ root.render(
   >
     <main className="native-sidebar-main">
       <SidebarApp
-        commandsPaneButtonOpensPalette={false}
         enableProjectCollections={true}
         messageSource={gpuiSidebarRuntime.messageSource}
         nativeHostEventSource={null}

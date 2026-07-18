@@ -25,6 +25,7 @@ import {
   type GxserverSidebarHudResponse,
   type GxserverSidebarHudSettingsMutationParams,
   type GxserverSidebarHudSettingsMutationResult,
+  type GxserverSidebarProjectCollectionsState,
   type GxserverTypedOperationResult,
 } from "../../shared/gxserver-protocol";
 import {
@@ -463,6 +464,8 @@ const GPUI_AUTO_SLEEP_MINUTE_MS = 60 * 1000;
 const GPUI_WORKSPACE_TERMINAL_LIFECYCLE_BRIDGE_RETRY_DELAY_MS = 25;
 const GPUI_WORKSPACE_GROUPS_SERVER_SYNC_DELAY_MS = 400;
 const GPUI_WORKSPACE_GROUPS_SERVER_SYNC_RETRY_DELAY_MS = 5000;
+const GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_DELAY_MS = 400;
+const GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_RETRY_DELAY_MS = 5000;
 const GPUI_ACTIVE_WORKSPACE_TAB_SESSION_TITLE_MAX_CHARS = 512;
 const GPUI_SIDEBAR_DEFAULT_CLIENT_ID = "ghostex-gpui-sidebar";
 const GPUI_REMOTE_GXSERVER_PRESENTATION_RECOVERY_DELAY_MS = 500;
@@ -971,6 +974,12 @@ class GpuiSidebarRuntime {
     createEmptyGpuiWorkspaceSessionGroupsState();
   private workspaceGroupsServerSyncTimeoutId: number | undefined;
   private workspaceGroupsServerSyncPending = false;
+  private latestSidebarProjectCollectionsUpdate:
+    | GxserverSidebarProjectCollectionsState
+    | undefined;
+  private sidebarProjectCollectionsServerSyncTimeoutId: number | undefined;
+  private sidebarProjectCollectionsServerSyncPending = false;
+  private lastForwardedSidebarProjectCollectionsJson: string | undefined;
   private workspaceTerminalLifecycleBridgeRetryId: number | undefined;
 
   start(): void {
@@ -3087,6 +3096,9 @@ class GpuiSidebarRuntime {
         this.recoverPresentationStream(clientId);
       },
       onRendererCommand: (command) => this.handleGxserverRendererCommand(command),
+      onSidebarProjectCollections: (state) => {
+        this.forwardSidebarProjectCollectionsFromGxserver(state);
+      },
       onSnapshot: (snapshot) => {
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? "patch" : "hydrate");
       },
@@ -3364,6 +3376,9 @@ class GpuiSidebarRuntime {
     const projectedSnapshot = this.projectLocalPresentationAttentionAcknowledgementGuards(snapshot);
     this.presentation = projectedSnapshot;
     this.syncLocalPresentationAttentionTracking(previousSessions, projectedSnapshot.sessions);
+    if (isSidebarProjectCollectionsState(snapshot.sidebarProjectCollections)) {
+      this.forwardSidebarProjectCollectionsFromGxserver(snapshot.sidebarProjectCollections);
+    }
     this.publishPresentation(kind);
     this.notifyNativeGxserverPresentationReady();
     if (kind === "hydrate") {
@@ -5353,6 +5368,9 @@ class GpuiSidebarRuntime {
       case "syncGroupOrder":
         this.syncWorkspaceGroupOrder(message.groupIds);
         return;
+      case "updateSidebarProjectCollections":
+        this.queueSidebarProjectCollectionsServerSync(message.state);
+        return;
       case "requestPreviousSessions":
         await this.requestPreviousSessions(message);
         return;
@@ -6858,6 +6876,76 @@ class GpuiSidebarRuntime {
     }
     this.workspaceGroups = parsed;
     writeStoredGpuiWorkspaceSessionGroupsState(parsed);
+  }
+
+  /*
+  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  Colored "Group N" project collections mirror the workspace-groups sync shape,
+  but SidebarApp owns the localStorage overlay and the editing UI, so this
+  runtime only relays: sidebar `updateSidebarProjectCollections` commands are
+  debounced into gxserver write-throughs, and server state (startup snapshot,
+  live sidebarProjectCollectionsChanged events, update acks) is forwarded back
+  to SidebarApp for reconciliation. While a push is pending or failed, server
+  forwards are suppressed so older server state cannot clobber newer local
+  edits.
+  */
+  private queueSidebarProjectCollectionsServerSync(
+    state: GxserverSidebarProjectCollectionsState,
+  ): void {
+    this.latestSidebarProjectCollectionsUpdate = state;
+    this.sidebarProjectCollectionsServerSyncPending = true;
+    if (this.sidebarProjectCollectionsServerSyncTimeoutId !== undefined) {
+      window.clearTimeout(this.sidebarProjectCollectionsServerSyncTimeoutId);
+    }
+    this.sidebarProjectCollectionsServerSyncTimeoutId = window.setTimeout(() => {
+      this.sidebarProjectCollectionsServerSyncTimeoutId = undefined;
+      void this.pushSidebarProjectCollectionsToGxserver();
+    }, GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_DELAY_MS);
+  }
+
+  private async pushSidebarProjectCollectionsToGxserver(): Promise<void> {
+    const client = this.client;
+    const pushed = this.latestSidebarProjectCollectionsUpdate;
+    if (!client || !pushed) {
+      return;
+    }
+    try {
+      const normalized = await client.updateSidebarProjectCollections(pushed);
+      if (this.latestSidebarProjectCollectionsUpdate === pushed) {
+        this.sidebarProjectCollectionsServerSyncPending = false;
+        if (isSidebarProjectCollectionsState(normalized)) {
+          this.forwardSidebarProjectCollectionsFromGxserver(normalized);
+        }
+      }
+    } catch {
+      if (
+        this.client === client &&
+        this.sidebarProjectCollectionsServerSyncTimeoutId === undefined &&
+        this.sidebarProjectCollectionsServerSyncPending
+      ) {
+        this.sidebarProjectCollectionsServerSyncTimeoutId = window.setTimeout(() => {
+          this.sidebarProjectCollectionsServerSyncTimeoutId = undefined;
+          void this.pushSidebarProjectCollectionsToGxserver();
+        }, GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  private forwardSidebarProjectCollectionsFromGxserver(
+    state: GxserverSidebarProjectCollectionsState,
+  ): void {
+    if (this.sidebarProjectCollectionsServerSyncPending) {
+      return;
+    }
+    const stateJson = JSON.stringify(state);
+    if (stateJson === this.lastForwardedSidebarProjectCollectionsJson) {
+      return;
+    }
+    this.lastForwardedSidebarProjectCollectionsJson = stateJson;
+    this.messageSource.postMessage({
+      sidebarProjectCollections: state,
+      type: "sidebarProjectCollectionsChanged",
+    });
   }
 
   private createWorkspaceGroup(groupId?: string): void {
@@ -13093,6 +13181,15 @@ class GpuiGxserverClient {
     await this.rpc("/api/updateWorkspaceSessionGroups", { state });
   }
 
+  async updateSidebarProjectCollections(
+    state: GxserverSidebarProjectCollectionsState,
+  ): Promise<unknown> {
+    const { sidebarProjectCollections } = await this.rpc<{
+      sidebarProjectCollections?: unknown;
+    }>("/api/updateSidebarProjectCollections", { state });
+    return sidebarProjectCollections;
+  }
+
   async fetchAppUserData(): Promise<GxserverAppUserData> {
     return this.rpc<GxserverAppUserData>("/api/readAppUserData");
   }
@@ -13146,6 +13243,7 @@ class GpuiGxserverClient {
     onDelta,
     onError,
     onRendererCommand,
+    onSidebarProjectCollections,
     onSnapshot,
   }: {
     clientId: string;
@@ -13154,6 +13252,7 @@ class GpuiGxserverClient {
     onDelta: (delta: GxserverPresentationDelta, revision: number) => void;
     onError: () => void;
     onRendererCommand?: GpuiRendererCommandHandler;
+    onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
     onSnapshot: (snapshot: GxserverPresentationSnapshot) => void;
   }): GpuiPresentationSubscription {
     const url = new URL(`${this.bootstrap.baseUrl}/api/events`);
@@ -13194,6 +13293,14 @@ class GpuiGxserverClient {
         isGpuiRendererCommand(message.command)
       ) {
         void handleGpuiRendererCommand(socket, message.command, onRendererCommand);
+        return;
+      }
+      if (
+        message.type === "sidebarProjectCollectionsChanged" &&
+        onSidebarProjectCollections &&
+        isSidebarProjectCollectionsState(message.sidebarProjectCollections)
+      ) {
+        onSidebarProjectCollections(message.sidebarProjectCollections);
       }
     });
     socket.addEventListener("error", () => {
@@ -17530,6 +17637,20 @@ function isPresentationSnapshot(value: unknown): value is GxserverPresentationSn
 
 function isPresentationDelta(value: unknown): value is GxserverPresentationDelta {
   return Boolean(value) && typeof value === "object" && typeof (value as { type?: unknown }).type === "string";
+}
+
+function isSidebarProjectCollectionsState(
+  value: unknown,
+): value is GxserverSidebarProjectCollectionsState {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as GxserverSidebarProjectCollectionsState).collections === "object" &&
+    !Array.isArray((value as GxserverSidebarProjectCollectionsState).collections) &&
+    Array.isArray((value as GxserverSidebarProjectCollectionsState).order) &&
+    typeof (value as GxserverSidebarProjectCollectionsState).nextCollectionNumber === "number"
+  );
 }
 
 function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemoteEvent | undefined {

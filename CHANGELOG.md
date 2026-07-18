@@ -1,5 +1,20 @@
 # Changelog
 
+## 6.2.0 - 2026-07-16
+
+> **A quick note:** Ghostex has moved from Swift and AppKit to a cross-platform, Rust-based app framework. There may be a few small issues in this release, so please report anything you find on the [Ghostex Discord](https://discord.gg/df7b3G92CS) and I’ll get it sorted as soon as possible.
+
+- Major
+  - Ghostex for macOS now runs on its new Rust-based foundation while keeping the terminal, browser, project, agent, and workspace experience in one app.
+  - Connecting to a Linux remote can now install the matching gxserver automatically on x64 and ARM64 machines, making first-time remote setup simpler and keeping the app and server in sync.
+  - Workspaces now preserve project groups, selected panes, visible sessions, browser state, and terminal state more consistently across launches and remote connections.
+  - A new gxserver-hosted web workspace lets you reach Ghostex sessions and terminals from a browser, including connections to multiple machines.
+- Minor
+  - Terminal focus, keyboard input, selection, themes, links, copy and paste, and restored-session behavior are more reliable in the new macOS app.
+  - Sidebar collections are easier to scan and organize with session counts, reordering, appearance controls, machine-based recent projects, and collapse-all controls.
+  - Titlebar panels, prompt editing, keyboard zoom, menus, settings, update controls, and native macOS integration now behave more consistently.
+  - Android remote sessions attach more reliably and stay compatible with the updated gxserver and persistent-session connection flow.
+
 ## 6.0.1 - 2026-07-15
 
 - Major

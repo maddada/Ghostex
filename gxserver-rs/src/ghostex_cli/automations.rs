@@ -29,7 +29,11 @@ const AUTOMATION_COMMANDS: [(&str, &str, AutomationParser); 7] = [
         "/api/readAutomationState",
         AutomationParser::Project,
     ),
-    ("automation-save", "/api/saveAutomation", AutomationParser::Save),
+    (
+        "automation-save",
+        "/api/saveAutomation",
+        AutomationParser::Save,
+    ),
     (
         "automation-delete",
         "/api/deleteAutomation",
@@ -180,8 +184,8 @@ fn parse_automation_run(rest: &[String], flags: &Flags) -> Value {
         Value::Object(map) => map,
         _ => Map::new(),
     };
-    let remove_worktree = flag_json(flags, "removeWorktree")
-        .unwrap_or_else(|| Value::String("false".to_string()));
+    let remove_worktree =
+        flag_json(flags, "removeWorktree").unwrap_or_else(|| Value::String("false".to_string()));
     payload.insert(
         "removeWorktree".to_string(),
         Value::Bool(parse_automation_boolean(&remove_worktree)),
@@ -243,7 +247,10 @@ mod tests {
             ("automation-mark-run-read", "/api/markAutomationRunRead"),
         ] {
             assert!(is_automation_command(name), "{name} should be registered");
-            assert_eq!(automation_command_entry(name).map(|(path, _)| path), Some(pathname));
+            assert_eq!(
+                automation_command_entry(name).map(|(path, _)| path),
+                Some(pathname)
+            );
         }
         assert!(!is_automation_command("automation"));
         assert!(!is_automation_command("automation-unknown"));
@@ -252,7 +259,13 @@ mod tests {
 
     #[test]
     fn project_payload_prefers_flags_then_rest() {
-        let parsed = parse_args(&args(&["--project-id", "P1", "--path", "/tmp/x", "ignored"]));
+        let parsed = parse_args(&args(&[
+            "--project-id",
+            "P1",
+            "--path",
+            "/tmp/x",
+            "ignored",
+        ]));
         let payload = parse_automation_project(&parsed.rest, &parsed.flags);
         assert_eq!(payload["projectId"], "P1");
         assert_eq!(payload["projectPath"], "/tmp/x");

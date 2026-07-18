@@ -141,6 +141,7 @@ type ManageFilesBridgeRequest = {
     | "addToSessionContext"
     | "list"
     | "read"
+    | "stat"
     | "save"
     | "rename"
     | "delete"
@@ -352,6 +353,8 @@ type ManageResolvedAnnotationRange = ManageMeoAnnotationDecoration & {
 type ManageWebKitWindow = Window & {
   ghostexGpui?: {
     manageDocsResourceBaseUrl?: string;
+    postManageFilesRequest?: (payload: string) => boolean;
+    supportsManageFileChangePolling?: boolean;
   };
   webkit?: {
     messageHandlers?: {
@@ -386,6 +389,8 @@ const MANAGE_ANNOTATION_MAX_IMAGES = 4;
  * Markdown and Excalidraw edits should persist automatically shortly after the user stops changing content because those artifact surfaces do not expose a visible Save button. Debounce saves for one second so normal typing and drawing gestures coalesce into a single bridge write.
  */
 const MANAGE_CONTENT_AUTOSAVE_DELAY_MS = 1_000;
+const MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS = 400;
+const MANAGE_GPUI_FILE_CHANGE_DEBOUNCE_MS = 500;
 const MANAGE_SIDEBAR_DEFAULT_WIDTH = 292;
 const MANAGE_SIDEBAR_MIN_WIDTH = 230;
 const MANAGE_SIDEBAR_MAX_WIDTH = 560;
@@ -774,6 +779,7 @@ function ManageApp() {
   const [listState, setListState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [hasExternalChanges, setHasExternalChanges] = useState(false);
   const saveResetTimerRef = useRef<number | undefined>(undefined);
   const contentAutosaveTimerRef = useRef<number | undefined>(undefined);
   const [error, setError] = useState<string>();
@@ -798,9 +804,12 @@ function ManageApp() {
   const annotationsSaveTimerRef = useRef<number | undefined>(undefined);
   const hasInitializedDirectoryCollapseRef = useRef(false);
   const lastPersistedAnnotationsRef = useRef("");
+  const isEditablePreview = preview?.kind === "text";
+  const isDirty = isEditablePreview && draftContent !== lastSavedContent;
 
   const readFile = useCallback(
     async (path: string) => {
+      setHasExternalChanges(false);
       setSelectedPath(path);
       selectedPathRef.current = path;
       setPreview(undefined);
@@ -819,10 +828,24 @@ function ManageApp() {
         if (response.error) {
           throw new Error(response.error);
         }
-        setPreview(response.file);
-        const nextContent = response.file?.content ?? "";
+        const openedFile = response.file;
+        setPreview(openedFile);
+        const nextContent = openedFile?.content ?? "";
         setDraftContent(nextContent);
         setLastSavedContent(nextContent);
+        if (openedFile) {
+          setEntries((currentEntries) =>
+            currentEntries.map((entry) =>
+              entry.path === openedFile.path
+                ? {
+                    ...entry,
+                    modifiedAt: openedFile.modifiedAt,
+                    size: openedFile.size,
+                  }
+                : entry,
+            ),
+          );
+        }
         setPreviewState("ready");
       } catch (readError) {
         setPreviewState("error");
@@ -897,6 +920,101 @@ function ManageApp() {
   useEffect(() => {
     void refreshFiles();
   }, [refreshFiles]);
+
+  useEffect(() => {
+    /*
+     * CDXC:GPUIDocsFileRefresh 2026-07-15:
+     * GPUI's bundled Docs page has no native WKWebView file-presenter callback. Poll only
+     * the selected artifact's lightweight metadata through the GPUI bridge, then apply a
+     * trailing debounce before rereading it. HTML and Excalidraw are preview artifacts and
+     * reload automatically; Markdown stays in place so an active editor is never replaced
+     * without an explicit click, and exposes the pending change on its reload control.
+     */
+    const gpuiApi = (window as ManageWebKitWindow).ghostexGpui;
+    if (
+      gpuiApi?.supportsManageFileChangePolling !== true ||
+      !selectedPath ||
+      !preview ||
+      (!isHtmlPath(selectedPath) && !isExcalidrawPath(selectedPath) && !isMarkdownPath(selectedPath))
+    ) {
+      return undefined;
+    }
+
+    const path = selectedPath;
+    const automaticallyReload = isHtmlPath(path) || isExcalidrawPath(path);
+    let cancelled = false;
+    let pollInFlight = false;
+    let observedSignature = manageFileMetadataSignature(preview);
+    let debounceTimer: number | undefined;
+
+    const pollSelectedFile = async () => {
+      if (cancelled || pollInFlight) {
+        return;
+      }
+      pollInFlight = true;
+      try {
+        const response = await requestManageFiles({
+          action: "stat",
+          path,
+          projectEditorId,
+          projectId,
+        });
+        const changedFile = response.file;
+        if (cancelled || response.error || !changedFile || selectedPathRef.current !== path) {
+          return;
+        }
+        const nextSignature = manageFileMetadataSignature(changedFile);
+        if (nextSignature === observedSignature) {
+          return;
+        }
+        if (isDirty || saveState === "saving") {
+          return;
+        }
+        observedSignature = nextSignature;
+        setEntries((currentEntries) =>
+          currentEntries.map((entry) =>
+            entry.path === path
+              ? {
+                  ...entry,
+                  modifiedAt: changedFile.modifiedAt,
+                  size: changedFile.size,
+                }
+              : entry,
+          ),
+        );
+        if (debounceTimer !== undefined) {
+          window.clearTimeout(debounceTimer);
+        }
+        debounceTimer = window.setTimeout(() => {
+          debounceTimer = undefined;
+          if (cancelled || selectedPathRef.current !== path) {
+            return;
+          }
+          if (automaticallyReload) {
+            void readFile(path);
+          } else {
+            setHasExternalChanges(true);
+          }
+        }, MANAGE_GPUI_FILE_CHANGE_DEBOUNCE_MS);
+      } catch {
+        // A transient stat failure should not replace the open document with an error surface.
+      } finally {
+        pollInFlight = false;
+      }
+    };
+
+    const interval = window.setInterval(
+      () => void pollSelectedFile(),
+      MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS,
+    );
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      if (debounceTimer !== undefined) {
+        window.clearTimeout(debounceTimer);
+      }
+    };
+  }, [isDirty, preview, projectEditorId, projectId, readFile, saveState, selectedPath]);
 
   useEffect(() => {
     /*
@@ -1206,9 +1324,6 @@ function ManageApp() {
     }
     return nextCounts;
   }, [annotationsByPath]);
-
-  const isEditablePreview = preview?.kind === "text";
-  const isDirty = isEditablePreview && draftContent !== lastSavedContent;
 
   const saveContentSnapshot = useCallback(async ({
     content,
@@ -2169,8 +2284,14 @@ function ManageApp() {
           draftContent={draftContent}
           error={error}
           isDirty={isDirty}
+          hasExternalChanges={hasExternalChanges}
           onAnnotationsChange={updateAnnotationsForSelectedFile}
           onDraftContentChange={setDraftContent}
+          onReload={() => {
+            if (selectedPath) {
+              void readFile(selectedPath);
+            }
+          }}
           preview={preview}
           previewState={previewState}
           saveState={saveState}
@@ -2850,9 +2971,11 @@ function ManagePreview({
   annotationPersistenceState,
   draftContent,
   error,
+  hasExternalChanges,
   isDirty,
   onAnnotationsChange,
   onDraftContentChange,
+  onReload,
   preview,
   previewState,
   saveState,
@@ -2862,9 +2985,11 @@ function ManagePreview({
   annotationPersistenceState: "idle" | "loading" | "ready" | "saving" | "saved" | "error";
   draftContent: string;
   error?: string;
+  hasExternalChanges: boolean;
   isDirty: boolean;
   onAnnotationsChange: (updater: (annotations: ManageAnnotation[]) => ManageAnnotation[]) => void;
   onDraftContentChange: (content: string) => void;
+  onReload: () => void;
   preview?: ManageFilePreview;
   previewState: "idle" | "loading" | "ready" | "error";
   saveState: "idle" | "saving" | "saved" | "error";
@@ -3341,6 +3466,17 @@ function ManagePreview({
                 <ManageAnnotationDropdown annotations={annotations} onRemoveAnnotation={removeAnnotation} />
               ) : null}
             </div>
+            <button
+              aria-label={hasExternalChanges ? "Reload file with new changes" : "Reload file"}
+              className="manage-file-reload-button"
+              data-changes-available={String(hasExternalChanges)}
+              onClick={onReload}
+              title={hasExternalChanges ? "Reload to show new changes" : "Reload file"}
+              type="button"
+            >
+              <IconRefresh aria-hidden="true" size={14} />
+              {hasExternalChanges ? <span aria-hidden="true" className="manage-file-change-indicator" /> : null}
+            </button>
           </div>
         ) : isHtml ? (
           <div className="manage-preview-header-actions">
@@ -3354,6 +3490,15 @@ function ManagePreview({
             >
               <IconMessagePlus aria-hidden="true" size={14} />
               <span>Annotate</span>
+            </button>
+            <button
+              aria-label="Reload HTML file"
+              className="manage-file-reload-button"
+              onClick={onReload}
+              title="Reload HTML file"
+              type="button"
+            >
+              <IconRefresh aria-hidden="true" size={14} />
             </button>
           </div>
         ) : null}
@@ -4906,6 +5051,10 @@ function requestManageFiles(
     window.addEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
     bridge.postMessage(message);
   });
+}
+
+function manageFileMetadataSignature(file: Pick<ManageFilePreview, "modifiedAt" | "path" | "size">): string {
+  return `${file.path}\u0000${file.modifiedAt ?? ""}\u0000${file.size ?? ""}`;
 }
 
 function createUniqueArtifactPath(
@@ -7181,7 +7330,9 @@ styleElement.textContent = `
    * the Markdown toolbar buttons from shifting during hide/show.
    */
   .manage-shell[data-sidebar-hidden="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="markdown"] .manage-preview-header,
-  .manage-shell[data-sidebar-floating="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="markdown"] .manage-preview-header {
+  .manage-shell[data-sidebar-floating="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="markdown"] .manage-preview-header,
+  .manage-shell[data-sidebar-hidden="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="html"] .manage-preview-header,
+  .manage-shell[data-sidebar-floating="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="html"] .manage-preview-header {
     padding-right: 38px;
   }
 
@@ -7799,6 +7950,10 @@ styleElement.textContent = `
     position: relative;
   }
 
+  .manage-preview-content[data-kind="markdown"] .manage-annotation-dropdown-shell {
+    margin-right: 0;
+  }
+
   /*
    * CDXC:DocsAnnotationToolbar 2026-06-30-22:58:
    * When the right-side Docs sidebar is hidden, the restore button already owns the titlebar edge spacing. Remove the annotation dropdown shell's extra right margin so no empty strip appears between the comments/count button and the restore control.
@@ -7983,6 +8138,24 @@ styleElement.textContent = `
   .manage-preview-header-actions button svg {
     height: 16px;
     width: 16px;
+  }
+
+  .manage-preview-header-actions .manage-file-reload-button {
+    padding: 0 10px;
+    position: relative;
+  }
+
+  .manage-file-change-indicator {
+    background: #fbbf24;
+    border: 1px solid #0e0e0e;
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.18);
+    height: 7px;
+    pointer-events: none;
+    position: absolute;
+    right: 6px;
+    top: 6px;
+    width: 7px;
   }
 
   .manage-meo-markdown-editor {
@@ -8983,7 +9156,7 @@ styleElement.textContent = `
       align-self: auto;
     }
 
-    .manage-preview-content[data-kind="markdown"] .manage-preview-header-actions button span:not(.manage-count-badge) {
+    .manage-preview-content[data-kind="markdown"] .manage-preview-header-actions button span:not(.manage-count-badge):not(.manage-file-change-indicator) {
       display: none;
     }
 

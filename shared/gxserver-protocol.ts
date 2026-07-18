@@ -21,9 +21,13 @@ export const GXSERVER_REMOTE_API_PORT = 58745 as const;
 export const GXSERVER_MACOS_BRIDGE_PORT = 58743 as const;
 export const GXSERVER_RUNTIME_METADATA_PATH = "~/.ghostex/gxserver/runtime/server.json" as const;
 export const GXSERVER_STORAGE_ROOT_PATH = "~/.ghostex/gxserver" as const;
+export const GXSERVER_TERMINAL_WS_ENDPOINT = "/api/terminal" as const;
+export const GXSERVER_WEB_BOOTSTRAP_ENDPOINT = "/api/webBootstrap" as const;
 
 export type GxserverProduct = typeof GXSERVER_PRODUCT;
 export type GxserverProtocolVersion = typeof GXSERVER_PROTOCOL_VERSION;
+export type GxserverTerminalWsEndpointPath = typeof GXSERVER_TERMINAL_WS_ENDPOINT;
+export type GxserverWebBootstrapEndpointPath = typeof GXSERVER_WEB_BOOTSTRAP_ENDPOINT;
 export type GxserverServerId = `S${number}${Lowercase<string>}`;
 export type GxserverProjectId = `P${number}${Lowercase<string>}`;
 export type GxserverSessionId = `G${number}${Lowercase<string>}`;
@@ -103,6 +107,8 @@ export type GxserverEndpointPath =
   | "/api/mutateSidebarHudSettings"
   | "/api/readWorkspaceSessionGroups"
   | "/api/updateWorkspaceSessionGroups"
+  | "/api/readSidebarProjectCollections"
+  | "/api/updateSidebarProjectCollections"
   | "/api/readAutomationState"
   | "/api/saveAutomation"
   | "/api/deleteAutomation"
@@ -192,6 +198,13 @@ export interface GxserverMinimalHealthResponse {
   product: GxserverProduct;
   protocolVersion: GxserverProtocolVersion;
   version: string;
+}
+
+export interface GxserverWebBootstrapResult {
+  authToken: GxserverAuthToken;
+  baseUrl: string;
+  machineLabel: string;
+  protocolVersion: GxserverProtocolVersion;
 }
 
 export interface GxserverListenerConfig {
@@ -1624,6 +1637,42 @@ export interface GxserverPresentationSession {
   zmxName: GxserverZmxSessionName;
 }
 
+/*
+CDXC:SidebarProjectCollections 2026-07-18-00:00:
+Colored "Group N" project collections are server-owned metadata shared by the
+desktop sidebar, iOS, and Android. The wire state is fully normalized by
+gxserver: `order` is the authoritative collection ordering, `collections` is
+keyed by collectionId, a project id appears in at most one collection, and
+collections with no project ids are dropped. Clients write-through-sync the
+whole state via /api/updateSidebarProjectCollections and read it back from the
+same endpoint, the presentation snapshot, or the mobile session summary.
+*/
+export interface GxserverSidebarProjectCollection {
+  collapsed: boolean;
+  collectionId: string;
+  color: string;
+  projectIds: readonly string[];
+  title: string;
+}
+
+export interface GxserverSidebarProjectCollectionsState {
+  collections: Readonly<Record<string, GxserverSidebarProjectCollection>>;
+  nextCollectionNumber: number;
+  order: readonly string[];
+}
+
+export interface GxserverReadSidebarProjectCollectionsResult {
+  sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
+}
+
+export interface GxserverUpdateSidebarProjectCollectionsParams {
+  state: GxserverSidebarProjectCollectionsState;
+}
+
+export interface GxserverUpdateSidebarProjectCollectionsResult {
+  sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
+}
+
 export interface GxserverPresentationSnapshot {
   generatedAt: string;
   groups: readonly GxserverPresentationGroup[];
@@ -1631,6 +1680,7 @@ export interface GxserverPresentationSnapshot {
   projects: readonly GxserverPresentationProject[];
   revision: GxserverPresentationRevision;
   sessions: readonly GxserverPresentationSession[];
+  sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
 }
 
 export type GxserverPresentationDelta =
@@ -1925,6 +1975,45 @@ export interface GxserverAttachSessionMetadataResult {
   zmxName: GxserverZmxSessionName;
 }
 
+export type GxserverTerminalWsErrorCode =
+  | "unauthorized"
+  | "protocolMismatch"
+  | "notFound"
+  | "providerNotRunning";
+
+export interface GxserverTerminalWsReadyMessage {
+  cols: number;
+  rows: number;
+  type: "ready";
+  zmxName: GxserverZmxSessionName;
+}
+
+export interface GxserverTerminalWsExitMessage {
+  code: number | null;
+  type: "exit";
+}
+
+export interface GxserverTerminalWsErrorMessage {
+  code: GxserverTerminalWsErrorCode;
+  message: string;
+  type: "error";
+}
+
+export interface GxserverTerminalWsResizeMessage {
+  cols: number;
+  rows: number;
+  type: "resize";
+}
+
+export type GxserverTerminalWsClientControlMessage = GxserverTerminalWsResizeMessage;
+export type GxserverTerminalWsServerControlMessage =
+  | GxserverTerminalWsReadyMessage
+  | GxserverTerminalWsExitMessage
+  | GxserverTerminalWsErrorMessage;
+export type GxserverTerminalWsControlMessage =
+  | GxserverTerminalWsClientControlMessage
+  | GxserverTerminalWsServerControlMessage;
+
 export interface GxserverStartSessionProviderParams extends GxserverSessionLifecycleParams {
   promptEditor?: "monaco";
   startupText?: string;
@@ -2004,4 +2093,11 @@ export type GxserverEvent =
       protocolVersion: GxserverProtocolVersion;
       serverId: GxserverServerId;
       type: "rendererCommand";
+    }
+  | {
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
+      type: "sidebarProjectCollectionsChanged";
     };

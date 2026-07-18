@@ -139,9 +139,9 @@
 @keyframes edge-fade {
   /*
    * CDXC:ScrollFades 2026-06-19-14:41:
-   * Recent Projects has a short scroll range, so the top fade must reach full
-   * strength immediately after leaving scrollTop 0 instead of interpolating
-   * across the whole list. Keep both edges visible through the middle of the
+   * Short scroll ranges need the top fade to reach full strength immediately
+   * after leaving scrollTop 0 instead of interpolating across the whole list.
+   * Keep both edges visible through the middle of the
    * scroll range, then drop the bottom fade only at the end.
    */
   0% {

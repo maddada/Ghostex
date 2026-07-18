@@ -29,8 +29,8 @@ fn session_alias_cache_path() -> PathBuf {
 /// `ghostex k 4` target the rows the user just saw.
 pub fn write_session_alias_cache(cache: &Value) -> CliResult<()> {
     std::fs::create_dir_all(cli_dir())?;
-    let text = serde_json::to_string_pretty(cache)
-        .map_err(|error| CliError::Other(error.to_string()))?;
+    let text =
+        serde_json::to_string_pretty(cache).map_err(|error| CliError::Other(error.to_string()))?;
     std::fs::write(session_alias_cache_path(), text)?;
     Ok(())
 }
@@ -125,7 +125,10 @@ fn resolve_listed_sessions_with_cache<'a>(
      * user selected.
      */
     let scoped_sessions = project_scoped_sessions(sessions, flags);
-    if normalized_selector.chars().all(|character| character.is_ascii_digit()) {
+    if normalized_selector
+        .chars()
+        .all(|character| character.is_ascii_digit())
+    {
         let alias: f64 = normalized_selector.parse().unwrap_or(f64::NAN);
         let cache = cache_loader();
         let cached_session_id: Option<Value> = cache
@@ -149,7 +152,9 @@ fn resolve_listed_sessions_with_cache<'a>(
         let live_alias_match = scoped_sessions
             .iter()
             .find(|session| session.get("alias").and_then(Value::as_f64) == Some(alias));
-        return Ok(live_alias_match.map(|session| vec![*session]).unwrap_or_default());
+        return Ok(live_alias_match
+            .map(|session| vec![*session])
+            .unwrap_or_default());
     }
     let exact_id_matches: Vec<&Value> = scoped_sessions
         .iter()
@@ -201,7 +206,10 @@ fn resolve_listed_sessions_with_cache<'a>(
                 })
                 .copied()
                 .collect();
-            return Ok(rank_session_title_matches(&project_filtered, &title_selector));
+            return Ok(rank_session_title_matches(
+                &project_filtered,
+                &title_selector,
+            ));
         }
     }
     Ok(rank_session_title_matches(
@@ -211,7 +219,11 @@ fn resolve_listed_sessions_with_cache<'a>(
 }
 
 fn project_scoped_sessions<'a>(sessions: &'a [Value], flags: &Flags) -> Vec<&'a Value> {
-    let project_id = flags.text("projectId").unwrap_or_default().trim().to_string();
+    let project_id = flags
+        .text("projectId")
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if project_id.is_empty() {
         return sessions.iter().collect();
     }
@@ -235,10 +247,7 @@ fn session_project_id(session: &Value) -> String {
     .to_string()
 }
 
-fn rank_provider_session_matches<'a>(
-    sessions: &[&'a Value],
-    selector: &str,
-) -> Vec<&'a Value> {
+fn rank_provider_session_matches<'a>(sessions: &[&'a Value], selector: &str) -> Vec<&'a Value> {
     let normalized_selector = selector.trim();
     if normalized_selector.is_empty() {
         return Vec::new();
@@ -270,8 +279,7 @@ fn rank_provider_session_matches<'a>(
     sessions
         .iter()
         .filter(|session| {
-            session.get("providerSessionName").and_then(Value::as_str)
-                == Some(normalized_selector)
+            session.get("providerSessionName").and_then(Value::as_str) == Some(normalized_selector)
         })
         .copied()
         .collect()
@@ -409,7 +417,10 @@ mod tests {
             Some("first".to_string())
         );
         let parsed = parse_args(&[]);
-        assert_eq!(session_selector_from_args(&parsed.rest, &parsed.flags), None);
+        assert_eq!(
+            session_selector_from_args(&parsed.rest, &parsed.flags),
+            None
+        );
     }
 
     #[test]

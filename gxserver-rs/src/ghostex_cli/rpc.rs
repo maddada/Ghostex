@@ -182,7 +182,8 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
 
 pub fn is_gxserver_global_session_ref(value: &str) -> bool {
     let mut parts = value.split(':');
-    let (Some(s), Some(p), Some(g), None) = (parts.next(), parts.next(), parts.next(), parts.next())
+    let (Some(s), Some(p), Some(g), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
     else {
         return false;
     };
@@ -244,7 +245,10 @@ pub fn request_gxserver_rpc(
     let request = ureq::post(&format!("{}{}", target.base_url, pathname))
         .set("authorization", &format!("Bearer {}", target.token))
         .set("content-type", "application/json")
-        .set(GXSERVER_PROTOCOL_HEADER, &GXSERVER_PROTOCOL_VERSION.to_string())
+        .set(
+            GXSERVER_PROTOCOL_HEADER,
+            &GXSERVER_PROTOCOL_VERSION.to_string(),
+        )
         .timeout(Duration::from_millis(timeout_ms.max(0.0) as u64));
     let outcome = request.send_string(&body.to_string());
     let (status_ok, status, response_body) = match outcome {
@@ -433,7 +437,10 @@ pub fn fetch_gxserver_health(target: &Target, timeout_ms: u64) -> CliResult<Opti
         target.base_url
     ))
     .set("authorization", &format!("Bearer {}", target.token))
-    .set(GXSERVER_PROTOCOL_HEADER, &GXSERVER_PROTOCOL_VERSION.to_string())
+    .set(
+        GXSERVER_PROTOCOL_HEADER,
+        &GXSERVER_PROTOCOL_VERSION.to_string(),
+    )
     .timeout(Duration::from_millis(timeout_ms));
     match request.call() {
         Ok(response) => Ok(read_json_body(response)),
@@ -619,7 +626,9 @@ pub fn read_gxserver_connection_profile_token(profile: &Value, flags: &Flags) ->
 
 pub fn read_gxserver_credential_secret_from_flags(flags: &Flags) -> CliResult<String> {
     if flags.truthy("tokenStdin") || flags.truthy("tokenFromStdin") {
-        let token = read_gxserver_one_shot_token_from_stdin()?.trim().to_string();
+        let token = read_gxserver_one_shot_token_from_stdin()?
+            .trim()
+            .to_string();
         if token.is_empty() {
             return Err(CliError::Other(
                 "Remote gxserver --token-stdin did not receive a token.".to_string(),
@@ -974,9 +983,8 @@ fn run_gxserver_ssh_status_command(
     let result = run_gxserver_ssh_command(&plan.check_command, flags)
         .map_err(|error| format_ssh_setup_error("check", target, plan, &error))?;
     let parsed = parse_json_value(&result.0);
-    Ok(parsed.filter(|value| {
-        value.get("product").and_then(Value::as_str) == Some(GXSERVER_PRODUCT)
-    }))
+    Ok(parsed
+        .filter(|value| value.get("product").and_then(Value::as_str) == Some(GXSERVER_PRODUCT)))
 }
 
 struct SshCommandFailure {
@@ -1109,15 +1117,14 @@ pub fn is_expected_gxserver_health(health: Option<&Value>, target: &Target) -> b
     health.get("product").and_then(Value::as_str) == Some(GXSERVER_PRODUCT)
         && health.get("protocolVersion").and_then(Value::as_u64) == Some(GXSERVER_PROTOCOL_VERSION)
         && (target.server_id.is_none()
-            || health.get("serverId").and_then(Value::as_str)
-                == target.server_id.as_deref())
+            || health.get("serverId").and_then(Value::as_str) == target.server_id.as_deref())
 }
 
 pub fn shell_quote(value: &str) -> String {
     if !value.is_empty()
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '@' | '=' | '+'))
+        && value.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '@' | '=' | '+')
+        })
     {
         return value.to_string();
     }

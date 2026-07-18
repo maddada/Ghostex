@@ -80,7 +80,7 @@ export function SidebarSessionSearchField({
        * Settings and Previous Sessions search fields must reuse the Mac sidebar search affordance: show the search icon on the right while empty, then replace it with an X button that clears the typed query and keeps focus in the field.
        *
        * CDXC:SearchInputs 2026-06-04-03:11:
-       * Recent Projects and daemon search use this same field now, and Escape on a focused non-empty field must clear the query the same way as the X button instead of moving focus or closing the surrounding surface.
+       * Daemon search surfaces use this same field, and Escape on a focused non-empty field must clear the query the same way as the X button instead of moving focus or closing the surrounding surface.
        *
        * CDXC:SearchInputs 2026-06-13-15:59:
        * Some modal search rows own a real filter action at the right edge. Let callers replace the decorative idle Search icon with that button while preserving the shared clear-X behavior and input focus handling.

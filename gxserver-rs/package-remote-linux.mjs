@@ -121,6 +121,28 @@ async function buildLinuxPackageForArch({ arch, options }) {
 
   const workRoot = await mkdtemp(path.join(os.tmpdir(), `ghostex-remote-gxserver-${arch}-`));
   try {
+    const zmxZigBin = await resolveZigBinary({
+      candidates: [
+        options.zmxZigBin,
+        process.env.ZMX_ZIG,
+        process.env.ZIG,
+        path.join(os.homedir(), "apps", `zig-${zigHostArch()}-linux-0.15.2`, "zig"),
+        "zig",
+      ],
+      label: "Zig 0.15.x for zmx",
+      versionMatches: (version) => /^0\.15\./u.test(version),
+    });
+    const zehnZigBin = await resolveZigBinary({
+      candidates: [
+        options.zehnZigBin,
+        process.env.ZEHN_ZIG,
+        path.join(os.homedir(), "apps", `zig-${zigHostArch()}-linux-0.16.0`, "zig"),
+        process.env.ZIG,
+        "zig",
+      ],
+      label: "Zig 0.16+ for zehn",
+      versionMatches: isZig016OrNewer,
+    });
     const config = {
       ...archConfig,
       arch,
@@ -132,11 +154,11 @@ async function buildLinuxPackageForArch({ arch, options }) {
       sourceRevision: await gitOutput(repoRoot, ["rev-parse", "HEAD"], "unknown"),
       tuiBin: options.tuiBin ? path.resolve(repoRoot, options.tuiBin) : "",
       tuiRoot: path.resolve(repoRoot, options.tuiRoot || "tui2"),
-      tuiZigBin: options.tuiZigBin || process.env.TUI_ZIG || process.env.ZMX_ZIG || process.env.ZIG || "zig",
+      tuiZigBin: options.tuiZigBin || process.env.TUI_ZIG || zmxZigBin,
       zmxRoot: path.resolve(repoRoot, options.zmxRoot || "zmx"),
-      zmxZigBin: options.zmxZigBin || process.env.ZMX_ZIG || process.env.ZIG || "zig",
+      zmxZigBin,
       zehnRoot: path.resolve(repoRoot, options.zehnRoot || "zehn"),
-      zehnZigBin: options.zehnZigBin || process.env.ZEHN_ZIG || process.env.ZIG || "zig",
+      zehnZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
     };
 
@@ -383,6 +405,19 @@ async function validateLinuxPackage(packageDir, config) {
     }
     await chmod(fullPath, 0o755);
   }
+
+  /*
+   * CDXC:LinuxRuntimePackaging 2026-07-18:
+   * gxserver-generated managed attach commands require zmx's
+   * --require-existing contract. Reject a mixed package at build time instead
+   * of letting an older zmx parse the flag as a session name and make Android
+   * terminals exit successfully immediately after attach.
+   */
+  const zmxPath = path.join(packageDir, "bin", "zmx");
+  const zmxBytes = await readFile(zmxPath);
+  if (!zmxBytes.includes(Buffer.from("--require-existing"))) {
+    throw new Error("Linux remote package zmx does not support the required --require-existing attach contract.");
+  }
 }
 
 async function writeBuildIdentity(packageDir, version, config = {}) {
@@ -463,6 +498,33 @@ async function resolveBeadsRoot(explicitRoot) {
     }
   }
   return "";
+}
+
+async function resolveZigBinary({ candidates, label, versionMatches }) {
+  const tried = [];
+  for (const candidate of [...new Set(candidates.filter(Boolean))]) {
+    try {
+      const { stdout } = await execFileAsync(candidate, ["version"]);
+      const version = stdout.trim();
+      tried.push(`${candidate} (${version || "unknown"})`);
+      if (versionMatches(version)) return candidate;
+    } catch {
+      tried.push(`${candidate} (unavailable)`);
+    }
+  }
+  throw new Error(`Could not find ${label}. Tried: ${tried.join(", ")}`);
+}
+
+function zigHostArch() {
+  return process.arch === "arm64" ? "aarch64" : "x86_64";
+}
+
+function isZig016OrNewer(version) {
+  const match = version.match(/^(\d+)\.(\d+)\./u);
+  if (!match) return false;
+  const major = Number.parseInt(match[1], 10);
+  const minor = Number.parseInt(match[2], 10);
+  return major > 0 || minor >= 16;
 }
 
 async function assertSafeOutputDir(outputDir) {

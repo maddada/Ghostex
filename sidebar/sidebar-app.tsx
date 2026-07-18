@@ -22,7 +22,6 @@ import {
   IconFileSearch,
   IconFolder,
   IconFolderOpen,
-  IconHistory,
   IconHistoryToggle,
   IconKeyboard,
   IconLayoutSidebar,
@@ -51,7 +50,6 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type RefObject,
   type ReactNode,
 } from "react";
@@ -124,12 +122,15 @@ import {
 import { SessionGroupSection } from "./session-group-section";
 import { ProjectCollectionSection } from "./project-collection-section";
 import {
+  areSidebarProjectCollectionsStatesEqual,
   createSidebarProjectCollection,
   moveProjectsToSidebarCollection,
+  parseSidebarProjectCollectionsFromGxserver,
   readSidebarProjectCollections,
   removeSidebarProjectCollection,
   reorderSidebarProjectCollectionDefinitions,
   reorderSidebarProjectCollections,
+  serializeSidebarProjectCollectionsForGxserver,
   updateSidebarProjectCollection,
   writeSidebarProjectCollections,
   type SidebarProjectCollection,
@@ -162,7 +163,7 @@ import {
   normalizeSidebarSessionTagListItems,
   type SidebarSessionTagListItem,
 } from "../shared/session-tags";
-import { filterRecentProjects } from "./recent-project-search";
+import { groupRecentProjectsByMachine } from "./recent-project-search";
 import { isEmptySidebarDoubleClick } from "./empty-sidebar-double-click";
 import { closeAppModal, openAppModal } from "./app-modal-host-bridge";
 import { formatSidebarHotkeyLabel } from "./hotkey-label";
@@ -213,7 +214,6 @@ import { hasKnownSidebarProjectInventory } from "./sidebar-project-empty-state";
 type SidebarEventSource = Pick<Window, "addEventListener" | "removeEventListener">;
 
 export type SidebarAppProps = {
-  commandsPaneButtonOpensPalette?: boolean;
   enableProjectCollections?: boolean;
   messageSource?: SidebarEventSource;
   nativeHostEventSource?: SidebarEventSource | null;
@@ -239,10 +239,6 @@ type RecentProjectContextMenuPosition = {
   projectId: string;
   x: number;
   y: number;
-};
-type PointerViewportPoint = {
-  clientX: number;
-  clientY: number;
 };
 
 type NativeModifierStateHostEvent = {
@@ -550,7 +546,6 @@ type SidebarSessionPointerDragState = {
 type SidebarUiCollapseState = {
   collapsedGroupsById: Record<string, true>;
   collapsedRemoteMachineSectionsById: Record<string, true>;
-  isRecentProjectsOpen: boolean;
   isReferenceChatsCollapsed: boolean;
   isReferenceProjectsCollapsed: boolean;
 };
@@ -610,7 +605,6 @@ const sensors = [
 
 const SIDEBAR_STARTUP_INTERACTION_BLOCK_MS = 1500;
 const SIDEBAR_STARTUP_REPRO_WINDOW_MS = 15_000;
-const RECENT_PROJECTS_TOOLTIP_SCROLL_SETTLE_MS = 180;
 const SIDEBAR_POINTER_DRAG_REORDER_THRESHOLD_PX = 8;
 const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID = "gxserver-unavailable";
 const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;
@@ -637,7 +631,6 @@ function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
   return {
     collapsedGroupsById: {},
     collapsedRemoteMachineSectionsById: {},
-    isRecentProjectsOpen: false,
     isReferenceChatsCollapsed: false,
     isReferenceProjectsCollapsed: false,
   };
@@ -677,8 +670,6 @@ function readSidebarUiCollapseState(): SidebarUiCollapseStateReadResult {
         collapsedRemoteMachineSectionsById: normalizeStoredCollapsedGroupsById(
           (candidate as Partial<SidebarUiCollapseState>).collapsedRemoteMachineSectionsById,
         ),
-        isRecentProjectsOpen:
-          (candidate as Partial<SidebarUiCollapseState>).isRecentProjectsOpen === true,
         isReferenceChatsCollapsed:
           (candidate as Partial<SidebarUiCollapseState>).isReferenceChatsCollapsed === true,
         isReferenceProjectsCollapsed:
@@ -713,7 +704,6 @@ function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): Record<
     collapsedGroupCount: Object.keys(state.collapsedGroupsById).length,
     collapsedRemoteMachineSectionCount: Object.keys(state.collapsedRemoteMachineSectionsById)
       .length,
-    isRecentProjectsOpen: state.isRecentProjectsOpen,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
     isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed,
   };
@@ -774,7 +764,6 @@ function readSidebarProjectJumpEventDetail(event: Event): SidebarProjectJumpEven
 }
 
 export function SidebarApp({
-  commandsPaneButtonOpensPalette = false,
   enableProjectCollections = false,
   messageSource = window,
   nativeHostEventSource = window,
@@ -789,9 +778,6 @@ export function SidebarApp({
   const [ isDaemonSessionsOpen, setIsDaemonSessionsOpen ] = useState(false);
   const [ isPinnedPromptsOpen, setIsPinnedPromptsOpen ] = useState(false);
   const [ isPreviousSessionsOpen, setIsPreviousSessionsOpen ] = useState(false);
-  const [ isRecentProjectsOpen, setIsRecentProjectsOpen ] = useState(
-    initialUiCollapseState.isRecentProjectsOpen,
-  );
   const [ isReferenceChatsCollapsed, setIsReferenceChatsCollapsed ] = useState(
     initialUiCollapseState.isReferenceChatsCollapsed,
   );
@@ -811,6 +797,15 @@ export function SidebarApp({
   const [ projectCollections, setProjectCollections ] = useState<SidebarProjectCollectionsState>(
     enableProjectCollections ? readSidebarProjectCollections : { collections: [], nextCollectionNumber: 1 },
   );
+  /*
+  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  Tracks the last collection state exchanged with gxserver (pushed to it or
+  adopted from it) so the write-through effect posts only real local edits.
+  Without this baseline, mount and server reconciliation would echo the state
+  straight back and a fresh install would clobber the server copy with its
+  empty localStorage overlay.
+  */
+  const lastGxserverSyncedProjectCollectionsRef = useRef(projectCollections);
   const [ autoEditingProjectCollectionId, setAutoEditingProjectCollectionId ] = useState<string>();
   const [ collapsedRemoteMachineSectionsById, setCollapsedRemoteMachineSectionsById ] = useState<
     Record<string, true>
@@ -823,8 +818,7 @@ export function SidebarApp({
     remote: false,
   });
   const previousExpandedReferenceProjectGroupIdsRef = useRef<string[]>([]);
-  const [ recentProjectsQuery, setRecentProjectsQuery ] = useState("");
-  const [ isRecentProjectsListScrolling, setIsRecentProjectsListScrolling ] = useState(false);
+  const previousExpandedProjectGroupIdsByCollectionIdRef = useRef<Record<string, string[]>>({});
   const [ sessionSearchQuery, setSessionSearchQuery ] = useState("");
   const [ selectedSessionTagFilters, setSelectedSessionTagFilters ] = useState<
     SidebarSessionTag[]
@@ -850,9 +844,6 @@ export function SidebarApp({
   const didResetStoreRef = useRef(false);
   const sessionGroupsPanelRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const recentProjectsSearchInputRef = useRef<HTMLInputElement>(null);
-  const recentProjectsPointerPointRef = useRef<PointerViewportPoint | undefined>(undefined);
-  const recentProjectsScrollIdleTimeoutRef = useRef<number | undefined>(undefined);
   const groupIdsRef = useRef<string[]>([]);
   const sessionIdsByGroupRef = useRef<SessionIdsByGroup>({});
   const pinnedSessionDropTargetLogKeyRef = useRef<string | undefined>(undefined);
@@ -892,18 +883,37 @@ export function SidebarApp({
 
   useEffect(() => {
     return () => {
-      if (recentProjectsScrollIdleTimeoutRef.current !== undefined) {
-        window.clearTimeout(recentProjectsScrollIdleTimeoutRef.current);
-      }
       setSidebarTooltipsSuppressedForDrag(false);
     };
   }, []);
 
   useEffect(() => {
-    if (enableProjectCollections) {
-      writeSidebarProjectCollections(projectCollections);
+    if (!enableProjectCollections) {
+      return;
     }
-  }, [enableProjectCollections, projectCollections]);
+    writeSidebarProjectCollections(projectCollections);
+    /*
+    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    localStorage stays the instant-edit overlay, but every local collection
+    edit also write-through-syncs the whole wire state to gxserver via the
+    host so iOS/Android see the same colored "Group N" overlay. States that
+    just arrived from (or were already pushed to) the server are skipped to
+    avoid echo loops.
+    */
+    if (
+      areSidebarProjectCollectionsStatesEqual(
+        lastGxserverSyncedProjectCollectionsRef.current,
+        projectCollections,
+      )
+    ) {
+      return;
+    }
+    lastGxserverSyncedProjectCollectionsRef.current = projectCollections;
+    vscode.postMessage({
+      state: serializeSidebarProjectCollectionsForGxserver(projectCollections),
+      type: "updateSidebarProjectCollections",
+    });
+  }, [enableProjectCollections, projectCollections, vscode]);
 
   const applyLocalFocus = useSidebarStore((state) => state.applyLocalFocus);
   const consumeFocusedSessionScrollSuppression = useSidebarStore(
@@ -1509,6 +1519,50 @@ export function SidebarApp({
       return;
     }
 
+    if (event.data.type === "sidebarProjectCollectionsChanged") {
+      /*
+      CDXC:SidebarProjectCollections 2026-07-18-00:00:
+      gxserver's normalized copy is authoritative whenever it has collections;
+      adopt it into the localStorage-backed state so edits from iOS/Android or
+      another desktop land here. An empty server copy while local collections
+      exist means gxserver has no durable state yet (first run after the
+      server-backed cutover), so seed it from the local overlay instead of
+      wiping the user's groups. nextCollectionNumber keeps the local maximum
+      so "Group N" numbering never goes backwards.
+      */
+      if (!enableProjectCollections) {
+        return;
+      }
+      const parsed = parseSidebarProjectCollectionsFromGxserver(
+        event.data.sidebarProjectCollections,
+      );
+      if (!parsed) {
+        return;
+      }
+      if (parsed.collections.length === 0) {
+        if (projectCollections.collections.length > 0) {
+          lastGxserverSyncedProjectCollectionsRef.current = projectCollections;
+          vscode.postMessage({
+            state: serializeSidebarProjectCollectionsForGxserver(projectCollections),
+            type: "updateSidebarProjectCollections",
+          });
+        }
+        return;
+      }
+      const adopted: SidebarProjectCollectionsState = {
+        collections: parsed.collections,
+        nextCollectionNumber: Math.max(
+          parsed.nextCollectionNumber,
+          projectCollections.nextCollectionNumber,
+        ),
+      };
+      lastGxserverSyncedProjectCollectionsRef.current = adopted;
+      if (!areSidebarProjectCollectionsStatesEqual(adopted, projectCollections)) {
+        setProjectCollections(adopted);
+      }
+      return;
+    }
+
     if (event.data.type === "sidebarHudChanged") {
       applyHudChangedMessage(event.data);
       return;
@@ -1688,7 +1742,6 @@ export function SidebarApp({
         {
           collapsedGroupCount: Object.keys(collapsedGroupsById).length,
           groupCount: event.data.groups.length,
-          isRecentProjectsOpen,
           isReferenceChatsCollapsed,
           isReferenceProjectsCollapsed,
           messageRevision: event.data.revision,
@@ -1765,7 +1818,6 @@ export function SidebarApp({
         {
           collapsedGroupCount: Object.keys(collapsedGroupsById).length,
           groupCount: event.data.groups.length,
-          isRecentProjectsOpen,
           isReferenceChatsCollapsed,
           isReferenceProjectsCollapsed,
           messageRevision: event.data.revision,
@@ -2422,64 +2474,10 @@ export function SidebarApp({
       remoteSessionSearchPreviousSessions,
     ],
   );
-  const filteredRecentProjects = useMemo(
-    () => {
-      /*
-       * CDXC:SidebarPerformance 2026-06-28-05:39:
-       * Minimized Recent Projects should not rebuild fuzzy-search records while
-       * the drawer body is unmounted. Preserve the query in local state and
-       * apply it only when the user opens the drawer again.
-       */
-      if (!isRecentProjectsOpen) {
-        return recentProjects;
-      }
-      return filterRecentProjects(recentProjects, recentProjectsQuery);
-    },
-    [ isRecentProjectsOpen, recentProjects, recentProjectsQuery ],
+  const recentProjectsByMachine = useMemo(
+    () => groupRecentProjectsByMachine(recentProjects),
+    [ recentProjects ],
   );
-
-  const handleRecentProjectsListPointerMove = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ): void => {
-    recentProjectsPointerPointRef.current = {
-      clientX: event.clientX,
-      clientY: event.clientY,
-    };
-  };
-
-  const handleRecentProjectsListPointerLeave = (): void => {
-    recentProjectsPointerPointRef.current = undefined;
-    dismissSidebarTooltips();
-  };
-
-  const handleRecentProjectsListScroll = (): void => {
-    /*
-     * CDXC:RecentProjects 2026-06-14-15:45:
-     * Recent Project path tooltips should be dismissed as soon as the drawer scroll area receives scroll input. Do not reopen on scroll idle; the next normal hover should create a fresh tooltip for the row currently under the pointer.
-     */
-    dismissSidebarTooltips();
-    setIsRecentProjectsListScrolling(true);
-    if (recentProjectsScrollIdleTimeoutRef.current !== undefined) {
-      window.clearTimeout(recentProjectsScrollIdleTimeoutRef.current);
-    }
-    recentProjectsScrollIdleTimeoutRef.current = window.setTimeout(() => {
-      recentProjectsScrollIdleTimeoutRef.current = undefined;
-      setIsRecentProjectsListScrolling(false);
-    }, RECENT_PROJECTS_TOOLTIP_SCROLL_SETTLE_MS);
-  };
-
-  useEffect(() => {
-    if (isRecentProjectsOpen) {
-      return;
-    }
-    if (recentProjectsScrollIdleTimeoutRef.current !== undefined) {
-      window.clearTimeout(recentProjectsScrollIdleTimeoutRef.current);
-      recentProjectsScrollIdleTimeoutRef.current = undefined;
-    }
-    recentProjectsPointerPointRef.current = undefined;
-    setIsRecentProjectsListScrolling(false);
-    dismissSidebarTooltips();
-  }, [ isRecentProjectsOpen ]);
 
   const hasExpandedReferenceProjects = useMemo(
     () =>
@@ -2867,7 +2865,7 @@ export function SidebarApp({
   useEffect(() => {
     /**
      * CDXC:SidebarReference 2026-05-10-15:51
-     * Combined section headers, Recent Projects, and per-group collapse state are
+     * Combined section headers and per-group collapse state are
      * UI navigation state. Persist them in the sidebar webview so restarting
      * ghostex keeps collapsed items collapsed and expanded items expanded.
      * CDXC:SidebarReference 2026-05-20-12:00
@@ -2881,7 +2879,6 @@ export function SidebarApp({
     const nextCollapseState = {
       collapsedGroupsById,
       collapsedRemoteMachineSectionsById,
-      isRecentProjectsOpen,
       isReferenceChatsCollapsed,
       isReferenceProjectsCollapsed,
     };
@@ -2896,7 +2893,6 @@ export function SidebarApp({
   }, [
     collapsedGroupsById,
     collapsedRemoteMachineSectionsById,
-    isRecentProjectsOpen,
     isReferenceChatsCollapsed,
     isReferenceProjectsCollapsed,
   ]);
@@ -4101,9 +4097,6 @@ export function SidebarApp({
       }
       const searchInput = searchInputRef.current;
       const isSearchInputTarget = searchInput !== null && target === searchInput;
-      const recentProjectsSearchInput = recentProjectsSearchInputRef.current;
-      const isRecentProjectsSearchInputTarget =
-        recentProjectsSearchInput !== null && target === recentProjectsSearchInput;
 
       if (event.key === "Escape") {
         if (isSearchInputTarget && sessionSearchQuery.length > 0) {
@@ -4111,13 +4104,6 @@ export function SidebarApp({
           event.stopPropagation();
           setSessionSearchQuery("");
           searchInput.focus();
-          return;
-        }
-        if (isRecentProjectsSearchInputTarget && recentProjectsQuery.length > 0) {
-          event.preventDefault();
-          event.stopPropagation();
-          setRecentProjectsQuery("");
-          recentProjectsSearchInput.focus();
           return;
         }
         if (!closeTopmostSidebarOverlay()) {
@@ -4210,15 +4196,12 @@ export function SidebarApp({
     isPreviousSessionsOpen,
     isScratchPadOpen,
     isSessionSearchOpen,
-    recentProjectsQuery,
     selectedSessionSearchResult,
     sessionSearchQuery,
     sidebarSessionSearchResults,
   ]);
 
   const restoreRecentProject = (projectId: string) => {
-    setRecentProjectsQuery("");
-    setIsRecentProjectsOpen(false);
     setRecentProjectContextMenuPosition(undefined);
     vscode.postMessage({
       projectId,
@@ -4305,37 +4288,6 @@ export function SidebarApp({
   const pickWorkspaceFolder = () => {
     dismissAppModalForSidebarNavigation("SettingsDismissal:pickWorkspaceFolder");
     vscode.postMessage({ type: "pickWorkspaceFolder" });
-  };
-
-  const createFullWidthTerminalPane = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:commandsPane");
-    /**
-     * CDXC:CommandsPanel 2026-05-13-17:02:
-     * The legacy createFullWidthTerminalPane callback now opens the Commands
-     * panel through the shared hotkey-action route.
-     *
-     * CDXC:CommandsPanel 2026-06-18-23:28:
-     * The Commands panel shortcut lives on the Recent Projects header after Settings moved out of the sidebar footer. Keep the same native command so the host behavior does not fork by launcher.
-     *
-     * CDXC:GPUICommandPanePerProject 2026-07-10:
-     * GPUI does not implement the legacy renderer message. Send the fixed
-     * openCommandsPanel selector so the native host opens the active project's
-     * pane, creating its first command terminal only when that pane is empty.
-     */
-    setIsPinnedPromptsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    vscode.postMessage({
-      actionId: "openCommandsPanel",
-      type: "runGhostexHotkeyAction",
-    });
-    if (commandsPaneButtonOpensPalette) {
-      openCommandPalette(">");
-    }
   };
 
   const createReferenceChat = () => {
@@ -4735,11 +4687,43 @@ export function SidebarApp({
                           ) : (
                             <ProjectCollectionSection
                               autoEdit={autoEditingProjectCollectionId === item.collection.collectionId}
+                              bulkProjectActionLabel={
+                                item.groupIds.some(
+                                  (groupId) => collapsedGroupsById[groupId] !== true,
+                                )
+                                  ? "Collapse All"
+                                  : "Expand Previous"
+                              }
                               collection={item.collection}
                               draggingDisabled={isSessionSearchOpen}
                               index={itemIndex}
                               key={item.collection.collectionId}
                               onAutoEditHandled={() => setAutoEditingProjectCollectionId(undefined)}
+                              onBulkProjectToggle={() => {
+                                const hasExpandedProjects = item.groupIds.some(
+                                  (groupId) => collapsedGroupsById[groupId] !== true,
+                                );
+                                if (hasExpandedProjects) {
+                                  previousExpandedProjectGroupIdsByCollectionIdRef.current[
+                                    item.collection.collectionId
+                                  ] = item.groupIds.filter(
+                                    (groupId) => collapsedGroupsById[groupId] !== true,
+                                  );
+                                  setGroupsCollapsed(item.groupIds, true);
+                                  return;
+                                }
+
+                                const previousExpandedProjectGroupIds =
+                                  previousExpandedProjectGroupIdsByCollectionIdRef.current[
+                                    item.collection.collectionId
+                                  ]?.filter((groupId) => item.groupIds.includes(groupId)) ?? [];
+                                setGroupsCollapsed(
+                                  previousExpandedProjectGroupIds.length > 0
+                                    ? previousExpandedProjectGroupIds
+                                    : item.groupIds,
+                                  false,
+                                );
+                              }}
                               onChange={(updated) => {
                                 setProjectCollections((previous) =>
                                   updateSidebarProjectCollection(
@@ -4778,6 +4762,14 @@ export function SidebarApp({
                         referenceProjectsEmptyState
                       )}
                     </div>
+                  ) : null}
+                  {!shouldHideReferenceSectionsForSearchEmptyState ? (
+                    <RecentProjectsSection
+                      contextMenuProjectId={recentProjectContextMenuPosition?.projectId}
+                      onContextMenu={openRecentProjectContextMenu}
+                      onRestore={restoreRecentProject}
+                      projects={recentProjectsByMachine.local}
+                    />
                   ) : null}
                   {!shouldHideReferenceSectionsForSearchEmptyState && remoteMachines.length > 0 ? (
                     <div className="reference-remote-section-list">
@@ -4830,6 +4822,9 @@ export function SidebarApp({
                             });
                           }}
                           projectGroupIds={remoteProjectGroupIdsByMachineId[ machine.id ] ?? []}
+                          recentProjects={
+                            recentProjectsByMachine.remoteByMachineId.get(machine.id) ?? []
+                          }
                           renderProjectGroup={(groupId, groupIndex) => (
                             <SessionGroupSection
                               autoEdit={false}
@@ -4884,6 +4879,9 @@ export function SidebarApp({
                           }}
                           status={remoteMachineRuntimeStatuses[ machine.id ] ?? "disconnected"}
                           statusMessage={remoteMachineStatusMessages[ machine.id ]}
+                          recentProjectContextMenuId={recentProjectContextMenuPosition?.projectId}
+                          onRecentProjectContextMenu={openRecentProjectContextMenu}
+                          onRestoreRecentProject={restoreRecentProject}
                         />
                       ))}
                     </div>
@@ -4935,192 +4933,15 @@ export function SidebarApp({
               </div>
             </div>
           </section>
-          {recentProjects.length > 0 ? (
-            <section
-              aria-label="Recent Projects"
-              className="recent-projects-drawer"
-              data-open={String(isRecentProjectsOpen)}
-            >
-              {/*
-             * CDXC:RecentProjects 2026-05-04-14:25
-             * Combined mode parks projects without surfaced sessions in a
-             * bottom drawer. Clicking a row asks native to restore the full
-             * project and only create a blank terminal when no sessions were
-             * preserved.
-             */}
-              <div className="recent-projects-drawer-header reference-sidebar-nav-item">
-                <button
-                  aria-expanded={isRecentProjectsOpen}
-                  className="recent-projects-drawer-toggle group-head"
-                  data-collapsible="true"
-                  onClick={() => {
-                    postSidebarCollapseStateLog("sectionToggle", {
-                      collapsed: !isRecentProjectsOpen,
-                      recentProjectCount: recentProjects.length,
-                      section: "recent-projects",
-                    });
-                    setRecentProjectContextMenuPosition(undefined);
-                    setIsRecentProjectsOpen((previous) => !previous);
-                  }}
-                  type="button"
-                >
-                  <span className="group-title-wrap">
-                    <span className="group-title-row">
-                      <span
-                        aria-hidden="true"
-                        className="group-collapse-button section-titlebar-toggle"
-                        data-collapsed={String(!isRecentProjectsOpen)}
-                        data-has-idle-icon="true"
-                      >
-                        <span className="group-collapse-icon group-collapse-idle-icon section-titlebar-toggle-icon section-titlebar-toggle-idle-icon">
-                          <IconHistory size={16} stroke={1.8} />
-                        </span>
-                        <IconCaretRightFilled
-                          aria-hidden="true"
-                          className="group-collapse-icon group-collapse-chevron-icon section-titlebar-toggle-icon section-titlebar-toggle-chevron-icon"
-                          size={16}
-                        />
-                      </span>
-                      <span className="group-title-handle">
-                        <span className="recent-projects-drawer-title group-title section-titlebar-label">
-                          Recent Projects
-                        </span>
-                      </span>
-                    </span>
-                  </span>
-                </button>
-                {/*
-                  CDXC:CommandsPanel 2026-06-18-23:28:
-                  Move the Commands Pane launcher from the removed sidebar Settings footer onto the Recent Projects header as a sibling hover action so the header toggle keeps valid button semantics.
-                */}
-                <SidebarFixedTooltipButton
-                  aria-label={commandsPaneButtonOpensPalette ? "Open Command Palette" : "Show Commands Pane"}
-                  className="reference-sidebar-hover-action reference-sidebar-hover-action-tooltip reference-sidebar-commands-pane-action"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    createFullWidthTerminalPane();
-                  }}
-                  tooltip={commandsPaneButtonOpensPalette ? "Command Palette" : "Commands Pane"}
-                  tooltipSide="left"
-                  type="button"
-                >
-                  <IconTerminal2 aria-hidden="true" size={15} stroke={1.9} />
-                </SidebarFixedTooltipButton>
-              </div>
-              {isRecentProjectsOpen ? (
-                <div
-                  className="recent-projects-drawer-body"
-                  data-collapsed="false"
-                >
-                  {/*
-                 * CDXC:SidebarSearch 2026-05-15-18:13:
-                 * Recent Projects search must reuse the same shell, input, and
-                 * icon classes as Search sessions so both boxes stay identical
-                 * in typography, border, radius, padding, and icon placement.
-                 *
-                 * CDXC:SidebarPerformance 2026-06-28-05:39:
-                 * A minimized Recent Projects drawer should be real header-only
-                 * UI, not a hidden mounted list. Keep search/list rows and their
-                 * scroll/tooltip handlers unmounted until the drawer is open.
-                 */}
-                  <SidebarSessionSearchField
-                    ariaLabel="Search recent projects"
-                    autoComplete="off"
-                    clearLabel="Clear recent projects search"
-                    inputRef={recentProjectsSearchInputRef}
-                    placeholder="Search projects"
-                    query={recentProjectsQuery}
-                    setQuery={setRecentProjectsQuery}
-                    shellClassName="recent-projects-search"
-                  />
-                  <div
-                    className="recent-projects-list"
-                    onPointerEnter={handleRecentProjectsListPointerMove}
-                    onPointerLeave={handleRecentProjectsListPointerLeave}
-                    onPointerMove={handleRecentProjectsListPointerMove}
-                    onScrollCapture={handleRecentProjectsListScroll}
-                    onWheelCapture={handleRecentProjectsListScroll}
-                  >
-                    {filteredRecentProjects.length > 0 ? (
-                      filteredRecentProjects.map((project) => (
-                        <RecentProjectRow
-                          isContextMenuOpen={
-                            recentProjectContextMenuPosition?.projectId === project.projectId
-                          }
-                          isScrolling={isRecentProjectsListScrolling}
-                          key={project.projectId}
-                          onContextMenu={openRecentProjectContextMenu}
-                          onRestore={restoreRecentProject}
-                          pointerPointRef={recentProjectsPointerPointRef}
-                          project={project}
-                        />
-                      ))
-                    ) : (
-                      <div className="recent-projects-empty">No projects match that search.</div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-              {isRecentProjectsOpen && recentProjectContextMenuPosition ? (
-                <SidebarContextMenuPortal
-                  menuStyle={{
-                    left: `${recentProjectContextMenuPosition.x}px`,
-                    top: `${recentProjectContextMenuPosition.y}px`,
-                  }}
-                  onDismiss={() => setRecentProjectContextMenuPosition(undefined)}
-                  vscode={vscode}
-                >
-                  {/*
-                 * CDXC:RecentProjects 2026-05-27-07:04:
-                 * Right-clicking a Recent Projects row should expose only the
-                 * parked-project actions: Copy Path, Open Folder, then a
-                 * separator before Remove Project.
-                 *
-                 * CDXC:RecentProjects 2026-06-04-13:39:
-                 * User-facing filesystem actions should use Open Folder instead of Finder-specific wording while preserving the existing native reveal behavior.
-                 */}
-                  <button
-                    className="session-context-menu-item"
-                    onClick={() =>
-                      copyRecentProjectPath(recentProjectContextMenuPosition.projectId)
-                    }
-                    role="menuitem"
-                    type="button"
-                  >
-                    <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} />
-                    Copy Path
-                  </button>
-                  <button
-                    className="session-context-menu-item"
-                    onClick={() =>
-                      openRecentProjectInFinder(recentProjectContextMenuPosition.projectId)
-                    }
-                    role="menuitem"
-                    type="button"
-                  >
-                    <IconFolderOpen
-                      aria-hidden="true"
-                      className="session-context-menu-icon"
-                      size={14}
-                    />
-                    Open Folder
-                  </button>
-                  <div className="session-context-menu-divider" role="separator" />
-                  <button
-                    className="session-context-menu-item session-context-menu-item-danger"
-                    onClick={() =>
-                      removeRecentProject(recentProjectContextMenuPosition.projectId)
-                    }
-                    role="menuitem"
-                    type="button"
-                  >
-                    <IconTrash aria-hidden="true" className="session-context-menu-icon" size={14} />
-                    Remove Project
-                  </button>
-                </SidebarContextMenuPortal>
-              ) : null}
-            </section>
+          {recentProjectContextMenuPosition ? (
+            <RecentProjectContextMenu
+              onCopyPath={copyRecentProjectPath}
+              onDismiss={() => setRecentProjectContextMenuPosition(undefined)}
+              onOpenFolder={openRecentProjectInFinder}
+              onRemove={removeRecentProject}
+              position={recentProjectContextMenuPosition}
+              vscode={vscode}
+            />
           ) : null}
           <GitCommitModal
             agents={agents}
@@ -6366,8 +6187,12 @@ function RemoteMachineSidebarSection({
   onCloneRepository,
   onEdit,
   onReconnect,
+  onRecentProjectContextMenu,
+  onRestoreRecentProject,
   onToggleCollapsed,
   projectGroupIds,
+  recentProjectContextMenuId,
+  recentProjects,
   renderProjectGroup,
   status,
   statusMessage,
@@ -6379,8 +6204,15 @@ function RemoteMachineSidebarSection({
   onCloneRepository: () => void;
   onEdit: () => void;
   onReconnect: () => void;
+  onRecentProjectContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    projectId: string,
+  ) => void;
+  onRestoreRecentProject: (projectId: string) => void;
   onToggleCollapsed: () => void;
   projectGroupIds: readonly string[];
+  recentProjectContextMenuId?: string;
+  recentProjects: readonly SidebarRecentProject[];
   renderProjectGroup: (groupId: string, groupIndex: number) => ReactNode;
   status: RemoteMachineRuntimeStatus[ "state" ];
   statusMessage?: string;
@@ -6415,7 +6247,7 @@ function RemoteMachineSidebarSection({
    * (the runtime marks those groups stale) instead of hiding the body, so
    * "No projects" is a connected-only empty state.
    */
-  const showProjectList = isConnected || projectGroupIds.length > 0;
+  const showProjectList = isConnected || projectGroupIds.length > 0 || recentProjects.length > 0;
   const sortable = useSortable({
     accept: "remote-machine",
     data: createRemoteMachineDragData(machine.id),
@@ -6476,79 +6308,40 @@ function RemoteMachineSidebarSection({
           ) : (
             <div className="reference-sidebar-empty-state">No projects</div>
           )}
+          <RecentProjectsSection
+            contextMenuProjectId={recentProjectContextMenuId}
+            onContextMenu={onRecentProjectContextMenu}
+            onRestore={onRestoreRecentProject}
+            projects={recentProjects}
+          />
         </div>
       ) : null}
     </div>
   );
 }
 
-function isRecentProjectRowUnderPointer(
-  button: HTMLButtonElement | null,
-  pointerPoint: PointerViewportPoint | undefined,
-): boolean {
-  if (!button || !pointerPoint) {
-    return false;
-  }
-  const pointerElement = document.elementFromPoint(pointerPoint.clientX, pointerPoint.clientY);
-  return pointerElement !== null && button.contains(pointerElement);
-}
-
 type RecentProjectRowProps = {
   isContextMenuOpen: boolean;
-  isScrolling: boolean;
   onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, projectId: string) => void;
   onRestore: (projectId: string) => void;
-  pointerPointRef: RefObject<PointerViewportPoint | undefined>;
   project: SidebarRecentProject;
 };
 
 function RecentProjectRow({
   isContextMenuOpen,
-  isScrolling,
   onContextMenu,
   onRestore,
-  pointerPointRef,
   project,
 }: RecentProjectRowProps) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [ isTooltipOpen, setIsTooltipOpen ] = useState(false);
-  const displayTitle = formatRecentProjectTitle(project);
-
-  const setRecentProjectTooltipOpen = (nextOpen: boolean) => {
-    if (
-      nextOpen &&
-      (isScrolling || !isRecentProjectRowUnderPointer(buttonRef.current, pointerPointRef.current))
-    ) {
-      return;
-    }
-    setIsTooltipOpen(nextOpen);
-  };
-
-  useEffect(() => {
-    if (isScrolling) {
-      setIsTooltipOpen(false);
-    }
-  }, [ isScrolling ]);
-
   return (
-    <AppTooltip
-      content={project.remoteMachineName ? `${project.path} (${project.remoteMachineName})` : project.path}
-      onOpenChange={setRecentProjectTooltipOpen}
-      open={isTooltipOpen}
-    >
+    <AppTooltip content={project.path}>
       <button
         className="recent-projects-row group-head"
         data-context-menu-open={String(isContextMenuOpen)}
         onClick={() => onRestore(project.projectId)}
         onContextMenu={(event) => onContextMenu(event, project.projectId)}
-        onPointerLeave={() => setIsTooltipOpen(false)}
-        ref={buttonRef}
         type="button"
       >
-        {/*
-         * CDXC:RecentProjects 2026-06-14-15:45:
-         * Recent Project rows show their path tooltip only during a normal hover. Scrolling closes the current tooltip immediately and never reopens it from stale pointer state.
-         */}
         <span className="group-title-wrap">
           <span className="group-title-row">
             <span
@@ -6559,7 +6352,7 @@ function RecentProjectRow({
             </span>
             <span className="group-title-handle">
               <span className="recent-projects-row-title group-title section-titlebar-label">
-                {displayTitle}
+                {project.title}
               </span>
             </span>
             <span className="group-title-spacer" />
@@ -6576,12 +6369,96 @@ function RecentProjectRow({
   );
 }
 
-function formatRecentProjectTitle(project: SidebarRecentProject): string {
-  /*
-   * CDXC:RemoteRecentProjects 2026-06-24-10:36:
-   * Recent Projects should show remote closed projects beside local ones and append the owning machine name after the project name so identical remote/local project titles remain distinguishable.
-   */
-  return project.remoteMachineName ? `${project.title} (${project.remoteMachineName})` : project.title;
+function RecentProjectsSection({
+  contextMenuProjectId,
+  onContextMenu,
+  onRestore,
+  projects,
+}: {
+  contextMenuProjectId?: string;
+  onContextMenu: (event: ReactMouseEvent<HTMLElement>, projectId: string) => void;
+  onRestore: (projectId: string) => void;
+  projects: readonly SidebarRecentProject[];
+}) {
+  if (projects.length === 0) {
+    return null;
+  }
+  return (
+    <section aria-label="Recent Projects" className="recent-projects-section">
+      <div
+        className="reference-sidebar-section-row recent-projects-section-header"
+        data-reference-section="recent-projects"
+      >
+        <div className="reference-sidebar-section-heading recent-projects-section-heading">
+          <span className="reference-sidebar-section-title">Recent Projects</span>
+        </div>
+      </div>
+      <div className="recent-projects-section-list">
+        {projects.map((project) => (
+          <RecentProjectRow
+            isContextMenuOpen={contextMenuProjectId === project.projectId}
+            key={project.projectId}
+            onContextMenu={onContextMenu}
+            onRestore={onRestore}
+            project={project}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentProjectContextMenu({
+  onCopyPath,
+  onDismiss,
+  onOpenFolder,
+  onRemove,
+  position,
+  vscode,
+}: {
+  onCopyPath: (projectId: string) => void;
+  onDismiss: () => void;
+  onOpenFolder: (projectId: string) => void;
+  onRemove: (projectId: string) => void;
+  position: RecentProjectContextMenuPosition;
+  vscode: WebviewApi;
+}) {
+  return (
+    <SidebarContextMenuPortal
+      menuStyle={{ left: `${position.x}px`, top: `${position.y}px` }}
+      onDismiss={onDismiss}
+      vscode={vscode}
+    >
+      <button
+        className="session-context-menu-item"
+        onClick={() => onCopyPath(position.projectId)}
+        role="menuitem"
+        type="button"
+      >
+        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} />
+        Copy Path
+      </button>
+      <button
+        className="session-context-menu-item"
+        onClick={() => onOpenFolder(position.projectId)}
+        role="menuitem"
+        type="button"
+      >
+        <IconFolderOpen aria-hidden="true" className="session-context-menu-icon" size={14} />
+        Open Folder
+      </button>
+      <div className="session-context-menu-divider" role="separator" />
+      <button
+        className="session-context-menu-item session-context-menu-item-danger"
+        onClick={() => onRemove(position.projectId)}
+        role="menuitem"
+        type="button"
+      >
+        <IconTrash aria-hidden="true" className="session-context-menu-icon" size={14} />
+        Remove Project
+      </button>
+    </SidebarContextMenuPortal>
+  );
 }
 
 function createWorkspaceSessionIdsByGroup(

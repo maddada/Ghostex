@@ -68,6 +68,7 @@ pub enum Parser {
     BrowserOpen,
     AssertCard,
     WaitFor,
+    SidebarProjectCollectionsState,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -90,15 +91,14 @@ pub fn run_bridge_action(
     the caller did not pass one, exactly like the JS
     `payload.wait === true && flags.timeout === undefined` special case.
     */
-    let bridge_flags = if payload.get("wait") == Some(&Value::Bool(true))
-        && !parsed.flags.contains("timeout")
-    {
-        let mut flags = parsed.flags.clone();
-        flags.insert_text("timeout", "0");
-        flags
-    } else {
-        parsed.flags.clone()
-    };
+    let bridge_flags =
+        if payload.get("wait") == Some(&Value::Bool(true)) && !parsed.flags.contains("timeout") {
+            let mut flags = parsed.flags.clone();
+            flags.insert_text("timeout", "0");
+            flags
+        } else {
+            parsed.flags.clone()
+        };
     let result = send_gxserver_cli_action(action, &payload, &bridge_flags)?;
     /*
     CDXC:AndroidRemoteSessions 2026-05-17-14:24:
@@ -126,7 +126,10 @@ pub fn run_resolved_session_bridge_action(
     let payload = evaluate_parser(parser, &parsed.rest, &parsed.flags)?;
     let selector_value = selector::session_selector_from_args(&parsed.rest, &parsed.flags);
     let resolved_session = match selector_value {
-        Some(value) => Some(selector::resolve_cli_session_selector(&value, &parsed.flags)?),
+        Some(value) => Some(selector::resolve_cli_session_selector(
+            &value,
+            &parsed.flags,
+        )?),
         None => None,
     };
     /*
@@ -172,10 +175,20 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "state" | "dumpState" => sessions::fetch_gxserver_state(flags),
         "createQuickTerminal" => create_gxserver_quick_terminal(payload, flags),
         "createSession" => create_gxserver_session(payload, flags),
+        "createChatSession" => create_gxserver_chat_session(payload, flags),
         "createAgentSession" | "runAgent" => create_gxserver_agent_session(payload, flags),
         "saveCommand" => save_gxserver_command(payload, flags),
         "addProject" => rpc::call_gxserver_rpc("/api/addProjectPath", payload, flags),
         "removeProject" => rpc::call_gxserver_rpc("/api/removeProject", payload, flags),
+        "restoreRecentProject" => {
+            rpc::call_gxserver_rpc("/api/restoreRecentProject", payload, flags)
+        }
+        "readSidebarProjectCollections" => {
+            rpc::call_gxserver_rpc("/api/readSidebarProjectCollections", payload, flags)
+        }
+        "updateSidebarProjectCollections" => {
+            rpc::call_gxserver_rpc("/api/updateSidebarProjectCollections", payload, flags)
+        }
         "closeSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/killSession", &params, flags)
@@ -228,12 +241,23 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "sendKey" => send_gxserver_session_key(payload, flags),
         "renameCommand" => send_gxserver_rename_command(payload, flags),
         "sendMessage" => rpc::call_gxserver_rpc("/api/sendSessionMessage", payload, flags),
-        "assertSidebarCard" | "clickButton" | "focusGroup" | "fullReloadSession"
-        | "moveProject" | "moveSidebar" | "openBrowser" | "openBrowserPane" | "openPaths"
-        | "restartSession" | "runCommand" | "saveAgent" | "setViewMode" | "setVisibleCount"
-        | "switchProject" | "toggleSidebarCollapsed" | "waitFor" => {
-            dispatch_gxserver_renderer_command(action, payload, flags)
-        }
+        "assertSidebarCard"
+        | "clickButton"
+        | "focusGroup"
+        | "fullReloadSession"
+        | "moveProject"
+        | "moveSidebar"
+        | "openBrowser"
+        | "openBrowserPane"
+        | "openPaths"
+        | "restartSession"
+        | "runCommand"
+        | "saveAgent"
+        | "setViewMode"
+        | "setVisibleCount"
+        | "switchProject"
+        | "toggleSidebarCollapsed"
+        | "waitFor" => dispatch_gxserver_renderer_command(action, payload, flags),
         other => Err(rpc::unsupported_action_error(other)),
     }
 }
@@ -263,8 +287,7 @@ fn with_renderer_session_target(payload: &Value) -> Value {
     let Some(object) = payload.as_object() else {
         return payload.clone();
     };
-    if matches!(object.get("sessionTarget"), Some(value) if value.is_object() || value.is_array())
-    {
+    if matches!(object.get("sessionTarget"), Some(value) if value.is_object() || value.is_array()) {
         return payload.clone();
     }
     let project_id = string_or_empty(object.get("projectId")).trim().to_string();
@@ -348,7 +371,11 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
     let name = string_or_empty(payload.get("name")).trim().to_string();
     let command = string_or_empty(payload.get("command")).trim().to_string();
     let url = string_or_empty(payload.get("url")).trim().to_string();
-    let missing_primary = if action_type == "terminal" { command.is_empty() } else { url.is_empty() };
+    let missing_primary = if action_type == "terminal" {
+        command.is_empty()
+    } else {
+        url.is_empty()
+    };
     if command_id.is_empty() || name.is_empty() || missing_primary {
         return Err(CliError::Other(
             if action_type == "terminal" {
@@ -401,8 +428,10 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
     saved_command.insert("actionType".to_string(), json!(action_type));
     saved_command.insert(
         "closeTerminalOnExit".to_string(),
-        json!(action_type == "terminal"
-            && payload.get("closeTerminalOnExit") == Some(&Value::Bool(true))),
+        json!(
+            action_type == "terminal"
+                && payload.get("closeTerminalOnExit") == Some(&Value::Bool(true))
+        ),
     );
     saved_command.insert("commandId".to_string(), json!(command_id));
     if js_truthy(payload.get("icon")) {
@@ -413,13 +442,18 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
     }
     saved_command.insert(
         "isDefault".to_string(),
-        json!(matches!(command_id.as_str(), "dev" | "build" | "test" | "setup")),
+        json!(matches!(
+            command_id.as_str(),
+            "dev" | "build" | "test" | "setup"
+        )),
     );
     saved_command.insert("name".to_string(), json!(name));
     saved_command.insert(
         "playCompletionSound".to_string(),
-        json!(action_type == "terminal"
-            && payload.get("playCompletionSound") != Some(&Value::Bool(false))),
+        json!(
+            action_type == "terminal"
+                && payload.get("playCompletionSound") != Some(&Value::Bool(false))
+        ),
     );
     if action_type == "browser" {
         saved_command.insert("url".to_string(), json!(url));
@@ -428,15 +462,14 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
     }
     let saved_command = Value::Object(saved_command);
 
-    let has_existing = existing_commands
-        .iter()
-        .any(|candidate| candidate.get("commandId").and_then(Value::as_str) == Some(command_id.as_str()));
+    let has_existing = existing_commands.iter().any(|candidate| {
+        candidate.get("commandId").and_then(Value::as_str) == Some(command_id.as_str())
+    });
     let next_commands: Vec<Value> = if has_existing {
         existing_commands
             .iter()
             .map(|candidate| {
-                if candidate.get("commandId").and_then(Value::as_str) == Some(command_id.as_str())
-                {
+                if candidate.get("commandId").and_then(Value::as_str) == Some(command_id.as_str()) {
                     saved_command.clone()
                 } else {
                     candidate.clone()
@@ -527,6 +560,38 @@ fn create_gxserver_quick_terminal(payload: &Value, flags: &Flags) -> CliResult<V
     create_gxserver_session(&Value::Object(inner), flags)
 }
 
+fn create_gxserver_chat_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
+    /*
+    CDXC:MobileQuickSessions 2026-07-18:
+    Mobile Quick "+" must mirror the GPUI Quick header: create a fresh
+    projectless chat workspace through gxserver's createQuickProject, then
+    create the initial terminal session inside it through the ordinary
+    create-session path. gxserver stays the filesystem authority for
+    ~/ghostex/chats so mobile never derives chat storage paths itself.
+    */
+    let created_project = rpc::call_gxserver_rpc(
+        "/api/createQuickProject",
+        &json!({ "kind": "terminal" }),
+        flags,
+    )?;
+    let project_id = created_project
+        .get("project")
+        .and_then(|project| project.get("projectId"))
+        .filter(|value| !value.is_null())
+        .cloned();
+    let project_id = match project_id {
+        Some(value) => value,
+        None => {
+            return Err(CliError::Other(
+                "createQuickProject did not return a projectId.".to_string(),
+            ))
+        }
+    };
+    let mut inner = payload.as_object().cloned().unwrap_or_default();
+    inner.insert("projectId".to_string(), project_id);
+    create_gxserver_session(&Value::Object(inner), flags)
+}
+
 fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
     let project_id_value = payload
         .get("projectId")
@@ -604,7 +669,9 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
         None => String::new(),
     };
     if agent_id.is_empty() {
-        return Err(CliError::Other("create-agent requires an agent id.".to_string()));
+        return Err(CliError::Other(
+            "create-agent requires an agent id.".to_string(),
+        ));
     }
     /*
     CDXC:GxserverCliAgents 2026-06-19-15:55:
@@ -623,8 +690,7 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
         .map(FlagValue::as_json)
         .or_else(|| payload.get("title").cloned());
     set_or_remove(&mut params, "title", title);
-    let created =
-        rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
+    let created = rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
     start_created_session_provider(created, flags)
 }
 
@@ -657,15 +723,15 @@ fn start_created_session_provider(created: Value, flags: &Flags) -> CliResult<Va
 }
 
 fn ensure_gxserver_project_for_path(project_path: &str, flags: &Flags) -> CliResult<Value> {
-    let result =
-        rpc::call_gxserver_rpc("/api/addProjectPath", &json!({ "path": project_path }), flags)?;
+    let result = rpc::call_gxserver_rpc(
+        "/api/addProjectPath",
+        &json!({ "path": project_path }),
+        flags,
+    )?;
     Ok(result.get("project").cloned().unwrap_or(Value::Null))
 }
 
-fn normalize_required_project_id(
-    value: Option<Value>,
-    command_name: &str,
-) -> CliResult<String> {
+fn normalize_required_project_id(value: Option<Value>, command_name: &str) -> CliResult<String> {
     let project_id = match value {
         Some(value) if !value.is_null() => js_string(&value),
         _ => String::new(),
@@ -706,7 +772,11 @@ fn with_resolved_session_params(payload: &Value, flags: &Flags) -> Value {
         .filter(|value| !value.is_null())
         .cloned()
         .or_else(|| flags.0.get("projectId").map(FlagValue::as_json))
-        .or_else(|| global_parts.as_ref().map(|parts| Value::String(parts[1].clone())));
+        .or_else(|| {
+            global_parts
+                .as_ref()
+                .map(|parts| Value::String(parts[1].clone()))
+        });
     set_or_remove(&mut object, "projectId", project_id);
     let session_id = global_parts
         .as_ref()
@@ -730,8 +800,8 @@ fn with_resolved_gxserver_session_params(payload: &Value, flags: &Flags) -> CliR
     making every client learn project-scoped RPC payloads.
     */
     let session_id = js_string(params.get("sessionId").expect("truthy sessionId"));
-    let session = sessions::resolve_gxserver_inventory_session(&session_id, flags)?
-        .ok_or_else(|| {
+    let session =
+        sessions::resolve_gxserver_inventory_session(&session_id, flags)?.ok_or_else(|| {
             CliError::Other(format!(
                 "No gxserver session matched \"{}\".",
                 session_id.trim()
@@ -775,6 +845,9 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::BrowserOpen => parse_browser_open(rest, flags),
         Parser::AssertCard => Value::Object(parse_assert_card(rest, flags)),
         Parser::WaitFor => parse_wait_for(rest, flags),
+        Parser::SidebarProjectCollectionsState => {
+            parse_sidebar_project_collections_state(rest, flags)?
+        }
     })
 }
 
@@ -1003,7 +1076,10 @@ fn parse_session_boolean(name: &str, rest: &[String], flags: &Flags) -> Value {
         .get(name)
         .cloned()
         .or_else(|| flags.0.get("value").cloned())
-        .or_else(|| rest.get(positional_index).map(|text| FlagValue::Text(text.clone())))
+        .or_else(|| {
+            rest.get(positional_index)
+                .map(|text| FlagValue::Text(text.clone()))
+        })
         .unwrap_or_else(|| FlagValue::Text("true".to_string()));
     let mut map = parse_session_selector(rest, flags);
     map.insert(name.to_string(), Value::Bool(parse_boolean(&raw)));
@@ -1155,7 +1231,9 @@ fn parse_browser_open(rest: &[String], flags: &Flags) -> Value {
 
 fn parse_open_paths(rest: &[String], flags: &Flags) -> Value {
     let targets: Vec<Value> = if !rest.is_empty() {
-        rest.iter().map(|value| Value::String(value.clone())).collect()
+        rest.iter()
+            .map(|value| Value::String(value.clone()))
+            .collect()
     } else if flags.truthy("path") {
         vec![flags.0.get("path").expect("truthy path").as_json()]
     } else {
@@ -1173,13 +1251,17 @@ fn parse_open_paths(rest: &[String], flags: &Flags) -> Value {
 fn parse_edit_paths(rest: &[String], flags: &Flags) -> Value {
     let wait_consumed_target = flags.string_value("wait").map(str::to_string);
     let targets: Vec<Value> = if !rest.is_empty() {
-        rest.iter().map(|value| Value::String(value.clone())).collect()
+        rest.iter()
+            .map(|value| Value::String(value.clone()))
+            .collect()
     } else if flags.truthy("goto") {
         vec![flags.0.get("goto").expect("truthy goto").as_json()]
     } else if flags.truthy("path") {
         vec![flags.0.get("path").expect("truthy path").as_json()]
     } else if matches!(&wait_consumed_target, Some(target) if !target.is_empty()) {
-        vec![Value::String(wait_consumed_target.clone().expect("checked wait target"))]
+        vec![Value::String(
+            wait_consumed_target.clone().expect("checked wait target"),
+        )]
     } else {
         Vec::new()
     };
@@ -1265,7 +1347,9 @@ fn parse_vs_code_path_position(value: &str) -> (String, Option<i64>, Option<i64>
     let mut numbers: Vec<i64> = Vec::new();
     let mut current = value;
     for _ in 0..2 {
-        let Some(index) = current.rfind(':') else { break };
+        let Some(index) = current.rfind(':') else {
+            break;
+        };
         let (head, tail) = current.split_at(index);
         let digits = &tail[1..];
         if head.is_empty() || !is_positive_int(digits) {
@@ -1294,12 +1378,51 @@ fn parse_assert_card(rest: &[String], flags: &Flags) -> Map<String, Value> {
 fn parse_wait_for(rest: &[String], flags: &Flags) -> Value {
     let mut map = parse_assert_card(rest, flags);
     if flags.contains("intervalMs") {
-        map.insert("intervalMs".to_string(), flag_number_value(flags, "intervalMs"));
+        map.insert(
+            "intervalMs".to_string(),
+            flag_number_value(flags, "intervalMs"),
+        );
     }
     if flags.contains("timeoutMs") {
-        map.insert("timeoutMs".to_string(), flag_number_value(flags, "timeoutMs"));
+        map.insert(
+            "timeoutMs".to_string(),
+            flag_number_value(flags, "timeoutMs"),
+        );
     }
     Value::Object(map)
+}
+
+fn parse_sidebar_project_collections_state(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    /*
+    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    Mobile edits durable sidebar project collections by SSH-exec'ing `ghostex
+    update-sidebar-project-collections --state-json '<json>'` for a full
+    read-modify-write of the collections state. The CLI passes the whole state
+    through untouched; gxserver owns normalization (order authority, one
+    project per collection, limits) and the normalized result is printed back
+    for the client to adopt. `--state-json` mirrors automation-save's
+    `--definition-json` ergonomics; `--json` stays the CLI output flag.
+    */
+    let state_json = flag_json(flags, "stateJson")
+        .or_else(|| flag_json(flags, "state"))
+        .unwrap_or_else(|| Value::String(join_rest(rest, 0)));
+    let state_text = match state_json {
+        Value::String(text) => text,
+        _ => String::new(),
+    };
+    if state_text.trim().is_empty() {
+        return Err(CliError::Other(
+            "update-sidebar-project-collections requires --state-json '<json>' with the full collections state.".to_string(),
+        ));
+    }
+    let state: Value = serde_json::from_str(&state_text)
+        .map_err(|error| CliError::Other(format!("Invalid --state-json: {error}")))?;
+    if !state.is_object() {
+        return Err(CliError::Other(
+            "update-sidebar-project-collections --state-json must be a JSON object with collections, order, and nextCollectionNumber.".to_string(),
+        ));
+    }
+    Ok(json!({ "state": state }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,7 +1460,10 @@ fn join_rest(rest: &[String], skip: usize) -> String {
 /// Number(flags.key) rendered like JSON.stringify: NaN/Infinity → null,
 /// integral values without a decimal point.
 fn flag_number_value(flags: &Flags, key: &str) -> Value {
-    flags.number(key).map(js_number_to_value).unwrap_or(Value::Null)
+    flags
+        .number(key)
+        .map(js_number_to_value)
+        .unwrap_or(Value::Null)
 }
 
 fn js_number_to_value(number: f64) -> Value {
@@ -1372,7 +1498,9 @@ fn js_string(value: &Value) -> String {
         Value::Number(number) => number
             .as_f64()
             .map(|value| {
-                if value.is_finite() && value.fract() == 0.0 && value.abs() < 9.007_199_254_740_992e15
+                if value.is_finite()
+                    && value.fract() == 0.0
+                    && value.abs() < 9.007_199_254_740_992e15
                 {
                     (value as i64).to_string()
                 } else {
@@ -1383,7 +1511,13 @@ fn js_string(value: &Value) -> String {
         Value::String(text) => text.clone(),
         Value::Array(items) => items
             .iter()
-            .map(|item| if item.is_null() { String::new() } else { js_string(item) })
+            .map(|item| {
+                if item.is_null() {
+                    String::new()
+                } else {
+                    js_string(item)
+                }
+            })
             .collect::<Vec<String>>()
             .join(","),
         Value::Object(_) => "[object Object]".to_string(),
@@ -1475,7 +1609,15 @@ mod tests {
 
     #[test]
     fn create_session_payload_shape() {
-        let (rest, flags) = parsed(&["My Title", "run", "the", "tests", "--project-id", "P1", "--start"]);
+        let (rest, flags) = parsed(&[
+            "My Title",
+            "run",
+            "the",
+            "tests",
+            "--project-id",
+            "P1",
+            "--start",
+        ]);
         let payload = parse_create_session(&rest, &flags);
         assert_eq!(
             payload,
@@ -1556,11 +1698,17 @@ mod tests {
     fn send_text_selector_positional_split() {
         let (rest, flags) = parsed(&["G1abc", "hello", "world"]);
         let payload = parse_send_text(&rest, &flags);
-        assert_eq!(payload, json!({ "sessionId": "G1abc", "text": "hello world" }));
+        assert_eq!(
+            payload,
+            json!({ "sessionId": "G1abc", "text": "hello world" })
+        );
 
         let (rest, flags) = parsed(&["hello", "world", "--session-id", "G1abc"]);
         let payload = parse_send_text(&rest, &flags);
-        assert_eq!(payload, json!({ "sessionId": "G1abc", "text": "hello world" }));
+        assert_eq!(
+            payload,
+            json!({ "sessionId": "G1abc", "text": "hello world" })
+        );
     }
 
     #[test]
@@ -1592,12 +1740,18 @@ mod tests {
             parse_vs_code_path_position("file:0"),
             ("file:0".to_string(), None, None)
         );
-        assert_eq!(parse_vs_code_path_position(":12"), (":12".to_string(), None, None));
+        assert_eq!(
+            parse_vs_code_path_position(":12"),
+            (":12".to_string(), None, None)
+        );
         assert_eq!(
             parse_vs_code_path_position("a:12:5:7"),
             ("a:12".to_string(), Some(5), Some(7))
         );
-        assert_eq!(parse_vs_code_path_position(""), ("".to_string(), None, None));
+        assert_eq!(
+            parse_vs_code_path_position(""),
+            ("".to_string(), None, None)
+        );
     }
 
     #[cfg(unix)]
@@ -1622,7 +1776,10 @@ mod tests {
         let payload = parse_edit_paths(&rest, &flags);
         assert_eq!(payload.get("mode"), Some(&json!("edit")));
         assert_eq!(payload.get("wait"), Some(&json!(true)));
-        let targets = payload.get("targets").and_then(Value::as_array).expect("targets");
+        let targets = payload
+            .get("targets")
+            .and_then(Value::as_array)
+            .expect("targets");
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].get("raw"), Some(&json!("file.txt")));
         let token = targets[0]
@@ -1635,7 +1792,10 @@ mod tests {
         let (rest, flags) = parsed(&["file.txt"]);
         let payload = parse_edit_paths(&rest, &flags);
         assert_eq!(payload.get("wait"), Some(&json!(false)));
-        let targets = payload.get("targets").and_then(Value::as_array).expect("targets");
+        let targets = payload
+            .get("targets")
+            .and_then(Value::as_array)
+            .expect("targets");
         assert!(targets[0].get("waitToken").is_none());
     }
 
@@ -1644,14 +1804,14 @@ mod tests {
         let (rest, flags) = parsed(&["extra", "--", "npm", "run", "dev", "--title", "Dev"]);
         // "--" ends flag parsing, so everything after lands in rest untouched.
         let payload = parse_quick_terminal(&rest, &flags);
-        assert_eq!(payload.get("command"), Some(&json!("extra npm run dev --title Dev")));
+        assert_eq!(
+            payload.get("command"),
+            Some(&json!("extra npm run dev --title Dev"))
+        );
 
         let (rest, flags) = parsed(&["--title", "Dev", "--", "npm", "run", "dev"]);
         let payload = parse_quick_terminal(&rest, &flags);
-        assert_eq!(
-            payload,
-            json!({ "command": "npm run dev", "title": "Dev" })
-        );
+        assert_eq!(payload, json!({ "command": "npm run dev", "title": "Dev" }));
     }
 
     #[test]
@@ -1827,6 +1987,36 @@ mod tests {
             Value::Object(parse_session_selector(&rest, &flags)),
             json!({ "index": 2, "sessionNumber": null })
         );
+    }
+
+    #[test]
+    fn sidebar_project_collections_state_payload() {
+        let state = r#"{"collections":{"C1":{"collectionId":"C1","title":"Group 1","color":"transparent","collapsed":false,"projectIds":["P1"]}},"order":["C1"],"nextCollectionNumber":2}"#;
+        let (rest, flags) = parsed(&["--state-json", state]);
+        let payload =
+            parse_sidebar_project_collections_state(&rest, &flags).expect("valid state");
+        assert_eq!(
+            payload.get("state").and_then(|value| value.get("order")),
+            Some(&json!(["C1"]))
+        );
+
+        // Positional JSON fallback mirrors automation-save's rest.join(" ").
+        let (rest, flags) = parsed(&["{\"collections\":", "{}}"]);
+        let payload =
+            parse_sidebar_project_collections_state(&rest, &flags).expect("positional state");
+        assert_eq!(payload, json!({ "state": { "collections": {} } }));
+
+        // Missing state → error.
+        let (rest, flags) = parsed(&[]);
+        assert!(parse_sidebar_project_collections_state(&rest, &flags).is_err());
+
+        // Invalid JSON → error.
+        let (rest, flags) = parsed(&["--state-json", "{nope"]);
+        assert!(parse_sidebar_project_collections_state(&rest, &flags).is_err());
+
+        // Non-object JSON → error.
+        let (rest, flags) = parsed(&["--state-json", "\"text\""]);
+        assert!(parse_sidebar_project_collections_state(&rest, &flags).is_err());
     }
 
     #[test]

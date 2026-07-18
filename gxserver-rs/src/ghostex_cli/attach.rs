@@ -96,7 +96,10 @@ pub fn build_session_attach_command(session: &Value) -> Option<String> {
 }
 
 pub fn is_zmx_session(session: &Value) -> bool {
-    js_string_or_empty(session.get("provider")).trim().to_lowercase() == "zmx"
+    js_string_or_empty(session.get("provider"))
+        .trim()
+        .to_lowercase()
+        == "zmx"
 }
 
 pub fn should_create_missing_zmx_session_with_resume(session: &Value) -> bool {
@@ -126,7 +129,9 @@ fn build_zmx_attach_or_resume_command_with(
     shell: &CliShellLaunch,
     darwin: bool,
 ) -> String {
-    let session_name = js_display(session.get("providerSessionName")).trim().to_string();
+    let session_name = js_display(session.get("providerSessionName"))
+        .trim()
+        .to_string();
     let resume_command = js_display(session.get("resumeCommand")).trim().to_string();
     let resume_fallback_command = js_string_or_empty(session.get("resumeFallbackCommand"))
         .trim()
@@ -139,7 +144,11 @@ fn build_zmx_attach_or_resume_command_with(
     };
     let cwd = {
         let trimmed = cwd_raw.trim();
-        if trimmed.is_empty() { "." } else { trimmed }
+        if trimmed.is_empty() {
+            "."
+        } else {
+            trimmed
+        }
     };
     let keepalive_shell_assignment = if darwin {
         "zmx_keepalive_shell=${SHELL:-/bin/zsh}".to_string()
@@ -193,7 +202,10 @@ fn resolve_cli_interactive_shell_launch() -> CliShellLaunch {
 
 fn cli_interactive_shell_candidates() -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
-    let shell = std::env::var("SHELL").unwrap_or_default().trim().to_string();
+    let shell = std::env::var("SHELL")
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if !shell.is_empty() && is_supported_cli_posix_shell(&shell) {
         candidates.push(shell);
     }
@@ -275,7 +287,10 @@ fn shell_word(value: &str) -> String {
     let is_plain = !value.is_empty()
         && value.chars().all(|character| {
             character.is_ascii_alphanumeric()
-                || matches!(character, '_' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '-')
+                || matches!(
+                    character,
+                    '_' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '-'
+                )
         });
     if is_plain {
         value.to_string()
@@ -366,7 +381,11 @@ mod tests {
             "projectPath": "/tmp/p",
         });
         let command = build_session_attach_command(&session).unwrap();
-        assert!(command.starts_with("/bin/zsh -lc '") || command.contains(" -c '") || command.contains(" -lc '"));
+        assert!(
+            command.starts_with("/bin/zsh -lc '")
+                || command.contains(" -c '")
+                || command.contains(" -lc '")
+        );
         assert!(command.contains("zmx_session="));
     }
 

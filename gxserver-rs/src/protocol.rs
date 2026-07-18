@@ -372,6 +372,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/mutateSidebarHudSettings"
         | "/api/readWorkspaceSessionGroups"
         | "/api/updateWorkspaceSessionGroups"
+        | "/api/readSidebarProjectCollections"
+        | "/api/updateSidebarProjectCollections"
         | "/api/readAutomationState"
         | "/api/saveAutomation"
         | "/api/deleteAutomation"

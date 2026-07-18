@@ -44,6 +44,7 @@ const DEFAULT_TERMINAL_FONT_FAMILY: &str = "JetBrains Mono";
 const DEFAULT_TERMINAL_FONT_WEIGHT: f64 = 300.0;
 const NORMAL_TERMINAL_FONT_WEIGHT: f64 = 400.0;
 const DEFAULT_TERMINAL_GHOSTTY_THEME: &str = "GitHub Dark";
+const DEFAULT_TERMINAL_BACKGROUND_COLOR: &str = "#000000";
 const DEFAULT_TERMINAL_LETTER_SPACING: f64 = 0.0;
 const DEFAULT_TERMINAL_LINE_HEIGHT: f64 = 1.2;
 const DEFAULT_TERMINAL_CURSOR_STYLE_BLINK: bool = true;
@@ -259,6 +260,7 @@ pub struct SharedGpuiTerminalEngineSettings {
     pub font_size: f32,
     pub font_weight: f32,
     pub ghostty_theme: String,
+    pub terminal_background_rgb: Option<[u8; 3]>,
     pub letter_spacing: f32,
     pub line_height: f32,
     pub mouse_hide_while_typing: bool,
@@ -725,6 +727,11 @@ impl SharedSidebarSettingsSnapshot {
                 &self.object,
                 "terminalGhosttyTheme",
                 DEFAULT_TERMINAL_GHOSTTY_THEME,
+            )),
+            terminal_background_rgb: normalize_terminal_background_rgb(read_string_field(
+                &self.object,
+                "workspaceBackgroundColor",
+                DEFAULT_TERMINAL_BACKGROUND_COLOR,
             )),
             letter_spacing: read_finite_number_field(
                 &self.object,
@@ -1955,6 +1962,22 @@ fn normalize_ghostty_theme(value: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn normalize_terminal_background_rgb(value: &str) -> Option<[u8; 3]> {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case(DEFAULT_TERMINAL_BACKGROUND_COLOR) {
+        return None;
+    }
+    let hex = value.strip_prefix('#').unwrap_or(value);
+    if hex.len() != 6 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some([
+        u8::from_str_radix(&hex[0..2], 16).ok()?,
+        u8::from_str_radix(&hex[2..4], 16).ok()?,
+        u8::from_str_radix(&hex[4..6], 16).ok()?,
+    ])
 }
 
 fn normalize_ghostty_copy_on_select(value: &str) -> String {

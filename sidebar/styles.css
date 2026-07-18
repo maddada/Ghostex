@@ -134,8 +134,7 @@ button,
  * cause remains unresolved. Keep this scoped to search inputs so other sidebar
  * text-editing controls can keep their existing behavior.
  */
-.session-search-input,
-.recent-projects-search input {
+.session-search-input {
   cursor: default !important;
 }
 

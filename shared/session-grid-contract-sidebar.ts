@@ -28,6 +28,7 @@ import type { SidebarSessionTag } from "./session-tags";
 import type {
   GxserverPortlessPresentation,
   GxserverPortlessStatus,
+  GxserverSidebarProjectCollectionsState,
 } from "./gxserver-protocol";
 import type {
   NativePortlessAdminAction,
@@ -721,6 +722,18 @@ export type SidebarGroupsChangedMessage = {
   type: "sidebarGroupsChanged";
 };
 
+export type SidebarProjectCollectionsChangedMessage = {
+  /*
+  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  gxserver owns the shared colored "Group N" project-collection overlay so
+  iOS/Android edit the same grouped project list. Hosts forward the normalized
+  wire state (snapshot field, live event, or update ack) to SidebarApp, which
+  reconciles it into its localStorage-backed instant-edit state.
+  */
+  sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
+  type: "sidebarProjectCollectionsChanged";
+};
+
 export type SidebarHudChangedMessage = {
   hud: SidebarHudState;
   revision: number;
@@ -1047,6 +1060,7 @@ export type ExtensionToSidebarMessage =
   | AgentsHubFileContentMessage
   | SidebarSessionPresentationChangedMessage
   | SidebarGroupsChangedMessage
+  | SidebarProjectCollectionsChangedMessage
   | SidebarHudChangedMessage
   | SidebarPlayCompletionSoundMessage
   | SidebarOrderSyncResultMessage
@@ -2108,6 +2122,17 @@ export type SidebarToExtensionMessage =
   | {
       type: "syncGroupOrder";
       groupIds: string[];
+    }
+  | {
+      /*
+      CDXC:SidebarProjectCollections 2026-07-18-00:00:
+      SidebarApp write-through-syncs its whole project-collection overlay after
+      each local edit. The host debounces and pushes the wire state to
+      gxserver's /api/updateSidebarProjectCollections; only bounded metadata
+      (ids, titles, colors, collapsed flags, ordering) crosses this message.
+      */
+      state: GxserverSidebarProjectCollectionsState;
+      type: "updateSidebarProjectCollections";
     }
   | {
       /*

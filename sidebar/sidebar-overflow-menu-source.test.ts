@@ -7,26 +7,14 @@ const groupPanelsCssSource = readFileSync(
   "utf8",
 );
 
-function sourceBetween(source: string, start: string, end: string): string {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  expect(startIndex).toBeGreaterThanOrEqual(0);
-  expect(endIndex).toBeGreaterThan(startIndex);
-  return source.slice(startIndex, endIndex);
-}
-
-describe("sidebar settings menu source", () => {
-  test("moves the Commands Pane launcher onto Recent Projects", () => {
-    const recentProjectsSource = sourceBetween(
-      sidebarAppSource,
-      'aria-label="Recent Projects"',
-      '<GitCommitModal',
-    );
-    expect(recentProjectsSource).toContain("reference-sidebar-commands-pane-action");
-    expect(recentProjectsSource).toContain("createFullWidthTerminalPane();");
-    expect(groupPanelsCssSource).toContain(".reference-sidebar-commands-pane-action");
-    expect(groupPanelsCssSource).toContain("pointer-events: auto;");
-    expect(groupPanelsCssSource).toContain("cannot fall through to the drawer toggle");
+describe("sidebar recent projects source", () => {
+  test("renders plain machine-scoped sections without the legacy drawer", () => {
+    expect(sidebarAppSource).toContain("function RecentProjectsSection(");
+    expect(sidebarAppSource).toContain("recentProjectsByMachine.remoteByMachineId.get(machine.id)");
+    expect(sidebarAppSource).not.toContain("recent-projects-drawer");
+    expect(sidebarAppSource).not.toContain("Search recent projects");
+    expect(groupPanelsCssSource).toContain(".recent-projects-section");
+    expect(groupPanelsCssSource).not.toContain(".recent-projects-drawer");
     expect(sidebarAppSource).not.toContain("function SidebarReferenceSettingsButton(");
   });
 });

@@ -10,92 +10,35 @@
   width: calc(100% + (24px * var(--sidebar-density-scale)));
 }
 
-.recent-projects-drawer {
-  --sidebar-session-column-offset: calc(18px * var(--sidebar-density-scale));
-  /*
-   * CDXC:RecentProjects 2026-05-05-04:37
-   * Recent Projects uses the same header geometry as Combined project groups:
-   * no bottom drawer padding, no aggregate count in the section header, and
-   * project rows that read like active project headers with a persistent
-   * right-side circular session count.
-   */
-  border-top: 1px solid color-mix(in srgb, var(--app-border) 56%, transparent);
+.recent-projects-section {
   display: grid;
-  gap: calc(6px * var(--sidebar-density-scale));
-  justify-items: center;
-  margin-left: calc(-12px * var(--sidebar-density-scale));
-  margin-right: calc(-12px * var(--sidebar-density-scale));
-  padding: calc(6px * var(--sidebar-density-scale)) 0 0;
-  position: relative;
+  gap: 0;
+  min-width: 0;
 }
 
-.recent-projects-drawer-toggle.group-head,
+.recent-projects-section-heading {
+  cursor: default;
+}
+
+.recent-projects-section-list {
+  display: grid;
+  gap: calc(2px * var(--sidebar-density-scale));
+  min-width: 0;
+}
+
 .recent-projects-row.group-head {
   background: transparent;
   border: none;
   color: color-mix(in srgb, var(--app-foreground) 74%, var(--app-muted) 26%);
   cursor: pointer;
-  display: block;
-  justify-self: center;
-  max-width: calc(100% - var(--sidebar-session-column-offset));
   min-width: 0;
   text-align: left;
-  width: calc(100% - var(--sidebar-session-column-offset));
+  width: 100%;
 }
 
-.recent-projects-drawer-toggle.group-head:focus-visible,
 .recent-projects-row.group-head:focus-visible {
   color: var(--app-foreground);
   outline: none;
-}
-
-.recent-projects-drawer-title,
-.recent-projects-row-title {
-  letter-spacing: 0.12em;
-}
-
-.recent-projects-drawer-body {
-  display: grid;
-  gap: calc(8px * var(--sidebar-density-scale));
-  justify-items: center;
-  width: 100%;
-}
-
-.recent-projects-search:not(.session-search-input-shell) {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-foreground) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
-  border-radius: 0;
-  color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
-  display: flex;
-  gap: calc(7px * var(--sidebar-density-scale));
-  min-width: 0;
-  padding: calc(5px * var(--sidebar-density-scale)) calc(7px * var(--sidebar-density-scale));
-}
-
-.recent-projects-search:not(.session-search-input-shell):focus-within {
-  border-color: color-mix(in srgb, var(--app-button-background) 46%, var(--app-border));
-}
-
-.recent-projects-search:not(.session-search-input-shell) input {
-  background: transparent;
-  border: none;
-  color: var(--app-foreground);
-  flex: 1 1 auto;
-  font: inherit;
-  font-size: calc(12px * var(--sidebar-density-scale));
-  min-width: 0;
-  outline: none;
-  padding: 0;
-}
-
-.recent-projects-list {
-  display: grid;
-  gap: calc(2px * var(--sidebar-density-scale));
-  justify-items: center;
-  max-height: min(220px, 35vh);
-  overflow: hidden auto;
-  width: 100%;
 }
 
 .recent-projects-row-icon {
@@ -111,11 +54,6 @@
   visibility: visible;
 }
 
-.recent-projects-empty {
-  color: color-mix(in srgb, var(--app-foreground) 52%, transparent);
-  font-size: calc(12px * var(--sidebar-density-scale));
-  padding: calc(8px * var(--sidebar-density-scale)) calc(6px * var(--sidebar-density-scale));
-}
 
 .session-groups-top {
   display: grid;
@@ -595,14 +533,12 @@
 
 /* CDXC:SidebarReference 2026-05-08-01:10: Combined mode must copy the
    provided app sidebar: a dark full-height rail, top window/navigation chrome,
-   hidden legacy grids via display:none, section labels, and a persistent
-   bottom Recent Projects drawer.
+   hidden legacy grids via display:none and section labels.
    CDXC:SidebarReference 2026-05-08-01:28: Reference sizing follows the
    measured sidebar button geometry: a 298px viewport gives 7px side margins
    and 284x34px primary rows with compact 12px icons.
    CDXC:SidebarReference 2026-05-08-01:41: Plain/default reference mode uses
-   the requested dark reference color as the sidebar background, keeps Recent Projects in the bottom
-   drawer, and exposes collapsible Chats/Projects section headers with project
+   the requested dark reference color as the sidebar background and exposes collapsible Chats/Projects section headers with project
    management actions on hover.
    CDXC:SidebarReference 2026-05-08-02:21: The reference background must fill
    the whole native sidebar viewport, including parent shell/main surfaces that
@@ -621,9 +557,8 @@
    CDXC:SidebarReference 2026-05-08-02:56: Project bulk controls are icon-only
    buttons; Collapse All uses arrows-diagonal-2, and Expand Previous uses
    arrows-diagonal-minimize.
-   CDXC:SidebarSearch 2026-05-08-11:49: The top sidebar search field must use
-   the same color surface as the Recent Projects search field, replace the
-   Search nav row while active, animate the row swap, close on Escape or empty
+   CDXC:SidebarSearch 2026-05-08-11:49: The top sidebar search field replaces the
+   Search nav row while active, animates the row swap, closes on Escape or empty
    focus-away, and sit 6px from the left sidebar edge and 7px from the right.
    CDXC:SidebarResizeHandle 2026-05-31-15:13:
    Do not correct the right-edge sidebar gap by over-bleeding button boxes or
@@ -1022,8 +957,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
   min-width: 0;
 }
 
-.reference-sidebar-nav-button,
-.reference-sidebar-project-row {
+.reference-sidebar-nav-button {
   background: transparent;
   border: none;
   border-radius: 0;
@@ -1249,8 +1183,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
  *
  * CDXC:SidebarReference 2026-05-15-15:36:
  * Primary sidebar labels must keep their descenders visible in the 34px rows.
- * Use an 18px text line box instead of clipping labels to 14px, which cuts off
- * Search and Recent Projects at the bottom.
+ * Use an 18px text line box instead of clipping labels to 14px.
  *
  * CDXC:SidebarTopChrome 2026-07-04-17:26:
  * Search history controls moved into More, so shared hover-action padding only
@@ -1278,11 +1211,8 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
  * action is visible so hidden secondary controls do not shorten the primary
  * title unnecessarily.
  *
- * CDXC:CommandsPanel 2026-06-18-23:28:
- * Recent Projects owns the matching secondary Commands Pane action after the sidebar Settings footer was removed. Reserve row padding only while the hover icon is visible so the Recent Projects label uses the full row at rest.
- *
  * CDXC:SidebarReferenceBounds 2026-05-31-15:38:
- * Hover child buttons for More, Previous Sessions, and Commands Pane should sit
+ * Hover child buttons for More and Previous Sessions should sit
  * 5px farther left from the sidebar edge while their parent rows still occupy
  * the full button width.
  */
@@ -1304,15 +1234,6 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
     background-color 120ms ease,
     opacity 120ms ease;
   width: 26px;
-}
-
-.reference-sidebar-commands-pane-action {
-  /*
-   * CDXC:CommandsPanel 2026-06-19-00:22:
-   * The Recent Projects header is itself a full-width button. Keep the Commands Pane hover action on a higher stacking layer and pointer-active even while transparent so clicking the right-side icon area cannot fall through to the drawer toggle.
-   */
-  pointer-events: auto;
-  z-index: 2;
 }
 
 .reference-sidebar-nav-item:hover .reference-sidebar-hover-action,
@@ -1414,8 +1335,8 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
  * CDXC:SidebarTooltips 2026-06-25-15:48:
  * Sidebar action labels now render through SidebarFixedTooltipButton's fixed
  * document-body popup instead of CSS pseudo-elements. Keep the trigger classes
- * for hover-action layout, but suppress pseudo labels so scroll viewports,
- * masks, and the Recent Projects footer cannot clip or duplicate tooltips.
+ * for hover-action layout, but suppress pseudo labels so scroll viewports and
+ * masks cannot clip or duplicate tooltips.
  */
 .reference-sidebar-section-action.reference-sidebar-hover-action-tooltip {
   position: relative;
@@ -1486,10 +1407,6 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 
 .reference-sidebar-nav-button:hover,
 .reference-sidebar-nav-button:focus-visible,
-.recent-projects-drawer-toggle.group-head:hover,
-.recent-projects-drawer-toggle.group-head:focus-visible,
-.reference-sidebar-project-row:hover,
-.reference-sidebar-project-row:focus-visible,
 .reference-sidebar-section-action:hover,
 .reference-sidebar-section-action:focus-visible {
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
@@ -1513,13 +1430,8 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"] .stack {
-  /*
-   * CDXC:SidebarReferenceScroll 2026-05-24-14:05:
-   * Reference sidebar session rows must not scroll under the Recent Projects drawer.
-   * Give the drawer its own grid row so the session viewport measures only the space that remains above it.
-   */
   flex: 1 1 auto;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   height: auto;
   min-height: 0;
 }
@@ -1568,8 +1480,8 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
    *
    * CDXC:SidebarSearch 2026-06-19-13:52:
    * The top Search row no longer uses this boxed toolbar while active. Keep
-   * this sizing for other shared SidebarSessionSearchField surfaces, such as
-   * Recent Projects, that still intentionally render as boxes.
+   * this sizing for other shared SidebarSessionSearchField surfaces that still
+   * intentionally render as boxes.
    */
   justify-self: start;
   width: calc(100% - 5px);
@@ -1877,33 +1789,8 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   visibility: visible;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-body {
-  /*
-   * CDXC:RecentProjects 2026-06-14-15:30:
-   * Recent Projects expansion should animate the drawer's real grid row instead of a 2000px max-height sentinel. The sentinel made the body reach its measured height almost immediately, which read as a jump when opening the drawer.
-   */
-  max-height: none;
-  min-height: 0;
-  opacity: 1;
-  overflow: hidden;
-  pointer-events: auto;
-  transform: translateY(0);
-  transition:
-    opacity 150ms ease,
-    transform 180ms ease,
-    visibility 0s linear 0s;
-  visibility: visible;
-}
-
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="true"] {
-  /*
-   * CDXC:SidebarScroll 2026-05-21-12:32:
-   * When both Quick and Projects are collapsed, their hidden child rows must
-   * not keep inflating the session-groups scrollHeight. Clip collapsed section
-   * bodies so the two visible section headers fit without creating a fake
-   * scroll range that can hide them.
-   */
   max-height: 0;
   opacity: 0;
   overflow: hidden;
@@ -1918,93 +1805,41 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="true"] {
-  max-height: none;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 120ms ease,
-    transform 150ms ease,
-    visibility 0s linear 210ms;
-  visibility: hidden;
-}
-
-/*
- * CDXC:SidebarSessions 2026-05-17-00:11:
- * Reference sidebar project/session rows should only run child entrance motion
- * during an explicit section expand. Normal session open/close updates keep
- * expanded sections mounted and must not replay the loading-in animation.
- */
-.sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > *,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  > *,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > * {
   animation: reference-sidebar-child-fade-in 220ms ease both;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > :nth-child(1),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  > :nth-child(1),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > :nth-child(1) {
   animation-delay: 20ms;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > :nth-child(2),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  > :nth-child(2),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > :nth-child(2) {
   animation-delay: 50ms;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > :nth-child(3),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > :nth-child(3) {
   animation-delay: 80ms;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > :nth-child(4),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > :nth-child(4) {
   animation-delay: 110ms;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
-  > :nth-child(n + 5),
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-body[data-collapsed="false"]
-  .recent-projects-list
   > :nth-child(n + 5) {
   animation-delay: 140ms;
 }
+
 
 @keyframes reference-sidebar-child-fade-in {
   from {
@@ -2160,93 +1995,31 @@ manual mode visibly selected without adding text to the section row.
   transform: rotate(90deg);
 }
 
-.reference-sidebar-recent-project-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
+.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section {
+  margin-top: 6px;
 }
 
-.reference-sidebar-project-row {
-  align-items: center;
-  display: grid;
-  font-size: 15px;
-  font-weight: 500;
-  gap: 12px;
-  grid-template-columns: 17px minmax(0, 1fr) minmax(max-content, 44px);
-  min-height: 34px;
-  padding: 0;
-  text-align: left;
+.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-remote-machine-section
+  .recent-projects-section {
+  margin-top: 4px;
 }
 
-.reference-sidebar-project-row-icon {
-  color: #a6adb6;
+.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-header {
+  margin-bottom: 1px;
 }
 
-.reference-sidebar-project-row-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reference-sidebar-project-row-time {
+.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-heading {
   color: var(--app-muted);
-  font-variant-numeric: tabular-nums;
-  min-width: max-content;
-  overflow: visible;
-  text-align: right;
-  white-space: nowrap;
+  min-height: 28px;
+  pointer-events: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer {
-  border-top: 0;
-  flex: none;
-  gap: 6px;
-  grid-template-rows: auto minmax(0, 1fr);
-  /*
-   * CDXC:RecentProjects 2026-06-16-01:43:
-   * The footer gap above the closed Recent Projects row should be 12px shorter
-   * so the session/project scroll viewport can use more of the bottom sidebar.
-   * Keep the row hit target unchanged; only reduce the spacer before it.
-   */
-  margin: 6px -5px 0;
-  padding: 0;
-  transition:
-    gap 220ms ease,
-    grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding-bottom 220ms ease;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer[data-open="true"] {
-  /*
-   * CDXC:RecentProjects 2026-06-22-03:27:
-   * The macOS Recent Projects area should not draw a bottom divider under the
-   * restored project rows. Keep the expanded spacing but let the drawer merge
-   * cleanly into the sidebar chrome.
-   */
-  padding-bottom: 8px;
-}
-
-/*
- * CDXC:SidebarReference 2026-05-10-12:14:
- * The closed Recent Projects drawer should collapse its body row so the bottom drawer does not reserve extra vertical space while it is closed.
- *
- * CDXC:SidebarReference 2026-05-15-15:36:
- * Recent Projects uses the same visual row height as the removed Settings footer, so its title also needs an unclipped 18px text line box instead of a fixed 14px title row.
- */
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer[data-open="false"] {
+.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-list {
   gap: 0;
-  grid-template-rows: auto minmax(0, 0fr);
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-header {
-  justify-self: start;
-  margin-left: calc(5px - var(--reference-sidebar-footer-edge-bleed-left));
-  min-width: 0;
-  width: calc(100% + var(--reference-sidebar-edge-bleed-right));
-}
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-toggle.group-head,
 .sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row.group-head {
   border-radius: 0;
   box-sizing: border-box;
@@ -2257,47 +2030,7 @@ manual mode visibly selected without adding text to the section row.
   width: 100%;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-toggle.group-head {
-  /*
-   * CDXC:RecentProjects 2026-05-31-15:38:
-   * Recent Projects had a smaller left gap than main sidebar rows. Bleed the
-   * header by the footer edge amount and compensate its padding so its icon/text
-   * stay aligned while the button surface starts at the sidebar edge.
-   */
-  justify-self: start;
-  margin-left: 0;
-  max-width: none;
-  padding-left: calc(10px + var(--reference-sidebar-footer-edge-bleed-left));
-  padding-right: calc(10px + var(--reference-sidebar-edge-bleed-right) - 5px);
-  width: 100%;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-header:has(.reference-sidebar-commands-pane-action):is(:hover, :focus-within)
-  .recent-projects-drawer-toggle.group-head {
-  /*
-   * CDXC:CommandsPanel 2026-06-18-23:28:
-   * The Recent Projects row hosts the Commands Pane hover action. Add temporary right padding only while the action is visible so the header text does not sit beneath the terminal icon.
-   */
-  padding-right: calc(47px + var(--reference-sidebar-edge-bleed-right) - 5px);
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-toggle.group-head {
-  align-items: center;
-  color: var(--app-foreground);
-  display: flex;
-  font-size: 15.55px;
-  font-weight: 300;
-  height: 34px;
-  line-height: 18px;
-  min-height: 34px;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-title,
 .sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row-title,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle.group-head
-  .recent-projects-drawer-title.group-title,
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .recent-projects-row.group-head
   .recent-projects-row-title.group-title {
@@ -2309,150 +2042,6 @@ manual mode visibly selected without adding text to the section row.
   text-transform: none;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  .group-collapse-button {
-  color: inherit;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  .group-title-row {
-  gap: 11px;
-  min-height: 18px;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  .group-collapse-button {
-  border: 0;
-  height: 15px;
-  padding: 0;
-  right: auto;
-  top: auto;
-  width: 15px;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  .section-titlebar-toggle-icon,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  .group-collapse-icon,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-drawer-toggle
-  svg {
-  height: 15px;
-  width: 15px;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-drawer-body {
-  gap: 8px;
-  justify-items: center;
-  padding-left: 6px;
-  /*
-   * CDXC:RecentProjects 2026-05-31-16:37:
-   * Keep the expanded drawer content's left edge fixed, but give the search
-   * box and child recent-project buttons 5px more right-side gap.
-   */
-  padding-right: 12px;
-  box-sizing: border-box;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-search.session-search-input-shell {
-  /*
-   * CDXC:RecentProjects 2026-06-04-22:29:
-   * The Recent Projects search box should be 5px wider on its left side only.
-   * Keep the drawer body's right edge and project row geometry unchanged by
-   * expanding the shared search shell left with a negative margin.
-   *
-   * CDXC:RecentProjects 2026-06-09-18:46:
-   * The "Search projects" box should now shrink by 17px from its current left side only. Replace the prior 5px left expansion with a 12px left inset and reduce the shell width by the same 12px so the right edge remains fixed.
-   */
-  justify-self: center;
-  margin-left: 12px;
-  width: calc(100% - 12px);
-}
-
-/*
- * CDXC:SidebarSearch 2026-05-08-11:54
- * Recent Projects search must visually match the active top Search sessions
- * field: same box metrics, right-side icon, typography, placeholder color, and
- * focus border.
- *
- * CDXC:SidebarSearch 2026-05-15-18:13:
- * The drawer now shares Search sessions classes in markup, so the old explicit
- * Recent Projects field styling only applies to legacy non-shared markup.
- */
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-search:not(.session-search-input-shell) {
-  background: color-mix(in srgb, var(--app-foreground) 5%, transparent);
-  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
-  border-radius: 0;
-  box-sizing: border-box;
-  color: var(--app-foreground);
-  display: grid;
-  gap: 0;
-  height: 32px;
-  min-height: 32px;
-  padding: 0;
-  position: relative;
-  width: 100%;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-search:not(.session-search-input-shell):focus-within {
-  border-color: color-mix(in srgb, var(--app-button-background) 46%, var(--app-border));
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-search:not(.session-search-input-shell)
-  input {
-  background: transparent;
-  border: none;
-  box-sizing: border-box;
-  color: var(--app-foreground);
-  font-size: 13px;
-  font-weight: 400;
-  height: 32px;
-  letter-spacing: 0;
-  line-height: 1.3;
-  min-width: 0;
-  outline: none;
-  padding: 0 34px 0 10px;
-  width: 100%;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .recent-projects-search:not(.session-search-input-shell)
-  input::placeholder {
-  color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-search-icon {
-  color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
-  pointer-events: none;
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-list {
-  /*
-   * CDXC:ScrollFades 2026-06-19-14:16:
-   * Recent Projects is a real scroll surface when the parked project list is
-   * long. Use the shared Codex-style scroll-container fade instead of a hard
-   * clipped edge so it matches the main sidebar session list.
-   */
-  --edge-fade-distance: calc(14px * var(--sidebar-density-scale));
-  gap: 0;
-  max-height: min(230px, 36vh);
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
 
 .sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row.group-head {
   align-items: center;

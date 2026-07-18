@@ -32,6 +32,8 @@ jobs:
           fetch-depth: 0
           submodules: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
       - name: Install native build dependencies
         run: |
           sudo apt-get update

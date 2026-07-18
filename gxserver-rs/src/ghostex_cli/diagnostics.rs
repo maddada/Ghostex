@@ -32,7 +32,9 @@ fn gxserver_log_path() -> PathBuf {
 }
 
 fn shared_settings_path() -> PathBuf {
-    ghostex_home().join("state").join("native-sidebar-settings.json")
+    ghostex_home()
+        .join("state")
+        .join("native-sidebar-settings.json")
 }
 
 /// String(value) for the JS values these commands interpolate into messages.
@@ -279,7 +281,10 @@ pub fn logs_command(args: &[String]) -> CliResult<()> {
             let mut merged = result.as_object().cloned().unwrap_or_default();
             merged.insert("entries".to_string(), Value::Array(filtered));
             merged.insert("ok".to_string(), Value::Bool(true));
-            merged.insert("source".to_string(), Value::String("gxserver-api".to_string()));
+            merged.insert(
+                "source".to_string(),
+                Value::String("gxserver-api".to_string()),
+            );
             print_json(&Value::Object(merged));
             return Ok(());
         }
@@ -294,7 +299,9 @@ pub fn logs_command(args: &[String]) -> CliResult<()> {
         Err(error) => return Err(error),
     }
 
-    let file = flags.text("file").unwrap_or_else(|| "gxserver.jsonl".to_string());
+    let file = flags
+        .text("file")
+        .unwrap_or_else(|| "gxserver.jsonl".to_string());
     let log_path = if Path::new(&file).is_absolute() {
         PathBuf::from(&file)
     } else if file == "gxserver.jsonl" {
@@ -424,7 +431,9 @@ pub fn run_android_readiness_check(flags: &Flags) -> Value {
         }
         return Value::Object(failure);
     }
-    let zmx_path = zmx_tool.and_then(|tool| tool.get("executablePath")).cloned();
+    let zmx_path = zmx_tool
+        .and_then(|tool| tool.get("executablePath"))
+        .cloned();
 
     let result = actions::send_gxserver_cli_action("listSessions", &json!({}), flags)
         .unwrap_or_else(|error| json!({ "error": error.to_string(), "ok": false }));
@@ -571,7 +580,10 @@ mod tests {
         // --grep is a plain substring filter.
         let grep = filter_log_lines(text, &flags_of(&["--grep", "beta"]));
         assert_eq!(grep.len(), 2);
-        let both = filter_log_lines(text, &flags_of(&["--since", "2026-07-03", "--grep", "beta"]));
+        let both = filter_log_lines(
+            text,
+            &flags_of(&["--since", "2026-07-03", "--grep", "beta"]),
+        );
         assert_eq!(both, vec!["[2026-07-03T00:00:00Z] gamma beta"]);
     }
 
@@ -589,7 +601,10 @@ mod tests {
     #[test]
     fn number_flag_or_preserves_nan_for_unparseable_values() {
         assert_eq!(number_flag_or(&flags_of(&[]), "lines", 200.0), 200.0);
-        assert_eq!(number_flag_or(&flags_of(&["--lines", "40"]), "lines", 200.0), 40.0);
+        assert_eq!(
+            number_flag_or(&flags_of(&["--lines", "40"]), "lines", 200.0),
+            40.0
+        );
         assert!(number_flag_or(&flags_of(&["--lines", "abc"]), "lines", 200.0).is_nan());
     }
 

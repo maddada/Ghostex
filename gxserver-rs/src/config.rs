@@ -1,4 +1,4 @@
-use std::{env, fs, io};
+use std::{env, fs, io, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
@@ -17,6 +17,13 @@ pub struct CorsConfig {
     pub allowed_origins: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dist_dir: Option<PathBuf>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GxserverConfig {
@@ -24,6 +31,7 @@ pub struct GxserverConfig {
     pub created_at: String,
     pub listeners: ListenersConfig,
     pub product: String,
+    pub web: WebConfig,
 }
 
 const DEFAULT_CORS_ALLOWED_ORIGINS: &[&str] = &[
@@ -61,6 +69,7 @@ pub fn create_default_gxserver_config() -> Result<GxserverConfig> {
             remote: ListenerConfig::remote_default(),
         },
         product: GXSERVER_PRODUCT.to_string(),
+        web: WebConfig::default(),
     })
 }
 
@@ -145,6 +154,15 @@ fn merge_gxserver_config(value: serde_json::Value) -> Result<GxserverConfig> {
             .to_string(),
         listeners: defaults.listeners,
         product: GXSERVER_PRODUCT.to_string(),
+        web: WebConfig {
+            dist_dir: value
+                .get("web")
+                .and_then(|web| web.get("distDir"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+        },
     })
 }
 

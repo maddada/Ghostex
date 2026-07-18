@@ -4,6 +4,7 @@ type GhostexGpuiWorkareaApi = {
   postProjectBeadsRequest?: (payload: string) => boolean;
   postProjectBoardImageRequest?: (payload: string) => boolean;
   postProjectBoardRequest?: (payload: string) => boolean;
+  supportsManageFileChangePolling?: boolean;
 };
 
 type GhostexGpuiWorkareaWindow = Window & {
@@ -61,5 +62,8 @@ export function installKanbanCefBridge(): void {
 }
 
 export function installManageCefBridge(): void {
+  const target = window as GhostexGpuiWorkareaWindow;
+  target.ghostexGpui = target.ghostexGpui ?? {};
+  target.ghostexGpui.supportsManageFileChangePolling = true;
   installMessageHandler("ghostexManageFiles", "postManageFilesRequest");
 }

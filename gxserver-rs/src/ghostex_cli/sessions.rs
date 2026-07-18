@@ -263,7 +263,9 @@ pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
         .to_string();
     let project_id = normalize_required_project_id(flags.text("projectId"), "run-action")?;
     if command_id.is_empty() {
-        return Err(CliError::Other("run-action requires a command id.".to_string()));
+        return Err(CliError::Other(
+            "run-action requires a command id.".to_string(),
+        ));
     }
     let hud = call_gxserver_rpc(
         "/api/readSidebarHud",
@@ -327,7 +329,9 @@ pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
             return Ok(());
         }
     };
-    let session_id = created.get("session").and_then(|session| session.get("sessionId"));
+    let session_id = created
+        .get("session")
+        .and_then(|session| session.get("sessionId"));
     if is_failed_cli_result(&created) || !js_truthy(session_id) {
         print_json(&json!({
             "actionType": "terminal",
@@ -393,6 +397,8 @@ pub fn fetch_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
 
 fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     let projects_response = call_gxserver_rpc("/api/listProjects", &json!({}), flags)?;
+    let recent_projects_response =
+        call_gxserver_rpc("/api/listRecentProjects", &json!({}), flags)?;
     let sessions_response = call_gxserver_rpc("/api/listSessions", &json!({}), flags)?;
     let presentation_response =
         call_gxserver_rpc("/api/readPresentationSnapshot", &json!({}), flags)?;
@@ -457,7 +463,19 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     result.insert("product".to_string(), json!(GXSERVER_PRODUCT));
     result.insert(
         "projects".to_string(),
-        Value::Array(active_projects.iter().map(|project| (*project).clone()).collect()),
+        Value::Array(
+            active_projects
+                .iter()
+                .map(|project| (*project).clone())
+                .collect(),
+        ),
+    );
+    result.insert(
+        "recentProjects".to_string(),
+        recent_projects_response
+            .get("recentProjects")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
     );
     insert_present(&mut result, "revision", sessions_response.get("requestId"));
     result.insert("sessions".to_string(), Value::Array(cli_sessions));
@@ -470,6 +488,17 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         &mut result,
         "workspaceGroups",
         snapshot.and_then(|snapshot| snapshot.get("workspaceGroups")),
+    );
+    /*
+     * CDXC:SidebarProjectCollections 2026-07-18-00:00:
+     * The presentation snapshot also carries the colored project-collection
+     * overlay ("Group N" wrappers) so phones can render and edit the same
+     * grouped project list as the desktop sidebar.
+     */
+    insert_present(
+        &mut result,
+        "sidebarProjectCollections",
+        snapshot.and_then(|snapshot| snapshot.get("sidebarProjectCollections")),
     );
     Ok(Value::Object(result))
 }
@@ -522,6 +551,41 @@ fn is_active_gxserver_inventory_project(project: &Value) -> bool {
         && project.get("systemKind").and_then(Value::as_str) != Some("remoteAttachCarrier")
 }
 
+fn is_mobile_chats_collection_project(project: &Value) -> bool {
+    let explicit = |key: &str| project.get(key) == Some(&Value::Bool(true));
+    let launch_setting = |key: &str| {
+        project
+            .get("launchSettings")
+            .and_then(|settings| settings.get(key))
+            == Some(&Value::Bool(true))
+    };
+    explicit("isChat")
+        || explicit("isQuick")
+        || launch_setting("isChat")
+        || launch_setting("isQuick")
+        || project
+            .get("path")
+            .and_then(Value::as_str)
+            .map(is_mobile_chats_storage_path)
+            .unwrap_or(false)
+}
+
+fn is_mobile_chats_storage_path(value: &str) -> bool {
+    let normalized = value.replace('\\', "/");
+    let segments: Vec<&str> = normalized
+        .trim_end_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != "~")
+        .collect();
+    segments.windows(2).any(|pair| {
+        pair[1] == "chats"
+            && (pair[0] == "ghostex"
+                || pair[0] == ".active"
+                || pair[0] == ".ghostex"
+                || pair[0].starts_with(".ghostex-"))
+    })
+}
+
 fn should_use_local_gxserver_state_fallback(flags: &Flags) -> bool {
     let server = flags
         .text("server")
@@ -542,7 +606,9 @@ fn read_persisted_gxserver_server_id() -> Option<String> {
 }
 
 fn should_include_stopped_gxserver_sessions(flags: &Flags) -> bool {
-    strict_true(flags, "all") || strict_true(flags, "includeStopped") || strict_true(flags, "stopped")
+    strict_true(flags, "all")
+        || strict_true(flags, "includeStopped")
+        || strict_true(flags, "stopped")
 }
 
 fn is_stopped_gxserver_session(session: &Value) -> bool {
@@ -616,10 +682,7 @@ fn build_persisted_gxserver_session_list(
             insert_non_null(&mut map, "agentId", row.get("agentId"));
             insert_non_null(&mut map, "cwd", row.get("cwd"));
             let server_truthy = server_id.map(|id| !id.is_empty()).unwrap_or(false);
-            if server_truthy
-                && js_truthy(row.get("projectId"))
-                && js_truthy(row.get("sessionId"))
-            {
+            if server_truthy && js_truthy(row.get("projectId")) && js_truthy(row.get("sessionId")) {
                 map.insert(
                     "globalRef".to_string(),
                     json!(format!(
@@ -699,11 +762,9 @@ fn read_persisted_gxserver_inventory_rows(
     db_path: &Path,
     include_project_visibility_columns: bool,
 ) -> Option<Vec<Value>> {
-    let connection = rusqlite::Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .ok()?;
+    let connection =
+        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
     read_persisted_gxserver_inventory_rows_from(&connection, include_project_visibility_columns)
 }
 
@@ -854,10 +915,17 @@ fn to_cli_session(
         "isPrimaryTitleTerminalTitle",
         &[p("isPrimaryTitleTerminalTitle")],
     );
-    map.insert("isSleeping".to_string(), json!(lifecycle_state == "sleeping"));
+    map.insert(
+        "isSleeping".to_string(),
+        json!(lifecycle_state == "sleeping"),
+    );
     insert_js(&mut map, "isTemporaryTitle", &[p("isTemporaryTitle")]);
     insert_js(&mut map, "kind", &[p("kind"), s("kind")]);
-    insert_js(&mut map, "lastActiveAt", &[p("lastActiveAt"), s("lastActiveAt")]);
+    insert_js(
+        &mut map,
+        "lastActiveAt",
+        &[p("lastActiveAt"), s("lastActiveAt")],
+    );
     insert_js(
         &mut map,
         "lastInteractionAt",
@@ -872,7 +940,11 @@ fn to_cli_session(
         "projectName",
         &[project.and_then(|value| value.get("name")), s("projectId")],
     );
-    match js_coalesce(&[p("cwd"), s("cwd"), project.and_then(|value| value.get("path"))]) {
+    match js_coalesce(&[
+        p("cwd"),
+        s("cwd"),
+        project.and_then(|value| value.get("path")),
+    ]) {
         Some(value) if !value.is_null() => {
             map.insert("projectPath".to_string(), value.clone());
         }
@@ -1017,7 +1089,11 @@ fn start_missing_provider_for_cli_attach(
             session.get("sessionId"),
         ],
     );
-    insert_js(&mut params, "startupText", &[attach_value.get("startupText")]);
+    insert_js(
+        &mut params,
+        "startupText",
+        &[attach_value.get("startupText")],
+    );
     call_gxserver_rpc("/api/startSessionProvider", &Value::Object(params), flags)?;
     fetch_attach_metadata_for_session(session, flags)
 }
@@ -1072,7 +1148,10 @@ fn apply_attach_metadata_to_cli_session(
         } else {
             String::new()
         };
-        let label = js_template(js_coalesce(&[session.get("title"), session.get("sessionId")]));
+        let label = js_template(js_coalesce(&[
+            session.get("title"),
+            session.get("sessionId"),
+        ]));
         return Err(CliError::Other(format!(
             "Session {label} cannot be restored because its cwd is missing{cwd}."
         )));
@@ -1154,7 +1233,9 @@ pub fn resolve_gxserver_inventory_session(
 ) -> CliResult<Option<Value>> {
     let selector = session_id.trim();
     if selector.is_empty() {
-        return Err(CliError::Other("Session action requires --session-id.".to_string()));
+        return Err(CliError::Other(
+            "Session action requires --session-id.".to_string(),
+        ));
     }
     let mut list_flags = flags.clone();
     list_flags.insert_bool("all", true);
@@ -1249,14 +1330,15 @@ fn to_mobile_session_list(result: &Value) -> Value {
      * Mobile summaries must preserve gxserver's active-project filter even if
      * a future caller passes unfiltered inventory into this compactor.
      */
-    let projects: Option<Vec<&Value>> = result
-        .get("projects")
-        .and_then(Value::as_array)
-        .map(|list| {
-            list.iter()
-                .filter(|project| is_active_gxserver_inventory_project(project))
-                .collect()
-        });
+    let projects: Option<Vec<&Value>> =
+        result
+            .get("projects")
+            .and_then(Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter(|project| is_active_gxserver_inventory_project(project))
+                    .collect()
+            });
     let active_project_ids: Option<std::collections::HashSet<String>> =
         projects.as_ref().map(|list| {
             list.iter()
@@ -1310,12 +1392,39 @@ fn to_mobile_session_list(result: &Value) -> Value {
                         insert_present(&mut project_map, "name", project.get("name"));
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
+                        project_map.insert(
+                            "isChat".to_string(),
+                            json!(is_mobile_chats_collection_project(project)),
+                        );
                         Value::Object(project_map)
                     })
                     .collect(),
             ),
         );
     }
+    let recent_projects = result
+        .get("recentProjects")
+        .and_then(Value::as_array)
+        .map(|projects| {
+            projects
+                .iter()
+                .filter_map(|project| {
+                    let project_id = project.get("projectId")?.as_str()?.trim();
+                    if project_id.is_empty() {
+                        return None;
+                    }
+                    let mut recent = Map::new();
+                    insert_present(&mut recent, "path", project.get("path"));
+                    recent.insert("projectId".to_string(), json!(project_id));
+                    insert_present(&mut recent, "recentClosedAt", project.get("recentClosedAt"));
+                    insert_present(&mut recent, "sessionCount", project.get("sessionCount"));
+                    insert_present(&mut recent, "title", project.get("title"));
+                    Some(Value::Object(recent))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    map.insert("recentProjects".to_string(), Value::Array(recent_projects));
     insert_present(&mut map, "revision", result.get("revision"));
     map.insert(
         "sessions".to_string(),
@@ -1326,6 +1435,11 @@ fn to_mobile_session_list(result: &Value) -> Value {
                 .collect(),
         ),
     );
+    if let Some(collections) =
+        to_mobile_sidebar_project_collections(result.get("sidebarProjectCollections"))
+    {
+        map.insert("sidebarProjectCollections".to_string(), collections);
+    }
     if let Some(groups) = to_mobile_workspace_groups(result.get("workspaceGroups")) {
         map.insert("workspaceGroups".to_string(), groups);
     }
@@ -1397,6 +1511,87 @@ fn to_mobile_workspace_groups(workspace_groups: Option<&Value>) -> Option<Value>
     Some(json!({ "projectOrder": project_order, "projects": projects }))
 }
 
+fn to_mobile_sidebar_project_collections(collections_state: Option<&Value>) -> Option<Value> {
+    /*
+     * CDXC:SidebarProjectCollections 2026-07-18-00:00:
+     * Mobile keeps the server-normalized {order, collections} contract but
+     * re-sanitizes rows because fallback caches may carry stale shapes. Empty
+     * overlays collapse to an absent key so phones can cheaply skip rendering.
+     */
+    let object = collections_state?.as_object()?;
+    let mut collections = Map::new();
+    if let Some(entries) = object.get("collections").and_then(Value::as_object) {
+        for (collection_id, collection) in entries {
+            if collection_id.is_empty() {
+                continue;
+            }
+            let project_ids: Vec<Value> = collection
+                .get("projectIds")
+                .and_then(Value::as_array)
+                .map(|ids| {
+                    ids.iter()
+                        .filter(|value| matches!(value, Value::String(text) if !text.is_empty()))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            if project_ids.is_empty() {
+                continue;
+            }
+            let title = match collection.get("title") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => collection_id.clone(),
+            };
+            let color = match collection.get("color") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "transparent".to_string(),
+            };
+            let collapsed = collection
+                .get("collapsed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            collections.insert(
+                collection_id.clone(),
+                json!({
+                    "collapsed": collapsed,
+                    "collectionId": collection_id,
+                    "color": color,
+                    "projectIds": project_ids,
+                    "title": title,
+                }),
+            );
+        }
+    }
+    if collections.is_empty() {
+        return None;
+    }
+    let mut order: Vec<Value> = Vec::new();
+    let mut seen_order_ids = std::collections::HashSet::new();
+    if let Some(entries) = object.get("order").and_then(Value::as_array) {
+        for entry in entries {
+            let Some(id) = entry.as_str() else { continue };
+            if collections.contains_key(id) && seen_order_ids.insert(id.to_string()) {
+                order.push(Value::String(id.to_string()));
+            }
+        }
+    }
+    for collection_id in collections.keys() {
+        if seen_order_ids.insert(collection_id.clone()) {
+            order.push(Value::String(collection_id.clone()));
+        }
+    }
+    let next_collection_number = object
+        .get("nextCollectionNumber")
+        .and_then(Value::as_i64)
+        .filter(|value| *value >= 1)
+        .unwrap_or((collections.len() as i64) + 1);
+    Some(json!({
+        "collections": collections,
+        "nextCollectionNumber": next_collection_number,
+        "order": order,
+    }))
+}
+
 fn to_mobile_session_summary(session: &Value) -> Value {
     let s = |key: &str| session.get(key);
     let mut map = Map::new();
@@ -1424,7 +1619,11 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "providerSessionName",
         &[s("providerSessionName"), s("sessionPersistenceName")],
     );
-    insert_js(&mut map, "providerSessionState", &[s("providerSessionState")]);
+    insert_js(
+        &mut map,
+        "providerSessionState",
+        &[s("providerSessionState")],
+    );
     insert_js(&mut map, "sessionId", &[s("sessionId")]);
     insert_js(
         &mut map,
@@ -1611,9 +1810,7 @@ fn parse_js_date_ms(text: &str) -> Option<i64> {
     if let Ok(date) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
         return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
     }
-    if let Ok(datetime) =
-        chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S%.f")
-    {
+    if let Ok(datetime) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S%.f") {
         return Some(datetime.and_utc().timestamp_millis());
     }
     None
@@ -1706,7 +1903,10 @@ mod tests {
 
     #[test]
     fn normalize_cli_session_activity_matches_node() {
-        assert_eq!(normalize_cli_session_activity(Some(&json!("Attention"))), "attention");
+        assert_eq!(
+            normalize_cli_session_activity(Some(&json!("Attention"))),
+            "attention"
+        );
         assert_eq!(
             normalize_cli_session_activity(Some(&json!("needs_attention"))),
             "attention"
@@ -1715,9 +1915,18 @@ mod tests {
             normalize_cli_session_activity(Some(&json!(" attention required "))),
             "attention"
         );
-        assert_eq!(normalize_cli_session_activity(Some(&json!("BUSY"))), "working");
-        assert_eq!(normalize_cli_session_activity(Some(&json!("processing"))), "working");
-        assert_eq!(normalize_cli_session_activity(Some(&json!("something"))), "idle");
+        assert_eq!(
+            normalize_cli_session_activity(Some(&json!("BUSY"))),
+            "working"
+        );
+        assert_eq!(
+            normalize_cli_session_activity(Some(&json!("processing"))),
+            "working"
+        );
+        assert_eq!(
+            normalize_cli_session_activity(Some(&json!("something"))),
+            "idle"
+        );
         assert_eq!(normalize_cli_session_activity(None), "idle");
     }
 
@@ -1751,7 +1960,9 @@ mod tests {
         assert!(!is_configured_mobile_quick_action(&json!({
             "commandId": "c1", "actionType": "terminal", "command": "  ",
         })));
-        assert!(!is_configured_mobile_quick_action(&json!({ "command": "ls" })));
+        assert!(!is_configured_mobile_quick_action(
+            &json!({ "command": "ls" })
+        ));
     }
 
     #[test]
@@ -1794,7 +2005,8 @@ mod tests {
                 "ok": true,
                 "product": "gxserver",
                 "revision": "r1",
-                "projects": [ { "name": "Alpha", "path": "/a", "projectId": "P1" } ],
+                "projects": [ { "isChat": false, "name": "Alpha", "path": "/a", "projectId": "P1" } ],
+                "recentProjects": [],
                 "sessions": [
                     {
                         "sessionId": "G1", "projectId": "P1", "title": "One",
@@ -1832,6 +2044,66 @@ mod tests {
     }
 
     #[test]
+    fn mobile_sidebar_project_collections_shape() {
+        let mobile = to_mobile_sidebar_project_collections(Some(&json!({
+            "collections": {
+                "c1": {
+                    "collapsed": true,
+                    "collectionId": "c1",
+                    "color": "#7c6df2",
+                    "projectIds": ["P1", ""],
+                    "title": "Group 1",
+                },
+                "c2": { "projectIds": ["P2"] },
+                "c3": { "projectIds": [] },
+            },
+            "nextCollectionNumber": 7,
+            "order": ["c2", "ghost", "c1"],
+        })));
+        assert_eq!(
+            mobile,
+            Some(json!({
+                "collections": {
+                    "c1": {
+                        "collapsed": true,
+                        "collectionId": "c1",
+                        "color": "#7c6df2",
+                        "projectIds": ["P1"],
+                        "title": "Group 1",
+                    },
+                    "c2": {
+                        "collapsed": false,
+                        "collectionId": "c2",
+                        "color": "transparent",
+                        "projectIds": ["P2"],
+                        "title": "c2",
+                    },
+                },
+                "nextCollectionNumber": 7,
+                "order": ["c2", "c1"],
+            }))
+        );
+    }
+
+    #[test]
+    fn mobile_sidebar_project_collections_empty_becomes_undefined() {
+        assert_eq!(to_mobile_sidebar_project_collections(None), None);
+        assert_eq!(
+            to_mobile_sidebar_project_collections(Some(&Value::Null)),
+            None
+        );
+        assert_eq!(to_mobile_sidebar_project_collections(Some(&json!("x"))), None);
+        assert_eq!(
+            to_mobile_sidebar_project_collections(Some(&json!({
+                "collections": {},
+                "nextCollectionNumber": 1,
+                "order": [],
+            }))),
+            None
+        );
+    }
+
+    #[test]
     fn persisted_inventory_sql_row_mapping() {
         let connection = rusqlite::Connection::open_in_memory().expect("open");
         connection
@@ -1846,20 +2118,15 @@ mod tests {
                  INSERT INTO sessions VALUES ('P2', 'G3', 'terminal', 'Ghost', 'running', NULL, NULL, NULL, NULL, '2026-01-01T00:00:00Z', NULL);",
             )
             .expect("seed");
-        let rows =
-            read_persisted_gxserver_inventory_rows_from(&connection, true).expect("rows");
+        let rows = read_persisted_gxserver_inventory_rows_from(&connection, true).expect("rows");
         assert_eq!(
             rows.iter()
                 .filter(|row| row["rowType"] == json!("project"))
                 .count(),
             3
         );
-        let list = build_persisted_gxserver_session_list(
-            &rows,
-            Some("S1"),
-            "boom",
-            &Flags::default(),
-        );
+        let list =
+            build_persisted_gxserver_session_list(&rows, Some("S1"), "boom", &Flags::default());
         assert_eq!(list["error"], json!("boom"));
         assert_eq!(list["fallback"], json!("persisted-gxserver-state"));
         assert_eq!(list["ok"], json!(true));
@@ -1896,8 +2163,7 @@ mod tests {
             )
             .expect("seed");
         assert!(read_persisted_gxserver_inventory_rows_from(&connection, true).is_none());
-        let rows =
-            read_persisted_gxserver_inventory_rows_from(&connection, false).expect("rows");
+        let rows = read_persisted_gxserver_inventory_rows_from(&connection, false).expect("rows");
         let project = rows
             .iter()
             .find(|row| row["rowType"] == json!("project"))
@@ -1931,8 +2197,7 @@ mod tests {
             "zmxName": "g-new",
             "providerState": { "lifecycleState": "exists" },
         });
-        let applied =
-            apply_attach_metadata_to_cli_session(&session, Some(&attach)).expect("ok");
+        let applied = apply_attach_metadata_to_cli_session(&session, Some(&attach)).expect("ok");
         assert_eq!(applied["attachCommand"], json!("zmx attach g-new"));
         assert_eq!(applied["projectPath"], json!("/new"));
         assert_eq!(applied["providerSessionName"], json!("g-new"));
@@ -1940,8 +2205,7 @@ mod tests {
         assert!(applied.get("resumeCommand").is_none());
         // resume command -> sleep
         let attach = json!({ "startupText": "claude --resume abc\r\r" });
-        let applied =
-            apply_attach_metadata_to_cli_session(&session, Some(&attach)).expect("ok");
+        let applied = apply_attach_metadata_to_cli_session(&session, Some(&attach)).expect("ok");
         assert_eq!(applied["resumeCommand"], json!("claude --resume abc"));
         assert_eq!(applied["status"], json!("sleep"));
         assert!(applied.get("attachCommand").is_none());
@@ -1953,18 +2217,26 @@ mod tests {
             "provider": "zmx", "providerState": { "lifecycleState": "missing" },
         }))));
         assert!(!should_start_missing_provider_for_cli_attach(None));
-        assert!(!should_start_missing_provider_for_cli_attach(Some(&Value::Null)));
-        assert!(!should_start_missing_provider_for_cli_attach(Some(&json!({
-            "provider": "zmx",
-            "providerState": { "lifecycleState": "missing" },
-            "restoreBlocked": { "cwd": "/gone" },
-        }))));
-        assert!(!should_start_missing_provider_for_cli_attach(Some(&json!({
-            "provider": "tmux", "providerState": { "lifecycleState": "missing" },
-        }))));
-        assert!(!should_start_missing_provider_for_cli_attach(Some(&json!({
-            "provider": "zmx", "providerState": { "lifecycleState": "exists" },
-        }))));
+        assert!(!should_start_missing_provider_for_cli_attach(Some(
+            &Value::Null
+        )));
+        assert!(!should_start_missing_provider_for_cli_attach(Some(
+            &json!({
+                "provider": "zmx",
+                "providerState": { "lifecycleState": "missing" },
+                "restoreBlocked": { "cwd": "/gone" },
+            })
+        )));
+        assert!(!should_start_missing_provider_for_cli_attach(Some(
+            &json!({
+                "provider": "tmux", "providerState": { "lifecycleState": "missing" },
+            })
+        )));
+        assert!(!should_start_missing_provider_for_cli_attach(Some(
+            &json!({
+                "provider": "zmx", "providerState": { "lifecycleState": "exists" },
+            })
+        )));
     }
 
     #[test]
@@ -2017,7 +2289,9 @@ mod tests {
 
     #[test]
     fn active_project_filter_matches_node() {
-        assert!(is_active_gxserver_inventory_project(&json!({ "projectId": "P1" })));
+        assert!(is_active_gxserver_inventory_project(
+            &json!({ "projectId": "P1" })
+        ));
         assert!(!is_active_gxserver_inventory_project(
             &json!({ "isRecentProject": true })
         ));
@@ -2031,6 +2305,42 @@ mod tests {
         assert!(is_active_gxserver_inventory_project(
             &json!({ "isRecentProject": 1 })
         ));
+    }
+
+    #[test]
+    fn mobile_chat_project_classification_matches_gpui_contract() {
+        assert!(is_mobile_chats_collection_project(&json!({
+            "path": "/Users/me/.ghostex-dev/chats/session-a"
+        })));
+        assert!(is_mobile_chats_collection_project(&json!({
+            "launchSettings": { "isQuick": true }
+        })));
+        assert!(!is_mobile_chats_collection_project(&json!({
+            "name": "Chat tools",
+            "path": "/Users/me/code/chat-tools"
+        })));
+    }
+
+    #[test]
+    fn mobile_summary_keeps_active_and_recent_project_contracts_separate() {
+        let summary = to_mobile_session_list(&json!({
+            "ok": true,
+            "projects": [
+                { "projectId": "P1", "name": "Empty", "path": "/repo/empty" },
+                { "projectId": "PC", "name": "Chat", "path": "/Users/me/.ghostex/chats/c1" }
+            ],
+            "recentProjects": [
+                { "projectId": "PR", "title": "Parked", "path": "/repo/parked", "sessionCount": 2 }
+            ],
+            "sessions": []
+        }));
+        let projects = summary["projects"].as_array().unwrap();
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0]["projectId"], "P1");
+        assert_eq!(projects[0]["isChat"], false);
+        assert_eq!(projects[1]["isChat"], true);
+        assert_eq!(summary["recentProjects"][0]["projectId"], "PR");
+        assert!(summary["sessions"].as_array().unwrap().is_empty());
     }
 
     #[test]

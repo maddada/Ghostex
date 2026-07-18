@@ -1,4 +1,6 @@
 import {
+  IconArrowsDiagonal2,
+  IconArrowsDiagonalMinimize,
   IconCaretRightFilled,
   IconCheck,
   IconMoon,
@@ -23,6 +25,7 @@ import {
 } from "../shared/session-tags";
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { createProjectCollectionDragData } from "./sidebar-dnd";
+import { SidebarFixedTooltipButton } from "./sidebar-fixed-tooltip-button";
 import {
   getAwakeTerminalAndBrowserCount,
   getGroupSessionSummary,
@@ -47,12 +50,14 @@ type ProjectCollectionSectionProps = {
   draggingDisabled: boolean;
   index: number;
   onAutoEditHandled: () => void;
+  onBulkProjectToggle: () => void;
   onChange: (collection: SidebarProjectCollection) => void;
   onDelete: () => void;
   onSelectSessions: (sessionIds: string[]) => void;
   sessionIds: readonly string[];
   sessionTagListItems: readonly SidebarSessionTagListItem[];
   sessionsById: Record<string, SidebarSessionItem | undefined>;
+  bulkProjectActionLabel: "Collapse All" | "Expand Previous";
   vscode: WebviewApi;
 };
 
@@ -96,12 +101,14 @@ export function ProjectCollectionSection({
   draggingDisabled,
   index,
   onAutoEditHandled,
+  onBulkProjectToggle,
   onChange,
   onDelete,
   onSelectSessions,
   sessionIds,
   sessionTagListItems,
   sessionsById,
+  bulkProjectActionLabel,
   vscode,
 }: ProjectCollectionSectionProps) {
   const [isEditing, setIsEditing] = useState(autoEdit);
@@ -159,6 +166,10 @@ export function ProjectCollectionSection({
     (item) => item.type === "tag" && item.enabled && item.visible,
   );
   const style = { "--project-collection-color": collection.color } as CSSProperties;
+  const BulkProjectIcon =
+    bulkProjectActionLabel === "Collapse All"
+      ? IconArrowsDiagonalMinimize
+      : IconArrowsDiagonal2;
 
   useEffect(() => {
     if (!autoEdit) {
@@ -338,6 +349,24 @@ export function ProjectCollectionSection({
               </span>
             ) : null}
           </div>
+        ) : null}
+        {!collection.collapsed ? (
+          <SidebarFixedTooltipButton
+            aria-label={bulkProjectActionLabel}
+            className="project-collection-bulk-project-action"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onBulkProjectToggle();
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            tooltip={bulkProjectActionLabel}
+            tooltipAlign="end"
+            tooltipSide="left"
+            type="button"
+          >
+            <BulkProjectIcon aria-hidden="true" size={14} stroke={1.9} />
+          </SidebarFixedTooltipButton>
         ) : null}
       </div>
       {!collection.collapsed ? <div className="project-collection-projects">{children}</div> : null}

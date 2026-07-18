@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
-use crate::ghostex_cli::rpc::{self, call_gxserver_rpc, unsupported_action_error, CliError, CliResult};
+use crate::ghostex_cli::rpc::{
+    self, call_gxserver_rpc, unsupported_action_error, CliError, CliResult,
+};
 
 /*
 CDXC:GhostexRustCli 2026-07-13:
@@ -281,7 +283,9 @@ pub fn prompt_editor_command(args: &[String]) -> CliResult<()> {
     let selection_started_at = Instant::now();
     let parsed = parse_args(args);
     let Some(file_path) = parsed.rest.iter().find(|arg| !arg.trim().is_empty()) else {
-        return Err(CliError::Other("Usage: ghostex prompt-editor <file>".to_string()));
+        return Err(CliError::Other(
+            "Usage: ghostex prompt-editor <file>".to_string(),
+        ));
     };
 
     let cwd = js_path_resolve(&parsed.flags.text("cwd").unwrap_or_else(current_dir_string));
@@ -325,7 +329,9 @@ pub fn prompt_editor_command(args: &[String]) -> CliResult<()> {
 }
 
 fn prompt_editor_backend_from_environment() -> String {
-    let backend = env_or_empty("GHOSTEX_PROMPT_EDITOR_BACKEND").trim().to_string();
+    let backend = env_or_empty("GHOSTEX_PROMPT_EDITOR_BACKEND")
+        .trim()
+        .to_string();
     if backend == "monaco" || backend == "custom" {
         return backend;
     }
@@ -635,7 +641,10 @@ fn floating_monaco_editor_command_with_trace(args: &[String], trace: &Value) -> 
                 "filePath": resolved_file_path,
                 "requestId": request_id,
             }));
-            eprintln!("{}", ghostex_editor_unavailable_message(Some(&error.message)));
+            eprintln!(
+                "{}",
+                ghostex_editor_unavailable_message(Some(&error.message))
+            );
             let editor_command = machine_prompt_editor_command_from_environment();
             run_editor_inline(
                 &[
@@ -787,10 +796,7 @@ fn cli_session_key(project_id: Option<&Value>, session_id: Option<&Value>) -> St
     }
 }
 
-fn focus_prompt_editor_originating_session(
-    originating_session_id: Option<&str>,
-    request_id: &str,
-) {
+fn focus_prompt_editor_originating_session(originating_session_id: Option<&str>, request_id: &str) {
     /*
     CDXC:EditorDaemon 2026-07-05 (ported): best-effort — a missing ref or
     unreachable gxserver must not change the editor's exit status.
@@ -1188,7 +1194,9 @@ impl EditorDaemonClient {
         } else {
             None
         };
-        let _ = self.reader.set_read_timeout(Some(Duration::from_millis(100)));
+        let _ = self
+            .reader
+            .set_read_timeout(Some(Duration::from_millis(100)));
         let mut chunk = [0u8; 4096];
         loop {
             self.poll_signal_save_close();
@@ -1197,8 +1205,7 @@ impl EditorDaemonClient {
                 Ok(read_bytes) => {
                     self.buffer.extend_from_slice(&chunk[..read_bytes]);
                     self.drain_buffered_lines();
-                    if let Some(index) =
-                        self.pending.iter().position(|message| predicate(message))
+                    if let Some(index) = self.pending.iter().position(|message| predicate(message))
                     {
                         return Ok(self.pending.remove(index));
                     }
@@ -1698,9 +1705,16 @@ fn sanitize_prompt_editor_timeline_value(key: &str, value: &Value) -> Value {
 
 /// /^(~\/|\/Users\/|\/Volumes\/|\/private\/|\/tmp\/|\/var\/folders\/)/u
 fn text_looks_like_local_path(text: &str) -> bool {
-    ["~/", "/Users/", "/Volumes/", "/private/", "/tmp/", "/var/folders/"]
-        .iter()
-        .any(|prefix| text.starts_with(prefix))
+    [
+        "~/",
+        "/Users/",
+        "/Volumes/",
+        "/private/",
+        "/tmp/",
+        "/var/folders/",
+    ]
+    .iter()
+    .any(|prefix| text.starts_with(prefix))
 }
 
 /// /^https?:\/\//iu
@@ -1772,9 +1786,8 @@ mod floating_editor_bridge_parity {
 
     /// floatingEditorEnvironment.
     pub(super) fn floating_editor_environment() -> Value {
-        let env_or = |key: &str, fallback: &str| {
-            std::env::var(key).unwrap_or_else(|_| fallback.to_string())
-        };
+        let env_or =
+            |key: &str, fallback: &str| std::env::var(key).unwrap_or_else(|_| fallback.to_string());
         let mut environment = Map::new();
         environment.insert(
             "HOME".to_string(),
@@ -1875,7 +1888,10 @@ mod floating_editor_bridge_parity {
             };
         }
         let mut candidates: Vec<String> = Vec::new();
-        let shell = std::env::var("SHELL").unwrap_or_default().trim().to_string();
+        let shell = std::env::var("SHELL")
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         if !shell.is_empty() && is_supported_cli_posix_shell(&shell) {
             candidates.push(shell);
         }
@@ -1890,10 +1906,7 @@ mod floating_editor_bridge_parity {
             .cloned()
             .or_else(|| candidates.first().cloned())
             .unwrap_or_else(|| "/bin/sh".to_string());
-        let command_flag = if matches!(
-            shell_basename(&executable).as_str(),
-            "bash" | "zsh"
-        ) {
+        let command_flag = if matches!(shell_basename(&executable).as_str(), "bash" | "zsh") {
             "-lc"
         } else {
             "-c"
@@ -2052,7 +2065,10 @@ mod tests {
     fn select_machine_editor_falls_through_environment_chain() {
         let env = env_map(&[
             ("GHOSTEX_PROMPT_EDITOR_MACHINE_VISUAL", "   "),
-            ("GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR", "ghostex prompt-editor"),
+            (
+                "GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR",
+                "ghostex prompt-editor",
+            ),
             ("VISUAL", "nvim"),
             ("EDITOR", "nano"),
         ]);
@@ -2062,24 +2078,35 @@ mod tests {
 
         // Everything unusable → vi.
         let env = env_map(&[("EDITOR", "gte --floating-editor -- gte")]);
-        assert_eq!(machine_prompt_editor_command_with(&|key| env.get(key).cloned()), "vi");
+        assert_eq!(
+            machine_prompt_editor_command_with(&|key| env.get(key).cloned()),
+            "vi"
+        );
         assert_eq!(machine_prompt_editor_command_with(&|_| None), "vi");
     }
 
     #[test]
     fn ghostex_prompt_editor_command_detection() {
         assert!(is_ghostex_prompt_editor_command("prompt-editor"));
-        assert!(is_ghostex_prompt_editor_command("/usr/local/bin/prompt-editor --flag"));
+        assert!(is_ghostex_prompt_editor_command(
+            "/usr/local/bin/prompt-editor --flag"
+        ));
         assert!(is_ghostex_prompt_editor_command("\"prompt-editor\""));
         assert!(is_ghostex_prompt_editor_command("ghostex prompt-editor"));
         assert!(is_ghostex_prompt_editor_command(
             "node /x/scripts/ghostex-cli.mjs prompt-editor"
         ));
-        assert!(is_ghostex_prompt_editor_command("ghostex floating-monaco-editor"));
-        assert!(is_ghostex_prompt_editor_command("ghostex floating-editor -- gte"));
+        assert!(is_ghostex_prompt_editor_command(
+            "ghostex floating-monaco-editor"
+        ));
+        assert!(is_ghostex_prompt_editor_command(
+            "ghostex floating-editor -- gte"
+        ));
         assert!(!is_ghostex_prompt_editor_command("vim"));
         assert!(!is_ghostex_prompt_editor_command("code --wait"));
-        assert!(!is_ghostex_prompt_editor_command("node /x/scripts/ghostex-cli.mjs open"));
+        assert!(!is_ghostex_prompt_editor_command(
+            "node /x/scripts/ghostex-cli.mjs open"
+        ));
     }
 
     #[test]
@@ -2093,7 +2120,10 @@ mod tests {
             Some("P0abc:G0abc".to_string())
         );
         assert_eq!(native_focus_session_id_from_global_session_ref(""), None);
-        assert_eq!(native_focus_session_id_from_global_session_ref("P2cde:G3fgh"), None);
+        assert_eq!(
+            native_focus_session_id_from_global_session_ref("P2cde:G3fgh"),
+            None
+        );
         assert_eq!(
             native_focus_session_id_from_global_session_ref("S1a:P2cde:G3fgh:extra"),
             None
@@ -2113,10 +2143,16 @@ mod tests {
     #[test]
     fn final_status_matches_multiline_regex() {
         assert_eq!(final_ghostex_editor_status_from_text("saved"), "saved");
-        assert_eq!(final_ghostex_editor_status_from_text("started\nsaved\n"), "saved");
+        assert_eq!(
+            final_ghostex_editor_status_from_text("started\nsaved\n"),
+            "saved"
+        );
         // JS multiline anchors also break on \r (verified against Node).
         assert_eq!(final_ghostex_editor_status_from_text("saved\r\n"), "saved");
-        assert_eq!(final_ghostex_editor_status_from_text("started\r\nsaved"), "saved");
+        assert_eq!(
+            final_ghostex_editor_status_from_text("started\r\nsaved"),
+            "saved"
+        );
         assert_eq!(
             final_ghostex_editor_status_from_text("started\ncancelled"),
             "cancelled"
@@ -2206,9 +2242,13 @@ mod tests {
             };
             assert!(is_ghostex_editor_connection_error(&error), "{code}");
         }
-        assert!(!is_ghostex_editor_connection_error(&EditorError::new("plain")));
+        assert!(!is_ghostex_editor_connection_error(&EditorError::new(
+            "plain"
+        )));
         assert!(EditorError::unavailable("x").is_unavailable());
-        assert!(!is_ghostex_editor_connection_error(&EditorError::unavailable("x")));
+        assert!(!is_ghostex_editor_connection_error(
+            &EditorError::unavailable("x")
+        ));
     }
 
     #[test]
@@ -2222,8 +2262,14 @@ mod tests {
             js_path_resolve_from(base, "../other/./x.md"),
             PathBuf::from("/base/other/x.md")
         );
-        assert_eq!(js_path_resolve_from(base, "/abs/y.md"), PathBuf::from("/abs/y.md"));
-        assert_eq!(js_path_resolve_from(Path::new("/"), ".."), PathBuf::from("/"));
+        assert_eq!(
+            js_path_resolve_from(base, "/abs/y.md"),
+            PathBuf::from("/abs/y.md")
+        );
+        assert_eq!(
+            js_path_resolve_from(Path::new("/"), ".."),
+            PathBuf::from("/")
+        );
     }
 
     #[test]
@@ -2290,7 +2336,9 @@ mod tests {
         assert_eq!(to_base36(36), "10");
         let id = random_base36(6);
         assert_eq!(id.len(), 6);
-        assert!(id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert!(id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 
     #[test]

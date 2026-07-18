@@ -46,7 +46,7 @@ the pointer movement that needs to restore hover tooltips without a click.
 
 /*
 CDXC:NativeSidebarChrome 2026-05-05-05:29:
-The native sidebar webview must keep long session/action content scrollable without clipping the right-side edge controls. Project headers consume fixed vertical space, while session lists and Recent Projects own their bounded scroll viewports.
+The native sidebar webview must keep long session/action content scrollable without clipping the right-side edge controls. Project and Recent Projects sections share the main bounded scroll viewport.
 */
 body.native-sidebar-body .stack,
 .native-sidebar-shell .stack {

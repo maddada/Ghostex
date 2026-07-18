@@ -44,7 +44,8 @@ pub fn shell_quote(value: &str) -> String {
 pub fn shell_word(value: &str) -> String {
     let is_safe = !value.is_empty()
         && value.chars().all(|c| {
-            c.is_ascii_alphanumeric() || matches!(c, '_' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '-')
+            c.is_ascii_alphanumeric()
+                || matches!(c, '_' | '@' | '%' | '+' | '=' | ':' | ',' | '.' | '/' | '-')
         });
     if is_safe {
         value.to_string()
@@ -258,7 +259,10 @@ pub fn ghostex_bundled_web_resource_roots(cli_dir: &Path) -> Vec<PathBuf> {
     and the legacy parent layout so old dev bundles and new release bundles
     resolve app-owned tools without PATH fallbacks.
     */
-    unique_paths(&[Some(cli_dir.join("..").join("Web")), Some(cli_dir.join(".."))])
+    unique_paths(&[
+        Some(cli_dir.join("..").join("Web")),
+        Some(cli_dir.join("..")),
+    ])
 }
 
 pub fn find_ghostex_source_root(start_path: Option<&Path>) -> Option<PathBuf> {
@@ -326,7 +330,9 @@ pub fn run_interactive_process(
     for (key, value) in env {
         child.env(key, value);
     }
-    let status = child.status().map_err(|error| spawn_error(command, &error))?;
+    let status = child
+        .status()
+        .map_err(|error| spawn_error(command, &error))?;
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
@@ -446,8 +452,16 @@ pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
     if file_exists_sync(&bundled_bin) {
         return Some(simple(&bundled_bin));
     }
-    let debug_bin = root.join("tui2").join("target").join("debug").join("ghostex-tui");
-    let release_bin = root.join("tui2").join("target").join("release").join("ghostex-tui");
+    let debug_bin = root
+        .join("tui2")
+        .join("target")
+        .join("debug")
+        .join("ghostex-tui");
+    let release_bin = root
+        .join("tui2")
+        .join("target")
+        .join("release")
+        .join("ghostex-tui");
     if file_exists_sync(&release_bin) {
         return Some(simple(&release_bin));
     }
@@ -511,13 +525,6 @@ fn interactive_session_picker_command(args: &[String]) -> CliResult<()> {
     crate::ghostex_cli::attach::interactive_session_picker_command(args)
 }
 
-
-
-
-
-
-
-
 // ---------------------------------------------------------------------------
 // zehn (`gx find`) and ghostex-history (`gx h`)
 // ---------------------------------------------------------------------------
@@ -527,7 +534,12 @@ pub fn zehn_search_command(args: &[String]) -> CliResult<()> {
     let zehn_args = resolve_zehn_search_args(args);
     let mut full_args = launch.args.clone();
     full_args.extend(zehn_args);
-    run_interactive_process(&launch.command, &full_args, launch.cwd.as_deref(), &launch.env)?;
+    run_interactive_process(
+        &launch.command,
+        &full_args,
+        launch.cwd.as_deref(),
+        &launch.env,
+    )?;
     Ok(())
 }
 
@@ -541,7 +553,12 @@ pub fn history_command(args: &[String]) -> CliResult<()> {
     let history_args = resolve_ghostex_history_args(args);
     let mut full_args = launch.args.clone();
     full_args.extend(history_args);
-    run_interactive_process(&launch.command, &full_args, launch.cwd.as_deref(), &launch.env)?;
+    run_interactive_process(
+        &launch.command,
+        &full_args,
+        launch.cwd.as_deref(),
+        &launch.env,
+    )?;
     Ok(())
 }
 
@@ -551,7 +568,12 @@ pub fn resolve_ghostex_history_launch() -> CliResult<Launch> {
         .trim()
         .to_string();
     if !explicit_bin.is_empty() {
-        return Ok(Launch { command: explicit_bin, args: Vec::new(), cwd: None, env: Vec::new() });
+        return Ok(Launch {
+            command: explicit_bin,
+            args: Vec::new(),
+            cwd: None,
+            env: Vec::new(),
+        });
     }
     let cli_dir = cli_dir();
     for root in default_launch_roots(&cli_dir) {
@@ -657,7 +679,12 @@ pub fn resolve_zehn_launch() -> CliResult<Launch> {
         .trim()
         .to_string();
     if !explicit_bin.is_empty() {
-        return Ok(Launch { command: explicit_bin, args: Vec::new(), cwd: None, env: Vec::new() });
+        return Ok(Launch {
+            command: explicit_bin,
+            args: Vec::new(),
+            cwd: None,
+            env: Vec::new(),
+        });
     }
 
     let cli_dir = cli_dir();
@@ -710,7 +737,11 @@ pub fn resolve_zehn_launch_from_root(root: &Path) -> Option<Launch> {
         .trim()
         .to_string();
     Some(Launch {
-        command: if zig_bin.is_empty() { "zig".to_string() } else { zig_bin },
+        command: if zig_bin.is_empty() {
+            "zig".to_string()
+        } else {
+            zig_bin
+        },
         args: vec!["build".to_string(), "run".to_string(), "--".to_string()],
         cwd: Some(root.join("zehn")),
         env: Vec::new(),
@@ -778,7 +809,12 @@ pub fn run_gxserver_cli_command(args: &[String]) -> CliResult<()> {
     let launch = resolve_gxserver_cli_launch()?;
     let mut full_args = launch.args.clone();
     full_args.extend(args.to_vec());
-    run_interactive_process(&launch.command, &full_args, launch.cwd.as_deref(), &launch.env)?;
+    run_interactive_process(
+        &launch.command,
+        &full_args,
+        launch.cwd.as_deref(),
+        &launch.env,
+    )?;
     Ok(())
 }
 
@@ -831,7 +867,10 @@ pub fn resolve_gxserver_cli_launch_from_root(root: &Path) -> CliResult<Option<La
             .join("gxserver")
             .join("bin")
             .join("gxserver"),
-        root.join("gxserver").join("dist").join("src").join("cli.js"),
+        root.join("gxserver")
+            .join("dist")
+            .join("src")
+            .join("cli.js"),
         root.join("native")
             .join("macos")
             .join("ghostexHost")
@@ -897,7 +936,9 @@ pub fn resolve_gxserver_cli_path(cli_path: &Path, explicit: bool) -> PathBuf {
     */
     let source_root = find_ghostex_source_root(None);
     let candidates = unique_paths(&[
-        std::env::current_dir().ok().map(|cwd| cwd.join(&normalized)),
+        std::env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join(&normalized)),
         env_path("GHOSTEX_SOURCE_ROOT").map(|root| root.join(&normalized)),
         env_path("ghostex_REPO_ROOT").map(|root| root.join(&normalized)),
         source_root.map(|root| root.join(&normalized)),
@@ -1099,7 +1140,10 @@ mod tests {
             ("a:1".to_string(), Some(2), Some(3))
         );
         // The path itself must stay non-empty.
-        assert_eq!(parse_vscode_path_position(":12"), (":12".to_string(), None, None));
+        assert_eq!(
+            parse_vscode_path_position(":12"),
+            (":12".to_string(), None, None)
+        );
     }
 
     #[test]
@@ -1183,13 +1227,21 @@ mod tests {
         assert_eq!(launch.args[0], "run");
         assert_eq!(launch.args.last().map(String::as_str), Some("--no-session"));
 
-        let debug = root.join("tui2").join("target").join("debug").join("ghostex-tui");
+        let debug = root
+            .join("tui2")
+            .join("target")
+            .join("debug")
+            .join("ghostex-tui");
         touch(&debug);
         let launch = resolve_ghostex_tui_launch_from_root(&root).expect("debug launch");
         assert_eq!(launch.command, debug.to_string_lossy());
         assert_eq!(launch.args, vec!["--ghostex", "--no-session"]);
 
-        let release = root.join("tui2").join("target").join("release").join("ghostex-tui");
+        let release = root
+            .join("tui2")
+            .join("target")
+            .join("release")
+            .join("ghostex-tui");
         touch(&release);
         let launch = resolve_ghostex_tui_launch_from_root(&root).expect("release launch");
         assert_eq!(launch.command, release.to_string_lossy());
@@ -1230,7 +1282,11 @@ mod tests {
             .expect("no launch")
             .is_none());
 
-        let js_cli = root.join("gxserver").join("dist").join("src").join("cli.js");
+        let js_cli = root
+            .join("gxserver")
+            .join("dist")
+            .join("src")
+            .join("cli.js");
         touch(&js_cli);
         let launch = resolve_gxserver_cli_launch_from_root(&root)
             .expect("js launch")
@@ -1297,7 +1353,10 @@ mod tests {
 
     #[test]
     fn bundled_web_resource_roots_prefer_sibling_web_folder() {
-        let cli_dir = temp_root("web-roots").join("Contents").join("Resources").join("CLI");
+        let cli_dir = temp_root("web-roots")
+            .join("Contents")
+            .join("Resources")
+            .join("CLI");
         std::fs::create_dir_all(&cli_dir).expect("mkdir");
         let roots = ghostex_bundled_web_resource_roots(&cli_dir);
         assert_eq!(roots.len(), 2);

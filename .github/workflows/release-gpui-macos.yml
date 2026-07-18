@@ -52,6 +52,8 @@ jobs:
           fetch-depth: 0
           submodules: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
       - name: Restore embedded source checkouts
         run: |
           git submodule update --init --depth=1 -- code-server t3code
@@ -89,6 +91,21 @@ jobs:
           [[ "$($ZIG_016 version)" == "0.16.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\nZEHN_ZIG=%s\n' \
             "$ZIG_015" "$ZIG_015" "$ZIG_016" >> "$GITHUB_ENV"
+      - name: Seed pinned VS Code ripgrep cache
+        env:
+          RIPGREP_PACKAGE_VERSION: 1.17.1
+          RIPGREP_VERSION: v15.0.1
+          RIPGREP_SHA256: 2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6
+        run: |
+          RIPGREP_ASSET="ripgrep-${RIPGREP_VERSION}-aarch64-apple-darwin.tar.gz"
+          RIPGREP_CACHE_DIR="$(node -p 'require("os").tmpdir()')/vscode-ripgrep-cache-${RIPGREP_PACKAGE_VERSION}"
+          RIPGREP_CACHE_PATH="${RIPGREP_CACHE_DIR}/${RIPGREP_ASSET}"
+          mkdir -p "$RIPGREP_CACHE_DIR"
+          curl --fail --location --retry 5 --retry-all-errors \
+            "https://github.com/microsoft/ripgrep-prebuilt/releases/download/${RIPGREP_VERSION}/${RIPGREP_ASSET}" \
+            --output "$RIPGREP_CACHE_PATH"
+          [[ "$(shasum -a 256 "$RIPGREP_CACHE_PATH" | awk '{print $1}')" == "$RIPGREP_SHA256" ]]
+          tar -tzf "$RIPGREP_CACHE_PATH" >/dev/null
       - name: Install JavaScript dependencies
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -98,6 +115,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
+      - name: Validate Sparkle signing credential
+        if: ${{ inputs.update_sparkle }}
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "SPARKLE_PRIVATE_KEY is required when update_sparkle is enabled" >&2
+            exit 1
+          fi
       - name: Install embedded T3 Code dependencies
         env:
           GITHUB_TOKEN: ${{ github.token }}

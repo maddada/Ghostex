@@ -37,6 +37,8 @@ unsafe extern "C" {
     fn GhostexGpuiCEFOrderNativeViewFront(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
     fn GhostexGpuiCEFFocusNativeView(native_view: *mut c_void);
+    fn GhostexGpuiCEFActivateNativeViewWindow(native_view: *mut c_void);
+    fn GhostexGpuiCEFFocusGpuiRootView(native_view: *mut c_void);
     fn GhostexGpuiInstallFirstResponderObserverForNativeView(native_view: *mut c_void);
     fn GhostexGpuiNativeViewContainsResponder(
         root_native_view: *mut c_void,
@@ -171,6 +173,18 @@ pub(super) fn focus_native_view(native_view: *mut c_void) {
     }
 }
 
+pub(super) fn activate_native_view_window(native_view: *mut c_void) {
+    unsafe {
+        GhostexGpuiCEFActivateNativeViewWindow(native_view);
+    }
+}
+
+pub(super) fn focus_gpui_root_view(native_view: *mut c_void) {
+    unsafe {
+        GhostexGpuiCEFFocusGpuiRootView(native_view);
+    }
+}
+
 pub(super) fn native_view_owns_first_responder(native_view: *mut c_void) -> bool {
     unsafe { GhostexGpuiCEFNativeViewOwnsFirstResponder(native_view) }
 }
@@ -237,6 +251,60 @@ pub extern "C" fn GhostexGpuiCEFHandleEditCommandForNativeView(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFLogClipboardRoute(
+    command: c_int,
+    bridged_during_dispatch: c_int,
+    responder_walk_handled: c_int,
+    responder_class: *const std::ffi::c_char,
+) {
+    let responder_class = if responder_class.is_null() {
+        String::new()
+    } else {
+        // SAFETY: AppKit supplies object_getClassName storage that remains
+        // valid for this synchronous diagnostic callback.
+        unsafe { std::ffi::CStr::from_ptr(responder_class) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::TerminalFocus,
+        "gpui.cef.clipboardAppKitRoute",
+        serde_json::json!({
+            "command": command,
+            "bridgedDuringDispatch": bridged_during_dispatch != 0,
+            "responderWalkHandled": responder_walk_handled != 0,
+            "responderClass": responder_class,
+        }),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFLogDevToolsWindowActivation(
+    window_is_key: c_int,
+    responder_inside_native_view: c_int,
+    responder_class: *const std::ffi::c_char,
+) {
+    let responder_class = if responder_class.is_null() {
+        String::new()
+    } else {
+        // SAFETY: AppKit supplies object_getClassName storage that remains
+        // valid for this synchronous diagnostic callback.
+        unsafe { std::ffi::CStr::from_ptr(responder_class) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::TerminalFocus,
+        "gpui.cef.devToolsWindowActivation",
+        serde_json::json!({
+            "windowIsKey": window_is_key != 0,
+            "responderInsideNativeView": responder_inside_native_view != 0,
+            "responderClass": responder_class,
+        }),
+    );
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiCEFHandleZoomCommandForNativeView(
     native_view: *mut c_void,
     command: c_int,
@@ -250,6 +318,44 @@ pub extern "C" fn GhostexGpuiCEFHandleZoomCommandForNativeView(
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiCEFMarkNativeViewFocused(native_view: *mut c_void) -> c_int {
     super::shell::mark_native_view_focused(native_view)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFLogNativeMouseDown(
+    native_view: *mut c_void,
+    event_window_x: c_double,
+    event_window_y: c_double,
+    frame_window_x: c_double,
+    frame_window_y: c_double,
+    frame_width: c_double,
+    frame_height: c_double,
+    parent_bounds_width: c_double,
+    parent_bounds_height: c_double,
+    hidden: c_int,
+    responder_class: *const std::ffi::c_char,
+) {
+    let responder_class = if responder_class.is_null() {
+        String::new()
+    } else {
+        // SAFETY: AppKit supplies object_getClassName storage that remains
+        // valid for this synchronous diagnostic callback.
+        unsafe { std::ffi::CStr::from_ptr(responder_class) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    super::shell::log_native_mouse_down(
+        native_view,
+        event_window_x,
+        event_window_y,
+        frame_window_x,
+        frame_window_y,
+        frame_width,
+        frame_height,
+        parent_bounds_width,
+        parent_bounds_height,
+        hidden != 0,
+        responder_class,
+    );
 }
 
 #[unsafe(no_mangle)]

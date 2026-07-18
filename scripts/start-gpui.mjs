@@ -114,6 +114,34 @@ if (isDarwin) {
     includeBundleId: false,
   });
 }
+if (!isDarwin) {
+  /*
+  CDXC:LinuxRuntimePackaging 2026-07-18:
+  gxserver and zmx are one protocol-coupled runtime. The Linux app packager
+  previously reused whichever build/remote-gxserver-linux package happened to
+  exist, so a freshly compiled gxserver could emit flags unsupported by the
+  stale bundled zmx client. Rebuild the host-architecture package from the
+  current source before staging every local GPUI build.
+  */
+  logStartStep("Building local gxserver and zmx runtime...");
+  run(process.execPath, [
+    path.join(repoRoot, "gxserver-rs", "package-remote-linux.mjs"),
+    "--arch",
+    process.arch,
+    "--rust-target",
+    process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu",
+    "--zig-target",
+    process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu",
+    "--bd-bin",
+    path.join(repoRoot, "build", "remote-gxserver-linux", process.arch, "package", "bin", "bd"),
+    "--tui-bin",
+    path.join(repoRoot, "build", "remote-gxserver-linux", process.arch, "package", "bin", "ghostex-tui"),
+  ], {
+    env: buildEnvironment,
+    quietLabel: "Linux gxserver runtime build",
+  });
+  logStartDetail("Linux gxserver and zmx runtime is ready.");
+}
 logStartStep("Building GPUI app resources and native shell...");
 run("/bin/bash", [buildScript], {
   env: buildEnvironment,
@@ -129,7 +157,7 @@ if (isDarwin) {
     includeBundleId: true,
   });
   await stopRunningGxserverControlPlaneBeforeLaunch(appPath);
-  installAndOpenMacosApp(appPath);
+  await installAndOpenMacosApp(appPath);
 } else {
   await closeRunningGpuiBundle(installedAppPath, {
     action: `before installing rebuilt app to ${installedAppPath}`,
@@ -140,12 +168,17 @@ if (isDarwin) {
 finishStartStep();
 
 function resolveGpuiInstallDir() {
+  if (isDarwin) {
+    /*
+     * Local macOS GPUI debugging has one canonical app identity and location.
+     * Do not inherit a generic INSTALL_DIR from a shell/toolchain and create a
+     * second LaunchServices-visible Ghostex.app beside /Applications/Ghostex.app.
+     */
+    return "/Applications";
+  }
   const configured = process.env.INSTALL_DIR?.trim();
   if (configured) {
     return configured;
-  }
-  if (isDarwin) {
-    return "/Applications";
   }
   const xdgDataHome = process.env.XDG_DATA_HOME?.trim();
   return xdgDataHome || path.join(homedir(), ".local", "share");
@@ -542,7 +575,7 @@ function commandLineRunsExecutable(commandLine, executablePath) {
   return commandLine === executablePath || commandLine.startsWith(`${executablePath} `);
 }
 
-function installAndOpenMacosApp(stagedAppPath) {
+async function installAndOpenMacosApp(stagedAppPath) {
   logStartStep(`Installing ${appName} to ${installDir}...`);
   syncInstalledAppBundle(stagedAppPath);
   logStartStep("Checking installed GPUI app signature...");
@@ -556,7 +589,25 @@ function installAndOpenMacosApp(stagedAppPath) {
   );
   logStartStep(`Opening ${appName}...`);
   run("open", [installedAppPath], { env: startEnvironment });
-  logStartDetail("Open request sent.");
+  await verifyCanonicalMacosGpuiLaunch();
+  logStartDetail(`One canonical app process is running from ${installedAppPath}.`);
+}
+
+async function verifyCanonicalMacosGpuiLaunch() {
+  const deadline = Date.now() + 10_000;
+  let bundlePids = [];
+  let canonicalPids = [];
+  while (Date.now() < deadline) {
+    bundlePids = findRunningGpuiPidsByBundleId();
+    canonicalPids = findRunningGpuiPidsByBundlePath(installedAppPath);
+    if (bundlePids.length === 1 && canonicalPids.includes(bundlePids[0])) {
+      return;
+    }
+    await sleep(100);
+  }
+  throw new Error(
+    `Expected exactly one ${bundleId} app launched from ${installedAppPath}; found ${bundlePids.length} bundle process(es) and ${canonicalPids.length} canonical bundle process(es).`,
+  );
 }
 
 function installAndLaunchLinuxApp(stagedAppPath) {

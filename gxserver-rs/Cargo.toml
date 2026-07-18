@@ -13,6 +13,7 @@ crossterm = "0.28"
 futures-util = "0.3"
 libc = "0.2"
 md-5 = "0.10"
+portable-pty = "0.9"
 rand = "0.8"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 ureq = { version = "2", features = ["json"] }

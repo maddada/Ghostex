@@ -2,6 +2,7 @@
 
 ### General notes
 
+- Multiple sub-agents are working in this repository. Don't be alarmed if something gets changed around your code. This is normal. Just get your work done without affecting the work of other sub-agents or breaking their work.
 - Don't get stuck on stale git locks. You can delete those and continue on your work without confirmation.
 
 ### Repository Search Routing

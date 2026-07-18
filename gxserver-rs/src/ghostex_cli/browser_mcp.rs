@@ -136,8 +136,8 @@ fn parse_browser_open(rest: &[String], flags: &Flags) -> Value {
         flag_json(flags, "reuse").unwrap_or_else(|| Value::String("similar".to_string()))
     };
     payload.insert("reuse".to_string(), reuse);
-    if let Some(value) = flag_json(flags, "url")
-        .or_else(|| rest.first().map(|value| Value::String(value.clone())))
+    if let Some(value) =
+        flag_json(flags, "url").or_else(|| rest.first().map(|value| Value::String(value.clone())))
     {
         payload.insert("url".to_string(), value);
     }
@@ -165,23 +165,59 @@ fn browser_usage() -> String {
      * agents keep working in their own worktree and reuse similar browser tabs.
      */
     let setup_commands = [
-        format_help_command("browser mcp [--port n] [--target id|--page id]", "Run the stdio MCP server for CEF DevTools control"),
-        format_help_command("browser install-skill [--json]", "Install the $ghostex-browser-use skill with the external skills CLI"),
-        format_help_command("browser open [url] [project/reuse flags]", "Open or reuse an embedded browser pane"),
-        format_help_command("browser open-pane [url] [project/reuse flags]", "Alias for browser open"),
+        format_help_command(
+            "browser mcp [--port n] [--target id|--page id]",
+            "Run the stdio MCP server for CEF DevTools control",
+        ),
+        format_help_command(
+            "browser install-skill [--json]",
+            "Install the $ghostex-browser-use skill with the external skills CLI",
+        ),
+        format_help_command(
+            "browser open [url] [project/reuse flags]",
+            "Open or reuse an embedded browser pane",
+        ),
+        format_help_command(
+            "browser open-pane [url] [project/reuse flags]",
+            "Alias for browser open",
+        ),
     ]
     .join("\n");
 
     let mcp_tools = [
-        format_help_command("ghostex_list_pages", "List CEF DevTools targets and current page ids"),
-        format_help_command("ghostex_select_page", "Choose the target page for later tool calls"),
+        format_help_command(
+            "ghostex_list_pages",
+            "List CEF DevTools targets and current page ids",
+        ),
+        format_help_command(
+            "ghostex_select_page",
+            "Choose the target page for later tool calls",
+        ),
         format_help_command("ghostex_navigate", "Navigate the selected CEF page"),
-        format_help_command("ghostex_console_logs", "Read console messages, Log entries, and exceptions captured after attach"),
-        format_help_command("ghostex_snapshot", "Get an accessibility-like DOM snapshot with @e element refs"),
-        format_help_command("ghostex_click / ghostex_fill", "Interact with @e refs or CSS selectors"),
-        format_help_command("ghostex_press_key", "Send Enter, Tab, Escape, arrows, or printable keys"),
-        format_help_command("ghostex_evaluate", "Run JavaScript in the selected page for inspection"),
-        format_help_command("ghostex_screenshot", "Capture a PNG screenshot as base64 MCP image content"),
+        format_help_command(
+            "ghostex_console_logs",
+            "Read console messages, Log entries, and exceptions captured after attach",
+        ),
+        format_help_command(
+            "ghostex_snapshot",
+            "Get an accessibility-like DOM snapshot with @e element refs",
+        ),
+        format_help_command(
+            "ghostex_click / ghostex_fill",
+            "Interact with @e refs or CSS selectors",
+        ),
+        format_help_command(
+            "ghostex_press_key",
+            "Send Enter, Tab, Escape, arrows, or printable keys",
+        ),
+        format_help_command(
+            "ghostex_evaluate",
+            "Run JavaScript in the selected page for inspection",
+        ),
+        format_help_command(
+            "ghostex_screenshot",
+            "Capture a PNG screenshot as base64 MCP image content",
+        ),
     ]
     .join("\n");
 
@@ -566,7 +602,10 @@ fn browser_mcp_list_pages(state: &mut McpState) -> CliResult<Value> {
             entry.insert("title".to_string(), defaulted(page, "title"));
             entry.insert("type".to_string(), defaulted(page, "type"));
             entry.insert("url".to_string(), defaulted(page, "url"));
-            let selected = match (&state.selected_page_id, page.get("id").and_then(Value::as_str)) {
+            let selected = match (
+                &state.selected_page_id,
+                page.get("id").and_then(Value::as_str),
+            ) {
                 (Some(selected_id), Some(page_id)) => selected_id == page_id,
                 _ => false,
             };
@@ -643,8 +682,8 @@ fn browser_mcp_console_logs(args: &Value, state: &mut McpState) -> CliResult<Val
     ensure_capture_enabled(state, &page_id)?;
     pump_client_events(state, &page_id);
     let entries = state.captures.get(&page_id).cloned().unwrap_or_default();
-    let limit = normalize_positive_integer_opt(defined(args.get("limit")).cloned()).unwrap_or(200)
-        as usize;
+    let limit =
+        normalize_positive_integer_opt(defined(args.get("limit")).cloned()).unwrap_or(200) as usize;
     let selected: Vec<Value> = entries
         .iter()
         .skip(entries.len().saturating_sub(limit))
@@ -673,7 +712,10 @@ fn browser_mcp_snapshot(args: &Value, state: &mut McpState) -> CliResult<Value> 
     {
         for element in elements {
             let element_ref = element.get("ref").and_then(Value::as_str).unwrap_or("");
-            let selector = element.get("selector").and_then(Value::as_str).unwrap_or("");
+            let selector = element
+                .get("selector")
+                .and_then(Value::as_str)
+                .unwrap_or("");
             if !element_ref.is_empty() && !selector.is_empty() {
                 ref_map.insert(element_ref.to_string(), selector.to_string());
             }
@@ -707,7 +749,12 @@ fn browser_mcp_fill(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let page = get_ghostex_cdp_client(args, state)?;
     let page_id = page_id_of(&page);
     let selector = resolve_browser_element_selector(args, state, &page_id)?;
-    let result = evaluate_function(state, &page_id, GHOSTEX_FILL_SCRIPT, json!([selector, text]))?;
+    let result = evaluate_function(
+        state,
+        &page_id,
+        GHOSTEX_FILL_SCRIPT,
+        json!([selector, text]),
+    )?;
     let mut response = serde_json::Map::new();
     if let Some(result) = result {
         response.insert("filled".to_string(), result);
@@ -724,10 +771,20 @@ fn browser_mcp_press_key(args: &Value, state: &mut McpState) -> CliResult<Value>
     let event = key_event_for_browser_mcp(&key);
     let mut key_down = event.as_object().cloned().unwrap_or_default();
     key_down.insert("type".to_string(), json!("keyDown"));
-    client_call(state, &page_id, "Input.dispatchKeyEvent", Value::Object(key_down))?;
+    client_call(
+        state,
+        &page_id,
+        "Input.dispatchKeyEvent",
+        Value::Object(key_down),
+    )?;
     let mut key_up = event.as_object().cloned().unwrap_or_default();
     key_up.insert("type".to_string(), json!("keyUp"));
-    client_call(state, &page_id, "Input.dispatchKeyEvent", Value::Object(key_up))?;
+    client_call(
+        state,
+        &page_id,
+        "Input.dispatchKeyEvent",
+        Value::Object(key_up),
+    )?;
     Ok(json!({
         "key": key,
         "page": cdp_page_summary(&page),
@@ -782,7 +839,12 @@ fn page_id_of(page: &Value) -> String {
 
 /// Perform one CDP call on the page's client, then record any CDP events that
 /// arrived on the socket while waiting (the JS client did this via onEvent).
-fn client_call(state: &mut McpState, page_id: &str, method: &str, params: Value) -> CliResult<Value> {
+fn client_call(
+    state: &mut McpState,
+    page_id: &str,
+    method: &str,
+    params: Value,
+) -> CliResult<Value> {
     let client = state
         .clients
         .get_mut(page_id)
@@ -1011,7 +1073,10 @@ fn record_ghostex_cdp_event(
         );
         push_entry(entry);
     } else if method == "Runtime.exceptionThrown" {
-        let exception_details = params.get("exceptionDetails").cloned().unwrap_or(Value::Null);
+        let exception_details = params
+            .get("exceptionDetails")
+            .cloned()
+            .unwrap_or(Value::Null);
         let mut entry = serde_json::Map::new();
         entry.insert("exception".to_string(), exception_details.clone());
         entry.insert("level".to_string(), json!("error"));
@@ -1060,8 +1125,8 @@ fn evaluate_function(
     function_source: &str,
     args: Value,
 ) -> CliResult<Option<Value>> {
-    let args_json = serde_json::to_string(&args)
-        .map_err(|error| CliError::Other(error.to_string()))?;
+    let args_json =
+        serde_json::to_string(&args).map_err(|error| CliError::Other(error.to_string()))?;
     let expression = format!("({function_source})(...{args_json})");
     let result = client_call(
         state,
@@ -1095,11 +1160,9 @@ fn resolve_browser_element_selector(
     if let Some(selector) = string_flag(defined(args.get("selector"))) {
         return Ok(selector);
     }
-    let element_ref = string_flag(
-        defined(args.get("ref"))
-            .or_else(|| defined(args.get("element"))),
-    )
-    .ok_or_else(|| CliError::Other("Expected selector or ref".to_string()))?;
+    let element_ref =
+        string_flag(defined(args.get("ref")).or_else(|| defined(args.get("element"))))
+            .ok_or_else(|| CliError::Other("Expected selector or ref".to_string()))?;
     let mapped = state
         .ref_maps
         .get(page_id)
@@ -1167,7 +1230,11 @@ fn key_event_for_browser_mcp(key: &str) -> Value {
     }
     // JS `key.length === 1` counts UTF-16 code units.
     let is_single_unit = key.encode_utf16().count() == 1;
-    let text = if is_single_unit { key.to_string() } else { String::new() };
+    let text = if is_single_unit {
+        key.to_string()
+    } else {
+        String::new()
+    };
     let upper = key.to_uppercase();
     let code = if !text.is_empty() {
         format!("Key{upper}")
@@ -1350,8 +1417,8 @@ impl CdpClient {
             .map_err(|error| CliError::Other(error.to_string()))?
             .next()
             .ok_or_else(|| CliError::Other("Invalid WebSocket handshake".to_string()))?;
-        let stream = TcpStream::connect_timeout(&address, Duration::from_secs(5)).map_err(
-            |error| {
+        let stream =
+            TcpStream::connect_timeout(&address, Duration::from_secs(5)).map_err(|error| {
                 if matches!(
                     error.kind(),
                     std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
@@ -1360,8 +1427,7 @@ impl CdpClient {
                 } else {
                     CliError::Other(error.to_string())
                 }
-            },
-        )?;
+            })?;
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
         let (socket, _response) = tungstenite::client::client(ws_url, stream)
             .map_err(|error| CliError::Other(error.to_string()))?;
@@ -1386,7 +1452,11 @@ impl CdpClient {
             self.closed = true;
             return Err(CliError::Other(error.to_string()));
         }
-        let timeout_ms = if self.timeout_ms > 0 { self.timeout_ms } else { 10_000 };
+        let timeout_ms = if self.timeout_ms > 0 {
+            self.timeout_ms
+        } else {
+            10_000
+        };
         let deadline = Instant::now() + Duration::from_millis(timeout_ms);
         loop {
             let now = Instant::now();
@@ -1407,7 +1477,9 @@ impl CdpClient {
                     };
                     match defined(parsed.get("id")).and_then(Value::as_u64) {
                         Some(message_id) if message_id == id => {
-                            if let Some(error) = parsed.get("error").filter(|error| js_truthy(error)) {
+                            if let Some(error) =
+                                parsed.get("error").filter(|error| js_truthy(error))
+                            {
                                 let message = error
                                     .get("message")
                                     .and_then(Value::as_str)
@@ -1441,9 +1513,7 @@ impl CdpClient {
                         "Timed out waiting for CDP method {method}"
                     )));
                 }
-                Err(
-                    tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed,
-                ) => {
+                Err(tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed) => {
                     self.closed = true;
                     return Err(CliError::Other("CDP connection closed".to_string()));
                 }
@@ -1751,15 +1821,10 @@ mod tests {
             Some(&json!("2025-03-26"))
         );
 
-        let listed = handle_browser_mcp_message(
-            &json!({ "id": 3, "method": "tools/list" }),
-            &mut state,
-        )
-        .expect("tools/list response");
-        assert_eq!(
-            listed.pointer("/result/tools"),
-            Some(&browser_mcp_tools())
-        );
+        let listed =
+            handle_browser_mcp_message(&json!({ "id": 3, "method": "tools/list" }), &mut state)
+                .expect("tools/list response");
+        assert_eq!(listed.pointer("/result/tools"), Some(&browser_mcp_tools()));
     }
 
     #[test]
@@ -1789,11 +1854,9 @@ mod tests {
     #[test]
     fn handle_unknown_method_and_unknown_tool() {
         let mut state = test_state();
-        let response = handle_browser_mcp_message(
-            &json!({ "id": 4, "method": "resources/list" }),
-            &mut state,
-        )
-        .expect("error response");
+        let response =
+            handle_browser_mcp_message(&json!({ "id": 4, "method": "resources/list" }), &mut state)
+                .expect("error response");
         assert_eq!(response.pointer("/error/code"), Some(&json!(-32601)));
         assert_eq!(
             response.pointer("/error/message"),
@@ -1832,7 +1895,8 @@ mod tests {
         assert!(buffer.is_empty());
 
         // Split frame arrives across chunks.
-        let mut buffer = format!("Content-Length: {}\r\n\r\n{}", body.len(), &body[..10]).into_bytes();
+        let mut buffer =
+            format!("Content-Length: {}\r\n\r\n{}", body.len(), &body[..10]).into_bytes();
         assert!(extract_mcp_messages(&mut buffer).is_empty());
         buffer.extend_from_slice(body[10..].as_bytes());
         assert_eq!(extract_mcp_messages(&mut buffer).len(), 1);
@@ -1887,8 +1951,14 @@ mod tests {
         assert_eq!(string_flag(Some(&Value::Null)), None);
         assert_eq!(string_flag(None), None);
 
-        assert_eq!(normalize_positive_integer_opt(Some(json!(9333))), Some(9333));
-        assert_eq!(normalize_positive_integer_opt(Some(json!("9334"))), Some(9334));
+        assert_eq!(
+            normalize_positive_integer_opt(Some(json!(9333))),
+            Some(9333)
+        );
+        assert_eq!(
+            normalize_positive_integer_opt(Some(json!("9334"))),
+            Some(9334)
+        );
         assert_eq!(normalize_positive_integer_opt(Some(json!(1.5))), None);
         assert_eq!(normalize_positive_integer_opt(Some(json!(0))), None);
         assert_eq!(normalize_positive_integer_opt(Some(json!(-2))), None);

@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <Carbon/Carbon.h>
 #import <Foundation/Foundation.h>
 #import <stdbool.h>
 #import <objc/message.h>
@@ -13,11 +14,45 @@ void GhostexGpuiCEFDoMessageLoopWork(void);
 int GhostexGpuiCEFHandleSelectAllForNativeView(void* nativeView);
 int GhostexGpuiCEFHandleSelectAllForActiveNativeView(void);
 int GhostexGpuiCEFHandleEditCommandForNativeView(void* nativeView, int command);
+void GhostexGpuiCEFLogClipboardRoute(
+  int command,
+  int bridgedDuringDispatch,
+  int responderWalkHandled,
+  const char* responderClass);
+void GhostexGpuiCEFLogDevToolsWindowActivation(
+  int windowIsKey,
+  int responderInsideNativeView,
+  const char* responderClass);
 int GhostexGpuiCEFHandleZoomCommandForNativeView(void* nativeView, int command);
 int GhostexGpuiCEFMarkNativeViewFocused(void* nativeView);
+void GhostexGpuiCEFLogNativeMouseDown(
+  void* nativeView,
+  double eventWindowX,
+  double eventWindowY,
+  double frameWindowX,
+  double frameWindowY,
+  double frameWidth,
+  double frameHeight,
+  double parentBoundsWidth,
+  double parentBoundsHeight,
+  int hidden,
+  const char* responderClass);
 void GhostexGpuiCEFClearActiveNativeView(void);
 int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void* nativeView);
 void GhostexGpuiFirstResponderDidChange(void* responder);
+int GhostexGpuiCompositedTerminalShouldHandleTab(void);
+void GhostexGpuiCompositedTerminalLogTabRoute(
+  uint64_t modifiers,
+  int responderInsideGpuiRoot,
+  int keyboardResponderFound,
+  int keyboardResponderIsRoot,
+  int keyboardResponderIsFirstResponder,
+  int routed,
+  int dispatchHandled,
+  const char* rootClass,
+  const char* responderClass,
+  const char* keyboardResponderClass);
+bool GhostexGpuiNativeViewContainsResponder(void* rootNativeView, void* responder);
 
 // ABI contract with cef/shell.rs CefEditCommand::from_raw.
 typedef enum {
@@ -39,6 +74,8 @@ static BOOL g_ghostexGpuiCEFMessagePumpInstalled = NO;
 static BOOL g_ghostexGpuiCEFApplicationHooksInstalled = NO;
 static BOOL g_ghostexGpuiCEFHandlingSendEvent = NO;
 static BOOL g_ghostexGpuiCEFEditCommandBridged = NO;
+static const void* GhostexGpuiFirstResponderObserverKey =
+  &GhostexGpuiFirstResponderObserverKey;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkPending = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkActive = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpReentrancyDetected = NO;
@@ -88,23 +125,26 @@ static BOOL GhostexGpuiCEFHandleZoomCommandForResponder(
   id responder,
   GhostexGpuiCEFZoomCommand command);
 static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd, id sender);
-static void GhostexGpuiCEFMarkFocusedResponder(id responder);
+static NSView* GhostexGpuiCEFMarkFocusedResponder(id responder);
 static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view);
 static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event);
 static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
+static NSView* GhostexGpuiKeyboardResponderInRoot(NSView* rootView, id responder);
 
 @interface GhostexGpuiFirstResponderObserver : NSObject
 @property(nonatomic, weak) NSWindow* window;
-- (instancetype)initWithWindow:(NSWindow*)window;
+@property(nonatomic, weak) NSView* gpuiRootView;
+- (instancetype)initWithWindow:(NSWindow*)window gpuiRootView:(NSView*)gpuiRootView;
 @end
 
 @implementation GhostexGpuiFirstResponderObserver
-- (instancetype)initWithWindow:(NSWindow*)window {
+- (instancetype)initWithWindow:(NSWindow*)window gpuiRootView:(NSView*)gpuiRootView {
   self = [super init];
   if (!self) {
     return nil;
   }
   _window = window;
+  _gpuiRootView = gpuiRootView;
   [window addObserver:self
            forKeyPath:@"firstResponder"
               options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionNew
@@ -132,6 +172,27 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
   [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
 }
 @end
+
+static NSView* GhostexGpuiKeyboardResponderInRoot(NSView* rootView, id responder) {
+  if (!rootView || ![responder isKindOfClass:NSView.class]) {
+    return nil;
+  }
+  Method baseKeyEquivalent =
+    class_getInstanceMethod(NSView.class, @selector(performKeyEquivalent:));
+  IMP baseKeyEquivalentImplementation = method_getImplementation(baseKeyEquivalent);
+  for (NSView* view = (NSView*)responder; view; view = view.superview) {
+    Method keyEquivalent =
+      class_getInstanceMethod(view.class, @selector(performKeyEquivalent:));
+    if (keyEquivalent &&
+        method_getImplementation(keyEquivalent) != baseKeyEquivalentImplementation) {
+      return view;
+    }
+    if (view == rootView) {
+      break;
+    }
+  }
+  return nil;
+}
 
 /*
  CDXC:GPUICefAppProtocol 2026-06-14-16:14:
@@ -190,6 +251,60 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
   event = GhostexGpuiNormalizedNavigationKeyEvent(event);
 
   /*
+   CDXC:GPUICompositedTerminalTab 2026-07-15:
+   AppKit treats Tab and Shift-Tab as key-view traversal before GPUIView's
+   key-equivalent path. When the GPUI terminal FocusHandle owns input and AppKit's
+   current responder is classified as the GPUI window, deliver that native
+   event to the exact GPUI root registered for this window so the normal GPUI
+   -> TerminalElement -> libghostty encoder path receives it. CEF descendants,
+   GPUI text inputs, Option/Control/Command variants, and unrelated windows
+   stay on AppKit's normal responder path.
+   */
+  if (event.type == NSEventTypeKeyDown && event.keyCode == kVK_Tab) {
+    NSEventModifierFlags flags =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    flags &= ~NSEventModifierFlagCapsLock;
+    NSWindow* window = event.window ?: NSApp.keyWindow;
+    GhostexGpuiFirstResponderObserver* observer =
+      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+    NSView* gpuiRootView = observer.gpuiRootView;
+    id responder = window.firstResponder;
+    BOOL responderInsideGpuiRoot =
+      gpuiRootView &&
+      gpuiRootView.window == window &&
+      [responder isKindOfClass:NSView.class] &&
+      GhostexGpuiNativeViewContainsResponder(
+        (__bridge void*)gpuiRootView,
+        (__bridge void*)responder);
+    NSView* keyboardResponder = responderInsideGpuiRoot
+      ? GhostexGpuiKeyboardResponderInRoot(gpuiRootView, responder)
+      : nil;
+    BOOL shouldRoute =
+      (flags & ~NSEventModifierFlagShift) == 0 &&
+      responderInsideGpuiRoot &&
+      keyboardResponder &&
+      GhostexGpuiCompositedTerminalShouldHandleTab() != 0;
+    int dispatchHandled = -1;
+    if (shouldRoute) {
+      dispatchHandled = [keyboardResponder performKeyEquivalent:event] ? 1 : 0;
+    }
+    GhostexGpuiCompositedTerminalLogTabRoute(
+      (uint64_t)flags,
+      responderInsideGpuiRoot ? 1 : 0,
+      keyboardResponder ? 1 : 0,
+      keyboardResponder == gpuiRootView ? 1 : 0,
+      keyboardResponder == responder ? 1 : 0,
+      shouldRoute ? 1 : 0,
+      dispatchHandled,
+      gpuiRootView ? object_getClassName(gpuiRootView) : NULL,
+      responder ? object_getClassName(responder) : NULL,
+      keyboardResponder ? object_getClassName(keyboardResponder) : NULL);
+    if (shouldRoute) {
+      return;
+    }
+  }
+
+  /*
    CDXC:GPUICefEditCommands 2026-06-14-17:25:
    GPUI can keep its address-input focus handle after Chromium has accepted a page click, so AppKit command-key dispatch may never invoke selectAll: on CEF's responder chain. When the active native target is a registered CEF view, mirror only Cmd+A in the existing CEF NSApplication sendEvent hook and call Chromium's Frame::select_all after normal dispatch; GPUI chrome clicks clear that active target before their own text shortcuts run.
    */
@@ -223,10 +338,21 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
     GhostexGpuiCEFHandleSelectAllForActiveNativeView();
   }
 
-  if (clipboardCommand != GhostexGpuiCEFEditCommandNone &&
-      !g_ghostexGpuiCEFEditCommandBridged) {
-    NSWindow* window = event.window ?: NSApp.keyWindow;
-    GhostexGpuiCEFHandleEditCommandForResponder(window.firstResponder, clipboardCommand);
+  BOOL bridgedDuringDispatch = g_ghostexGpuiCEFEditCommandBridged;
+  BOOL responderWalkHandled = NO;
+  NSWindow* clipboardWindow = event.window ?: NSApp.keyWindow;
+  if (clipboardCommand != GhostexGpuiCEFEditCommandNone && !bridgedDuringDispatch) {
+    responderWalkHandled = GhostexGpuiCEFHandleEditCommandForResponder(
+      clipboardWindow.firstResponder,
+      clipboardCommand);
+  }
+  if (clipboardCommand != GhostexGpuiCEFEditCommandNone) {
+    id responder = clipboardWindow.firstResponder;
+    GhostexGpuiCEFLogClipboardRoute(
+      (int)clipboardCommand,
+      bridgedDuringDispatch ? 1 : 0,
+      responderWalkHandled ? 1 : 0,
+      responder ? object_getClassName(responder) : NULL);
   }
   g_ghostexGpuiCEFEditCommandBridged = wasEditCommandBridged;
 }
@@ -640,16 +766,18 @@ void GhostexGpuiInstallFirstResponderObserverForNativeView(void* nativeView) {
     return;
   }
 
-  static const void* GhostexGpuiFirstResponderObserverKey =
-    &GhostexGpuiFirstResponderObserverKey;
   NSWindow* window = view.window;
-  if (objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey)) {
+  GhostexGpuiFirstResponderObserver* observer =
+    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  if (observer) {
+    observer.gpuiRootView = view;
     GhostexGpuiFirstResponderReportWindow(window);
     return;
   }
 
-  GhostexGpuiFirstResponderObserver* observer =
-    [[GhostexGpuiFirstResponderObserver alloc] initWithWindow:window];
+  observer = [[GhostexGpuiFirstResponderObserver alloc]
+    initWithWindow:window
+       gpuiRootView:view];
   objc_setAssociatedObject(
     window,
     GhostexGpuiFirstResponderObserverKey,
@@ -796,11 +924,27 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView* view) {
 }
 
 static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd, NSEvent* event) {
+  NSView* browserRoot = GhostexGpuiCEFMarkFocusedResponder(self);
   NSWindow* window = [self window];
   if (window) {
     [window makeFirstResponder:self];
   }
-  GhostexGpuiCEFMarkFocusedResponder(self);
+  if (browserRoot && event) {
+    NSRect frameInWindow = [browserRoot convertRect:browserRoot.bounds toView:nil];
+    NSView* parent = browserRoot.superview;
+    GhostexGpuiCEFLogNativeMouseDown(
+      (__bridge void*)browserRoot,
+      event.locationInWindow.x,
+      event.locationInWindow.y,
+      frameInWindow.origin.x,
+      frameInWindow.origin.y,
+      frameInWindow.size.width,
+      frameInWindow.size.height,
+      parent ? NSWidth(parent.bounds) : 0.0,
+      parent ? NSHeight(parent.bounds) : 0.0,
+      browserRoot.hidden || browserRoot.isHiddenOrHasHiddenAncestor ? 1 : 0,
+      object_getClassName(self));
+  }
   /*
    CDXC:GPUITitlebarDropdownCefDismissal 2026-07-15:
    CEF child views receive mouseDown before GPUI's main-window mouse capture,
@@ -1157,16 +1301,17 @@ static BOOL GhostexGpuiCEFHandleZoomCommandForResponder(
   return NO;
 }
 
-static void GhostexGpuiCEFMarkFocusedResponder(id responder) {
+static NSView* GhostexGpuiCEFMarkFocusedResponder(id responder) {
   if (![responder isKindOfClass:NSView.class]) {
-    return;
+    return nil;
   }
 
   for (NSView* view = (NSView*)responder; view; view = view.superview) {
     if (GhostexGpuiCEFMarkNativeViewFocused((__bridge void*)view)) {
-      return;
+      return view;
     }
   }
+  return nil;
 }
 
 void GhostexGpuiCEFFocusNativeView(void* nativeView) {
@@ -1188,4 +1333,54 @@ void GhostexGpuiCEFFocusNativeView(void* nativeView) {
     GhostexGpuiCEFClearActiveNativeView();
   }
   [window makeFirstResponder:view];
+}
+
+void GhostexGpuiCEFActivateNativeViewWindow(void* nativeView) {
+  NSView* view = (__bridge NSView*)nativeView;
+  NSWindow* window = view.window;
+  if (!view || !window) {
+    return;
+  }
+
+  /*
+   CDXC:GPUICefDevToolsFocus 2026-07-15:
+   CEF DevTools owns a separate native window. Making its browser view first
+   responder is insufficient while the GPUI window remains key: AppKit sends
+   application edit shortcuts through the key window's GPUIView instead.
+   Activate the real DevTools window before focusing its registered CEF root
+   so normal responder-chain Copy/Paste reaches the popup browser.
+  */
+  if (!GhostexGpuiCEFMarkNativeViewFocused(nativeView)) {
+    GhostexGpuiCEFClearActiveNativeView();
+  }
+  [window makeKeyAndOrderFront:nil];
+  [window makeFirstResponder:view];
+  id responder = window.firstResponder;
+  BOOL responderInsideNativeView =
+    [responder isKindOfClass:NSView.class] &&
+    GhostexGpuiNativeViewContainsResponder(
+      nativeView,
+      (__bridge void*)responder);
+  GhostexGpuiCEFLogDevToolsWindowActivation(
+    window.isKeyWindow ? 1 : 0,
+    responderInsideNativeView ? 1 : 0,
+    responder ? object_getClassName(responder) : NULL);
+}
+
+void GhostexGpuiCEFFocusGpuiRootView(void* nativeView) {
+  NSView* view = (__bridge NSView*)nativeView;
+  if (!view || !view.window) {
+    return;
+  }
+
+  /*
+   CDXC:GPUICefExplicitNativeFocusOwnership 2026-07-15:
+   A caller that owns the GPUI root already knows this target is not a CEF
+   surface. Do not run it through the generic CEF registry probe: clear the
+   active Chromium grant unconditionally before AppKit transfers first
+   responder to GPUI, so a renderer SYSTEM focus callback from the outgoing
+   sidebar cannot reuse stale explicit ownership during the same event.
+  */
+  GhostexGpuiCEFClearActiveNativeView();
+  [view.window makeFirstResponder:view];
 }

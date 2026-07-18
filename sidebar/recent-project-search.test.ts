@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { filterRecentProjects } from "./recent-project-search";
+import { groupRecentProjectsByMachine } from "./recent-project-search";
 import type { SidebarRecentProject } from "../shared/session-grid-contract";
 
 const PROJECTS: SidebarRecentProject[] = [
@@ -25,32 +25,16 @@ const PROJECTS: SidebarRecentProject[] = [
   },
 ];
 
-describe("filterRecentProjects", () => {
-  test("keeps native recency order when query is blank", () => {
-    expect(filterRecentProjects(PROJECTS, "")).toEqual(PROJECTS);
-  });
-
-  test("matches project names and paths fuzzily", () => {
-    /**
-     * CDXC:RecentProjects 2026-05-04-14:25
-     * Recent Projects search should find parked projects by name or path while
-     * leaving restore ordering owned by the native recency projection.
-     */
-    expect(filterRecentProjects(PROJECTS, "agm").map((project) => project.projectId)).toEqual([
+describe("groupRecentProjectsByMachine", () => {
+  test("keeps local and remote recency order within their machine sections", () => {
+    const grouped = groupRecentProjectsByMachine(PROJECTS);
+    expect(grouped.local.map((project) => project.projectId)).toEqual([
       "agent-manager-x",
+      "open-design",
     ]);
     expect(
-      filterRecentProjects(PROJECTS, "open design").map((project) => project.projectId),
-    ).toEqual(["open-design"]);
-  });
-
-  test("matches remote project machine names", () => {
-    /**
-     * CDXC:RemoteRecentProjects 2026-06-24-10:36:
-     * Recent Projects includes closed remote projects with a visible machine
-     * suffix, so filtering must match the machine name as well as path/title.
-     */
-    expect(filterRecentProjects(PROJECTS, "raspberry").map((project) => project.projectId)).toEqual([
+      grouped.remoteByMachineId.get("main-machine")?.map((project) => project.projectId),
+    ).toEqual([
       "remote:main-machine:project:remote-control",
     ]);
   });

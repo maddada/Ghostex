@@ -56,7 +56,9 @@ pub fn update_workspace_session_groups(
         .get("state")
         .filter(|value| value.is_object())
         .ok_or_else(|| {
-            DomainStateError::bad_request("Workspace session groups update requires a state object.")
+            DomainStateError::bad_request(
+                "Workspace session groups update requires a state object.",
+            )
         })?;
     let normalized = normalize_workspace_session_groups_state(state);
     let serialized = serde_json::to_string(&normalized).map_err(|error| DomainStateError {
@@ -114,8 +116,8 @@ fn normalize_project_workspace_groups(project_state: &Value) -> Option<Value> {
         if !seen_group_ids.insert(group_id.clone()) {
             continue;
         }
-        let title =
-            trimmed_bounded_text(group.get("title"), MAX_TITLE_CHARS).unwrap_or_else(|| group_id.clone());
+        let title = trimmed_bounded_text(group.get("title"), MAX_TITLE_CHARS)
+            .unwrap_or_else(|| group_id.clone());
         let session_ids = group
             .get("sessionIds")
             .and_then(Value::as_array)

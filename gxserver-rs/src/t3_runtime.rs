@@ -245,13 +245,11 @@ impl T3RuntimeManager {
             let owned = tracked_alive.is_some()
                 || (self.is_owned_t3_runtime_process(listener)
                     && self.has_recoverable_auth_material());
-            let started_at = tracked_alive
-                .and(tracked_started_at)
-                .or_else(|| {
-                    self.probe
-                        .process_age_seconds(listener.pid)
-                        .map(started_at_for_age_seconds)
-                });
+            let started_at = tracked_alive.and(tracked_started_at).or_else(|| {
+                self.probe
+                    .process_age_seconds(listener.pid)
+                    .map(started_at_for_age_seconds)
+            });
             return T3RuntimeStatusPayload {
                 running: true,
                 pid: Some(listener.pid),
@@ -329,10 +327,7 @@ impl T3RuntimeManager {
         &self,
         plan: Option<&T3RuntimeLaunchPlan>,
     ) -> Result<T3EnsureDecision, DomainStateError> {
-        let tracked_alive = self
-            .lock_inner()
-            .child_pid
-            .is_some_and(is_process_running);
+        let tracked_alive = self.lock_inner().child_pid.is_some_and(is_process_running);
         if tracked_alive {
             return Ok(T3EnsureDecision::AlreadyRunning);
         }
@@ -1079,7 +1074,11 @@ fn is_t3_runtime_supervisor_command(command: &str) -> bool {
         && normalized.contains(".vscode/extensions/maddada.vsmux")
 }
 
-fn build_launch_script(bootstrap_path: &Path, heartbeat_path: &Path, runtime_command: &str) -> String {
+fn build_launch_script(
+    bootstrap_path: &Path,
+    heartbeat_path: &Path,
+    runtime_command: &str,
+) -> String {
     let bootstrap = shell_quote(&path_text(bootstrap_path));
     let heartbeat = shell_quote(&path_text(heartbeat_path));
     let shutdown_timeout = T3_APP_CLOSED_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS.to_string();
@@ -1204,7 +1203,9 @@ fn t3_http_request(
 
     let mut response = Vec::new();
     stream.read_to_end(&mut response).ok()?;
-    let separator = response.windows(4).position(|window| window == b"\r\n\r\n")?;
+    let separator = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")?;
     let headers = String::from_utf8_lossy(&response[..separator]).to_string();
     let raw_body = response[separator + 4..].to_vec();
     let status = headers
@@ -1645,11 +1646,14 @@ mod tests {
             "'/usr/local/bin/node' '/apps/t3code-server/dist/bin.mjs'",
         );
 
-        assert!(script.starts_with("exec 3< '/tmp/t3/bootstrap-x.json'\nrm -f '/tmp/t3/bootstrap-x.json'\n("));
+        assert!(script.starts_with(
+            "exec 3< '/tmp/t3/bootstrap-x.json'\nrm -f '/tmp/t3/bootstrap-x.json'\n("
+        ));
         assert!(script.contains(
             "'/usr/local/bin/node' '/apps/t3code-server/dist/bin.mjs' --mode desktop --host 127.0.0.1 --port 3774 --no-browser --bootstrap-fd 3 &"
         ));
-        assert!(script.contains("last=$(cat '/tmp/t3/ghostex-app-heartbeat' 2>/dev/null || echo \"$now\")"));
+        assert!(script
+            .contains("last=$(cat '/tmp/t3/ghostex-app-heartbeat' 2>/dev/null || echo \"$now\")"));
         assert!(script.contains("if [ $((now - last)) -ge 180 ]; then"));
         assert!(script.contains("kill -9 \"$runtime_pid\" 2>/dev/null"));
         assert!(script.contains("wait \"$runtime_pid\""));

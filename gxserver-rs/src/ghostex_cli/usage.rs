@@ -51,36 +51,118 @@ fn automation_help_commands() -> Vec<String> {
 
 pub fn usage() -> String {
     let session_commands = [
-        format_help_command("sessions | s | ls [--ungrouped|-u] [--json] [--mobile-summary]", "List running terminal sessions"),
-        format_help_command("find | f [zehn args...]", "Search agent prompt history with bundled zehn"),
-        format_help_command("history | h [ghostex-history args...]", "View local agent transcripts in the alt-screen history TUI"),
-        format_help_command("android-check [--json]", "Verify this Mac is ready for Ghostex Android"),
-        format_help_command("attach | a [selector]", "Attach to a provider session, or open the picker without a selector"),
+        format_help_command(
+            "sessions | s | ls [--ungrouped|-u] [--json] [--mobile-summary]",
+            "List running terminal sessions",
+        ),
+        format_help_command(
+            "find | f [zehn args...]",
+            "Search agent prompt history with bundled zehn",
+        ),
+        format_help_command(
+            "history | h [ghostex-history args...]",
+            "View local agent transcripts in the alt-screen history TUI",
+        ),
+        format_help_command(
+            "android-check [--json]",
+            "Verify this Mac is ready for Ghostex Android",
+        ),
+        format_help_command(
+            "attach | a [selector]",
+            "Attach to a provider session, or open the picker without a selector",
+        ),
         format_help_command("resume | r [selector]", "Alias for attach"),
-        format_help_command("attach | a --session-id <id> [--project-id id] [--prompt-editor monaco]", "Flag form used by mobile and desktop remote session attach"),
-        format_help_command("kill | k <selector|all> [--json]", "Close one session or every listed session"),
-        format_help_command("sleep <selector|all> [--json]", "Sleep one session or every listed session"),
-        format_help_command("wake <selector|all> [--json]", "Wake one session or every listed session"),
-        format_help_command("focus <selector> [--json]", "Unsupported in gxserver cutover until renderer focus events land"),
-        format_help_command("(sleep|wake|kill) --session-id <id> [--json]", "Flag form used by Android sidebar actions"),
+        format_help_command(
+            "attach | a --session-id <id> [--project-id id] [--prompt-editor monaco]",
+            "Flag form used by mobile and desktop remote session attach",
+        ),
+        format_help_command(
+            "kill | k <selector|all> [--json]",
+            "Close one session or every listed session",
+        ),
+        format_help_command(
+            "sleep <selector|all> [--json]",
+            "Sleep one session or every listed session",
+        ),
+        format_help_command(
+            "wake <selector|all> [--json]",
+            "Wake one session or every listed session",
+        ),
+        format_help_command(
+            "focus <selector> [--json]",
+            "Unsupported in gxserver cutover until renderer focus events land",
+        ),
+        format_help_command(
+            "(sleep|wake|kill) --session-id <id> [--json]",
+            "Flag form used by Android sidebar actions",
+        ),
     ]
     .join("\n");
 
     let workspace_commands = [
         format_help_command("state | dump-state", "Print sidebar state as JSON"),
         format_help_command("open | o <path...>", "Open files or folders in Ghostex"),
-        format_help_command("edit | e [--wait] [--goto] <file...>", "Open files in embedded Code"),
-        format_help_command("terminal | t [--cwd path] [--title title] [-- command...]", "Create a Quick terminal"),
-        format_help_command("create-session [title] [--input text] [--start] [--project-id id] [--group-id id]", "Create a terminal session; --start materializes the live terminal immediately"),
-        format_help_command("create-agent <agentId> --project-id id [--group-id id]", "Create and start a configured agent session"),
+        format_help_command(
+            "edit | e [--wait] [--goto] <file...>",
+            "Open files in embedded Code",
+        ),
+        format_help_command(
+            "terminal | t [--cwd path] [--title title] [-- command...]",
+            "Create a Quick terminal",
+        ),
+        format_help_command(
+            "create-session [title] [--input text] [--start] [--project-id id] [--group-id id]",
+            "Create a terminal session; --start materializes the live terminal immediately",
+        ),
+        format_help_command(
+            "create-chat [title] [--input text] [--start] --json",
+            "Create a Quick chat workspace with its first terminal session",
+        ),
+        format_help_command(
+            "create-agent <agentId> --project-id id [--group-id id]",
+            "Create and start a configured agent session",
+        ),
         format_help_command("run-agent <agentId>", "Run a configured agent button"),
-        format_help_command("run-command <commandId>", "Trigger a renderer command button; use run-action for project quick actions"),
-        format_help_command("click-button <agent|command> <id>", "Trigger a renderer sidebar button; use run-action for project quick actions"),
-        format_help_command("switch-project (--project-id|--path|--name) <value>", "Switch active project"),
-        format_help_command("move-project --project-id id --direction up|down", "Move a project in the desktop sidebar order"),
-        format_help_command("add-project <path> [--name name]", "Add a project to Ghostex"),
-        format_help_command("focus-session <id|--index n|--session-number n>", "Focus a session by raw selector"),
-        format_help_command("acknowledge-session-attention <selector>", "Mark a session's shared attention event as seen"),
+        format_help_command(
+            "run-command <commandId>",
+            "Trigger a renderer command button; use run-action for project quick actions",
+        ),
+        format_help_command(
+            "click-button <agent|command> <id>",
+            "Trigger a renderer sidebar button; use run-action for project quick actions",
+        ),
+        format_help_command(
+            "switch-project (--project-id|--path|--name) <value>",
+            "Switch active project",
+        ),
+        format_help_command(
+            "move-project --project-id id --direction up|down",
+            "Move a project in the desktop sidebar order",
+        ),
+        format_help_command(
+            "add-project <path> [--name name]",
+            "Add a project to Ghostex",
+        ),
+        format_help_command(
+            "restore-recent-project --project-id id --json",
+            "Restore a parked project to the active sidebar",
+        ),
+        format_help_command(
+            "read-sidebar-project-collections --json",
+            "Print the durable sidebar project collections state",
+        ),
+        format_help_command(
+            "update-sidebar-project-collections --state-json json --json",
+            "Replace the collections state; prints the normalized result",
+        ),
+        format_help_command(
+            "focus-session <id|--index n|--session-number n>",
+            "Focus a session by raw selector",
+        ),
+        format_help_command(
+            "acknowledge-session-attention <selector>",
+            "Mark a session's shared attention event as seen",
+        ),
         format_help_command("focus-group <groupId>", "Focus a project group"),
     ]
     .join("\n");
@@ -111,7 +193,10 @@ pub fn usage() -> String {
             "Unsupported renderer-era agent-button writer; not a project quick action",
         )];
         lines.extend(automation_help_commands());
-        lines.push(format_help_command("bd <args...>", "Run Ghostex's bundled Beads CLI for the current project"));
+        lines.push(format_help_command(
+            "bd <args...>",
+            "Run Ghostex's bundled Beads CLI for the current project",
+        ));
         lines.join("\n")
     };
 
@@ -130,43 +215,107 @@ pub fn usage() -> String {
     .join("\n");
 
     let ui_commands = [
-        format_help_command("floating-editor | fe -- <editor> [args...]", "Open a draggable terminal overlay"),
-        format_help_command("floating-monaco-editor | fme <file>", "Open the standalone Ghostex Editor app"),
-        format_help_command("editor-daemon <ensure|status|warm|shutdown>", "Manage the standalone Ghostex Editor daemon"),
-        format_help_command("(close|restart|fork|reload)-session <id>", "Manage a session lifecycle"),
-        format_help_command("sleep-session|pin-session <id> [true|false]", "Set raw session flags"),
+        format_help_command(
+            "floating-editor | fe -- <editor> [args...]",
+            "Open a draggable terminal overlay",
+        ),
+        format_help_command(
+            "floating-monaco-editor | fme <file>",
+            "Open the standalone Ghostex Editor app",
+        ),
+        format_help_command(
+            "editor-daemon <ensure|status|warm|shutdown>",
+            "Manage the standalone Ghostex Editor daemon",
+        ),
+        format_help_command(
+            "(close|restart|fork|reload)-session <id>",
+            "Manage a session lifecycle",
+        ),
+        format_help_command(
+            "sleep-session|pin-session <id> [true|false]",
+            "Set raw session flags",
+        ),
         format_help_command("tag-session <id> <tag|none>", "Set or clear a session tag"),
-        format_help_command("set-visible-count <1|2|3|4|6|9>", "Set visible session count"),
-        format_help_command("set-view-mode <grid|horizontal|vertical>", "Set session layout mode"),
-        format_help_command("browser --help", "Show embedded CEF browser control and MCP setup"),
-        format_help_command("computer-use --help", "Show Ghostex Computer Use skill setup for Cua Driver"),
-        format_help_command("agent-orchestration --help", "Show Ghostex Agent Orchestration skill setup"),
-        format_help_command("fable-5.6-orchestration --help", "Show Ghostex Fable 5.6 Orchestration skill setup"),
-        format_help_command("generate-title --help", "Show Ghostex Generate Title skill setup"),
-        format_help_command("manage-beads --help", "Show Ghostex Manage Beads skill setup"),
-        format_help_command("move-codex-session --help", "Show Ghostex Move Codex Session skill setup"),
+        format_help_command(
+            "set-visible-count <1|2|3|4|6|9>",
+            "Set visible session count",
+        ),
+        format_help_command(
+            "set-view-mode <grid|horizontal|vertical>",
+            "Set session layout mode",
+        ),
+        format_help_command(
+            "browser --help",
+            "Show embedded CEF browser control and MCP setup",
+        ),
+        format_help_command(
+            "computer-use --help",
+            "Show Ghostex Computer Use skill setup for Cua Driver",
+        ),
+        format_help_command(
+            "agent-orchestration --help",
+            "Show Ghostex Agent Orchestration skill setup",
+        ),
+        format_help_command(
+            "fable-5.6-orchestration --help",
+            "Show Ghostex Fable 5.6 Orchestration skill setup",
+        ),
+        format_help_command(
+            "generate-title --help",
+            "Show Ghostex Generate Title skill setup",
+        ),
+        format_help_command(
+            "manage-beads --help",
+            "Show Ghostex Manage Beads skill setup",
+        ),
+        format_help_command(
+            "move-codex-session --help",
+            "Show Ghostex Move Codex Session skill setup",
+        ),
         format_help_command("toggle-sidebar", "Collapse or expand the sidebar"),
         format_help_command("move-sidebar", "Move the sidebar"),
     ]
     .join("\n");
 
     let server_commands = [
+        format_help_command("web", "Open the Ghostex web app in the default browser"),
         format_help_command("server", "Run gxserver in the foreground"),
         format_help_command("server start [--json]", "Start gxserver in the background"),
-        format_help_command("server stop [--json]", "Stop only the gxserver control plane"),
-        format_help_command("server stop-all [--json]", "Stop gxserver and kill tracked zmx sessions"),
+        format_help_command(
+            "server stop [--json]",
+            "Stop only the gxserver control plane",
+        ),
+        format_help_command(
+            "server stop-all [--json]",
+            "Stop gxserver and kill tracked zmx sessions",
+        ),
         format_help_command("server status [--json]", "Print gxserver runtime state"),
-        format_help_command("server version | server --version", "Print the gxserver package version"),
+        format_help_command(
+            "server version | server --version",
+            "Print the gxserver package version",
+        ),
         format_help_command("server --help", "Show gxserver lifecycle command help"),
     ]
     .join("\n");
 
     let evidence_commands = [
         format_help_command("screenshot [output.png]", "Capture the Ghostex window"),
-        format_help_command("logs [--file name] [--lines n] [--grep text] [--json]", "Print recent logs"),
-        format_help_command("bundle [output-dir] [--lines n]", "Save state, logs, and a screenshot"),
-        format_help_command("assert-card <id> [--agent-icon codex] [--visible true]", "Assert card projection"),
-        format_help_command("wait-for <id> [--agent-icon codex] [--timeout-ms n]", "Wait for card projection"),
+        format_help_command(
+            "logs [--file name] [--lines n] [--grep text] [--json]",
+            "Print recent logs",
+        ),
+        format_help_command(
+            "bundle [output-dir] [--lines n]",
+            "Save state, logs, and a screenshot",
+        ),
+        format_help_command(
+            "assert-card <id> [--agent-icon codex] [--visible true]",
+            "Assert card projection",
+        ),
+        format_help_command(
+            "wait-for <id> [--agent-icon codex] [--timeout-ms n]",
+            "Wait for card projection",
+        ),
     ]
     .join("\n");
 
@@ -306,8 +455,14 @@ pub fn server_usage() -> String {
     let commands = [
         format_help_command("server", "Run gxserver in the foreground"),
         format_help_command("server start [--json]", "Start gxserver in the background"),
-        format_help_command("server stop [--json]", "Stop only the gxserver control plane"),
-        format_help_command("server stop-all [--json]", "Stop gxserver and kill tracked zmx sessions"),
+        format_help_command(
+            "server stop [--json]",
+            "Stop only the gxserver control plane",
+        ),
+        format_help_command(
+            "server stop-all [--json]",
+            "Stop gxserver and kill tracked zmx sessions",
+        ),
         format_help_command("server status [--json]", "Print gxserver runtime state"),
         format_help_command("server version", "Print the gxserver package version"),
         format_help_command("server --version", "Alias for server version"),
@@ -344,23 +499,59 @@ Compatibility:
 
 pub fn browser_usage() -> String {
     let setup_commands = [
-        format_help_command("browser mcp [--port n] [--target id|--page id]", "Run the stdio MCP server for CEF DevTools control"),
-        format_help_command("browser install-skill [--json]", "Install the $ghostex-browser-use skill with the external skills CLI"),
-        format_help_command("browser open [url] [project/reuse flags]", "Open or reuse an embedded browser pane"),
-        format_help_command("browser open-pane [url] [project/reuse flags]", "Alias for browser open"),
+        format_help_command(
+            "browser mcp [--port n] [--target id|--page id]",
+            "Run the stdio MCP server for CEF DevTools control",
+        ),
+        format_help_command(
+            "browser install-skill [--json]",
+            "Install the $ghostex-browser-use skill with the external skills CLI",
+        ),
+        format_help_command(
+            "browser open [url] [project/reuse flags]",
+            "Open or reuse an embedded browser pane",
+        ),
+        format_help_command(
+            "browser open-pane [url] [project/reuse flags]",
+            "Alias for browser open",
+        ),
     ]
     .join("\n");
 
     let mcp_tools = [
-        format_help_command("ghostex_list_pages", "List CEF DevTools targets and current page ids"),
-        format_help_command("ghostex_select_page", "Choose the target page for later tool calls"),
+        format_help_command(
+            "ghostex_list_pages",
+            "List CEF DevTools targets and current page ids",
+        ),
+        format_help_command(
+            "ghostex_select_page",
+            "Choose the target page for later tool calls",
+        ),
         format_help_command("ghostex_navigate", "Navigate the selected CEF page"),
-        format_help_command("ghostex_console_logs", "Read console messages, Log entries, and exceptions captured after attach"),
-        format_help_command("ghostex_snapshot", "Get an accessibility-like DOM snapshot with @e element refs"),
-        format_help_command("ghostex_click / ghostex_fill", "Interact with @e refs or CSS selectors"),
-        format_help_command("ghostex_press_key", "Send Enter, Tab, Escape, arrows, or printable keys"),
-        format_help_command("ghostex_evaluate", "Run JavaScript in the selected page for inspection"),
-        format_help_command("ghostex_screenshot", "Capture a PNG screenshot as base64 MCP image content"),
+        format_help_command(
+            "ghostex_console_logs",
+            "Read console messages, Log entries, and exceptions captured after attach",
+        ),
+        format_help_command(
+            "ghostex_snapshot",
+            "Get an accessibility-like DOM snapshot with @e element refs",
+        ),
+        format_help_command(
+            "ghostex_click / ghostex_fill",
+            "Interact with @e refs or CSS selectors",
+        ),
+        format_help_command(
+            "ghostex_press_key",
+            "Send Enter, Tab, Escape, arrows, or printable keys",
+        ),
+        format_help_command(
+            "ghostex_evaluate",
+            "Run JavaScript in the selected page for inspection",
+        ),
+        format_help_command(
+            "ghostex_screenshot",
+            "Capture a PNG screenshot as base64 MCP image content",
+        ),
     ]
     .join("\n");
 

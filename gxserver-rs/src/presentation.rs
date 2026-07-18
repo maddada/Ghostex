@@ -24,6 +24,7 @@ pub fn read_presentation_snapshot(
     );
     insert_portless_presentation_payload(&mut snapshot, db);
     insert_workspace_groups_presentation_payload(&mut snapshot, db)?;
+    insert_sidebar_project_collections_presentation_payload(&mut snapshot, db)?;
     Ok(snapshot)
 }
 
@@ -225,6 +226,24 @@ fn insert_workspace_groups_presentation_payload(
     let groups = crate::workspace_groups::read_workspace_session_groups(db)?;
     if let Some(snapshot) = snapshot.as_object_mut() {
         snapshot.insert("workspaceGroups".to_string(), groups);
+    }
+    Ok(())
+}
+
+fn insert_sidebar_project_collections_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) -> Result<(), DomainStateError> {
+    /*
+    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    Mobile and CLI consumers read the colored project-collection overlay from
+    the same presentation snapshot they already poll, so grouped project
+    rendering needs no extra round trip.
+    */
+    let collections =
+        crate::sidebar_project_collections::read_sidebar_project_collections(db)?;
+    if let Some(snapshot) = snapshot.as_object_mut() {
+        snapshot.insert("sidebarProjectCollections".to_string(), collections);
     }
     Ok(())
 }

@@ -259,6 +259,7 @@ pub enum TerminalViewEvent {
     PathsDropped(Vec<PathBuf>),
     EscapePressed,
     PromptEditorShortcutRequested,
+    FocusChanged { focused: bool },
     KeyRouteDiagnostic(TerminalKeyRouteDiagnostic),
 }
 
@@ -971,7 +972,8 @@ impl TerminalView {
             unshifted_codepoint,
         };
         let accepted = self.model.send_key(&input);
-        if modifiers.alt && matches!(keystroke.key.as_str(), "," | ".") {
+        if keystroke.key == "tab" || (modifiers.alt && matches!(keystroke.key.as_str(), "," | "."))
+        {
             cx.emit(TerminalViewEvent::KeyRouteDiagnostic(
                 TerminalKeyRouteDiagnostic {
                     accepted,
@@ -1683,7 +1685,12 @@ impl TerminalView {
     /// Build the frame layout for the element bounds: sync focus state and
     /// metrics/grid, reshape dirty rows, and lay out cursor/selection/marked
     /// text.
-    fn prepaint_layout(&mut self, bounds: Bounds<Pixels>, window: &mut Window) -> TerminalLayout {
+    fn prepaint_layout(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> TerminalLayout {
         self.terminal_bounds = Some(bounds);
         // Focus edges send focus reports (mode 1004) and toggle the hollow
         // cursor; gpui refreshes the window on focus changes, so prepaint
@@ -1693,6 +1700,7 @@ impl TerminalView {
             self.focused = focused;
             self.cursor_blink_visible = true;
             self.model.send_focus(focused);
+            cx.emit(TerminalViewEvent::FocusChanged { focused });
         }
 
         let metrics = compute_cell_metrics(&self.font, window);
@@ -2120,7 +2128,7 @@ impl Element for TerminalElement {
     ) -> Self::PrepaintState {
         let layout = self
             .terminal
-            .update(cx, |view, _cx| view.prepaint_layout(bounds, window));
+            .update(cx, |view, cx| view.prepaint_layout(bounds, window, cx));
         // The focus handle attaches to this element's dispatch node so key
         // events only dispatch here while this terminal is focused; an
         // unfocused terminal never sees (or swallows) keys.

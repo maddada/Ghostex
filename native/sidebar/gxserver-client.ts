@@ -32,6 +32,7 @@ import {
   type GxserverSavePinnedPromptParams,
   type GxserverSessionProviderProbeResponse,
   type GxserverProjectDomainState,
+  type GxserverReadSidebarProjectCollectionsResult,
   type GxserverRecentProjectDomainState,
   type GxserverRemoveSessionParams,
   type GxserverRendererCommand,
@@ -41,9 +42,11 @@ import {
   type GxserverSessionDomainState,
   type GxserverSessionTransitionParams,
   type GxserverSessionTransitionResult,
+  type GxserverSidebarProjectCollectionsState,
   type GxserverStartSessionProviderParams,
   type GxserverStartSessionProviderResult,
   type GxserverTypedOperationResult,
+  type GxserverUpdateSidebarProjectCollectionsResult,
 } from "../../shared/gxserver-protocol";
 
 export type NativeSidebarGxserverBootstrap = {
@@ -361,6 +364,29 @@ export function createNativeSidebarGxserverClient(
       "/api/uninstallAgentHooks",
       agentIds ? { agentIds } : {},
     );
+  }
+
+  async function readSidebarProjectCollections(): Promise<GxserverSidebarProjectCollectionsState> {
+    /*
+    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    Colored "Group N" project collections are gxserver-owned shared metadata
+    (see shared/gxserver-protocol.ts). Clients hydrate the normalized wire
+    state from the daemon instead of trusting only their localStorage overlay.
+    */
+    const { sidebarProjectCollections } = await rpc<GxserverReadSidebarProjectCollectionsResult>(
+      "/api/readSidebarProjectCollections",
+    );
+    return sidebarProjectCollections;
+  }
+
+  async function updateSidebarProjectCollections(
+    state: GxserverSidebarProjectCollectionsState,
+  ): Promise<GxserverSidebarProjectCollectionsState> {
+    const { sidebarProjectCollections } = await rpc<GxserverUpdateSidebarProjectCollectionsResult>(
+      "/api/updateSidebarProjectCollections",
+      { state },
+    );
+    return sidebarProjectCollections;
   }
 
   async function fetchPresentationSnapshot(): Promise<GxserverPresentationSnapshot> {
@@ -730,6 +756,7 @@ export function createNativeSidebarGxserverClient(
     listPreviousSessions,
     listRecentProjects,
     readAppUserData,
+    readSidebarProjectCollections,
     removeProject,
     removeRecentProject,
     removeSession,
@@ -747,6 +774,7 @@ export function createNativeSidebarGxserverClient(
     restoreRecentProject,
     updateAgentSettings,
     updateSessionLifecycle,
+    updateSidebarProjectCollections,
     savePinnedPrompt,
     saveScratchPad,
   };
@@ -1079,6 +1107,10 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "load workspace session groups";
     case "/api/updateWorkspaceSessionGroups":
       return "save workspace session groups";
+    case "/api/readSidebarProjectCollections":
+      return "load sidebar project collections";
+    case "/api/updateSidebarProjectCollections":
+      return "save sidebar project collections";
     case "/api/readAutomationState":
       return "load automation state";
     case "/api/saveAutomation":

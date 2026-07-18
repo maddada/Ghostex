@@ -18,6 +18,8 @@ pub fn shutdown() {}
 
 pub fn focus_native_view(_native_view: *mut std::ffi::c_void) {}
 
+pub fn focus_gpui_root_view(_native_view: *mut std::ffi::c_void) {}
+
 pub type BrowserPopupOpenHandler = Rc<dyn Fn(String)>;
 
 pub type T3WorkspaceBridgeEventHandler = Rc<dyn Fn(String)>;

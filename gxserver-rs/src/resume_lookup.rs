@@ -238,10 +238,7 @@ fn scan_claude_transcript(
                 latest = timestamp.to_string();
             }
         }
-        let item_type = item
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let item_type = item.get("type").and_then(Value::as_str).unwrap_or_default();
         if item_type == "custom-title" {
             if let Some(custom_title) = item.get("customTitle").and_then(Value::as_str) {
                 names.push(custom_title.to_string());
@@ -605,7 +602,11 @@ fn lookup_cursor(project_path: &str, title: &str) -> Option<String> {
                 Some(Value::String(text)) => text.trim().parse::<f64>().unwrap_or(0.0),
                 _ => 0.0,
             };
-            let created_at = if created_at.is_finite() { created_at } else { 0.0 };
+            let created_at = if created_at.is_finite() {
+                created_at
+            } else {
+                0.0
+            };
             matches.push((chat_id, created_at));
         }
     }

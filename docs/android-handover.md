@@ -64,7 +64,7 @@ Because the package id changed from `com.ghostx` to `io.ghostex`, a phone may sh
 
 - `android/termux-app/app/src/main/java/com/termux/app/ghostex/GhostexSshAttachProcess.java`
   - Bridges a remote SSHJ interactive PTY into Termux's `TerminalSession.ExternalTerminalProcess`.
-  - Allocates a PTY, starts an SSH shell channel, then writes `exec /bin/zsh -lc 'ghostex attach --session-id ...'`.
+  - Allocates a PTY, starts an SSH shell channel, then runs `ghostex attach --session-id ...` through the remote account's configured login shell (`$SHELL -lc`), preserving zsh behavior on macOS without requiring zsh on Linux.
   - Handles stdout/stdin logging and remote PTY resize.
   - Important previous bug fixed here: SSHJ `window-change` writes to the socket, and Android resize/zoom can happen on the UI thread. Resize is now queued to a single background executor and coalesced.
 

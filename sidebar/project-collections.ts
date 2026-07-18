@@ -1,3 +1,5 @@
+import type { GxserverSidebarProjectCollectionsState } from "../shared/gxserver-protocol";
+
 export type SidebarProjectCollection = {
   collapsed: boolean;
   color: string;
@@ -51,63 +53,72 @@ export function readSidebarProjectCollections(): SidebarProjectCollectionsState 
       return empty;
     }
     const record = parsed as Record<string, unknown>;
-    const rawCollections = Array.isArray(record.collections) ? record.collections : [];
-    const seenCollectionIds = new Set<string>();
-    const seenProjectIds = new Set<string>();
-    const collections: SidebarProjectCollection[] = [];
-    for (const rawCollection of rawCollections) {
-      if (!rawCollection || typeof rawCollection !== "object") {
-        continue;
-      }
-      const candidate = rawCollection as Record<string, unknown>;
-      const collectionId =
-        typeof candidate.collectionId === "string"
-          ? candidate.collectionId.trim().slice(0, 120)
-          : "";
-      const title = typeof candidate.title === "string" ? candidate.title.trim().slice(0, 80) : "";
-      const color =
-        typeof candidate.color === "string" &&
-        (candidate.color === "transparent" || /^#[0-9a-f]{6}$/iu.test(candidate.color))
-          ? candidate.color
-          : SIDEBAR_PROJECT_COLLECTION_COLORS[
-              collections.length % SIDEBAR_PROJECT_COLLECTION_COLORS.length
-            ];
-      if (!collectionId || !title || seenCollectionIds.has(collectionId)) {
-        continue;
-      }
-      seenCollectionIds.add(collectionId);
-      const projectIds = (Array.isArray(candidate.projectIds) ? candidate.projectIds : [])
-        .filter((projectId): projectId is string => typeof projectId === "string")
-        .map((projectId) => projectId.trim().slice(0, 300))
-        .filter((projectId) => {
-          if (!projectId || seenProjectIds.has(projectId)) {
-            return false;
-          }
-          seenProjectIds.add(projectId);
-          return true;
-        });
-      if (projectIds.length === 0) {
-        continue;
-      }
-      collections.push({
-        collapsed: candidate.collapsed === true,
-        color,
-        collectionId,
-        projectIds,
-        title,
-      });
-    }
-    return {
-      collections,
-      nextCollectionNumber:
-        typeof record.nextCollectionNumber === "number" &&
-        Number.isSafeInteger(record.nextCollectionNumber)
-          ? Math.max(1, record.nextCollectionNumber)
-          : collections.length + 1,
-    };
+    return sanitizeSidebarProjectCollections(
+      Array.isArray(record.collections) ? record.collections : [],
+      record.nextCollectionNumber,
+    );
   } catch {
     return empty;
   }
+}
+
+function sanitizeSidebarProjectCollections(
+  rawCollections: readonly unknown[],
+  rawNextCollectionNumber: unknown,
+): SidebarProjectCollectionsState {
+  const seenCollectionIds = new Set<string>();
+  const seenProjectIds = new Set<string>();
+  const collections: SidebarProjectCollection[] = [];
+  for (const rawCollection of rawCollections) {
+    if (!rawCollection || typeof rawCollection !== "object") {
+      continue;
+    }
+    const candidate = rawCollection as Record<string, unknown>;
+    const collectionId =
+      typeof candidate.collectionId === "string"
+        ? candidate.collectionId.trim().slice(0, 120)
+        : "";
+    const title = typeof candidate.title === "string" ? candidate.title.trim().slice(0, 80) : "";
+    const color =
+      typeof candidate.color === "string" &&
+      (candidate.color === "transparent" || /^#[0-9a-f]{6}$/iu.test(candidate.color))
+        ? candidate.color
+        : SIDEBAR_PROJECT_COLLECTION_COLORS[
+            collections.length % SIDEBAR_PROJECT_COLLECTION_COLORS.length
+          ];
+    if (!collectionId || !title || seenCollectionIds.has(collectionId)) {
+      continue;
+    }
+    seenCollectionIds.add(collectionId);
+    const projectIds = (Array.isArray(candidate.projectIds) ? candidate.projectIds : [])
+      .filter((projectId): projectId is string => typeof projectId === "string")
+      .map((projectId) => projectId.trim().slice(0, 300))
+      .filter((projectId) => {
+        if (!projectId || seenProjectIds.has(projectId)) {
+          return false;
+        }
+        seenProjectIds.add(projectId);
+        return true;
+      });
+    if (projectIds.length === 0) {
+      continue;
+    }
+    collections.push({
+      collapsed: candidate.collapsed === true,
+      color,
+      collectionId,
+      projectIds,
+      title,
+    });
+  }
+  return {
+    collections,
+    nextCollectionNumber:
+      typeof rawNextCollectionNumber === "number" &&
+      Number.isSafeInteger(rawNextCollectionNumber)
+        ? Math.max(1, rawNextCollectionNumber)
+        : collections.length + 1,
+  };
 }
 
 export function writeSidebarProjectCollections(state: SidebarProjectCollectionsState): void {
@@ -119,6 +130,96 @@ export function writeSidebarProjectCollections(state: SidebarProjectCollectionsS
   } catch {
     // Persistence can be unavailable while the in-memory grouping remains usable.
   }
+}
+
+/*
+CDXC:SidebarProjectCollections 2026-07-18-00:00:
+Project collections are now server-backed shared metadata: gxserver stores the
+normalized wire state ({collections: record, order, nextCollectionNumber}) so
+iOS/Android render and edit the same colored "Group N" overlay. localStorage
+stays the instant-edit overlay; these converters translate between the local
+ordered-array shape and the gxserver wire shape for write-through sync and
+server-authoritative reconciliation.
+*/
+export function serializeSidebarProjectCollectionsForGxserver(
+  state: SidebarProjectCollectionsState,
+): GxserverSidebarProjectCollectionsState {
+  return {
+    collections: Object.fromEntries(
+      state.collections.map((collection) => [
+        collection.collectionId,
+        {
+          collapsed: collection.collapsed,
+          collectionId: collection.collectionId,
+          color: collection.color,
+          projectIds: [...collection.projectIds],
+          title: collection.title,
+        },
+      ]),
+    ),
+    nextCollectionNumber: state.nextCollectionNumber,
+    order: state.collections.map((collection) => collection.collectionId),
+  };
+}
+
+export function parseSidebarProjectCollectionsFromGxserver(
+  serverState: unknown,
+): SidebarProjectCollectionsState | undefined {
+  if (!serverState || typeof serverState !== "object" || Array.isArray(serverState)) {
+    return undefined;
+  }
+  const record = serverState as Record<string, unknown>;
+  const collectionsById = record.collections;
+  if (!collectionsById || typeof collectionsById !== "object" || Array.isArray(collectionsById)) {
+    return undefined;
+  }
+  const collectionRecord = collectionsById as Record<string, unknown>;
+  const orderedIds: string[] = [];
+  const seenOrderIds = new Set<string>();
+  for (const entry of Array.isArray(record.order) ? record.order : []) {
+    if (typeof entry === "string" && entry in collectionRecord && !seenOrderIds.has(entry)) {
+      seenOrderIds.add(entry);
+      orderedIds.push(entry);
+    }
+  }
+  for (const collectionId of Object.keys(collectionRecord)) {
+    if (!seenOrderIds.has(collectionId)) {
+      seenOrderIds.add(collectionId);
+      orderedIds.push(collectionId);
+    }
+  }
+  return sanitizeSidebarProjectCollections(
+    orderedIds.map((collectionId) => {
+      const collection = collectionRecord[collectionId];
+      return collection && typeof collection === "object" && !Array.isArray(collection)
+        ? { ...(collection as Record<string, unknown>), collectionId }
+        : undefined;
+    }),
+    record.nextCollectionNumber,
+  );
+}
+
+export function areSidebarProjectCollectionsStatesEqual(
+  left: SidebarProjectCollectionsState,
+  right: SidebarProjectCollectionsState,
+): boolean {
+  if (
+    left.nextCollectionNumber !== right.nextCollectionNumber ||
+    left.collections.length !== right.collections.length
+  ) {
+    return false;
+  }
+  return left.collections.every((collection, index) => {
+    const other = right.collections[index];
+    return (
+      collection.collapsed === other.collapsed &&
+      collection.collectionId === other.collectionId &&
+      collection.color === other.color &&
+      collection.title === other.title &&
+      collection.projectIds.length === other.projectIds.length &&
+      collection.projectIds.every((projectId, projectIndex) => projectId === other.projectIds[projectIndex])
+    );
+  });
 }
 
 export function createSidebarProjectCollection(

@@ -123,12 +123,8 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         let backup = options
             .install_root
             .join(format!("package.backup.{release_name}"));
-        fs::rename(&package_link, &backup).with_context(|| {
-            format!(
-                "move previous package directory to {}",
-                backup.display()
-            )
-        })?;
+        fs::rename(&package_link, &backup)
+            .with_context(|| format!("move previous package directory to {}", backup.display()))?;
     }
     replace_symlink(release_dir, &package_link)?;
 
@@ -264,12 +260,7 @@ fn listener_pids(port: u16) -> Vec<u32> {
         }
     }
     if let Ok(output) = Command::new("lsof")
-        .args([
-            "-nP",
-            &format!("-iTCP:{port}"),
-            "-sTCP:LISTEN",
-            "-Fp",
-        ])
+        .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-Fp"])
         .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);

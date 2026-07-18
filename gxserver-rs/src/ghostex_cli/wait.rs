@@ -60,9 +60,10 @@ pub fn session_action_command(
                 crate::ghostex_cli::set_exit_code(1);
                 return Ok(());
             }
-            return Err(CliError::Other(result_error_message(&action_result, || {
-                format!("Could not {action} {}.", js_display(session.get("title")))
-            })));
+            return Err(CliError::Other(result_error_message(
+                &action_result,
+                || format!("Could not {action} {}.", js_display(session.get("title"))),
+            )));
         }
         affected.push((
             action_result.get("ok") != Some(&Value::Bool(false)),
@@ -112,15 +113,18 @@ pub fn fork_session_command(args: &[String]) -> CliResult<()> {
             crate::ghostex_cli::set_exit_code(1);
             return Ok(());
         }
-        return Err(CliError::Other(result_error_message(&action_result, || {
-            format!("Could not fork {}.", js_display(session.get("title")))
-        })));
+        return Err(CliError::Other(result_error_message(
+            &action_result,
+            || format!("Could not fork {}.", js_display(session.get("title"))),
+        )));
     }
     if flags.truthy("json") {
         print_json(&action_result);
         return Ok(());
     }
-    let forked_session = action_result.get("fork").and_then(|fork| fork.get("session"));
+    let forked_session = action_result
+        .get("fork")
+        .and_then(|fork| fork.get("session"));
     let suffix = forked_session
         .and_then(|forked| forked.get("sessionId"))
         .filter(|session_id| js_truthy(Some(session_id)))
@@ -155,9 +159,10 @@ pub fn focus_smart_session_command(args: &[String]) -> CliResult<()> {
             crate::ghostex_cli::set_exit_code(1);
             return Ok(());
         }
-        return Err(CliError::Other(result_error_message(&action_result, || {
-            format!("Could not focus {}.", js_display(session.get("title")))
-        })));
+        return Err(CliError::Other(result_error_message(
+            &action_result,
+            || format!("Could not focus {}.", js_display(session.get("title"))),
+        )));
     }
     if flags.truthy("json") {
         print_json(&action_result);
@@ -174,7 +179,8 @@ pub fn focus_smart_session_command(args: &[String]) -> CliResult<()> {
 pub fn read_session_text_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = parsed.flags;
-    let selector_text = selector::session_selector_from_args(&parsed.rest, &flags).unwrap_or_default();
+    let selector_text =
+        selector::session_selector_from_args(&parsed.rest, &flags).unwrap_or_default();
     let mut payload = Map::new();
     let visible = matches!(flags.0.get("visible"), Some(FlagValue::Bool(true)))
         || flags.string_value("source") == Some("visible");
@@ -208,7 +214,11 @@ pub fn read_session_text_command(args: &[String]) -> CliResult<()> {
     let text = js_string_or_empty(result.get("text"));
     // flags.lines === undefined and Number(non-numeric) = NaN both leave the
     // text unlimited in limitTextLines; flags.number covers both as None.
-    let lines = if flags.contains("lines") { flags.number("lines") } else { None };
+    let lines = if flags.contains("lines") {
+        flags.number("lines")
+    } else {
+        None
+    };
     let limited = limit_text_lines(&text, lines);
     if flags.truthy("json") {
         let mut json_result = result.clone();
@@ -250,7 +260,9 @@ fn parse_wait_for_text(rest: &[String], flags: &Flags) -> WaitForTextParams {
             .unwrap_or_else(|| rest.iter().skip(1).cloned().collect::<Vec<_>>().join(" "))
             .trim()
             .to_string(),
-        selector: if flags.contains("sessionId") || flags.contains("title") || flags.contains("index")
+        selector: if flags.contains("sessionId")
+            || flags.contains("title")
+            || flags.contains("index")
         {
             None
         } else {
@@ -307,9 +319,18 @@ pub fn wait_for_text_command(args: &[String]) -> CliResult<()> {
         let read_result =
             actions::send_gxserver_cli_action("readSessionText", &Value::Object(payload), &flags)?;
         if !is_failed_cli_result(&read_result) {
-            let text = limit_text_lines(&js_string_or_empty(read_result.get("text")), Some(parsed.lines));
+            let text = limit_text_lines(
+                &js_string_or_empty(read_result.get("text")),
+                Some(parsed.lines),
+            );
             if let Some(line) = find_wait_for_text_match(&text, &regex) {
-                finish_wait_for_text(&flags, started_at, polls, json!({ "line": line, "matched": true }), true);
+                finish_wait_for_text(
+                    &flags,
+                    started_at,
+                    polls,
+                    json!({ "line": line, "matched": true }),
+                    true,
+                );
                 return Ok(());
             }
         } else {
@@ -361,7 +382,9 @@ pub fn wait_for_text_command(args: &[String]) -> CliResult<()> {
             );
             return Ok(());
         }
-        std::thread::sleep(Duration::from_millis((parsed.interval_seconds * 1000.0) as u64));
+        std::thread::sleep(Duration::from_millis(
+            (parsed.interval_seconds * 1000.0) as u64,
+        ));
     }
 }
 
@@ -398,7 +421,10 @@ pub fn send_message_command(args: &[String]) -> CliResult<()> {
     let mut agent_id: Option<String> = flags.string_value("agent").map(str::to_string);
     let mut text_start_index = 0usize;
 
-    let agent_truthy = agent_id.as_deref().map(|value| !value.is_empty()).unwrap_or(false);
+    let agent_truthy = agent_id
+        .as_deref()
+        .map(|value| !value.is_empty())
+        .unwrap_or(false);
     if selector_text.is_empty()
         && !agent_truthy
         && rest.first().map(|arg| !arg.is_empty()).unwrap_or(false)
@@ -453,8 +479,7 @@ pub fn send_message_command(args: &[String]) -> CliResult<()> {
     } else if let Some(agent_id) = agent_id {
         payload.insert("agentId".to_string(), Value::String(agent_id));
     }
-    let result =
-        actions::send_gxserver_cli_action("sendMessage", &Value::Object(payload), &flags)?;
+    let result = actions::send_gxserver_cli_action("sendMessage", &Value::Object(payload), &flags)?;
     if is_failed_cli_result(&result) {
         print_json(&result);
         crate::ghostex_cli::set_exit_code(1);
@@ -649,7 +674,10 @@ fn session_project_id(session: &Value) -> String {
     if let Some(project_id) = session.get("projectId").filter(|value| !value.is_null()) {
         return js_string(project_id).trim().to_string();
     }
-    let global_ref = session.get("globalRef").and_then(Value::as_str).unwrap_or("");
+    let global_ref = session
+        .get("globalRef")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     project_id_from_global_ref(global_ref)
         .unwrap_or_default()
         .trim()
@@ -837,10 +865,15 @@ mod js_regex {
     enum Node {
         Char(char),
         Any,
-        Class { negated: bool, items: Vec<ClassItem> },
+        Class {
+            negated: bool,
+            items: Vec<ClassItem>,
+        },
         StartAnchor,
         EndAnchor,
-        WordBoundary { negated: bool },
+        WordBoundary {
+            negated: bool,
+        },
         Seq(Vec<Node>),
         Alt(Vec<Node>),
         Repeat {
@@ -849,7 +882,10 @@ mod js_regex {
             max: Option<u32>,
             lazy: bool,
         },
-        Look { negated: bool, node: Box<Node> },
+        Look {
+            negated: bool,
+            node: Box<Node>,
+        },
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -875,7 +911,9 @@ mod js_regex {
                 .map_err(|detail| format!("Invalid regular expression: /{pattern}/: {detail}"))?;
             if parser.pos < parser.chars.len() {
                 // Only an unmatched ')' can stop the top-level parse.
-                return Err(format!("Invalid regular expression: /{pattern}/: Unmatched ')'"));
+                return Err(format!(
+                    "Invalid regular expression: /{pattern}/: Unmatched ')'"
+                ));
             }
             Ok(Regex { root })
         }
@@ -1186,9 +1224,7 @@ mod js_regex {
                         match second {
                             ClassItem::Char(high) => {
                                 if (high as u32) < (low as u32) {
-                                    return Err(
-                                        "Range out of order in character class".to_string()
-                                    );
+                                    return Err("Range out of order in character class".to_string());
                                 }
                                 items.push(ClassItem::Range(low, high));
                                 continue;
@@ -1299,9 +1335,9 @@ mod js_regex {
     ) -> bool {
         match nodes.split_first() {
             None => cont(pos),
-            Some((first, rest)) => {
-                match_node(first, chars, pos, &mut |next| match_seq(rest, chars, next, cont))
-            }
+            Some((first, rest)) => match_node(first, chars, pos, &mut |next| {
+                match_seq(rest, chars, next, cont)
+            }),
         }
     }
 
@@ -1375,20 +1411,14 @@ mod js_regex {
     fn is_js_whitespace(character: char) -> bool {
         matches!(
             character,
-            '\t' | '\n'
-                | '\u{b}'
-                | '\u{c}'
-                | '\r'
-                | ' '
-                | '\u{a0}'
-                | '\u{1680}'
-                | '\u{2000}'..='\u{200a}'
-                | '\u{2028}'
-                | '\u{2029}'
-                | '\u{202f}'
-                | '\u{205f}'
-                | '\u{3000}'
-                | '\u{feff}'
+            '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200a}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202f}'
+                    | '\u{205f}'
+                    | '\u{3000}'
+                    | '\u{feff}'
         )
     }
 }
@@ -1415,11 +1445,16 @@ mod tests {
         assert_eq!(parsed.selector, Some("my-session".to_string()));
 
         let (flags, rest) = flags_from(&[
-            "--interval-seconds", "1",
-            "--lines", "99999",
-            "--timeout-seconds", "2",
-            "--pattern", "DONE$",
-            "--session-id", "s1",
+            "--interval-seconds",
+            "1",
+            "--lines",
+            "99999",
+            "--timeout-seconds",
+            "2",
+            "--pattern",
+            "DONE$",
+            "--session-id",
+            "s1",
         ]);
         let parsed = parse_wait_for_text(&rest, &flags);
         assert_eq!(parsed.interval_seconds, 2.0);
@@ -1449,7 +1484,10 @@ mod tests {
     fn wait_for_text_match_scans_from_last_line() {
         let regex = js_regex::Regex::new("^\\s*PHASE 1 (COMPLETE|BLOCKED)").unwrap();
         let text = "noise\n  PHASE 1 COMPLETE\nmore noise\n  PHASE 1 BLOCKED\ntail";
-        assert_eq!(find_wait_for_text_match(text, &regex), Some("  PHASE 1 BLOCKED"));
+        assert_eq!(
+            find_wait_for_text_match(text, &regex),
+            Some("  PHASE 1 BLOCKED")
+        );
         // The anchor binds to line starts, so mid-line mentions never match.
         let text = "the agent said PHASE 1 COMPLETE in its reasoning";
         assert_eq!(find_wait_for_text_match(text, &regex), None);
@@ -1459,8 +1497,14 @@ mod tests {
     #[test]
     fn js_regex_supports_sentinel_patterns() {
         let test = |pattern: &str, input: &str| js_regex::Regex::new(pattern).unwrap().test(input);
-        assert!(test("^\\s*PHASE 1 (COMPLETE|BLOCKED)", "   PHASE 1 COMPLETE"));
-        assert!(!test("^\\s*PHASE 1 (COMPLETE|BLOCKED)", "x PHASE 1 COMPLETE"));
+        assert!(test(
+            "^\\s*PHASE 1 (COMPLETE|BLOCKED)",
+            "   PHASE 1 COMPLETE"
+        ));
+        assert!(!test(
+            "^\\s*PHASE 1 (COMPLETE|BLOCKED)",
+            "x PHASE 1 COMPLETE"
+        ));
         assert!(test("READY$", "worker READY"));
         assert!(!test("READY$", "READY to go"));
         assert!(test("PHASE(?= 2)", "PHASE 2 START"));
@@ -1528,7 +1572,10 @@ mod tests {
         let error = js_regex::Regex::new("\\b*").unwrap_err();
         assert!(error.contains("Nothing to repeat"), "{error}");
         let error = js_regex::Regex::new("[b-a]").unwrap_err();
-        assert!(error.contains("Range out of order in character class"), "{error}");
+        assert!(
+            error.contains("Range out of order in character class"),
+            "{error}"
+        );
         let error = js_regex::Regex::new("(?xa)").unwrap_err();
         assert!(error.contains("Invalid group"), "{error}");
     }
@@ -1542,15 +1589,26 @@ mod tests {
         assert!(!test("(a+)+c", "aaab"));
     }
 
-
     // Differential battery: expected values generated with Node's RegExp on
     // the same (pattern, input) pairs; the private engine must agree.
     #[test]
     fn js_regex_matches_node_regexp_battery() {
         let cases: &[(&str, &str, bool)] = &[
-            ("^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$", "PHASE 12 BLOCKED", true),
-            ("^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$", "\tPHASE 3 COMPLETE", true),
-            ("^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$", "PHASE 3 COMPLETE.", false),
+            (
+                "^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$",
+                "PHASE 12 BLOCKED",
+                true,
+            ),
+            (
+                "^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$",
+                "\tPHASE 3 COMPLETE",
+                true,
+            ),
+            (
+                "^\\s*PHASE \\d+ (COMPLETE|BLOCKED)$",
+                "PHASE 3 COMPLETE.",
+                false,
+            ),
             ("error|warning", "no problems here", false),
             ("error|warning", "1 warning generated", true),
             ("\\$\\d+\\.\\d{2}", "cost $14.99 total", true),
@@ -1718,7 +1776,10 @@ mod tests {
             "Could not focus X."
         );
         let fallback = || "Could not focus X.".to_string();
-        assert_eq!(result_error_message(&json!({}), fallback), "Could not focus X.");
+        assert_eq!(
+            result_error_message(&json!({}), fallback),
+            "Could not focus X."
+        );
     }
 
     #[test]

@@ -28,28 +28,160 @@ pub struct AgentIndicator {
 }
 
 const AGENT_PICKER_INDICATORS: &[(&str, AgentIndicator)] = &[
-    ("amp", AgentIndicator { color: "#ffffff", label: "AMP" }),
-    ("amp-cli", AgentIndicator { color: "#ffffff", label: "AMP" }),
-    ("antigravity", AgentIndicator { color: "#749bff", label: "AGY" }),
-    ("antigravity-cli", AgentIndicator { color: "#749bff", label: "AGY" }),
-    ("claude", AgentIndicator { color: "#d97757", label: "CLD" }),
-    ("claude-code", AgentIndicator { color: "#d97757", label: "CLD" }),
-    ("codex", AgentIndicator { color: "#a991ff", label: "CDX" }),
-    ("codex-cli", AgentIndicator { color: "#a991ff", label: "CDX" }),
-    ("copilot", AgentIndicator { color: "#ffffff", label: "PLT" }),
-    ("cursor", AgentIndicator { color: "#749bff", label: "CRS" }),
-    ("cursor-cli", AgentIndicator { color: "#749bff", label: "CRS" }),
-    ("droid", AgentIndicator { color: "#ff7a1a", label: "DRD" }),
-    ("factory-droid", AgentIndicator { color: "#ff7a1a", label: "DRD" }),
-    ("gemini", AgentIndicator { color: "#8b9aff", label: "GEM" }),
-    ("grok", AgentIndicator { color: "#ffffff", label: "GRK" }),
-    ("grok-build", AgentIndicator { color: "#ffffff", label: "GRK" }),
-    ("opencode", AgentIndicator { color: "#6d96c0", label: "OPN" }),
-    ("open-code", AgentIndicator { color: "#6d96c0", label: "OPN" }),
-    ("pi", AgentIndicator { color: "#c8ff62", label: "PIA" }),
-    ("t3", AgentIndicator { color: "#ff6af3", label: "T3C" }),
-    ("t3-code", AgentIndicator { color: "#ff6af3", label: "T3C" }),
-    ("work-codex", AgentIndicator { color: "#a991ff", label: "CDX" }),
+    (
+        "amp",
+        AgentIndicator {
+            color: "#ffffff",
+            label: "AMP",
+        },
+    ),
+    (
+        "amp-cli",
+        AgentIndicator {
+            color: "#ffffff",
+            label: "AMP",
+        },
+    ),
+    (
+        "antigravity",
+        AgentIndicator {
+            color: "#749bff",
+            label: "AGY",
+        },
+    ),
+    (
+        "antigravity-cli",
+        AgentIndicator {
+            color: "#749bff",
+            label: "AGY",
+        },
+    ),
+    (
+        "claude",
+        AgentIndicator {
+            color: "#d97757",
+            label: "CLD",
+        },
+    ),
+    (
+        "claude-code",
+        AgentIndicator {
+            color: "#d97757",
+            label: "CLD",
+        },
+    ),
+    (
+        "codex",
+        AgentIndicator {
+            color: "#a991ff",
+            label: "CDX",
+        },
+    ),
+    (
+        "codex-cli",
+        AgentIndicator {
+            color: "#a991ff",
+            label: "CDX",
+        },
+    ),
+    (
+        "copilot",
+        AgentIndicator {
+            color: "#ffffff",
+            label: "PLT",
+        },
+    ),
+    (
+        "cursor",
+        AgentIndicator {
+            color: "#749bff",
+            label: "CRS",
+        },
+    ),
+    (
+        "cursor-cli",
+        AgentIndicator {
+            color: "#749bff",
+            label: "CRS",
+        },
+    ),
+    (
+        "droid",
+        AgentIndicator {
+            color: "#ff7a1a",
+            label: "DRD",
+        },
+    ),
+    (
+        "factory-droid",
+        AgentIndicator {
+            color: "#ff7a1a",
+            label: "DRD",
+        },
+    ),
+    (
+        "gemini",
+        AgentIndicator {
+            color: "#8b9aff",
+            label: "GEM",
+        },
+    ),
+    (
+        "grok",
+        AgentIndicator {
+            color: "#ffffff",
+            label: "GRK",
+        },
+    ),
+    (
+        "grok-build",
+        AgentIndicator {
+            color: "#ffffff",
+            label: "GRK",
+        },
+    ),
+    (
+        "opencode",
+        AgentIndicator {
+            color: "#6d96c0",
+            label: "OPN",
+        },
+    ),
+    (
+        "open-code",
+        AgentIndicator {
+            color: "#6d96c0",
+            label: "OPN",
+        },
+    ),
+    (
+        "pi",
+        AgentIndicator {
+            color: "#c8ff62",
+            label: "PIA",
+        },
+    ),
+    (
+        "t3",
+        AgentIndicator {
+            color: "#ff6af3",
+            label: "T3C",
+        },
+    ),
+    (
+        "t3-code",
+        AgentIndicator {
+            color: "#ff6af3",
+            label: "T3C",
+        },
+    ),
+    (
+        "work-codex",
+        AgentIndicator {
+            color: "#a991ff",
+            label: "CDX",
+        },
+    ),
 ];
 const DEFAULT_PICKER_AGENT_INDICATOR: AgentIndicator = AgentIndicator {
     color: "#9ca3af",
@@ -175,10 +307,7 @@ pub fn build_session_picker_model(sessions: &[Value]) -> PickerModel {
         items.push(PickerItem {
             kind: PickerItemKind::Project,
             plain_text: project.project_name.clone(),
-            render_text: format!(
-                "{PROJECT_HEADER_STYLE}{}{RESET_ANSI}",
-                project.project_name
-            ),
+            render_text: format!("{PROJECT_HEADER_STYLE}{}{RESET_ANSI}", project.project_name),
             project_index: Some(project_index),
             session_index: None,
             session: None,
@@ -213,7 +342,10 @@ pub fn build_session_picker_model(sessions: &[Value]) -> PickerModel {
     }
 }
 
-pub fn build_session_picker_rows(sessions: &[Value], selected_session_index: usize) -> Vec<PickerRow> {
+pub fn build_session_picker_rows(
+    sessions: &[Value],
+    selected_session_index: usize,
+) -> Vec<PickerRow> {
     let model = build_session_picker_model(sessions);
     model
         .items
@@ -297,10 +429,7 @@ pub fn interactive_session_picker(sessions: &[Value]) -> CliResult<Option<Value>
     result
 }
 
-fn run_picker_loop(
-    model: &PickerModel,
-    output: &mut std::io::Stdout,
-) -> CliResult<Option<Value>> {
+fn run_picker_loop(model: &PickerModel, output: &mut std::io::Stdout) -> CliResult<Option<Value>> {
     use crossterm::event::{read, Event, KeyCode, KeyEventKind, KeyModifiers};
     let mut selected_session_index = 0usize;
     let mut viewport_start = 0usize;
@@ -339,7 +468,8 @@ fn run_picker_loop(
             KeyCode::PageDown => "pagedown",
             _ => continue,
         };
-        let next_selection = move_session_picker_selection(model, selected_session_index, direction);
+        let next_selection =
+            move_session_picker_selection(model, selected_session_index, direction);
         if next_selection != selected_session_index {
             selected_session_index = next_selection;
             viewport_start =
@@ -403,7 +533,11 @@ fn render_session_picker(
 }
 
 fn resolve_session_picker_project_name(session: &Value, is_first_group: bool) -> String {
-    if is_first_group && js_string_or_empty(session.get("projectPath")).trim().is_empty() {
+    if is_first_group
+        && js_string_or_empty(session.get("projectPath"))
+            .trim()
+            .is_empty()
+    {
         return QUICK_TERMINALS_PROJECT_NAME.to_string();
     }
     for key in ["projectName", "projectPath"] {
@@ -507,7 +641,11 @@ fn format_compact_session_line_at(
     project_label: Option<&str>,
     now_ms: i64,
 ) -> String {
-    let marker = if js_truthy(session.get("isFocused")) { "›" } else { " " };
+    let marker = if js_truthy(session.get("isFocused")) {
+        "›"
+    } else {
+        " "
+    };
     let title = ["displayTitle", "title"]
         .iter()
         .find(|key| js_truthy(session.get(**key)))
@@ -626,20 +764,14 @@ fn now_ms() -> i64 {
 fn is_js_whitespace(character: char) -> bool {
     matches!(
         character,
-        '\t' | '\n'
-            | '\u{b}'
-            | '\u{c}'
-            | '\r'
-            | ' '
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-            | '\u{feff}'
+        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200a}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202f}'
+                | '\u{205f}'
+                | '\u{3000}'
+                | '\u{feff}'
     )
 }
 
@@ -827,7 +959,10 @@ mod tests {
     fn rows_mark_selected_session_only() {
         let rows = build_session_picker_rows(&fixture_sessions(), 1);
         let selected: Vec<bool> = rows.iter().map(|row| row.selected).collect();
-        assert_eq!(selected, vec![false, false, false, false, true, false, false]);
+        assert_eq!(
+            selected,
+            vec![false, false, false, false, true, false, false]
+        );
         assert_eq!(rows[4].text, "[UNK] port cli");
         assert!(rows[2].agent_indicator.is_none());
         assert_eq!(rows[3].agent_indicator.map(|i| i.label), Some("CLD"));
@@ -836,11 +971,20 @@ mod tests {
     #[test]
     fn agent_indicator_resolution_order_and_normalization() {
         let session = json!({ "agent": "Claude Code", "provider": "zmx" });
-        assert_eq!(resolve_session_picker_agent_indicator(&session).label, "CLD");
+        assert_eq!(
+            resolve_session_picker_agent_indicator(&session).label,
+            "CLD"
+        );
         let session = json!({ "provider": "codex_cli" });
-        assert_eq!(resolve_session_picker_agent_indicator(&session).label, "CDX");
+        assert_eq!(
+            resolve_session_picker_agent_indicator(&session).label,
+            "CDX"
+        );
         let session = json!({ "agent": "mystery" });
-        assert_eq!(resolve_session_picker_agent_indicator(&session).label, "UNK");
+        assert_eq!(
+            resolve_session_picker_agent_indicator(&session).label,
+            "UNK"
+        );
         assert_eq!(
             normalize_agent_indicator_key(Some(&json!("  Factory  Droid "))),
             "factory-droid"

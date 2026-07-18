@@ -54,7 +54,10 @@ use std::{
     ffi::{c_int, c_void},
     path::PathBuf,
     rc::Rc as StdRc,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Instant,
 };
 
@@ -417,7 +420,6 @@ thread_local! {
     static KEYBOARD_ZOOM_CEF_NATIVE_VIEWS: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
     static CEF_REQUEST_CONTEXTS_BY_PROFILE: RefCell<HashMap<String, cef::RequestContext>> = RefCell::new(HashMap::new());
     static T3_BROWSER_SESSION_PROFILES: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
-    static ACTIVE_CEF_NATIVE_VIEW: Cell<Option<usize>> = const { Cell::new(None) };
     static APP_MODAL_HOST_BRIDGE_SURFACES_BY_BROWSER_ID: RefCell<HashMap<c_int, AppModalHostBridgeSurface>> = RefCell::new(HashMap::new());
     // Native views the app has explicitly hidden via CefBrowser::set_visible.
     // The focus handler consults this so a hidden surface can never take
@@ -425,6 +427,23 @@ thread_local! {
     static HIDDEN_CEF_NATIVE_VIEWS: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
     static SYSTEM_PAGE_APPEARANCE_CEF_NATIVE_VIEWS: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
     static PAGE_APPEARANCE_DEVTOOLS_MESSAGE_ID: Cell<c_int> = const { Cell::new(0) };
+}
+
+// AppKit grants and Chromium focus callbacks can run on different native
+// threads. Keep the one process-wide active CEF identity outside the
+// thread-local browser registries so a GPUI-root handoff is immediately
+// visible to the focus guard on whichever thread CEF invokes it.
+static ACTIVE_CEF_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
+
+fn active_cef_native_view() -> Option<usize> {
+    match ACTIVE_CEF_NATIVE_VIEW.load(Ordering::Acquire) {
+        0 => None,
+        native_view => Some(native_view),
+    }
+}
+
+fn set_active_cef_native_view(native_view: usize) {
+    ACTIVE_CEF_NATIVE_VIEW.store(native_view, Ordering::Release);
 }
 
 fn set_cef_native_view_hidden(native_view: *mut c_void, hidden: bool) {
@@ -617,6 +636,10 @@ pub fn refresh_application_menu_hooks() {
 
 pub fn focus_native_view(native_view: *mut c_void) {
     platform::focus_native_view(native_view);
+}
+
+pub fn focus_gpui_root_view(native_view: *mut c_void) {
+    platform::focus_gpui_root_view(native_view);
 }
 
 #[cfg(target_os = "macos")]
@@ -970,20 +993,47 @@ wrap_focus_handler! {
             responder are renderer-initiated steals and are canceled
             regardless of source or visibility.
             */
-            let native_view = browser
-                .and_then(|browser| browser.host())
-                .map(|host| platform::native_view_ptr(host.window_handle()));
+            let (native_view, browser_id) = browser
+                .map(|browser| {
+                    (
+                        browser
+                            .host()
+                            .map(|host| platform::native_view_ptr(host.window_handle())),
+                        Some(browser.identifier()),
+                    )
+                })
+                .unwrap_or((None, None));
             let hidden = native_view.is_some_and(cef_native_view_is_hidden);
             let responder_outside = native_view
                 .is_some_and(|native_view| !platform::native_view_owns_first_responder(native_view));
-            let cancel = hidden || responder_outside || source == FocusSource::NAVIGATION;
+            /*
+            CDXC:GPUICefExplicitNativeFocusOwnership 2026-07-15:
+            `native_view_owns_first_responder` cannot prove a SYSTEM request is
+            app-owned: Chromium moves its NSView into first-responder position
+            before invoking OnSetFocus, so a renderer `focus()` call satisfies
+            that check while stealing input from a GPUI terminal. The existing
+            active-native-view registry is the non-circular authority. AppKit
+            CEF mouseDown and explicit Rust `focus_native_view` calls mark the
+            exact browser root before requesting focus; returning focus to the
+            GPUI root clears the registry. Reject every request that lacks that
+            explicit current ownership, even if Chromium already changed the
+            responder underneath us.
+            */
+            let explicitly_active = native_view
+                .is_some_and(|native_view| active_cef_native_view() == Some(native_view as usize));
+            let cancel = hidden
+                || responder_outside
+                || !explicitly_active
+                || source == FocusSource::NAVIGATION;
             crate::support_logs::append(
                 crate::support_logs::GpuiSupportLog::TerminalFocus,
                 "gpui.terminalFocus.cefNativeFocusRequest",
                 serde_json::json!({
+                    "browserId": browser_id,
                     "source": format!("{source:?}"),
                     "surfaceHidden": hidden,
                     "responderOutside": responder_outside,
+                    "explicitlyActive": explicitly_active,
                     "canceled": cancel,
                 }),
             );
@@ -2870,13 +2920,66 @@ fn show_browser_dev_tools(
         ..Default::default()
     };
     let browser_settings = cef::BrowserSettings::default();
+    let mut devtools_client = Some(GhostexGpuiCefClient::new(
+        Some(GhostexGpuiLifeSpanHandler::new(None, true)),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(GhostexGpuiCefFocusHandler::new()),
+    ));
     host.show_dev_tools(
         Some(&window_info),
-        None,
+        devtools_client.as_mut(),
         Some(&browser_settings),
         inspect_element_at,
     );
     true
+}
+
+wrap_task! {
+    struct GhostexRegisterDevToolsNativeView {
+        browser: cef::Browser,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            let Some(host) = self.browser.host() else {
+                return;
+            };
+            let native_view = platform::native_view_ptr(host.window_handle());
+            platform::prepare_native_view_for_focus(native_view);
+            register_native_view_browser(native_view, &self.browser, false, false);
+            /*
+            CDXC:GPUICefDevToolsFocus 2026-07-15:
+            OnAfterCreated precedes native DevTools window attachment on macOS,
+            so its host handle can still be null. A CEF UI task runs after that
+            creation callback, at which point the final native root can be
+            registered before the explicit OS/Chromium focus grant. This keeps
+            Copy/Paste on DevTools' real responder chain without broad routing.
+            */
+            #[cfg(target_os = "macos")]
+            platform::activate_native_view_window(native_view);
+            platform::focus_native_view(native_view);
+            host.set_focus(1);
+            crate::support_logs::append(
+                crate::support_logs::GpuiSupportLog::TerminalFocus,
+                "gpui.cef.nativeViewBrowserRegistered",
+                serde_json::json!({
+                    "browserId": self.browser.identifier(),
+                    "isPopup": self.browser.is_popup() != 0,
+                    "nativeViewWasNull": native_view.is_null(),
+                    "explicitFocusGranted": !native_view.is_null(),
+                }),
+            );
+        }
+    }
 }
 
 wrap_context_menu_handler! {
@@ -2982,9 +3085,21 @@ wrap_find_handler! {
 wrap_life_span_handler! {
     struct GhostexGpuiLifeSpanHandler {
         popup_open_handler: Option<BrowserPopupOpenHandler>,
+        register_created_native_view: bool,
     }
 
     impl LifeSpanHandler {
+        fn on_after_created(&self, browser: Option<&mut cef::Browser>) {
+            if !self.register_created_native_view {
+                return;
+            }
+            let Some(browser) = browser else {
+                return;
+            };
+            let mut task = GhostexRegisterDevToolsNativeView::new(browser.clone());
+            post_task(ThreadId::UI, Some(&mut task));
+        }
+
         fn do_close(&self, _browser: Option<&mut cef::Browser>) -> c_int {
             /*
             CDXC:GPUIResourcesTitlebar 2026-07-09:
@@ -3424,7 +3539,7 @@ impl CefBrowser {
         // DoClose is always handled and CEF can never close the host GPUI
         // window when a browser is dropped.
         let mut client = Some(GhostexGpuiCefClient::new(
-            Some(GhostexGpuiLifeSpanHandler::new(popup_open_handler)),
+            Some(GhostexGpuiLifeSpanHandler::new(popup_open_handler, false)),
             Some(context_menu_handler),
             display_handler,
             find_handler,
@@ -3642,7 +3757,6 @@ impl CefBrowser {
     }
 
     pub fn execute_java_script_in_main_frame(&self, script: &str) -> bool {
-        self.focus();
         let browser = self.browser.borrow();
         let Some(frame) = browser.main_frame() else {
             return false;
@@ -3650,6 +3764,14 @@ impl CefBrowser {
         /*
         CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
         GPUI Browser feedback tools now use CEF's normal main-frame JavaScript execution path for app-owned injection scripts. Pass a synthetic script URL and return only main-frame availability so this backend does not log page URLs, titles, script bodies, user content, JS errors, cookies, tokens, paths, command text, or terminal content.
+
+        CDXC:GPUICefAppOwnedScriptFocus 2026-07-15:
+        App-owned renderer notifications are sideband state delivery, not an
+        input-focus action. Executing one must preserve the current GPUI,
+        terminal, or CEF responder; callers that represent an explicit user
+        focus action invoke `focus` separately. Focusing here caused sidebar
+        attention/session-selection notifications to steal keyboard ownership
+        synchronously during terminal mouse-down handling.
         */
         frame.execute_java_script(
             Some(&cef::CefString::from(script)),
@@ -3996,15 +4118,16 @@ fn clear_active_native_view_if_matching(native_view: *mut c_void) {
         return;
     }
 
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| {
-        if active.get() == Some(native_view as usize) {
-            active.set(None);
-        }
-    });
+    let _ = ACTIVE_CEF_NATIVE_VIEW.compare_exchange(
+        native_view as usize,
+        0,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    );
 }
 
 fn clear_active_native_view() {
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| active.set(None));
+    ACTIVE_CEF_NATIVE_VIEW.store(0, Ordering::Release);
 }
 
 fn select_all_in_browser(browser: &cef::Browser) -> bool {
@@ -4100,7 +4223,7 @@ pub(super) fn select_all_for_native_view(native_view: *mut c_void) -> c_int {
         return 0;
     };
 
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| active.set(Some(native_view as usize)));
+    set_active_cef_native_view(native_view as usize);
 
     if let Some(host) = browser.host() {
         platform::focus_native_view(platform::native_view_ptr(host.window_handle()));
@@ -4115,7 +4238,7 @@ pub(super) fn select_all_for_native_view(native_view: *mut c_void) -> c_int {
 }
 
 pub(super) fn select_all_for_active_native_view() -> c_int {
-    let native_view = ACTIVE_CEF_NATIVE_VIEW.with(|active| active.get());
+    let native_view = active_cef_native_view();
     let Some(native_view) = native_view else {
         return 0;
     };
@@ -4135,6 +4258,15 @@ pub(super) fn edit_command_for_native_view(
     command: CefEditCommand,
 ) -> c_int {
     if native_view.is_null() {
+        crate::support_logs::append(
+            crate::support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.cef.editCommandNativeViewRoute",
+            serde_json::json!({
+                "command": format!("{command:?}"),
+                "matchedBrowser": false,
+                "nativeViewWasNull": true,
+            }),
+        );
         return 0;
     }
 
@@ -4144,17 +4276,25 @@ pub(super) fn edit_command_for_native_view(
         return 0;
     };
 
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| active.set(Some(native_view as usize)));
+    set_active_cef_native_view(native_view as usize);
 
     if let Some(host) = browser.host() {
         host.set_focus(1);
     }
 
-    if edit_command_in_browser(&browser, command) {
-        1
-    } else {
-        0
-    }
+    let handled = edit_command_in_browser(&browser, command);
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::TerminalFocus,
+        "gpui.cef.editCommandNativeViewRoute",
+        serde_json::json!({
+            "command": format!("{command:?}"),
+            "matchedBrowser": true,
+            "browserId": browser.identifier(),
+            "isPopup": browser.is_popup() != 0,
+            "handled": handled,
+        }),
+    );
+    if handled { 1 } else { 0 }
 }
 
 pub(super) fn zoom_command_for_native_view(
@@ -4177,7 +4317,7 @@ pub(super) fn zoom_command_for_native_view(
         return 0;
     };
 
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| active.set(Some(native_view as usize)));
+    set_active_cef_native_view(native_view as usize);
     host.set_focus(1);
     match command {
         CefZoomCommand::In => host.zoom(ZoomCommand::IN),
@@ -4198,8 +4338,45 @@ pub(super) fn mark_native_view_focused(native_view: *mut c_void) -> c_int {
         return 0;
     }
 
-    ACTIVE_CEF_NATIVE_VIEW.with(|active| active.set(Some(native_view as usize)));
+    set_active_cef_native_view(native_view as usize);
     1
+}
+
+#[cfg(target_os = "macos")]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn log_native_mouse_down(
+    native_view: *mut c_void,
+    event_window_x: f64,
+    event_window_y: f64,
+    frame_window_x: f64,
+    frame_window_y: f64,
+    frame_width: f64,
+    frame_height: f64,
+    parent_bounds_width: f64,
+    parent_bounds_height: f64,
+    hidden: bool,
+    responder_class: String,
+) {
+    let browser = CEF_BROWSERS_BY_NATIVE_VIEW
+        .with(|browsers| browsers.borrow().get(&(native_view as usize)).cloned());
+    let event_inside_native_frame = event_window_x >= frame_window_x
+        && event_window_y >= frame_window_y
+        && event_window_x < frame_window_x + frame_width
+        && event_window_y < frame_window_y + frame_height;
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::TerminalFocus,
+        "gpui.cef.nativeMouseDown",
+        serde_json::json!({
+            "browserId": browser.as_ref().map(cef::Browser::identifier),
+            "isPopup": browser.as_ref().is_some_and(|browser| browser.is_popup() != 0),
+            "eventWindow": [event_window_x, event_window_y],
+            "nativeFrameWindow": [frame_window_x, frame_window_y, frame_width, frame_height],
+            "parentBounds": [parent_bounds_width, parent_bounds_height],
+            "eventInsideNativeFrame": event_inside_native_frame,
+            "hidden": hidden,
+            "responderClass": responder_class,
+        }),
+    );
 }
 
 pub(super) fn clear_active_native_view_registry() {

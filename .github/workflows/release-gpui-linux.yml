@@ -36,6 +36,8 @@ jobs:
           fetch-depth: 0
           submodules: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
       - uses: actions/download-artifact@v4
         if: ${{ inputs.runtime_artifacts_ready }}
         with:

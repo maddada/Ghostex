@@ -85,6 +85,9 @@ impl GpuiTerminalEngineConfig {
             confirm_close_surface: settings.confirm_close_surface,
         };
         config.apply_ghostty_theme(&settings.ghostty_theme);
+        if let Some(background) = settings.terminal_background_rgb {
+            config.apply_terminal_background(background);
+        }
         config
     }
 
@@ -101,6 +104,24 @@ impl GpuiTerminalEngineConfig {
         self.view.cursor_text = theme.cursor_text.map(TerminalConfiguredColor::Rgb);
         self.view.selection_background =
             theme.selection_background.map(TerminalConfiguredColor::Rgb);
+    }
+
+    pub(crate) fn apply_terminal_background(&mut self, [r, g, b]: [u8; 3]) {
+        let background = Rgb { r, g, b };
+        if let Some(colors) = &mut self.colors {
+            colors.background = background;
+            return;
+        }
+        self.colors = Some(GpuiTerminalColorDefaults {
+            foreground: Rgb {
+                r: 0xff,
+                g: 0xff,
+                b: 0xff,
+            },
+            background,
+            cursor: None,
+            palette: crate::ghostty_vt::default_color_palette(),
+        });
     }
 }
 

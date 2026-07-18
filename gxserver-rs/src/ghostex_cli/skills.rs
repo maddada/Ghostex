@@ -168,7 +168,9 @@ pub fn resolve_ghostex_agent_skill_package_source(
         return Ok(explicit_source);
     }
     let legacy_source_dir = resolve_ghostex_agent_skill_source_dir(skill_name, env_vars)?;
-    Ok(path_dirname(&legacy_source_dir.to_string_lossy()).to_string_lossy().to_string())
+    Ok(path_dirname(&legacy_source_dir.to_string_lossy())
+        .to_string_lossy()
+        .to_string())
 }
 
 fn install_ghostex_agent_skill(
@@ -266,7 +268,10 @@ pub fn install_browser_skill_command(args: &[String]) -> CliResult<()> {
     install_ghostex_agent_skill(
         args,
         "ghostex browser mcp",
-        &["GHOSTEX_BROWSER_USE_SKILL_SOURCE", "GHOSTEX_BROWSER_SKILL_SOURCE"],
+        &[
+            "GHOSTEX_BROWSER_USE_SKILL_SOURCE",
+            "GHOSTEX_BROWSER_SKILL_SOURCE",
+        ],
         GHOSTEX_BROWSER_SKILL_NAME,
     )
 }
@@ -461,9 +466,8 @@ mod tests {
             flags.insert_text("source", "https://registry.example/skills.tgz");
             flags
         };
-        let source =
-            resolve_ghostex_agent_skill_package_source("gx-test-skill-nope", &[], &flags)
-                .expect("url source");
+        let source = resolve_ghostex_agent_skill_package_source("gx-test-skill-nope", &[], &flags)
+            .expect("url source");
         assert_eq!(source, "https://registry.example/skills.tgz");
     }
 
