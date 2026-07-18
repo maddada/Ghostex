@@ -1,0 +1,246 @@
+name: GPUI build - macOS x86_64 (Intel)
+
+# Iteration workflow for making the GPUI macOS app build for x86_64 on a
+# GitHub-hosted Intel runner. Produces an ad-hoc signed, unnotarized DMG as a
+# downloadable CI artifact. This is NOT the release flow: no Developer ID
+# signing, no notarization, no Sparkle, no Linux remote gxserver packages, no
+# on-demand assets. Once x86_64 compiles cleanly here, fold it into the real
+# release flow by parameterizing scripts/release-gpui/macos.sh.
+#
+# Why macos-15-intel: GitHub retired macos-13 and is deprecating macos-14;
+# macos-15-intel is the current standard Intel x86_64 runner label (macos-26-
+# intel also exists). Avoid the -large variants — those are paid larger runners.
+# cef-rs/cef-dll-sys downloads the matching macosx64 CEF on a native Intel host,
+# so we avoid cross-build questions entirely. docs/dual-arch-macos-release-
+# handover.md explicitly endorses this: "If CMake cannot cross-build the CEF
+# wrapper from Apple Silicon to x86_64, use an Intel runner for the x86_64 leg
+# rather than adding runtime fallbacks."
+#
+# Shelf life: GitHub is phasing Intel macOS out. macos-15-intel works today but
+# has a limited runway. Iterate promptly. The durable fallback is cross-
+# compiling x86_64-apple-darwin from an arm64 runner (the CEF cross-build the
+# handover doc warns about). Get this green before the Intel fleet disappears.
+#
+# Emergent-failure note: verify runner-label availability externally before
+# relying on it — the build scripts supporting an arch does not mean GitHub
+# still provisions a runner for it. (Bitten by this once already: macos-13 was
+# retired between plan and commit.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Submodule scope. minimal = zmx + code-server + t3code (exercises all compile risk, fails fast). full = + zehn + tui2 (complete app minus Project board bd).
+        required: true
+        type: choice
+        default: minimal
+        options:
+          - minimal
+          - full
+      version:
+        description: Optional marketing version (defaults to package.json version). Not validated against CHANGELOG.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpui-macos-x86_64-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Initialize submodules (${{ inputs.scope }})
+        run: |
+          # zmx: hard terminal dependency (prepare-macos-runtime.sh fails without it).
+          # code-server (+lib/vscode): required by validate_portless_admin_runtime_resources
+          #   in build-macos-app.sh (needs Web/code-server/out/node/entry.js + lib/vscode/out/server-main.js).
+          # t3code: also hard-required by validate_portless_admin_runtime_resources
+          #   (needs Web/t3code-server/dist/bin.mjs), so it cannot be skipped even in minimal mode.
+          git submodule update --init --depth=1 zmx code-server t3code
+          git -C code-server submodule update --init --depth=1 lib/vscode
+          if [[ "${{ inputs.scope }}" == "full" ]]; then
+            # zehn: Zehn search CLI (Zig 0.16). tui2: ghostex-tui (Cargo).
+            git submodule update --init --depth=1 zehn tui2
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: code-server/package-lock.json
+
+      - name: Install build tools
+        run: brew install cmake ninja rsync go xcodegen
+
+      - name: Install pinned Zig toolchains
+        run: |
+          curl https://mise.run | sh
+          "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
+          ZIG_015="$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig"
+          ZIG_016="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
+          [[ "$($ZIG_015 version)" == "0.15.2" ]]
+          [[ "$($ZIG_016 version)" == "0.16.0" ]]
+          # ZIG/GHOSTEX_ZIG: zmx (Zig 0.15.2). ZEHN_ZIG: zehn (Zig 0.16).
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\nZEHN_ZIG=%s\n' \
+            "$ZIG_015" "$ZIG_015" "$ZIG_016" >> "$GITHUB_ENV"
+
+      - name: Install JavaScript dependencies
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix code-server ci
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.1
+
+      - name: Install embedded T3 Code dependencies
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          npm install --global pnpm@10.24.0
+          pnpm --dir t3code install --frozen-lockfile
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Cache budget: GitHub Actions cache is 10 GB per repo, LRU-evicted.
+      # A Zed-scale cargo target/ can be 10-20 GB by itself — caching it would
+      # blow the budget and evict the stable ~500 MB cef-cache (the most
+      # valuable thing here). So: cache the stable things aggressively, and
+      # skip the volatile cargo target/ trees. Cargo will do clean builds
+      # from the cached registry — slower, but the cef-cache survives.
+      # If iteration proves too slow, add target/ back with a *separate*
+      # cache key so it can't evict the stable caches.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            gpui/build/cef-cache
+            build/x86_64/build-cache
+          key: gpui-macos-x86_64-${{ inputs.scope }}-${{ hashFiles('gpui/Cargo.lock', 'gxserver-rs/Cargo.lock', 'bun.lock', 'code-server/package-lock.json') }}
+          restore-keys: |
+            gpui-macos-x86_64-${{ inputs.scope }}-
+            gpui-macos-x86_64-
+
+      - name: Prepare macOS runtime (x86_64)
+        env:
+          GHOSTEX_MACOS_ARCH: x86_64
+          # t3code is init'd even in minimal; beads/zehn/tui2 may be absent.
+          # Allowed-missing keeps the build going when optional submodules are
+          # not init'd (beads is never a submodule; zehn/tui2 only in full).
+          GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES: 1
+          GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES: 0
+          GHOSTEX_ON_DEMAND_ASSETS: 0
+        run: gpui/scripts/prepare-macos-runtime.sh
+
+      - name: Build GPUI macOS app (x86_64, ad-hoc signed)
+        env:
+          GHOSTEX_MACOS_ARCH: x86_64
+          GHOSTEX_GPUI_APP_NAME: Ghostex
+          GHOSTEX_GPUI_BUNDLE_ID: com.madda.ghostex.host
+          GHOSTEX_GPUI_MARKETING_VERSION: ${{ steps.version.outputs.version }}
+          # No Sparkle (dev build), no notarization, ad-hoc signing (empty
+          # GHOSTEX_GPUI_SIGN_IDENTITY keeps the historical `codesign -s -`).
+          GHOSTEX_REQUIRE_SPARKLE: 0
+        run: gpui/scripts/build-macos-app.sh
+
+      - name: Verify architecture
+        run: |
+          APP_PATH="gpui/build/macos/Ghostex.app"
+          echo "::group::Main executable"
+          lipo -archs "$APP_PATH/Contents/MacOS/Ghostex"
+          echo "::endgroup::"
+          echo "::group::CEF framework"
+          lipo -archs "$APP_PATH/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+          echo "::endgroup::"
+          echo "::group::GPUI CEF helper"
+          lipo -archs "$APP_PATH/Contents/Frameworks/Ghostex Helper.app/Contents/MacOS/Ghostex Helper" || true
+          echo "::endgroup::"
+          echo "::group::Lid-sleep helper"
+          lipo -archs "$APP_PATH/Contents/Library/LaunchServices/"* 2>/dev/null || true
+          echo "::endgroup::"
+          # Hard-fail if the main executable is not x86_64 — the whole point of this workflow.
+          lipo -archs "$APP_PATH/Contents/MacOS/Ghostex" | grep -Fx x86_64
+
+      - name: Build DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP_PATH="gpui/build/macos/Ghostex.app"
+          STAGE="$(mktemp -d)"
+          ditto "$APP_PATH" "$STAGE/Ghostex.app"
+          ln -s /Applications "$STAGE/Applications"
+          DMG="$RUNNER_TEMP/ghostex-$VERSION-x86_64.dmg"
+          hdiutil create -volname Ghostex -srcfolder "$STAGE" -format UDZO "$DMG"
+          shasum -a 256 "$DMG"
+          echo "DMG_PATH=$DMG" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghostex-macos-x86_64
+          path: ${{ runner.temp }}/ghostex-${{ steps.version.outputs.version }}-x86_64.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Run summary
+        if: always()
+        run: |
+          {
+            echo "## GPUI macOS x86_64 build"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Scope | \`${{ inputs.scope }}\` |"
+            echo "| Version | \`${{ steps.version.outputs.version }}\` |"
+            echo "| Arch | x86_64 (Intel, macos-13 runner) |"
+            echo "| Signing | ad-hoc (unnotarized) |"
+            echo ""
+            echo "### Download"
+            echo ""
+            echo "Grab the \`ghostex-macos-x86_64\` artifact from this run — it contains \`ghostex-${{ steps.version.outputs.version }}-x86_64.dmg\`."
+            echo ""
+            echo "### Install on Intel Mac (ad-hoc signed, unnotarized)"
+            echo ""
+            echo "Gatekeeper will block this DMG because it is ad-hoc signed and not notarized. To open:"
+            echo ""
+            echo '```bash'
+            echo "open ghostex-${{ steps.version.outputs.version }}-x86_64.dmg   # drag Ghostex.app to Applications"
+            echo "xattr -dr com.apple.quarantine /Applications/Ghostex.app"
+            echo '```'
+            echo ""
+            echo "Or right-click the app → **Open** → **Open anyway**."
+            echo ""
+            echo "### Known gaps in this dev DMG"
+            echo ""
+            echo "- **Project board (bd) is not bundled** — Beads is a separate checkout, not a submodule. Use the signed release build for Project board."
+            if [[ "${{ inputs.scope }}" == "minimal" ]]; then
+              echo "- **Zehn search and TUI are skipped** (minimal scope). Re-run with scope=full to include them."
+            fi
+            echo "- No Sparkle auto-update feed (dev build)."
+            echo ""
+            echo "### Next step"
+            echo ""
+            echo "Once this is green on minimal, re-run with **scope=full** to produce the complete DMG. Then parameterize \`scripts/release-gpui/macos.sh\` to fold x86_64 into the signed/notarized release flow."
+          } >> "$GITHUB_STEP_SUMMARY"
