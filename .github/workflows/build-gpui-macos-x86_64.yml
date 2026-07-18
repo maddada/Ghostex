@@ -69,8 +69,11 @@ jobs:
           git submodule update --init --depth=1 zmx code-server t3code
           git -C code-server submodule update --init --depth=1 lib/vscode
           if [[ "${{ inputs.scope }}" == "full" ]]; then
-            # zehn: Zehn search CLI (Zig 0.16). tui2: ghostex-tui (Cargo).
-            git submodule update --init --depth=1 zehn tui2
+            # zehn: Zehn search CLI (Zig 0.16), a real submodule.
+            # tui2 is NOT a submodule — it's a regular directory already in
+            # the checkout from actions/checkout (has its own Cargo.toml),
+            # so it needs no submodule init.
+            git submodule update --init --depth=1 zehn
           fi
 
       - uses: oven-sh/setup-bun@v2
@@ -148,9 +151,10 @@ jobs:
       - name: Prepare macOS runtime (x86_64)
         env:
           GHOSTEX_MACOS_ARCH: x86_64
-          # t3code is init'd even in minimal; beads/zehn/tui2 may be absent.
+          # t3code is init'd even in minimal; beads/zehn may be absent.
           # Allowed-missing keeps the build going when optional submodules are
-          # not init'd (beads is never a submodule; zehn/tui2 only in full).
+          # not init'd (beads is never a submodule; zehn only in full; tui2 is
+          # a regular directory, not a submodule, so always present).
           GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES: 1
           GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES: 0
           GHOSTEX_ON_DEMAND_ASSETS: 0
@@ -160,6 +164,10 @@ jobs:
         env:
           GHOSTEX_MACOS_ARCH: x86_64
           GHOSTEX_GPUI_APP_NAME: Ghostex
+          # .host (not .gpui) is deliberate: matches scripts/release-gpui/macos.sh
+          # line 67 so CEF helper and lid-sleep helper bundle ids derive from the
+          # same id as the signed release app. build-macos-app.sh's default is
+          # .gpui, but the release flow overrides to .host, so we match release.
           GHOSTEX_GPUI_BUNDLE_ID: com.madda.ghostex.host
           GHOSTEX_GPUI_MARKETING_VERSION: ${{ steps.version.outputs.version }}
           # No Sparkle (dev build), no notarization, ad-hoc signing (empty
@@ -214,7 +222,7 @@ jobs:
             echo "|---|---|"
             echo "| Scope | \`${{ inputs.scope }}\` |"
             echo "| Version | \`${{ steps.version.outputs.version }}\` |"
-            echo "| Arch | x86_64 (Intel, macos-13 runner) |"
+            echo "| Arch | x86_64 (Intel, macos-15-intel runner) |"
             echo "| Signing | ad-hoc (unnotarized) |"
             echo ""
             echo "### Download"
