@@ -67,6 +67,17 @@ struct AutomationRunRecord {
 }
 
 struct AutomationLaunch {
+    /*
+    CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+    Launches that create a fresh agent session own an undelivered prompt.
+    `createAgentSession` only records the prompt as `runtimeSettings.firstUserMessage`
+    metadata, and the agent launch plan's `startupText` carries the agent command
+    alone, so nothing types the prompt into the session. Carry the pending prompt
+    out of the launch so the run watcher delivers it once the agent TUI is up.
+    Thread launches leave this `None` because they already sent the prompt into an
+    existing session.
+    */
+    pending_prompt: Option<String>,
     session_id: String,
     session_project_id: String,
     worktree: Option<Value>,
@@ -75,6 +86,14 @@ struct AutomationLaunch {
 const AUTOMATION_SCHEDULER_TICK_SECONDS: u64 = 30;
 const AUTOMATION_RUN_POLL_SECONDS: u64 = 5;
 const AUTOMATION_RUN_POLL_LIMIT: usize = 720;
+/*
+CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+Mirror the GPUI sidebar's agent prompt contract (`GPUI_AGENT_PROMPT_READY_DELAY_MS`):
+a freshly launched agent TUI needs a settle window before it accepts composer
+input. The daemon waits inside the spawned run watcher, never inside the
+scheduler tick or the `runAutomationNow` endpoint, so neither blocks.
+*/
+const AUTOMATION_PROMPT_READY_DELAY_SECONDS: u64 = 4;
 const AUTOMATION_RESULT_PREFIX: &str = "AUTOMATION_RESULT:";
 const AUTOMATION_MAX_COUNT: usize = 500;
 const AUTOMATION_MAX_RUN_COUNT: usize = 5_000;
@@ -136,11 +155,18 @@ impl AutomationRuntime {
         run_id: String,
         session_project_id: String,
         session_id: String,
+        pending_prompt: Option<String>,
     ) {
         let runtime = self.clone();
         tokio::spawn(async move {
             let _ = runtime
-                .watch_automation_run(project_id, run_id, session_project_id, session_id)
+                .watch_automation_run(
+                    project_id,
+                    run_id,
+                    session_project_id,
+                    session_id,
+                    pending_prompt,
+                )
                 .await;
         });
     }
@@ -151,7 +177,17 @@ impl AutomationRuntime {
         run_id: String,
         session_project_id: String,
         session_id: String,
+        pending_prompt: Option<String>,
     ) -> Result<(), DomainStateError> {
+        if let Some(prompt) = pending_prompt {
+            if let Err(error) = self
+                .deliver_automation_prompt(&session_project_id, &session_id, &prompt)
+                .await
+            {
+                let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
+                return fail_run(&db, &project_id, &run_id, &error.message, "failed");
+            }
+        }
         for _ in 0..AUTOMATION_RUN_POLL_LIMIT {
             tokio::time::sleep(Duration::from_secs(AUTOMATION_RUN_POLL_SECONDS)).await;
             let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
@@ -175,6 +211,48 @@ impl AutomationRuntime {
             "needs_attention",
         )
     }
+
+    /*
+    CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+    Deliver the automation prompt the same way the GPUI sidebar delivers a first
+    user message: start the provider, let the agent TUI settle, then submit the
+    text through `sendSessionMessage`. Without this the session launches its agent
+    command and idles at an empty composer, so no run can ever emit an
+    AUTOMATION_RESULT marker and every run fails at the watcher timeout.
+    */
+    async fn deliver_automation_prompt(
+        &self,
+        session_project_id: &str,
+        session_id: &str,
+        prompt: &str,
+    ) -> Result<(), DomainStateError> {
+        tokio::time::sleep(Duration::from_secs(AUTOMATION_PROMPT_READY_DELAY_SECONDS)).await;
+        let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
+        let repository = DomainRepository::new(&db, self.server_id.as_str());
+        send_automation_prompt(&repository, session_project_id, session_id, prompt)
+    }
+}
+
+fn send_automation_prompt(
+    repository: &DomainRepository<'_>,
+    session_project_id: &str,
+    session_id: &str,
+    prompt: &str,
+) -> Result<(), DomainStateError> {
+    let mut params = Map::new();
+    params.insert(
+        "projectId".to_string(),
+        Value::String(session_project_id.to_string()),
+    );
+    params.insert(
+        "sessionId".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    params.insert("submit".to_string(), Value::Bool(true));
+    params.insert("text".to_string(), Value::String(prompt.to_string()));
+    dispatch_zmx_session_interaction_endpoint(repository, "/api/sendSessionMessage", &params)
+        .map_err(zmx_error)?;
+    Ok(())
 }
 
 pub async fn handle_automation_endpoint(
@@ -323,6 +401,7 @@ fn queue_automation_run(
                 run.id.clone(),
                 launch.session_project_id,
                 launch.session_id,
+                launch.pending_prompt,
             );
             Ok(run)
         }
@@ -373,6 +452,7 @@ fn launch_local_automation(
     let session =
         create_and_start_agent_session(runtime, repository, db, &project, automation, prompt)?;
     Ok(AutomationLaunch {
+        pending_prompt: Some(prompt.to_string()),
         session_id: required_value_text(&session, "sessionId")?,
         session_project_id: project.project_id,
         worktree: None,
@@ -420,6 +500,7 @@ fn launch_worktree_automation(
         prompt,
     )?;
     Ok(AutomationLaunch {
+        pending_prompt: Some(prompt.to_string()),
         session_id: required_value_text(&session, "sessionId")?,
         session_project_id: worktree_project.project_id,
         worktree: Some(json!({
@@ -461,17 +542,14 @@ fn launch_thread_automation(
         .ok_or_else(|| DomainStateError::bad_request("Thread automation requires sessionId."))?;
     let (session_project_id, session_id) =
         resolve_thread_session(repository, &automation.project_id, session_id)?;
-    let mut params = Map::new();
-    params.insert(
-        "projectId".to_string(),
-        Value::String(session_project_id.clone()),
-    );
-    params.insert("sessionId".to_string(), Value::String(session_id.clone()));
-    params.insert("submit".to_string(), Value::Bool(true));
-    params.insert("text".to_string(), Value::String(prompt.to_string()));
-    dispatch_zmx_session_interaction_endpoint(repository, "/api/sendSessionMessage", &params)
-        .map_err(zmx_error)?;
+    /*
+    Thread automations reuse a session whose agent is already running, so the
+    prompt goes in immediately and needs no readiness wait. Report it as already
+    delivered so the run watcher does not submit it a second time.
+    */
+    send_automation_prompt(repository, &session_project_id, &session_id, prompt)?;
     Ok(AutomationLaunch {
+        pending_prompt: None,
         session_id,
         session_project_id,
         worktree: Some(json!({ "sourceRunId": run.id })),
@@ -661,11 +739,17 @@ fn recover_running_automation_runs(
         {
             complete_run(db, &run.project_id, &run.id, &status, summary.as_deref())?;
         } else {
+            /*
+            A recovered run already reached the delivery step in the watcher that
+            owned it, so re-adopting it must not resubmit the prompt into a
+            session that is very likely already working on it.
+            */
             runtime.spawn_run_watcher(
                 run.project_id,
                 run.id,
                 session_project_id,
                 session_id.to_string(),
+                None,
             );
         }
     }
@@ -696,10 +780,35 @@ fn read_automation_result_from_session(
     Ok(parse_automation_result(&text))
 }
 
+/*
+CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+The delivered prompt is echoed into the session scrollback, so the marker scan
+reads the instruction block too. Scanning only the first occurrence let that echo
+decide the run: every run resolved to the first status word named in the
+instructions, seconds after delivery, with the remaining instruction lines stored
+as the summary. Take the last occurrence that parses into a real status instead,
+because the agent's closing marker always trails its own echoed instructions.
+`build_automation_prompt` keeps the instruction text free of a literal
+`AUTOMATION_RESULT: <status>` line so the echo can never parse at all.
+*/
 fn parse_automation_result(text: &str) -> Option<(String, Option<String>)> {
-    let marker_index = text.to_ascii_uppercase().find(AUTOMATION_RESULT_PREFIX)?;
-    let after_marker = &text[marker_index + AUTOMATION_RESULT_PREFIX.len()..];
-    let mut lines = after_marker.lines();
+    let haystack = text.to_ascii_uppercase();
+    let mut result = None;
+    let mut search_from = 0;
+    while let Some(offset) = haystack[search_from..].find(AUTOMATION_RESULT_PREFIX) {
+        search_from = search_from + offset + AUTOMATION_RESULT_PREFIX.len();
+        if let Some(parsed) = parse_automation_result_at(text, search_from) {
+            result = Some(parsed);
+        }
+    }
+    result
+}
+
+fn parse_automation_result_at(
+    text: &str,
+    after_marker_index: usize,
+) -> Option<(String, Option<String>)> {
+    let mut lines = text.get(after_marker_index..)?.lines();
     let status = lines.next()?.trim().to_ascii_lowercase();
     let status = match status.as_str() {
         "findings" | "no_findings" | "needs_attention" => status,
@@ -1524,9 +1633,18 @@ fn find_run_session_project_id(
         })
 }
 
+/*
+CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+Never spell out a literal `AUTOMATION_RESULT: <status>` line here. The prompt is
+typed into the session, so anything written here is echoed into the same
+scrollback the run watcher scans, and a literal marker line would let the
+instructions report the run's own result. Name the status words inside prose that
+follows the marker on its line, so the echo cannot parse while the agent's real
+closing marker still does.
+*/
 fn build_automation_prompt(prompt: &str) -> String {
     format!(
-        "{}\n\nWhen this automation finishes, end with one of:\n\nAUTOMATION_RESULT: findings\nAUTOMATION_RESULT: no_findings\nAUTOMATION_RESULT: needs_attention\n\nThen include a short summary.",
+        "{}\n\nWhen this automation finishes, end your final message with a line that starts with AUTOMATION_RESULT: completed by exactly one of these three words - findings, no_findings, or needs_attention. Put a short summary on the lines after it.",
         prompt.trim()
     )
 }
@@ -1749,5 +1867,70 @@ fn sql_error(error: rusqlite::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
         message: format!("SQLite automation state error: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_instructions_never_parse_as_a_result() {
+        /*
+        CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+        Regression lock for the pair of bugs that made every delivered run report a
+        bogus result: the prompt is echoed into the scanned scrollback, so the
+        instruction block must not contain a parseable marker line, and the scan
+        must not stop at the first occurrence.
+        */
+        let prompt = build_automation_prompt("Me fale quem é o NAP");
+        assert!(prompt.contains(AUTOMATION_RESULT_PREFIX));
+        assert_eq!(parse_automation_result(&prompt), None);
+    }
+
+    #[test]
+    fn agent_marker_after_echoed_instructions_wins() {
+        let session_text = format!(
+            "{}\n\nI looked into it.\n\nAUTOMATION_RESULT: needs_attention\nNo NAP context found in the repo.\n",
+            build_automation_prompt("Me fale quem é o NAP")
+        );
+        assert_eq!(
+            parse_automation_result(&session_text),
+            Some((
+                "needs_attention".to_string(),
+                Some("No NAP context found in the repo.".to_string())
+            ))
+        );
+    }
+
+    #[test]
+    fn last_valid_marker_wins_over_earlier_ones() {
+        let session_text = "AUTOMATION_RESULT: findings\nfirst pass\n\nAUTOMATION_RESULT: no_findings\nsecond pass\n";
+        assert_eq!(
+            parse_automation_result(session_text),
+            Some(("no_findings".to_string(), Some("second pass".to_string())))
+        );
+    }
+
+    #[test]
+    fn wrapped_instruction_echo_still_never_parses() {
+        /*
+        The pane hard-wraps long lines, so the instruction text can break right
+        after the marker. An empty or partial trailing line must not parse.
+        */
+        for wrapped in [
+            "AUTOMATION_RESULT:\ncompleted by exactly one of these three words - findings,\n",
+            "  AUTOMATION_RESULT: completed by exactly one of these three\n  words - findings, no_findings, or needs_attention.\n",
+        ] {
+            assert_eq!(parse_automation_result(wrapped), None, "{wrapped}");
+        }
+    }
+
+    #[test]
+    fn missing_marker_leaves_the_run_pending() {
+        assert_eq!(
+            parse_automation_result("claude booted and is waiting at an empty composer"),
+            None
+        );
     }
 }
