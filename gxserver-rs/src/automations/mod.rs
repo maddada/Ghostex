@@ -1635,16 +1635,27 @@ fn find_run_session_project_id(
 
 /*
 CDXC:GxserverAutomationPromptDelivery 2026-07-30:
-Never spell out a literal `AUTOMATION_RESULT: <status>` line here. The prompt is
-typed into the session, so anything written here is echoed into the same
-scrollback the run watcher scans, and a literal marker line would let the
-instructions report the run's own result. Name the status words inside prose that
-follows the marker on its line, so the echo cannot parse while the agent's real
-closing marker still does.
+This text is typed into the session, so it is echoed into the same scrollback the
+run watcher scans. Two constraints therefore apply at once, and they pull against
+each other.
+
+The instructions must never contain a parseable `AUTOMATION_RESULT: <status>`
+line, or the echo reports the run's own result before the agent has finished.
+
+They must also leave no doubt about what follows the colon. An earlier revision
+satisfied the first constraint with prose right after the marker ("...starts with
+AUTOMATION_RESULT: completed by exactly one of these three words..."), and agents
+intermittently copied that prose into their answer, emitting
+`AUTOMATION_RESULT: completed no_findings`. That parses as nothing, so the run
+died at the watcher timeout -- the very failure this module was fixed to remove.
+
+A placeholder template satisfies both: `<status>` is not a valid status, so the
+echo cannot parse, while the line still shows the exact shape the agent must
+produce.
 */
 fn build_automation_prompt(prompt: &str) -> String {
     format!(
-        "{}\n\nWhen this automation finishes, end your final message with a line that starts with AUTOMATION_RESULT: completed by exactly one of these three words - findings, no_findings, or needs_attention. Put a short summary on the lines after it.",
+        "{}\n\nWhen this automation finishes, end your final message with a line in exactly this form:\n\nAUTOMATION_RESULT: <status>\n\nReplace <status> with exactly one of these three words and nothing else: findings, no_findings, needs_attention. Put a short summary on the lines after that line.",
         prompt.trim()
     )
 }
@@ -1923,6 +1934,39 @@ mod tests {
             "  AUTOMATION_RESULT: completed by exactly one of these three\n  words - findings, no_findings, or needs_attention.\n",
         ] {
             assert_eq!(parse_automation_result(wrapped), None, "{wrapped}");
+        }
+    }
+
+    #[test]
+    fn prompt_shows_the_marker_alone_on_its_line() {
+        /*
+        Regression lock for an observed live failure: prose placed right after the
+        marker got copied into the agent's answer as
+        `AUTOMATION_RESULT: completed no_findings`, which parses as nothing and
+        sent the run back to the watcher timeout. The marker must appear only on a
+        line of its own, followed by a placeholder and nothing else.
+        */
+        let prompt = build_automation_prompt("Check the deploy");
+        let marker_line = prompt
+            .lines()
+            .find(|line| line.contains(AUTOMATION_RESULT_PREFIX))
+            .expect("prompt names the marker");
+        assert_eq!(marker_line.trim(), "AUTOMATION_RESULT: <status>");
+        assert_eq!(
+            prompt.matches(AUTOMATION_RESULT_PREFIX).count(),
+            1,
+            "one marker occurrence keeps the echo unambiguous"
+        );
+    }
+
+    #[test]
+    fn status_word_must_stand_alone_after_the_marker() {
+        for drifted in [
+            "AUTOMATION_RESULT: completed no_findings\nsummary\n",
+            "AUTOMATION_RESULT: status findings\nsummary\n",
+            "AUTOMATION_RESULT: <status>\nsummary\n",
+        ] {
+            assert_eq!(parse_automation_result(drifted), None, "{drifted}");
         }
     }
 
