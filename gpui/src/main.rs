@@ -29425,6 +29425,62 @@ impl GhostexGpuiApp {
             "toast" => {
                 self.receive_gpui_app_toast_bridge_message(&message, window, cx);
             }
+            /*
+            CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+            The shared React modal host already reports its uncaught renderer
+            exceptions (`logError`, installed by
+            `installAppModalGlobalErrorLogging`) and its Settings lifecycle
+            breadcrumbs (`debugLog`) over this same app-owned bridge, and the CEF
+            shim installs the `ghostexAppModalHost` handler both helpers post
+            through. GPUI had no arm for either message, so both fell through to
+            the no-op below: a render error that blanked the Settings window left
+            no trace anywhere under `~/.ghostex/logs`, which is why a blank
+            Settings report could not be diagnosed from a user's machine at all.
+
+            Persist both through the existing sanitized AppModal writer. The error
+            event name contains `error`, so `event_is_important_diagnostic` keeps
+            recording it even while the routine `gpui.app.modal` scenario is off,
+            while routine breadcrumbs stay opt-in behind that scenario. Stacks
+            carry paths and URLs, so they are reported as a presence flag and
+            never stored; `details` is parsed back into structured JSON so the
+            writer can sanitize each bounded field instead of redacting one long
+            string wholesale.
+            */
+            "logError" => {
+                let current_modal_id = self.app_modal_window.clone().and_then(|handle| {
+                    handle
+                        .update(cx, |host, _window, _cx| host.current_modal.modal_id())
+                        .ok()
+                });
+                support_logs::append(
+                    support_logs::GpuiSupportLog::AppModal,
+                    "gpui.appModal.rendererError",
+                    serde_json::json!({
+                        "area": message.get("area").and_then(serde_json::Value::as_str),
+                        "errorMessage": message.get("message").and_then(serde_json::Value::as_str),
+                        "errorName": message.get("name").and_then(serde_json::Value::as_str),
+                        "hasStack": message
+                            .get("stack")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|stack| !stack.trim().is_empty()),
+                        "modal": current_modal_id,
+                    }),
+                );
+            }
+            "debugLog" => {
+                support_logs::append(
+                    support_logs::GpuiSupportLog::AppModal,
+                    message
+                        .get("event")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("gpui.appModal.debugLog"),
+                    message
+                        .get("details")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|details| serde_json::from_str::<serde_json::Value>(details).ok())
+                        .unwrap_or(serde_json::Value::Null),
+                );
+            }
             _ => {}
         }
     }

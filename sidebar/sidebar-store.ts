@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createDefaultSidebarAgentButtons } from "../shared/sidebar-agents";
 import { createDefaultSidebarCommandButtons } from "../shared/sidebar-commands";
 import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from "../shared/completion-sound";
-import { DEFAULT_ghostex_SETTINGS } from "../shared/ghostex-settings";
+import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from "../shared/ghostex-settings";
 import { createDefaultSidebarGitState, type SidebarGitFileDiffDraft } from "../shared/sidebar-git";
 import type {
   SidebarCommandRunStateClearedMessage,
@@ -279,6 +279,37 @@ function getInitialSidebarTheme(): SidebarHudState["theme"] {
     : "dark-blue";
 }
 
+/*
+CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+A hydrate carries whatever the shared settings file happens to hold. The GPUI
+writer parses that JSON with no defaults (`read_settings_object_from_path`), so a
+file only ever written by titlebar code paths arrives missing entire nested
+objects such as `workspaceOpenTargetAvailability`, `hotkeys`, and
+`diagnosticLogging`. Consumers of `hud.settings` read the documented schema shape
+directly (for example `settings.workspaceOpenTargetAvailability.availableTargetIds`),
+so one absent nested object threw during the app-modal Settings render and left
+that window permanently blank — with no way to save a first full settings file
+from the UI, because Settings is the UI that could not open.
+
+Normalize hydrated settings through the same shared schema the GPUI sidebar
+handoff already applies (`createGpuiSidebarSettings`), so every hydrate consumer
+sees the complete documented shape instead of the raw file. Keys the schema does
+not model (for example `gpuiTitlebarTipsReadIds`) are kept ahead of the
+normalized values so a later full-settings save cannot drop them, and an absent
+`settings` stays absent so host readiness gates keep their current meaning.
+*/
+function normalizeHydratedSidebarHud(hud: SidebarHudState): SidebarHudState {
+  return {
+    ...hud,
+    projectSettingsProjects: hud.projectSettingsProjects ?? [],
+    recentProjects: hud.recentProjects ?? [],
+    settings:
+      hud.settings === undefined
+        ? undefined
+        : { ...hud.settings, ...normalizeghostexSettings(hud.settings) },
+  };
+}
+
 function applySidebarMessageState(
   state: SidebarStoreState,
   message: SidebarHydrateMessage | SidebarSessionStateMessage,
@@ -300,11 +331,10 @@ function applySidebarMessageState(
     state.pendingFocusedSessionId,
   );
   const normalizedGroups = normalizeSidebarGroups(state, reconciledGroups.groups);
-  const nextHud = preserveSidebarHudReferences(state.hud, {
-    ...message.hud,
-    projectSettingsProjects: message.hud.projectSettingsProjects ?? [],
-    recentProjects: message.hud.recentProjects ?? [],
-  });
+  const nextHud = preserveSidebarHudReferences(
+    state.hud,
+    normalizeHydratedSidebarHud(message.hud),
+  );
   return {
     commandRunStates: reconcileSidebarCommandRunFeedbackStates(
       state.commandRunStates,
@@ -334,11 +364,10 @@ function applyHudChangedMessageState(
     return state;
   }
 
-  const nextHud = preserveSidebarHudReferences(state.hud, {
-    ...message.hud,
-    projectSettingsProjects: message.hud.projectSettingsProjects ?? [],
-    recentProjects: message.hud.recentProjects ?? [],
-  });
+  const nextHud = preserveSidebarHudReferences(
+    state.hud,
+    normalizeHydratedSidebarHud(message.hud),
+  );
   return {
     commandRunStates: reconcileSidebarCommandRunFeedbackStates(
       state.commandRunStates,

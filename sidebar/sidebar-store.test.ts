@@ -651,6 +651,46 @@ describe("sidebar store", () => {
       "2026-07-30T09:00:00.000Z",
     );
   });
+
+  /*
+  CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+  The GPUI hydrate carries the shared settings file verbatim, so a file only ever
+  written by titlebar code paths arrives without whole nested schema objects. The
+  app-modal Settings render read `settings.workspaceOpenTargetAvailability
+  .availableTargetIds` directly and threw, blanking the window permanently.
+  */
+  test("should normalize a partial hydrated settings object into the full schema shape", () => {
+    const partialSettingsFromDisk = {
+      gpuiTitlebarOpenTargetByProject: { P70t8: "finder" },
+      gpuiTitlebarTipsReadIds: ["command-palette-all-actions"],
+    };
+    const message = createHydrateMessage([]);
+
+    useSidebarStore.getState().applySidebarMessage({
+      ...message,
+      hud: {
+        ...message.hud,
+        settings: partialSettingsFromDisk as unknown as typeof message.hud.settings,
+      },
+    });
+
+    const settings = useSidebarStore.getState().hud.settings;
+    expect(settings).toBeDefined();
+
+    // The exact read that threw: a missing nested object must arrive complete.
+    expect(settings?.workspaceOpenTargetAvailability.availableTargetIds).toBeInstanceOf(Array);
+    expect(settings?.hotkeys).toBeDefined();
+    expect(settings?.diagnosticLogging).toBeDefined();
+
+    // Values the user already had must survive normalization.
+    expect(settings?.gpuiTitlebarOpenTargetByProject).toEqual({ P70t8: "finder" });
+
+    // Keys the schema does not model must survive so a later full save cannot
+    // silently drop them.
+    expect(
+      (settings as unknown as { gpuiTitlebarTipsReadIds?: string[] }).gpuiTitlebarTipsReadIds,
+    ).toEqual(["command-palette-all-actions"]);
+  });
 });
 
 function createHydrateMessage(
