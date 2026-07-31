@@ -261,4 +261,33 @@ describe("project board issue prefix", () => {
 
     expect(requests).toEqual([{ action: "configGetIssuePrefix", value: undefined }]);
   });
+
+  test("keeps an established issue_prefix that differs from the project prefix", async () => {
+    /*
+     * CDXC:ProjectBoardBeads 2026-07-31:
+     * A shared beadsDirectory serves several projects; an established prefix is durable data, not
+     * stale bootstrap config, so focusing a differently named project must not rename the board.
+     */
+    const requests: Array<{ action: string; value?: string }> = [];
+    await ensureIssuePrefix(async (request) => {
+      requests.push({ action: request.action, value: request.value });
+      return { value: "agent-bo" };
+    }, "email-cleaner");
+
+    expect(requests).toEqual([{ action: "configGetIssuePrefix", value: undefined }]);
+  });
+
+  test("adopts the project prefix when issue_prefix is unset", async () => {
+    const requests: Array<{ action: string; value?: string }> = [];
+    await ensureIssuePrefix(async (request) => {
+      requests.push({ action: request.action, value: request.value });
+      return request.action === "configGetIssuePrefix" ? { value: "" } : {};
+    }, "email-cleaner");
+
+    expect(requests).toEqual([
+      { action: "configGetIssuePrefix", value: undefined },
+      { action: "renamePrefix", value: "email-cl-" },
+    ]);
+  });
 });
+

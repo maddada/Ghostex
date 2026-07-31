@@ -205,19 +205,29 @@ export function normalizeIssuePrefix(value: string | undefined): string {
   return /^[a-z]/u.test(normalized) ? normalized : `p-${normalized}`;
 }
 
+/*
+ * CDXC:ProjectBoardBeads 2026-07-31:
+ * Prefix reconciliation exists to replace stale bootstrap defaults (for example gxserver, or an
+ * unset value that normalizes to zmux) with the active project's prefix. A board that already has
+ * any other established prefix must keep it: projectBoardConfig.beadsDirectory can point several
+ * projects at one shared board, and renaming it to whichever project was focused last mass-renames
+ * every issue id and all text references on each board load — which also breaks the beadId values
+ * persisted in beadConversationLinks.
+ */
+const BOOTSTRAP_ISSUE_PREFIXES = new Set(["gxserver", "zmux"]);
+
 export async function ensureIssuePrefix(
   runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
   desiredPrefix: string,
 ): Promise<void> {
-  /*
-   * CDXC:ProjectBoardBeads 2026-06-10-20:27:
-   * Project-board ticket creation must use the active project's Beads issue prefix, not a stale repository YAML/default prefix such as gxserver.
-   * Reconcile issue_prefix through Beads rename-prefix before board mutations so the real Beads ids and the visible project board scope stay aligned.
-   */
   const normalizedDesiredPrefix = normalizeIssuePrefix(desiredPrefix);
   const payload = await runBeads({ action: "configGetIssuePrefix" });
   const currentValue = normalizeBeadsConfigString(payload);
-  if (normalizeIssuePrefix(currentValue) !== normalizedDesiredPrefix) {
+  const normalizedCurrentPrefix = normalizeIssuePrefix(currentValue);
+  if (
+    normalizedCurrentPrefix !== normalizedDesiredPrefix &&
+    BOOTSTRAP_ISSUE_PREFIXES.has(normalizedCurrentPrefix)
+  ) {
     await runBeads({ action: "renamePrefix", value: beadsRenamePrefixValue(normalizedDesiredPrefix) });
   }
 }
@@ -724,3 +734,4 @@ export function formatShortDate(value?: string): string {
   }
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
+
