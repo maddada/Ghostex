@@ -14141,8 +14141,15 @@ class GpuiSidebarRuntime {
     }
     if (targetProjectId && targetProjectId !== this.activeProjectId) {
       this.focusProjectId(targetProjectId);
-      this.postGxserverPresentationFocusState();
-      this.postActiveProjectContext();
+      /*
+       * Publish a presentation patch rather than posting focus state and
+       * active-project context directly: both read `latestGroups`, which only
+       * `publishPresentation` refreshes, so posting them alone would leave the
+       * sidebar's active-row highlight on the previous project until an
+       * unrelated delta arrived. This matches every other project-switching
+       * call site in this file.
+       */
+      this.publishPresentation("patch");
     }
     if (this.postSidebarCommandAction(command, selectionMessage)) {
       return;
@@ -15183,14 +15190,29 @@ function createGpuiSidebarHudState({
       ? ([...sidebarHud.agents] as SidebarAgentButton[])
       : createSidebarAgentButtons([], [])
   ).filter((agent) => agent.agentId !== "t3");
+  /*
+   * CDXC:ProjectActions 2026-08-01:
+   * `showOnProjectRow` is optional on the gxserver contract because a daemon
+   * older than the app drops fields it does not know, so a legacy response
+   * yields `undefined` where SidebarCommandButton promises a boolean. Normalize
+   * at the surface boundary instead of casting the gap away, so row rendering
+   * and the Settings toggle both see a real boolean.
+   */
+  const normalizeHudCommands = (
+    hudCommands: readonly GxserverSidebarHudResponse["commands"][number][],
+  ): ReturnType<typeof createSidebarCommandButtons> =>
+    hudCommands.map((command) => ({
+      ...command,
+      showOnProjectRow: command.showOnProjectRow === true,
+    })) as ReturnType<typeof createSidebarCommandButtons>;
   const commands = sidebarHud
-    ? ([...sidebarHud.commands] as ReturnType<typeof createSidebarCommandButtons>)
+    ? normalizeHudCommands(sidebarHud.commands)
     : createSidebarCommandButtons([], [], []);
   const commandsByProject = sidebarHud?.commandsByProject
     ? Object.fromEntries(
         Object.entries(sidebarHud.commandsByProject).map(([projectId, projectCommands]) => [
           projectId,
-          [...projectCommands] as ReturnType<typeof createSidebarCommandButtons>,
+          normalizeHudCommands(projectCommands),
         ]),
       )
     : undefined;

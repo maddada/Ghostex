@@ -2013,6 +2013,22 @@ mod tests {
     }
 
     #[test]
+    fn save_command_preserves_enabled_show_on_project_row() {
+        // The flag is opt-in, so the enabled path needs its own coverage: a
+        // default-only assertion would still pass if the flag were hardcoded.
+        let (rest, flags) = parsed(&[
+            "--showOnProjectRow",
+            "true",
+            "lazygit",
+            "Lazygit",
+            "lazygit",
+        ]);
+        let payload = parse_save_command(&rest, &flags);
+        assert_eq!(payload.get("showOnProjectRow"), Some(&json!(true)));
+        assert_eq!(payload.get("commandId"), Some(&json!("lazygit")));
+    }
+
+    #[test]
     fn browser_open_reuse_and_new() {
         let (rest, flags) = parsed(&["https://example.com", "--new", "--active-project"]);
         let payload = parse_browser_open(&rest, &flags);

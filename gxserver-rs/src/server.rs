@@ -1503,6 +1503,34 @@ fn static_status_response(status: StatusCode) -> RoutedResponse {
     }
 }
 
+/*
+CDXC:ProjectActions 2026-08-01:
+Both the HUD read and the HUD settings mutation answer the same opt-in
+`includeAllProjectCommands` request, because clients that render per-project
+quick actions replace their whole HUD snapshot from either response. Keep the
+opt-in in one place so the two cannot drift apart and silently blank project
+rows after a Settings save.
+*/
+fn apply_commands_by_project_if_requested(
+    hud: &mut Value,
+    projects: &[Value],
+    params: &Map<String, Value>,
+) {
+    if params
+        .get("includeAllProjectCommands")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return;
+    }
+    if let Some(hud) = hud.as_object_mut() {
+        hud.insert(
+            "commandsByProject".to_string(),
+            read_sidebar_hud_commands_by_project(projects),
+        );
+    }
+}
+
 async fn route_http(
     state: Arc<AppState>,
     request: Request<Body>,
@@ -2212,18 +2240,7 @@ async fn route_http(
                 for per-project command rows in one round trip instead of one
                 readSidebarHud call per project each poll.
                 */
-                if params
-                    .get("includeAllProjectCommands")
-                    .and_then(Value::as_bool)
-                    == Some(true)
-                {
-                    if let Some(hud) = hud.as_object_mut() {
-                        hud.insert(
-                            "commandsByProject".to_string(),
-                            read_sidebar_hud_commands_by_project(&projects),
-                        );
-                    }
-                }
+                apply_commands_by_project_if_requested(&mut hud, &projects, params);
                 Ok(hud)
             },
         ),
@@ -2263,18 +2280,7 @@ async fn route_http(
                 Without it a Settings save would drop the per-project rows until
                 the next full HUD poll.
                 */
-                if params
-                    .get("includeAllProjectCommands")
-                    .and_then(Value::as_bool)
-                    == Some(true)
-                {
-                    if let Some(hud) = hud.as_object_mut() {
-                        hud.insert(
-                            "commandsByProject".to_string(),
-                            read_sidebar_hud_commands_by_project(&projects),
-                        );
-                    }
-                }
+                apply_commands_by_project_if_requested(&mut hud, &projects, params);
                 let mut result = Map::new();
                 result.insert("hud".to_string(), hud);
                 if let Some(item_ids) = item_ids {
