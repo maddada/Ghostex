@@ -171,6 +171,24 @@ export function createSidebarCommandButtons(
   return orderSidebarCommandButtons([...defaultButtons, ...customButtons], storedOrder);
 }
 
+/**
+ * CDXC:GlobalActions 2026-08-01:
+ * Global Actions have no built-in members — dev/build/test/setup are
+ * project-scoped — so the stored rows are the entire list. That removes the
+ * whole default-resurrection and tombstone branch that project actions need,
+ * and it means an empty store renders an empty section rather than four
+ * unconfigured placeholder buttons.
+ */
+export function createGlobalSidebarCommandButtons(
+  storedCommands: readonly StoredSidebarCommand[],
+  storedOrder: readonly string[] = [],
+): SidebarCommandButton[] {
+  return orderSidebarCommandButtons(
+    storedCommands.map((command) => normalizeStoredCommandButton(command)),
+    storedOrder,
+  );
+}
+
 export function isDefaultSidebarCommandId(commandId: string): commandId is DefaultSidebarCommandId {
   return DEFAULT_SIDEBAR_COMMANDS.some((command) => command.commandId === commandId);
 }

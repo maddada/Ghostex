@@ -1067,6 +1067,34 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 17;
     "#,
     },
+    Migration {
+        id: "0018_global_sidebar_commands",
+        /*
+        CDXC:GlobalActions 2026-08-01-16:00:
+        Global Actions show the same action on every project, so they cannot
+        live in projects.customCommandsJson the way Project Actions do. Store
+        them daemon-side in their own table so mobile, web, and every desktop
+        build read one list instead of mirroring a per-project column. The
+        definition body is the same normalized stored-command shape Project
+        Actions use; only ownership and ordering differ. Defaults
+        (dev/build/test/setup) stay project-scoped, so there is no
+        deletedDefaultCommandIds equivalent here and every row is user-created.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS global_sidebar_commands (
+        commandId TEXT PRIMARY KEY,
+        definitionJson TEXT NOT NULL,
+        sortOrder REAL NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_global_sidebar_commands_order
+        ON global_sidebar_commands(sortOrder, commandId);
+
+      PRAGMA user_version = 18;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1115,10 +1143,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 17);
+        assert_eq!(user_version, 18);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 17);
+        assert_eq!(schema_migration_count(&db), 18);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1127,6 +1155,7 @@ mod tests {
                 "idx_automation_runs_project_created".to_string(),
                 "idx_automations_due".to_string(),
                 "idx_automations_project_updated".to_string(),
+                "idx_global_sidebar_commands_order".to_string(),
                 "idx_id_allocations_kind_parent".to_string(),
                 "idx_portless_domain_project_identity".to_string(),
                 "idx_portless_domain_project_slug".to_string(),

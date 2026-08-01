@@ -100,7 +100,8 @@ use crate::{
     session_status::agent_activity_presentation_refresh_delay_ms,
     sidebar_hud::{
         create_sidebar_hud_settings_mutation, read_sidebar_hud,
-        read_sidebar_hud_commands_by_project,
+        read_sidebar_hud_commands_by_project, read_sidebar_hud_global_commands,
+        GlobalSidebarCommandUpdate,
     },
     sidebar_project_collections::{
         read_sidebar_project_collections, update_sidebar_project_collections,
@@ -2248,6 +2249,23 @@ async fn route_http(
                         );
                     }
                 }
+                /*
+                CDXC:GlobalActions 2026-08-01-16:00:
+                Global Actions live in their own daemon table rather than in
+                project metadata, so they are attached here instead of inside
+                read_sidebar_hud, which stays a pure projection of project rows.
+                Served unconditionally rather than behind an opt-in flag: the
+                list is one small array with no per-project fan-out, and every
+                surface that renders the tab strip needs it on first paint.
+                */
+                if let Some(hud) = hud.as_object_mut() {
+                    hud.insert(
+                        "globalCommands".to_string(),
+                        read_sidebar_hud_global_commands(
+                            &repository.list_global_sidebar_commands()?,
+                        ),
+                    );
+                }
                 Ok(hud)
             },
         ),
@@ -2264,7 +2282,19 @@ async fn route_http(
                 let projects = repository.list_projects()?;
                 let mutation = create_sidebar_hud_settings_mutation(&projects, params)?;
                 let hud_active_project_id = mutation.hud_active_project_id;
-                let item_ids = mutation.item_ids;
+                let mut item_ids = mutation.item_ids;
+                /*
+                CDXC:GlobalActions 2026-08-01-16:00:
+                A reorder response must echo the order the daemon actually
+                stored — the sidebar treats itemIds as the confirmation for its
+                optimistic reorder and falls back to an empty list without it.
+                The stored order can differ from the ids the client sent, since
+                the repository keeps unlisted actions instead of dropping them.
+                */
+                let global_command_order_requested = matches!(
+                    mutation.global_command_update,
+                    Some(GlobalSidebarCommandUpdate::Order { .. })
+                );
                 let mut updated_projects = Vec::new();
                 for update in mutation.updates {
                     let project = repository.update_project(&update.params)?;
@@ -2277,8 +2307,46 @@ async fn route_http(
                     )?;
                     updated_projects.push(project);
                 }
+                /*
+                CDXC:GlobalActions 2026-08-01-16:00:
+                A Global Action write touches no project row, so it schedules no
+                projectUpdated presentation delta. Clients pick the new list up
+                from the refreshed HUD this call returns and from their next HUD
+                poll, the same way they already do for action edits.
+                */
+                match mutation.global_command_update {
+                    Some(GlobalSidebarCommandUpdate::Save {
+                        command_id,
+                        definition,
+                    }) => repository.save_global_sidebar_command(&command_id, &definition)?,
+                    Some(GlobalSidebarCommandUpdate::Delete { command_id }) => {
+                        repository.delete_global_sidebar_command(&command_id)?
+                    }
+                    Some(GlobalSidebarCommandUpdate::Order { command_ids }) => {
+                        repository.order_global_sidebar_commands(&command_ids)?
+                    }
+                    None => {}
+                }
                 let projects = repository.list_projects()?;
-                let hud = read_sidebar_hud(&projects, hud_active_project_id.as_deref());
+                let mut hud = read_sidebar_hud(&projects, hud_active_project_id.as_deref());
+                let global_commands =
+                    read_sidebar_hud_global_commands(&repository.list_global_sidebar_commands()?);
+                if global_command_order_requested {
+                    item_ids = Some(
+                        global_commands
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_object)
+                            .filter_map(|command| command.get("commandId"))
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect(),
+                    );
+                }
+                if let Some(hud) = hud.as_object_mut() {
+                    hud.insert("globalCommands".to_string(), global_commands);
+                }
                 let mut result = Map::new();
                 result.insert("hud".to_string(), hud);
                 if let Some(item_ids) = item_ids {

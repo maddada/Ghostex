@@ -511,6 +511,136 @@ impl<'a> DomainRepository<'a> {
         Ok(json!({ "deleted": deleted > 0 }))
     }
 
+    /*
+    CDXC:GlobalActions 2026-08-01-16:00:
+    Global Actions are daemon-owned rather than project-owned, so every client
+    reads one list instead of a per-project column. Rows come back in sortOrder
+    with commandId as the tiebreak, so two actions saved in the same tick still
+    order deterministically across reads.
+    */
+    pub fn list_global_sidebar_commands(&self) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT definitionJson FROM global_sidebar_commands
+                ORDER BY sortOrder ASC, commandId ASC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let stored_definitions = statement
+            .query_map([], |row| row.get::<_, String>("definitionJson"))
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        Ok(stored_definitions
+            .into_iter()
+            .filter_map(|definition| serde_json::from_str::<Value>(&definition).ok())
+            .collect())
+    }
+
+    pub fn save_global_sidebar_command(
+        &self,
+        command_id: &str,
+        definition: &Value,
+    ) -> DomainResult<()> {
+        let timestamp = now_iso();
+        let definition_json = serde_json::to_string(definition).map_err(|error| {
+            DomainStateError::corrupt_state(format!(
+                "Global action definition could not be serialized: {error}"
+            ))
+        })?;
+        /*
+        A new action lands after everything currently stored; an edit keeps the
+        position it already had. COALESCE over MAX gives the first row
+        sortOrder 1 without a separate empty-table branch.
+        */
+        self.db
+            .execute(
+                r#"
+                INSERT INTO global_sidebar_commands (
+                  commandId, definitionJson, sortOrder, createdAt, updatedAt
+                )
+                VALUES (
+                  ?1,
+                  ?2,
+                  COALESCE(
+                    (SELECT sortOrder FROM global_sidebar_commands WHERE commandId = ?1),
+                    (SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM global_sidebar_commands)
+                  ),
+                  ?3,
+                  ?3
+                )
+                ON CONFLICT(commandId) DO UPDATE SET
+                  definitionJson = excluded.definitionJson,
+                  updatedAt = excluded.updatedAt
+                "#,
+                params![command_id, definition_json, timestamp],
+            )
+            .map_err(sql_error)?;
+        Ok(())
+    }
+
+    pub fn delete_global_sidebar_command(&self, command_id: &str) -> DomainResult<()> {
+        self.db
+            .execute(
+                "DELETE FROM global_sidebar_commands WHERE commandId = ?1",
+                [command_id],
+            )
+            .map_err(sql_error)?;
+        Ok(())
+    }
+
+    /*
+    Reorder assigns positions from the ids the client sent, in order. Ids the
+    client did not mention keep their relative order after the listed ones
+    rather than being dropped, so a client on an older list cannot silently
+    delete an action it had not loaded yet.
+    */
+    pub fn order_global_sidebar_commands(&self, command_ids: &[String]) -> DomainResult<()> {
+        let timestamp = now_iso();
+        let stored_ids = {
+            let mut statement = self
+                .db
+                .prepare(
+                    r#"
+                    SELECT commandId FROM global_sidebar_commands
+                    ORDER BY sortOrder ASC, commandId ASC
+                    "#,
+                )
+                .map_err(sql_error)?;
+            let stored_ids = statement
+                .query_map([], |row| row.get::<_, String>("commandId"))
+                .map_err(sql_error)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(sql_error)?;
+            stored_ids
+        };
+        let mut next_order = command_ids
+            .iter()
+            .filter(|command_id| stored_ids.contains(command_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for command_id in stored_ids {
+            if !next_order.contains(&command_id) {
+                next_order.push(command_id);
+            }
+        }
+        for (index, command_id) in next_order.iter().enumerate() {
+            self.db
+                .execute(
+                    r#"
+                    UPDATE global_sidebar_commands
+                    SET sortOrder = ?2, updatedAt = ?3
+                    WHERE commandId = ?1
+                    "#,
+                    params![command_id, (index + 1) as f64, timestamp],
+                )
+                .map_err(sql_error)?;
+        }
+        Ok(())
+    }
+
     pub fn get_project(&self, project_id: &str) -> DomainResult<Option<Value>> {
         let row = self
             .db

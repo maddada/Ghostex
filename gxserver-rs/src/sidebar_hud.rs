@@ -62,9 +62,34 @@ pub struct SidebarHudProjectMutation {
 
 #[derive(Clone, Debug)]
 pub struct SidebarHudSettingsMutation {
+    /*
+    CDXC:GlobalActions 2026-08-01-16:00:
+    Global Actions belong to the daemon, not to a project row, so a settings
+    mutation is no longer always a project write. A global mutation carries this
+    field and leaves `updates` empty; a project mutation is unchanged and leaves
+    this None. The two never both apply in one request because the Settings UI
+    edits one list at a time.
+    */
+    pub global_command_update: Option<GlobalSidebarCommandUpdate>,
     pub hud_active_project_id: Option<String>,
     pub item_ids: Option<Vec<String>>,
     pub updates: Vec<SidebarHudProjectMutation>,
+}
+
+/// A single write against the daemon-owned Global Actions list. The repository
+/// owns ordering and timestamps; this only describes the intent.
+#[derive(Clone, Debug)]
+pub enum GlobalSidebarCommandUpdate {
+    Delete {
+        command_id: String,
+    },
+    Order {
+        command_ids: Vec<String>,
+    },
+    Save {
+        command_id: String,
+        definition: Value,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -347,6 +372,9 @@ pub fn create_sidebar_hud_settings_mutation(
         ("command", "save") => sidebar_command_save_mutation(projects, params),
         ("command", "delete") => sidebar_command_delete_mutation(projects, params),
         ("command", "order") => sidebar_command_order_mutation(projects, params),
+        ("globalCommand", "save") => global_sidebar_command_save_mutation(params),
+        ("globalCommand", "delete") => global_sidebar_command_delete_mutation(params),
+        ("globalCommand", "order") => global_sidebar_command_order_mutation(params),
         _ => Err(DomainStateError::bad_request(
             "Unsupported sidebar Settings mutation.",
         )),
@@ -546,6 +574,7 @@ fn sidebar_agent_projects_mutation(
         ));
     }
     Ok(SidebarHudSettingsMutation {
+        global_command_update: None,
         hud_active_project_id: optional_trimmed_param(params, "activeProjectId"),
         item_ids: None,
         updates,
@@ -558,43 +587,6 @@ fn sidebar_command_save_mutation(
 ) -> Result<SidebarHudSettingsMutation, DomainStateError> {
     let command_scope = sidebar_command_scope(projects, params)?;
     let mut state = sidebar_command_state(command_scope.owner_project);
-    let name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or_default()
-        .to_string();
-    let icon = params
-        .get("icon")
-        .and_then(Value::as_str)
-        .and_then(sidebar_command_icon)
-        .map(str::to_string);
-    if name.is_empty() && icon.is_none() {
-        return Err(DomainStateError::bad_request(
-            "Sidebar action mutations require a name or icon.",
-        ));
-    }
-    let action_type = match params.get("actionType").and_then(Value::as_str) {
-        Some("browser") => "browser",
-        Some("terminal") => "terminal",
-        _ => {
-            return Err(DomainStateError::bad_request(
-                "Unsupported sidebar action type.",
-            ));
-        }
-    };
-    let command_text = optional_trimmed_param(params, "command");
-    let url = optional_trimmed_param(params, "url");
-    if action_type == "browser" && url.is_none() {
-        return Err(DomainStateError::bad_request(
-            "Browser sidebar actions require a URL.",
-        ));
-    }
-    if action_type == "terminal" && command_text.is_none() {
-        return Err(DomainStateError::bad_request(
-            "Terminal sidebar actions require a command.",
-        ));
-    }
     let current_command_ids = sidebar_button_ids(
         &sidebar_command_buttons_from_state(
             &state.commands,
@@ -605,32 +597,7 @@ fn sidebar_command_save_mutation(
     );
     let command_id = optional_trimmed_param(params, "commandId")
         .unwrap_or_else(create_custom_sidebar_command_id);
-    let next_command = StoredSidebarCommand {
-        action_type,
-        close_terminal_on_exit: action_type == "terminal"
-            && params
-                .get("closeTerminalOnExit")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-        command: (action_type == "terminal")
-            .then_some(command_text)
-            .flatten(),
-        command_id: command_id.clone(),
-        icon,
-        is_default: is_default_sidebar_command_id(&command_id),
-        links: if action_type == "terminal" {
-            normalized_sidebar_command_links(params.get("links"))
-        } else {
-            Vec::new()
-        },
-        name,
-        play_completion_sound: action_type == "terminal"
-            && params
-                .get("playCompletionSound")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-        url: (action_type == "browser").then_some(url).flatten(),
-    };
+    let next_command = stored_sidebar_command_from_save_params(params, command_id.clone())?;
     reject_duplicate_sidebar_command_title(
         &next_command,
         &state.commands,
@@ -730,6 +697,156 @@ fn sidebar_command_order_mutation(
     let mut mutation = sidebar_command_project_mutation(command_scope, state)?;
     mutation.item_ids = Some(item_ids);
     Ok(mutation)
+}
+
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+Project and Global Actions accept the exact same action definition from
+Settings — only ownership differs — so both saves validate through one path.
+Splitting the validation would let the two lists drift into accepting different
+action shapes, which is how a Global Action that mobile cannot run gets saved.
+*/
+fn stored_sidebar_command_from_save_params(
+    params: &Map<String, Value>,
+    command_id: String,
+) -> Result<StoredSidebarCommand, DomainStateError> {
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let icon = params
+        .get("icon")
+        .and_then(Value::as_str)
+        .and_then(sidebar_command_icon)
+        .map(str::to_string);
+    if name.is_empty() && icon.is_none() {
+        return Err(DomainStateError::bad_request(
+            "Sidebar action mutations require a name or icon.",
+        ));
+    }
+    let action_type = match params.get("actionType").and_then(Value::as_str) {
+        Some("browser") => "browser",
+        Some("terminal") => "terminal",
+        _ => {
+            return Err(DomainStateError::bad_request(
+                "Unsupported sidebar action type.",
+            ));
+        }
+    };
+    let command_text = optional_trimmed_param(params, "command");
+    let url = optional_trimmed_param(params, "url");
+    if action_type == "browser" && url.is_none() {
+        return Err(DomainStateError::bad_request(
+            "Browser sidebar actions require a URL.",
+        ));
+    }
+    if action_type == "terminal" && command_text.is_none() {
+        return Err(DomainStateError::bad_request(
+            "Terminal sidebar actions require a command.",
+        ));
+    }
+    Ok(StoredSidebarCommand {
+        action_type,
+        close_terminal_on_exit: action_type == "terminal"
+            && params
+                .get("closeTerminalOnExit")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        command: (action_type == "terminal")
+            .then_some(command_text)
+            .flatten(),
+        is_default: is_default_sidebar_command_id(&command_id),
+        command_id,
+        icon,
+        links: if action_type == "terminal" {
+            normalized_sidebar_command_links(params.get("links"))
+        } else {
+            Vec::new()
+        },
+        name,
+        play_completion_sound: action_type == "terminal"
+            && params
+                .get("playCompletionSound")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        url: (action_type == "browser").then_some(url).flatten(),
+    })
+}
+
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+Global Action mutations never read or write project rows, so they do not resolve
+a command scope, an owner project, or a worktree parent the way Project Action
+mutations must. The repository owns ordering and the stored list; these arms only
+validate the intent and hand it over.
+*/
+fn global_sidebar_command_save_mutation(
+    params: &Map<String, Value>,
+) -> Result<SidebarHudSettingsMutation, DomainStateError> {
+    let command_id = optional_trimmed_param(params, "commandId")
+        .unwrap_or_else(create_custom_sidebar_command_id);
+    let mut next_command = stored_sidebar_command_from_save_params(params, command_id.clone())?;
+    /*
+    The four default actions (dev/build/test/setup) are project-scoped. A Global
+    Action is always user-created, so it can never be a default no matter what id
+    the client sends, and nothing here resurrects a deleted default.
+    */
+    next_command.is_default = false;
+    Ok(SidebarHudSettingsMutation {
+        global_command_update: Some(GlobalSidebarCommandUpdate::Save {
+            command_id,
+            definition: sidebar_command_button_value(&next_command),
+        }),
+        hud_active_project_id: optional_trimmed_param(params, "activeProjectId"),
+        item_ids: None,
+        updates: Vec::new(),
+    })
+}
+
+fn global_sidebar_command_delete_mutation(
+    params: &Map<String, Value>,
+) -> Result<SidebarHudSettingsMutation, DomainStateError> {
+    Ok(SidebarHudSettingsMutation {
+        global_command_update: Some(GlobalSidebarCommandUpdate::Delete {
+            command_id: required_trimmed_param(params, "commandId")?,
+        }),
+        hud_active_project_id: optional_trimmed_param(params, "activeProjectId"),
+        item_ids: None,
+        updates: Vec::new(),
+    })
+}
+
+fn global_sidebar_command_order_mutation(
+    params: &Map<String, Value>,
+) -> Result<SidebarHudSettingsMutation, DomainStateError> {
+    Ok(SidebarHudSettingsMutation {
+        global_command_update: Some(GlobalSidebarCommandUpdate::Order {
+            command_ids: normalized_string_order(params.get("commandIds")),
+        }),
+        hud_active_project_id: optional_trimmed_param(params, "activeProjectId"),
+        item_ids: None,
+        updates: Vec::new(),
+    })
+}
+
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+Global Actions are normalized through the same stored-command projection as
+Project Actions, minus the defaults branch: there are no built-in global actions
+to resurrect or tombstone, so the stored rows are the whole list. Rows arrive
+from the repository already in sortOrder.
+*/
+pub fn read_sidebar_hud_global_commands(stored_definitions: &[Value]) -> Value {
+    let stored_commands =
+        normalized_stored_sidebar_commands(Some(&Value::Array(stored_definitions.to_vec())));
+    Value::Array(
+        stored_commands
+            .iter()
+            .map(sidebar_command_button_value)
+            .collect(),
+    )
 }
 
 fn sidebar_agent_buttons_from_projects(projects: &[Value]) -> Value {
@@ -982,6 +1099,7 @@ fn sidebar_command_project_mutation(
         string_array_value(&state.deleted_default_command_ids),
     );
     Ok(SidebarHudSettingsMutation {
+        global_command_update: None,
         hud_active_project_id: command_scope.hud_active_project_id,
         item_ids: None,
         updates: vec![SidebarHudProjectMutation {
