@@ -290,6 +290,7 @@ export type GhostexGpuiSidebarBridge = {
   postSidebarCommandRunEnd?: (payload: string) => boolean;
   postSidebarEditableFocus?: (payload: string) => boolean;
   postSessionCompletionSound?: (payload: string) => boolean;
+  postGlobalActions?: (payload: string) => boolean;
   postSessionStatusIndicators?: (payload: string) => boolean;
   postT3SessionBrowserAccessRequest?: (payload: string) => boolean;
   postT3SessionCreate?: (payload: string) => boolean;
@@ -622,6 +623,16 @@ const GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE =
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.sessionCompletionSound";
+const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION = 1;
+const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE = "ghostex.gpui.sidebar.globalActions";
+/*
+ * CDXC:GlobalActions 2026-08-01:
+ * The tab strip is gpui-drawn, so it cannot read the HUD store the React
+ * surfaces use. Cap what crosses the bridge at the number of buttons the strip
+ * will actually draw; gpui rejects a longer list outright rather than
+ * truncating it, so the two caps must agree.
+ */
+const GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS = 8;
 const GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.sessionStatusIndicators";
@@ -1076,7 +1087,24 @@ class GpuiSidebarRuntime {
   private remoteGroupOrderByMachineId = new Map<string, string[]>();
   private revision = 0;
   private runtimeSettings: GpuiSidebarRuntimeSettings | undefined;
-  private sidebarHud: GxserverSidebarHudResponse | undefined;
+  private sidebarHudState: GxserverSidebarHudResponse | undefined;
+  private postedGlobalActionsPayload: string | undefined;
+
+  /*
+   * CDXC:GlobalActions 2026-08-01:
+   * The gpui tab strip renders Global Actions natively and cannot read this
+   * runtime's state, so every HUD change has to push the list across the
+   * bridge. Routing all HUD writes through this accessor is what guarantees a
+   * new assignment site cannot forget the push and leave the strip stale.
+   */
+  private get sidebarHud(): GxserverSidebarHudResponse | undefined {
+    return this.sidebarHudState;
+  }
+
+  private set sidebarHud(hud: GxserverSidebarHudResponse | undefined) {
+    this.sidebarHudState = hud;
+    this.postGpuiGlobalActions();
+  }
   private sleepingLocalSidebarSessionIds = new Set<string>();
   private subscription: GpuiPresentationSubscription | undefined;
   private trustedExistingWorktreeList: GpuiTrustedExistingWorktreeList | undefined;
@@ -4842,6 +4870,42 @@ class GpuiSidebarRuntime {
     return sessions;
   }
 
+  /*
+   * CDXC:GlobalActions 2026-08-01:
+   * Publish only what the native strip draws: bounded action id, display name,
+   * and icon slug. Command text, URLs, links, and run state deliberately stay
+   * on this side — a strip click sends the id back and this runtime resolves
+   * the trusted definition, so gpui never holds anything executable.
+   */
+  private postGpuiGlobalActions(): void {
+    const actions = (this.sidebarHudState?.globalCommands ?? [])
+      .slice(0, GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS)
+      .map((command) => ({
+        commandId: command.commandId,
+        ...(command.icon ? { icon: command.icon } : {}),
+        name: command.name,
+      }));
+    const payload = JSON.stringify({
+      actions,
+      type: GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE,
+      version: GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION,
+    });
+    if (payload === this.postedGlobalActionsPayload) {
+      return;
+    }
+    this.postedGlobalActionsPayload = payload;
+    try {
+      window.ghostexGpui?.postGlobalActions?.(payload);
+    } catch {
+      /*
+       * The strip is presentation-only. If CEF has not installed the fixed
+       * function or rejects the payload, keep this runtime authoritative and
+       * do not log raw payloads or invent native state.
+       */
+      this.postedGlobalActionsPayload = undefined;
+    }
+  }
+
   private postGpuiStatusPetState(): void {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
     const candidates = createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
@@ -5957,6 +6021,15 @@ class GpuiSidebarRuntime {
         return;
       case "syncSidebarCommandOrder":
         await this.syncSidebarCommandOrder(message.requestId, message.commandIds);
+        return;
+      case "saveGlobalSidebarCommand":
+        await this.saveGlobalSidebarCommand(message);
+        return;
+      case "deleteGlobalSidebarCommand":
+        await this.deleteGlobalSidebarCommand(message.commandId);
+        return;
+      case "syncGlobalSidebarCommandOrder":
+        await this.syncGlobalSidebarCommandOrder(message.requestId, message.commandIds);
         return;
       default:
         this.handleUnsupportedSidebarMessage(message);
@@ -13249,6 +13322,80 @@ class GpuiSidebarRuntime {
     });
   }
 
+  /*
+  CDXC:GlobalActions 2026-08-01:
+  Global Action writes are not project writes: they carry no activeProjectId,
+  and they do not require an active project to exist. A user with every project
+  closed can still edit the actions that apply to all of them. Validation
+  mirrors the project path so a save that gxserver would reject never leaves
+  the renderer.
+  */
+  private async saveGlobalSidebarCommand(
+    message: Extract<SidebarToExtensionMessage, { type: "saveGlobalSidebarCommand" }>,
+  ): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+    const name = message.name.trim();
+    const command = message.command?.trim();
+    const url = message.url?.trim();
+    if (!name && !message.icon) {
+      return;
+    }
+    if (message.actionType === "browser" && !url) {
+      return;
+    }
+    if (message.actionType === "terminal" && !command) {
+      return;
+    }
+    await this.mutateSidebarHudSettings({
+      actionType: message.actionType,
+      closeTerminalOnExit: message.actionType === "terminal" ? message.closeTerminalOnExit : false,
+      command,
+      commandId: message.commandId,
+      icon: message.icon,
+      links:
+        message.actionType === "terminal" ? normalizeSidebarCommandLinks(message.links) : undefined,
+      name,
+      playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
+      operation: "save",
+      target: "globalCommand",
+      url,
+    });
+  }
+
+  private async deleteGlobalSidebarCommand(commandId: string): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+    await this.mutateSidebarHudSettings({
+      commandId,
+      operation: "delete",
+      target: "globalCommand",
+    });
+  }
+
+  private async syncGlobalSidebarCommandOrder(
+    requestId: string,
+    commandIds: readonly string[],
+  ): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+    const result = await this.mutateSidebarHudSettings({
+      commandIds,
+      operation: "order",
+      target: "globalCommand",
+    });
+    this.messageSource.postMessage({
+      itemIds: result?.itemIds ?? [],
+      kind: "command",
+      requestId,
+      status: "success",
+      type: "sidebarOrderSyncResult",
+    });
+  }
+
   private pickWorkspaceFolder(originalMessage: SidebarToExtensionMessage): void {
     try {
       postAppModalHostMessage(
@@ -14032,7 +14179,20 @@ class GpuiSidebarRuntime {
     const commands = this.sidebarHud
       ? ([...this.sidebarHud.commands] as SidebarCommandButton[])
       : createSidebarCommandButtons([], [], []);
-    return commands.find((command) => command.commandId === normalizedCommandId);
+    const command = commands.find((command) => command.commandId === normalizedCommandId);
+    if (command) {
+      return command;
+    }
+    /*
+     * CDXC:GlobalActions 2026-08-01:
+     * Global Actions are runnable from the same selector-shaped paths as
+     * Project Actions — the gpui tab strip and the Command Palette both send
+     * just an id — so resolution falls through to the global list. Project
+     * Actions are checked first: a project that defines its own action with the
+     * same id keeps its own behavior rather than being shadowed by a global one.
+     */
+    const globalCommands = (this.sidebarHud?.globalCommands ?? []) as SidebarCommandButton[];
+    return globalCommands.find((command) => command.commandId === normalizedCommandId);
   }
 
   private createSidebarCommandSelectionMessage(
@@ -15143,6 +15303,16 @@ function createGpuiSidebarHudState({
   const commands = sidebarHud
     ? ([...sidebarHud.commands] as ReturnType<typeof createSidebarCommandButtons>)
     : createSidebarCommandButtons([], [], []);
+  /*
+   * CDXC:GlobalActions 2026-08-01:
+   * `globalCommands` is optional on the gxserver contract because a daemon
+   * older than the app drops fields it does not know. Normalize the gap to an
+   * empty list here, at the surface boundary, so Settings renders an empty
+   * Global Actions section instead of failing on undefined.
+   */
+  const globalCommands = (sidebarHud?.globalCommands
+    ? [...sidebarHud.globalCommands]
+    : []) as ReturnType<typeof createSidebarCommandButtons>;
   const focusedSession = groups
     .flatMap((group) => group.sessions)
     .find(
@@ -15173,6 +15343,7 @@ function createGpuiSidebarHudState({
     focusedSessionTitle:
       focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
     git: git ?? createDefaultSidebarGitState(),
+    globalCommands,
     highlightedVisibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
     isFocusModeActive: false,
     /*

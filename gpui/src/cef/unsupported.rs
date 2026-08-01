@@ -105,6 +105,7 @@ pub enum SidebarBridgeEvent {
     SessionCompletionSound(String),
     SessionStatusIndicators(String),
     PetOverlayState(String),
+    GlobalActions(String),
     TitlebarGitMenuState(String),
     OpenBrowserUrl(String),
     BrowserTabFocus(String),

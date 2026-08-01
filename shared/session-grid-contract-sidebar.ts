@@ -811,6 +811,14 @@ export type SidebarHudState = {
   debuggingMode: boolean;
   focusedSessionTitle?: string;
   git: SidebarGitState;
+  /**
+   * CDXC:GlobalActions 2026-08-01:
+   * Actions that apply to every project, stored by the daemon rather than in
+   * project metadata. Optional because hosts that do not serve them (legacy
+   * macOS) leave it absent, and Settings renders an empty section rather than
+   * a broken one.
+   */
+  globalCommands?: SidebarCommandButton[];
   isFocusModeActive: boolean;
   /**
    * CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -2624,6 +2632,35 @@ export type SidebarToExtensionMessage =
   | {
       requestId: string;
       type: "syncSidebarCommandOrder";
+      commandIds: string[];
+    }
+  /*
+   * CDXC:GlobalActions 2026-08-01:
+   * Global Actions get their own message types rather than a scope flag on the
+   * project ones. A host that predates this feature drops an unknown message
+   * type through the unsupported-message path, which is a visible no-op; a host
+   * that ignored an unknown scope field would instead write the Global Action
+   * into whichever project happened to be active.
+   */
+  | {
+      type: "saveGlobalSidebarCommand";
+      actionType: SidebarActionType;
+      closeTerminalOnExit: boolean;
+      commandId?: string;
+      icon?: SidebarCommandIcon;
+      links?: SidebarCommandLink[];
+      name: string;
+      playCompletionSound: boolean;
+      command?: string;
+      url?: string;
+    }
+  | {
+      type: "deleteGlobalSidebarCommand";
+      commandId: string;
+    }
+  | {
+      requestId: string;
+      type: "syncGlobalSidebarCommandOrder";
       commandIds: string[];
     }
   | {

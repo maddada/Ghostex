@@ -22,6 +22,7 @@ pub(crate) enum SidebarBridgeFunctionId {
     SessionCompletionSound,
     SessionStatusIndicators,
     PetOverlayState,
+    GlobalActions,
     TitlebarGitMenuState,
     OpenBrowserUrl,
     BrowserTabFocus,
@@ -108,6 +109,7 @@ const SIDEBAR_SESSION_COMPLETION_SOUND_PROCESS_MESSAGE_NAME: &str =
 const SIDEBAR_SESSION_STATUS_INDICATORS_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.sessionStatusIndicators";
 const SIDEBAR_PET_OVERLAY_STATE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.petOverlayState";
+const SIDEBAR_GLOBAL_ACTIONS_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.globalActions";
 const SIDEBAR_TITLEBAR_GIT_MENU_STATE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.titlebarGitMenuState";
 const SIDEBAR_OPEN_BROWSER_URL_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.openBrowserUrl";
@@ -143,6 +145,7 @@ const SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_JS_FUNCTION: &str =
 const SIDEBAR_SESSION_COMPLETION_SOUND_JS_FUNCTION: &str = "postSessionCompletionSound";
 const SIDEBAR_SESSION_STATUS_INDICATORS_JS_FUNCTION: &str = "postSessionStatusIndicators";
 const SIDEBAR_PET_OVERLAY_STATE_JS_FUNCTION: &str = "postPetOverlayState";
+const SIDEBAR_GLOBAL_ACTIONS_JS_FUNCTION: &str = "postGlobalActions";
 const SIDEBAR_TITLEBAR_GIT_MENU_STATE_JS_FUNCTION: &str = "postTitlebarGitMenuState";
 const SIDEBAR_OPEN_BROWSER_URL_JS_FUNCTION: &str = "postOpenBrowserUrl";
 const SIDEBAR_BROWSER_TAB_FOCUS_JS_FUNCTION: &str = "postBrowserTabFocus";
@@ -198,7 +201,7 @@ The sidebar CEF post-function allowlist must have one Rust manifest shared by ma
 CDXC:GPUICefBridgeOwnership 2026-06-29-14:45:
 GPUI CEF bridge names, payload budgets, and allowed app-modal/project-workarea surfaces live in this Rust manifest so the macOS browser process and helper renderer consume one ownership point. Keep sidebar, project-workarea, and app-modal handlers surface-specific; this manifest is an allowlist, not a generic IPC bus.
 */
-pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 27] = [
+pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 28] = [
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::ActiveProjectContext,
         js_function_name: SIDEBAR_PROJECT_CONTEXT_JS_FUNCTION,
@@ -308,6 +311,11 @@ pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 27] 
         id: SidebarBridgeFunctionId::PetOverlayState,
         js_function_name: SIDEBAR_PET_OVERLAY_STATE_JS_FUNCTION,
         process_message_name: SIDEBAR_PET_OVERLAY_STATE_PROCESS_MESSAGE_NAME,
+    },
+    SidebarBridgeFunctionSpec {
+        id: SidebarBridgeFunctionId::GlobalActions,
+        js_function_name: SIDEBAR_GLOBAL_ACTIONS_JS_FUNCTION,
+        process_message_name: SIDEBAR_GLOBAL_ACTIONS_PROCESS_MESSAGE_NAME,
     },
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::TitlebarGitMenuState,

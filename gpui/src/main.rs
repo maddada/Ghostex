@@ -842,6 +842,16 @@ const GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.sessionStatusIndicators";
 const GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION: u64 = 1;
 const GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.petOverlayState";
+const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION: u64 = 1;
+const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE: &str = "ghostex.gpui.sidebar.globalActions";
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+The tab strip draws at most this many Global Actions. The cap keeps the action
+cluster from crowding out the tabs themselves on a narrow pane, and it bounds
+the bridge payload the same way the status-indicator bridge bounds its rows.
+Actions past the cap stay runnable from Settings and the Command Palette.
+*/
+const GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS: usize = 8;
 const GPUI_SIDEBAR_STATUS_PET_ACTIVATION_MESSAGE_VERSION: u64 = 1;
 const GPUI_SIDEBAR_STATUS_PET_ACTIVATION_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.statusPetActivation";
@@ -1264,7 +1274,6 @@ const WORKSPACE_TAB_SLEEP_TITLE_RESERVED_WIDTH: f32 = WORKSPACE_TAB_SLEEP_ICON_S
 const WORKSPACE_TAB_ACTION_BUTTON_WIDTH: f32 = 42.0;
 const WORKSPACE_TAB_ACTION_BUTTON_HEIGHT: f32 = 34.0;
 const WORKSPACE_TAB_ACTION_ICON_SIZE: f32 = 15.0;
-const WORKSPACE_TAB_ACTION_CLUSTER_WIDTH: f32 = WORKSPACE_TAB_ACTION_BUTTON_WIDTH * 4.0 - 1.0;
 const WORKSPACE_TAB_SELECTED_WHITE_OVERLAY_ALPHA: f32 = 0.13;
 const WORKSPACE_TAB_INACTIVE_WHITE_OVERLAY_ALPHA: f32 = 0.06;
 const WORKSPACE_SPLIT_HANDLE_THICKNESS: f32 = 5.0;
@@ -23916,6 +23925,8 @@ pub struct GhostexGpuiApp {
     CDXC:GPUISettingsNotifications 2026-06-26-06:56:
     GPUI macOS attention banners are derived only from this sanitized status snapshot on attention transition edges. Keep first-snapshot replay suppression, per-session/global rate state, and notification click routing in runtime memory only; never persist or log titles, ids, paths, URLs, commands, stdout/stderr, settings JSON, tokens, raw payloads, or terminal content.
     */
+    sidebar_global_actions: Vec<GpuiSidebarGlobalActionState>,
+    tab_strip_built_in_buttons: shared_settings::SharedTabStripBuiltInButtons,
     sidebar_session_status_indicators: GpuiSidebarSessionStatusIndicatorsState,
     sidebar_session_status_indicators_snapshot_seen: bool,
     session_attention_notification_rate_limiter: GpuiSessionAttentionNotificationRateLimiter,
@@ -24475,6 +24486,8 @@ impl GhostexGpuiApp {
                 sidebar_runtime_settings_snapshot,
                 sidebar_gxserver_bootstrap,
                 sidebar_gxserver_presentation_focus_state,
+                sidebar_global_actions: Vec::new(),
+                tab_strip_built_in_buttons: shared_settings_snapshot.tab_strip_built_in_buttons(),
                 sidebar_session_status_indicators: GpuiSidebarSessionStatusIndicatorsState::default(
                 ),
                 sidebar_session_status_indicators_snapshot_seen: false,
@@ -26053,6 +26066,20 @@ impl GhostexGpuiApp {
         Settings refresh also re-evaluates the Working-session automatic hold against app-owned terminal model state. Keep this in the existing narrow refresh path instead of introducing a broad settings or terminal event bus.
         */
         self.sync_gpui_keep_awake_automation_from_settings(settings, cx);
+        /*
+        CDXC:GlobalActions 2026-08-01-16:00:
+        The tab strip draws every frame, so which built-in buttons are visible is
+        cached here rather than re-read from the settings file during render.
+        This runs before the unchanged-snapshot early return below, because the
+        button toggles are not part of the sidebar runtime snapshot that guards
+        it — a settings change that only hid a tab strip button would otherwise
+        never reach the strip.
+        */
+        let next_built_in_buttons = settings.tab_strip_built_in_buttons();
+        if self.tab_strip_built_in_buttons != next_built_in_buttons {
+            self.tab_strip_built_in_buttons = next_built_in_buttons;
+            cx.notify();
+        }
         let next_snapshot = sidebar_runtime_settings_snapshot_from_shared_settings(settings);
         let Some(next_snapshot) = changed_sidebar_runtime_settings_snapshot(
             &self.sidebar_runtime_settings_snapshot,
@@ -38070,7 +38097,12 @@ impl GhostexGpuiApp {
             "saveSidebarAgent" | "deleteSidebarAgent" | "syncSidebarAgentOrder" => {
                 self.handle_gpui_sidebar_agent_metadata_command(command, cx);
             }
-            "saveSidebarCommand" | "deleteSidebarCommand" | "syncSidebarCommandOrder" => {
+            "saveSidebarCommand"
+            | "deleteSidebarCommand"
+            | "syncSidebarCommandOrder"
+            | "saveGlobalSidebarCommand"
+            | "deleteGlobalSidebarCommand"
+            | "syncGlobalSidebarCommandOrder" => {
                 self.handle_gpui_sidebar_command_metadata_command(command, cx);
             }
             "setProjectWorktreeCommand" => {
@@ -38799,6 +38831,9 @@ impl GhostexGpuiApp {
             }
             cef::SidebarBridgeEvent::PetOverlayState(payload) => {
                 self.receive_sidebar_pet_overlay_state_payload(&payload, cx);
+            }
+            cef::SidebarBridgeEvent::GlobalActions(payload) => {
+                self.receive_sidebar_global_actions_payload(&payload, cx);
             }
             cef::SidebarBridgeEvent::TitlebarGitMenuState(payload) => {
                 self.receive_sidebar_titlebar_git_menu_state_payload(&payload, cx);
@@ -42029,6 +42064,29 @@ impl GhostexGpuiApp {
             return;
         }
         let _ = gpui_close_command_terminal_gxserver_session(key);
+    }
+
+    fn receive_sidebar_global_actions_payload(
+        &mut self,
+        payload: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GlobalActions 2026-08-01-16:00:
+        GPUI accepts the Global Actions list only through the fixed sidebar
+        bridge and keeps the parsed bounded rows in runtime memory for tab strip
+        rendering. Malformed payloads are ignored without logging raw JSON,
+        command text, URLs, or ids, and without clearing the last good list — a
+        rejected payload must not blank the strip.
+        */
+        let Ok(next_actions) = gpui_sidebar_global_actions_from_json(payload) else {
+            return;
+        };
+        if self.sidebar_global_actions == next_actions {
+            return;
+        }
+        self.sidebar_global_actions = next_actions;
+        cx.notify();
     }
 
     fn receive_sidebar_session_status_indicators_payload(
@@ -62044,12 +62102,27 @@ impl GhostexGpuiApp {
             .agents_workspace
             .active_session_in_pane(pane_id)
             .is_some_and(|session_id| self.agents_chat_mode_sessions.contains(&session_id));
-        let cluster_width = WORKSPACE_TAB_ACTION_CLUSTER_WIDTH
-            + if terminal_toggle_visible {
-                WORKSPACE_TAB_ACTION_BUTTON_WIDTH
-            } else {
-                0.0
-            };
+        /*
+        CDXC:GlobalActions 2026-08-01-16:00:
+        The cluster no longer has a fixed button count: users hide built-in
+        buttons they do not use, and Global Actions render as extra icons here.
+        Width is therefore derived from what is actually drawn instead of the
+        old four-button constant, so the tabs keep exactly the space the
+        cluster does not take.
+
+        Global Actions render before the built-ins so the user's own actions sit
+        closest to the tabs and the built-in controls stay where muscle memory
+        expects them, against the right edge.
+        */
+        let built_in_buttons = self.tab_strip_built_in_buttons;
+        let global_actions = self.sidebar_global_actions.clone();
+        let button_count = 1 // pane overflow, never hideable
+            + usize::from(terminal_toggle_visible)
+            + usize::from(built_in_buttons.show_new_terminal)
+            + usize::from(built_in_buttons.show_new_chat)
+            + usize::from(built_in_buttons.show_new_browser)
+            + global_actions.len();
+        let cluster_width = WORKSPACE_TAB_ACTION_BUTTON_WIDTH * button_count as f32 - 1.0;
         h_flex()
             .id(format!("ghostex-gpui-workspace-tab-actions-{}", pane_id.0))
             .flex_shrink_0()
@@ -62058,6 +62131,11 @@ impl GhostexGpuiApp {
             .items_center()
             .justify_center()
             .bg(workspace_tab_action_cluster_color())
+            .children(
+                global_actions
+                    .iter()
+                    .map(|action| self.render_workspace_tab_global_action_button(pane_id, action, cx)),
+            )
             .when(terminal_toggle_visible, |this| {
                 this.child(self.render_workspace_tab_action_button(
                     pane_id,
@@ -62067,27 +62145,33 @@ impl GhostexGpuiApp {
                     cx,
                 ))
             })
-            .child(self.render_workspace_tab_action_button(
-                pane_id,
-                "new-terminal",
-                WorkspaceTabActionIcon::NewTerminal,
-                "New Terminal",
-                cx,
-            ))
-            .child(self.render_workspace_tab_action_button(
-                pane_id,
-                "new-t3-chat",
-                WorkspaceTabActionIcon::NewT3Chat,
-                "New Chat",
-                cx,
-            ))
-            .child(self.render_workspace_tab_action_button(
-                pane_id,
-                "new-browser",
-                WorkspaceTabActionIcon::NewBrowser,
-                "New Browser Tab",
-                cx,
-            ))
+            .when(built_in_buttons.show_new_terminal, |this| {
+                this.child(self.render_workspace_tab_action_button(
+                    pane_id,
+                    "new-terminal",
+                    WorkspaceTabActionIcon::NewTerminal,
+                    "New Terminal",
+                    cx,
+                ))
+            })
+            .when(built_in_buttons.show_new_chat, |this| {
+                this.child(self.render_workspace_tab_action_button(
+                    pane_id,
+                    "new-t3-chat",
+                    WorkspaceTabActionIcon::NewT3Chat,
+                    "New Chat",
+                    cx,
+                ))
+            })
+            .when(built_in_buttons.show_new_browser, |this| {
+                this.child(self.render_workspace_tab_action_button(
+                    pane_id,
+                    "new-browser",
+                    WorkspaceTabActionIcon::NewBrowser,
+                    "New Browser Tab",
+                    cx,
+                ))
+            })
             .child(self.render_workspace_tab_action_button(
                 pane_id,
                 "overflow",
@@ -62095,6 +62179,62 @@ impl GhostexGpuiApp {
                 "Pane actions menu",
                 cx,
             ))
+            .into_any_element()
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-01-16:00:
+    A Global Action button carries only the id back to the sidebar runtime,
+    which resolves the trusted saved definition and runs it through the existing
+    Action bridge — the same selector-shaped path the Command Palette uses. No
+    command text or URL is held by, or dispatched from, the tab strip.
+    */
+    fn render_workspace_tab_global_action_button(
+        &self,
+        pane_id: WorkspacePaneId,
+        action: &GpuiSidebarGlobalActionState,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let command_id = action.command_id.clone();
+        let icon_path = gpui_sidebar_command_icon_asset_path(action.icon.as_deref());
+        let tooltip = if action.name.is_empty() {
+            "Global action".to_string()
+        } else {
+            action.name.clone()
+        };
+        div()
+            .id(format!(
+                "ghostex-gpui-workspace-tab-global-action-{}-{}",
+                pane_id.0, action.command_id
+            ))
+            .flex()
+            .w(px(WORKSPACE_TAB_ACTION_BUTTON_WIDTH))
+            .h(px(WORKSPACE_TAB_ACTION_BUTTON_HEIGHT))
+            .items_center()
+            .justify_center()
+            .border_l_1()
+            .border_color(workspace_tab_action_left_border_color())
+            .bg(workspace_tab_action_button_color())
+            .cursor_default()
+            .hover(|this| this.bg(tab_bar_button_hover_color()))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.dispatch_gpui_command_palette_run_sidebar_command(&command_id, None, cx);
+                }),
+            )
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
+                Tooltip::new(tooltip.clone()).build(window, cx)
+            })
+            .child(
+                svg()
+                    .size(px(WORKSPACE_TAB_ACTION_ICON_SIZE))
+                    .path(icon_path)
+                    .text_color(workspace_tab_action_icon_color())
+                    .into_any_element(),
+            )
             .into_any_element()
     }
 
@@ -98618,6 +98758,28 @@ impl GpuiSidebarAgentMetadataWrite {
     }
 }
 
+/*
+CDXC:GlobalActions 2026-08-01-19:00:
+Settings > Actions writes reach gxserver through this Rust path, not through the
+sidebar TypeScript runtime, so Global Actions need their own scope here or the
+message is parsed as a project write. Scope only selects the mutation target;
+the payload and every validation rule stay identical between the two lists.
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GpuiSidebarCommandScope {
+    Global,
+    Project,
+}
+
+impl GpuiSidebarCommandScope {
+    fn mutation_target(self) -> &'static str {
+        match self {
+            Self::Global => "globalCommand",
+            Self::Project => "command",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 enum GpuiSidebarCommandMetadataWrite {
     Save {
@@ -98629,17 +98791,30 @@ enum GpuiSidebarCommandMetadataWrite {
         icon: Option<String>,
         name: String,
         play_completion_sound: bool,
+        scope: GpuiSidebarCommandScope,
         url: Option<String>,
     },
     Delete {
         active_project_id: String,
         command_id: String,
+        scope: GpuiSidebarCommandScope,
     },
     SyncOrder {
         active_project_id: String,
         command_ids: Vec<String>,
         request_id: String,
+        scope: GpuiSidebarCommandScope,
     },
+}
+
+impl GpuiSidebarCommandMetadataWrite {
+    fn scope(&self) -> GpuiSidebarCommandScope {
+        match self {
+            Self::Save { scope, .. } | Self::Delete { scope, .. } | Self::SyncOrder { scope, .. } => {
+                *scope
+            }
+        }
+    }
 }
 
 impl GpuiSidebarCommandMetadataWrite {
@@ -98812,6 +98987,7 @@ const GPUI_DEFAULT_SIDEBAR_COMMANDS: &[GpuiDefaultSidebarCommand] = &[
     },
 ];
 
+const GPUI_DEFAULT_SIDEBAR_COMMAND_ICON: &str = "playerPlay";
 const GPUI_SIDEBAR_COMMAND_ICON_IDS: &[&str] = &[
     "playerPlay",
     "api",
@@ -98878,6 +99054,13 @@ const GPUI_SIDEBAR_COMMAND_ICON_IDS: &[&str] = &[
 struct GpuiSidebarHudButtons {
     agents: serde_json::Value,
     commands: serde_json::Value,
+    /*
+    CDXC:GlobalActions 2026-08-01-19:00:
+    The Settings app modal reads its Actions lists from this Rust-side HUD fetch,
+    not from the sidebar TypeScript runtime, so Global Actions have to be carried
+    here too or the new section renders empty no matter what is stored.
+    */
+    global_commands: serde_json::Value,
 }
 
 fn gpui_sidebar_hud_from_gxserver(
@@ -98905,6 +99088,13 @@ fn gpui_sidebar_hud_from_gxserver(
     Ok(GpuiSidebarHudButtons {
         agents: gpui_sidebar_hud_array_field(&result, "agents")?,
         commands: gpui_sidebar_hud_array_field(&result, "commands")?,
+        /*
+        A gxserver older than this app omits globalCommands entirely, so treat a
+        missing list as empty rather than failing the whole HUD read and blanking
+        Actions that do exist.
+        */
+        global_commands: gpui_sidebar_hud_array_field(&result, "globalCommands")
+            .unwrap_or_else(|_| serde_json::Value::Array(Vec::new())),
     })
 }
 
@@ -99515,8 +99705,22 @@ fn gpui_sidebar_command_metadata_write_from_command(
     active_project_id: Option<String>,
 ) -> Result<GpuiSidebarCommandMetadataWrite, String> {
     let active_project_id = active_project_id.unwrap_or_default();
-    match command.get("type").and_then(serde_json::Value::as_str) {
-        Some("saveSidebarCommand") => {
+    /*
+    CDXC:GlobalActions 2026-08-01-19:00:
+    Global and Project Action writes carry the identical payload and differ only
+    in which list they land in, so they share one parser and one set of
+    validation rules. Parsing them separately is how the two lists would start
+    accepting different action shapes.
+    */
+    let message_type = command.get("type").and_then(serde_json::Value::as_str);
+    let scope = match message_type {
+        Some("saveGlobalSidebarCommand")
+        | Some("deleteGlobalSidebarCommand")
+        | Some("syncGlobalSidebarCommandOrder") => GpuiSidebarCommandScope::Global,
+        _ => GpuiSidebarCommandScope::Project,
+    };
+    match message_type {
+        Some("saveSidebarCommand") | Some("saveGlobalSidebarCommand") => {
             let name = command
                 .get("name")
                 .and_then(serde_json::Value::as_str)
@@ -99558,6 +99762,7 @@ fn gpui_sidebar_command_metadata_write_from_command(
             Ok(GpuiSidebarCommandMetadataWrite::Save {
                 action_type,
                 active_project_id,
+                scope,
                 close_terminal_on_exit: action_type == "terminal"
                     && command
                         .get("closeTerminalOnExit")
@@ -99581,16 +99786,17 @@ fn gpui_sidebar_command_metadata_write_from_command(
                 url: (action_type == "browser").then_some(url).flatten(),
             })
         }
-        Some("deleteSidebarCommand") => {
+        Some("deleteSidebarCommand") | Some("deleteGlobalSidebarCommand") => {
             let command_id = gpui_trimmed_json_string_field(command, "commandId")
                 .ok_or_else(|| GPUI_SIDEBAR_METADATA_GENERIC_ERROR.to_string())?
                 .to_string();
             Ok(GpuiSidebarCommandMetadataWrite::Delete {
                 active_project_id,
                 command_id,
+                scope,
             })
         }
-        Some("syncSidebarCommandOrder") => {
+        Some("syncSidebarCommandOrder") | Some("syncGlobalSidebarCommandOrder") => {
             let request_id = command
                 .get("requestId")
                 .and_then(serde_json::Value::as_str)
@@ -99605,6 +99811,7 @@ fn gpui_sidebar_command_metadata_write_from_command(
                 active_project_id,
                 command_ids,
                 request_id,
+                scope,
             })
         }
         _ => Err(GPUI_SIDEBAR_METADATA_GENERIC_ERROR.to_string()),
@@ -99691,7 +99898,7 @@ fn gpui_sidebar_command_mutation_params(
     let mut params = serde_json::Map::new();
     params.insert(
         "target".to_string(),
-        serde_json::Value::String("command".to_string()),
+        serde_json::Value::String(write.scope().mutation_target().to_string()),
     );
     match write {
         GpuiSidebarCommandMetadataWrite::Save {
@@ -99700,6 +99907,7 @@ fn gpui_sidebar_command_mutation_params(
             close_terminal_on_exit,
             command,
             command_id,
+            scope: _,
             icon,
             name,
             play_completion_sound,
@@ -99734,6 +99942,7 @@ fn gpui_sidebar_command_mutation_params(
         GpuiSidebarCommandMetadataWrite::Delete {
             active_project_id,
             command_id,
+            scope: _,
         } => {
             params.insert(
                 "operation".to_string(),
@@ -100532,6 +100741,35 @@ fn gpui_strict_sidebar_agent_icon(candidate: &str) -> Option<&str> {
         .then_some(candidate)
 }
 
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+Action icon slugs are camelCase ids shared with the TypeScript surfaces, while
+the bundled assets are kebab-case files under `titlebar/`. Convert rather than
+hand-maintaining a 59-entry table that would silently rot whenever an icon is
+added on the shared side. `terminal` is the one id whose asset is not its
+kebab-case name — the bundle ships `terminal-2.svg`, which the tab strip's own
+Terminal View button already points at.
+
+Actions saved without an icon fall back to the same default the sidebar uses, so
+an icon-less Global Action still renders a button rather than an empty slot.
+*/
+fn gpui_sidebar_command_icon_asset_path(icon: Option<&str>) -> gpui::SharedString {
+    let icon = icon.unwrap_or(GPUI_DEFAULT_SIDEBAR_COMMAND_ICON);
+    if icon == "terminal" {
+        return gpui::SharedString::new_static("titlebar/terminal-2.svg");
+    }
+    let mut asset = String::with_capacity(icon.len() + 1);
+    for character in icon.chars() {
+        if character.is_ascii_uppercase() {
+            asset.push('-');
+            asset.push(character.to_ascii_lowercase());
+        } else {
+            asset.push(character);
+        }
+    }
+    gpui::SharedString::from(format!("titlebar/{asset}.svg"))
+}
+
 fn gpui_sidebar_command_icon(candidate: &str) -> Option<&str> {
     GPUI_SIDEBAR_COMMAND_ICON_IDS
         .iter()
@@ -101212,6 +101450,10 @@ fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_portless_stat
         .as_ref()
         .map(|hud| hud.commands.clone())
         .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
+    let global_commands = sidebar_hud
+        .as_ref()
+        .map(|hud| hud.global_commands.clone())
+        .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
     let project_settings_projects =
         gpui_project_settings_projects_from_domain_projects_or_presentation(&domain_projects);
     let recent_projects = gpui_gxserver_recent_projects(Duration::from_secs(2));
@@ -101233,6 +101475,7 @@ fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_portless_stat
             // until they have an equivalent native app-icon implementation.
             "appIconPickerUnavailable": !cfg!(target_os = "macos"),
             "commands": commands,
+            "globalCommands": global_commands,
             "commandSessionIndicators": [],
             "completionBellEnabled": false,
             "completionSound": completion_sound,
@@ -105803,6 +106046,22 @@ struct GpuiStatusIndicatorProjectState {
     title: String,
 }
 
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+What the tab strip needs to draw one Global Action button and to ask the sidebar
+runtime to run it: a bounded id, a display name for the tooltip, and an optional
+icon slug. Deliberately no command text, URL, cwd, or run state — the click
+sends the id back through the existing Action selector bridge, which resolves the
+trusted definition on the sidebar side, so a compromised renderer payload cannot
+put an executable string in front of the user.
+*/
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct GpuiSidebarGlobalActionState {
+    command_id: String,
+    icon: Option<String>,
+    name: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct GpuiSidebarSessionStatusIndicatorsState {
     attention_count: u64,
@@ -106035,6 +106294,71 @@ fn gpui_sidebar_session_status_indicators_from_json(
         hide_menu_bar_indicators: gpui_status_bool_field(object, "hideMenuBarIndicators")?,
         projects,
         working_count: gpui_status_count_field(object, "workingCount")?,
+    })
+}
+
+/*
+CDXC:GlobalActions 2026-08-01-16:00:
+The Global Actions bridge accepts only version/type plus a bounded action list of
+id, display name, and optional icon slug. Reject command text, URLs, paths, run
+state, project ids, and unknown keys before app state is updated, matching the
+status-indicator bridge: the tab strip renders a label and an icon, and running
+the action goes back through the Action selector by id.
+*/
+fn gpui_sidebar_global_actions_from_json(
+    text: &str,
+) -> Result<Vec<GpuiSidebarGlobalActionState>, ()> {
+    let value = serde_json::from_str::<serde_json::Value>(text).map_err(|_| ())?;
+    let object = value.as_object().ok_or(())?;
+    reject_unexpected_gpui_status_keys(object, &["version", "type", "actions"])?;
+    if object.get("version").and_then(serde_json::Value::as_u64)
+        != Some(GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION)
+        || object.get("type").and_then(serde_json::Value::as_str)
+            != Some(GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE)
+    {
+        return Err(());
+    }
+    object
+        .get("actions")
+        .and_then(serde_json::Value::as_array)
+        .filter(|actions| actions.len() <= GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS)
+        .ok_or(())?
+        .iter()
+        .map(gpui_sidebar_global_action_from_value)
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn gpui_sidebar_global_action_from_value(
+    value: &serde_json::Value,
+) -> Result<GpuiSidebarGlobalActionState, ()> {
+    let object = value.as_object().ok_or(())?;
+    reject_unexpected_gpui_status_keys(object, &["commandId", "icon", "name"])?;
+    /*
+    A Global Action may carry an icon and an empty name, so the name is bounded
+    like a title but allowed to be empty; the icon slug is validated against the
+    known sidebar icon set rather than trusted as an arbitrary asset path.
+    */
+    let name = object
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| value.is_empty() || gpui_status_title_allowed(value))
+        .map(str::to_string)
+        .ok_or(())?;
+    let icon = match object.get("icon") {
+        None => None,
+        Some(serde_json::Value::String(icon)) => {
+            Some(gpui_sidebar_command_icon(icon.trim()).ok_or(())?.to_string())
+        }
+        Some(_) => return Err(()),
+    };
+    if name.is_empty() && icon.is_none() {
+        return Err(());
+    }
+    Ok(GpuiSidebarGlobalActionState {
+        command_id: gpui_status_id_field(object, "commandId")?,
+        icon,
+        name,
     })
 }
 

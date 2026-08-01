@@ -383,6 +383,15 @@ pub const KEEP_AWAKE_DURATION_OPTIONS: &[SharedKeepAwakeDurationMinutes] = &[
     SharedKeepAwakeDurationMinutes::FiveHours,
 ];
 
+/// Which built-in buttons the Agents tab strip action cluster draws. Global
+/// Actions render alongside whichever of these the user kept.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SharedTabStripBuiltInButtons {
+    pub show_new_browser: bool,
+    pub show_new_chat: bool,
+    pub show_new_terminal: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SharedKeepAwakeTitlebarSettings {
     pub feature_enabled: bool,
@@ -525,6 +534,24 @@ impl SharedSidebarSettingsSnapshot {
 
     pub fn debugging_mode(&self) -> bool {
         strict_bool_field(&self.object, "debuggingMode") == Some(true)
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-01-16:00:
+    Which built-in buttons the Agents tab strip draws. Hiding is opt-in per
+    button, so a settings file written before this feature keeps every control.
+    The pane overflow button has no toggle: it is the only route to the
+    remaining pane actions, and hiding it would strand them.
+    */
+    pub fn tab_strip_built_in_buttons(&self) -> SharedTabStripBuiltInButtons {
+        SharedTabStripBuiltInButtons {
+            show_new_browser: strict_bool_field(&self.object, "hideTabStripNewBrowserButton")
+                != Some(true),
+            show_new_chat: strict_bool_field(&self.object, "hideTabStripNewChatButton")
+                != Some(true),
+            show_new_terminal: strict_bool_field(&self.object, "hideTabStripNewTerminalButton")
+                != Some(true),
+        }
     }
 
     pub fn show_beta_features(&self) -> bool {

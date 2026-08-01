@@ -5308,6 +5308,18 @@ export function SettingsModal({
           {!isFirstLaunchSetup ? (
           <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="actions">
             <ActionsSettingsTab
+              hideTabStripNewBrowserButton={draft.hideTabStripNewBrowserButton}
+              hideTabStripNewChatButton={draft.hideTabStripNewChatButton}
+              hideTabStripNewTerminalButton={draft.hideTabStripNewTerminalButton}
+              onHideTabStripNewBrowserButtonChange={(checked) =>
+                updateDraft("hideTabStripNewBrowserButton", checked)
+              }
+              onHideTabStripNewChatButtonChange={(checked) =>
+                updateDraft("hideTabStripNewChatButton", checked)
+              }
+              onHideTabStripNewTerminalButtonChange={(checked) =>
+                updateDraft("hideTabStripNewTerminalButton", checked)
+              }
               search={extraSettingsTabSearches.actions}
               searchEmptyState={settingsSearchEmptyState}
               vscode={vscode}
@@ -8948,17 +8960,22 @@ function AgentSettingsEditor({
   );
 }
 
-function ActionsSettingsTab({
-  search,
-  searchEmptyState,
-  vscode,
-}: {
-  search: SettingsTabSearch;
-  searchEmptyState?: ReactNode;
-  vscode?: WebviewApi;
-}) {
-  const commands = useSidebarStore((state) => state.hud.commands);
-  const [editorState, setEditorState] = useState<SettingsCommandEditorState>();
+/*
+CDXC:GlobalActions 2026-08-01:
+Settings > Actions holds two lists that behave identically and differ only in
+who owns them: Global Actions apply to every project and live in gxserver,
+Project Actions belong to one project (and its worktrees) and live in project
+metadata. The scope drives the bridge message types and the copy; everything
+else — ordering, drag reorder, the editor, duplicate-title validation — is one
+implementation, so the two lists cannot drift apart.
+*/
+type SettingsCommandScope = "global" | "project";
+
+type SettingsCommandScopeEditorState = SettingsCommandEditorState & {
+  scope: SettingsCommandScope;
+};
+
+function useSettingsCommandOrder(commands: readonly SidebarCommandButton[]) {
   const [draftCommandIds, setDraftCommandIds] = useState<string[]>();
 
   useEffect(() => {
@@ -8978,31 +8995,71 @@ function ActionsSettingsTab({
       .map((commandId) => commandById.get(commandId))
       .filter((command): command is SidebarCommandButton => command !== undefined);
   }, [commands, draftCommandIds]);
+
+  return { orderedCommands, setDraftCommandIds };
+}
+
+function ActionsSettingsTab({
+  hideTabStripNewBrowserButton,
+  hideTabStripNewChatButton,
+  hideTabStripNewTerminalButton,
+  onHideTabStripNewBrowserButtonChange,
+  onHideTabStripNewChatButtonChange,
+  onHideTabStripNewTerminalButtonChange,
+  search,
+  searchEmptyState,
+  vscode,
+}: {
+  hideTabStripNewBrowserButton: boolean;
+  hideTabStripNewChatButton: boolean;
+  hideTabStripNewTerminalButton: boolean;
+  onHideTabStripNewBrowserButtonChange: (checked: boolean) => void;
+  onHideTabStripNewChatButtonChange: (checked: boolean) => void;
+  onHideTabStripNewTerminalButtonChange: (checked: boolean) => void;
+  search: SettingsTabSearch;
+  searchEmptyState?: ReactNode;
+  vscode?: WebviewApi;
+}) {
+  const commands = useSidebarStore((state) => state.hud.commands);
+  const globalCommands = useSidebarStore((state) => state.hud.globalCommands);
+  const [editorState, setEditorState] = useState<SettingsCommandScopeEditorState>();
+
+  const emptyGlobalCommands = useMemo<SidebarCommandButton[]>(() => [], []);
+  const { orderedCommands, setDraftCommandIds } = useSettingsCommandOrder(commands);
+  const {
+    orderedCommands: orderedGlobalCommands,
+    setDraftCommandIds: setDraftGlobalCommandIds,
+  } = useSettingsCommandOrder(globalCommands ?? emptyGlobalCommands);
   /*
   CDXC:ProjectActions 2026-06-15-15:29:
   When no Actions have a saved terminal command or browser URL, the top of Settings > Actions should explain that frequently used commands can be set here for one-click or hotkey execution.
   */
   const hasConfiguredActions = useMemo(
-    () => orderedCommands.some((command) => isSidebarCommandConfigured(command)),
-    [orderedCommands],
+    () =>
+      [...orderedGlobalCommands, ...orderedCommands].some((command) =>
+        isSidebarCommandConfigured(command),
+      ),
+    [orderedCommands, orderedGlobalCommands],
   );
-  const editorCommandId = editorState?.draft.commandId;
-  const deleteEditorCommand = editorCommandId
-    ? () => deleteCommand(editorCommandId)
-    : undefined;
 
-  const openCreateCommandEditor = (actionType: SidebarActionType) => {
-    setEditorState({
-      draft: createSettingsCommandDraft(actionType),
-      lockedActionType: actionType,
+  const deleteCommand = (scope: SettingsCommandScope, commandId: string) => {
+    vscode?.postMessage({
+      commandId,
+      type: scope === "global" ? "deleteGlobalSidebarCommand" : "deleteSidebarCommand",
     });
+    setEditorState(undefined);
   };
 
-  const saveCommand = (draft: SettingsCommandDraft) => {
+  const saveCommand = (scope: SettingsCommandScope, draft: SettingsCommandDraft) => {
     if (!vscode) {
       return;
     }
-    vscode.postMessage({
+    /*
+     * The two messages carry an identical payload and differ only in `type`,
+     * but the bridge message union discriminates on that field, so it is
+     * written as a literal in each branch rather than computed.
+     */
+    const payload = {
       actionType: draft.actionType,
       closeTerminalOnExit: draft.closeTerminalOnExit,
       command: draft.command,
@@ -9011,20 +9068,189 @@ function ActionsSettingsTab({
       links: draft.links,
       name: draft.name,
       playCompletionSound: draft.playCompletionSound,
-      type: "saveSidebarCommand",
       url: draft.url,
-    });
+    };
+    if (scope === "global") {
+      vscode.postMessage({ ...payload, type: "saveGlobalSidebarCommand" });
+    } else {
+      vscode.postMessage({ ...payload, type: "saveSidebarCommand" });
+    }
     setEditorState(undefined);
   };
 
-  const deleteCommand = (commandId: string) => {
+  const reorderCommands = (scope: SettingsCommandScope, nextCommandIds: string[]) => {
+    if (scope === "global") {
+      setDraftGlobalCommandIds(nextCommandIds);
+    } else {
+      setDraftCommandIds(nextCommandIds);
+    }
     vscode?.postMessage({
-      commandId,
-      type: "deleteSidebarCommand",
+      commandIds: nextCommandIds,
+      requestId: createSettingsReorderRequestId(scope === "global" ? "globalActions" : "actions"),
+      type: scope === "global" ? "syncGlobalSidebarCommandOrder" : "syncSidebarCommandOrder",
     });
-    setEditorState(undefined);
   };
 
+  if (!editorState && search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab)) {
+    return (
+      <SettingsNativeScrollArea className="h-full min-h-0">
+        <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">{searchEmptyState}</div>
+      </SettingsNativeScrollArea>
+    );
+  }
+
+  /*
+   * Editing replaces both lists with the single editor, the same way the one
+   * Actions list behaved before Global Actions existed. Showing the other list
+   * alongside an open editor would let a user start a second edit and lose the
+   * first draft.
+   */
+  if (editorState) {
+    const editorScope = editorState.scope;
+    const editorCommandId = editorState.draft.commandId;
+    return (
+      <SettingsNativeScrollArea className="h-full min-h-0">
+        <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
+          <SettingsSection title={editorScope === "global" ? "Global Action" : "Action"}>
+            <ActionSettingsEditor
+              draft={editorState.draft}
+              existingCommands={editorScope === "global" ? orderedGlobalCommands : commands}
+              lockedActionType={editorState.lockedActionType}
+              onCancel={() => setEditorState(undefined)}
+              onDelete={
+                editorCommandId ? () => deleteCommand(editorScope, editorCommandId) : undefined
+              }
+              onSave={(draft) => saveCommand(editorScope, draft)}
+            />
+          </SettingsSection>
+        </div>
+      </SettingsNativeScrollArea>
+    );
+  }
+
+  return (
+    <SettingsNativeScrollArea className="h-full min-h-0">
+      <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
+        {!hasConfiguredActions ? (
+          <div className="flex items-start gap-3 border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+            <IconInfoCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
+            <p className="m-0">
+              Set frequently used terminal or browser commands here so you can run them with one
+              click or a hotkey.
+            </p>
+          </div>
+        ) : null}
+        <ActionsSettingsSection
+          commands={orderedGlobalCommands}
+          description="Global actions apply to every project and are stored by the Ghostex daemon, so they follow you to every app that connects to it. They appear in the tab strip above your tabs."
+          emptyDescription="Add a terminal or browser action that should be available in every project."
+          emptyTitle="No global actions configured"
+          onCreate={(actionType) =>
+            setEditorState({
+              draft: createSettingsCommandDraft(actionType),
+              lockedActionType: actionType,
+              scope: "global",
+            })
+          }
+          onDelete={(commandId) => deleteCommand("global", commandId)}
+          onEdit={(command) =>
+            setEditorState({
+              draft: createSettingsCommandDraftFromButton(command),
+              scope: "global",
+            })
+          }
+          onReorder={(nextCommandIds) => reorderCommands("global", nextCommandIds)}
+          title="Global Actions"
+          vscode={vscode}
+        />
+        <ActionsSettingsSection
+          commands={orderedCommands}
+          /*
+           * CDXC:ActionsSettings 2026-06-15-14:00:
+           * The Actions section header needs explanatory copy because users may
+           * not know that terminal actions run in quick command terminals,
+           * browser actions open panes, project actions are shared with
+           * worktrees, and right-click exposes every configured project action.
+           */
+          description="Actions are custom shortcuts for repeat work. Add terminal actions to run saved commands in quick command terminals, or browser actions to open saved URLs in browser panes. These actions are shared between a main project and its worktrees, and you can right-click the action button to show all configured actions for that project."
+          emptyDescription="Add a terminal or browser action."
+          emptyTitle="No actions configured"
+          onCreate={(actionType) =>
+            setEditorState({
+              draft: createSettingsCommandDraft(actionType),
+              lockedActionType: actionType,
+              scope: "project",
+            })
+          }
+          onDelete={(commandId) => deleteCommand("project", commandId)}
+          onEdit={(command) =>
+            setEditorState({
+              draft: createSettingsCommandDraftFromButton(command),
+              scope: "project",
+            })
+          }
+          onReorder={(nextCommandIds) => reorderCommands("project", nextCommandIds)}
+          title="Project Actions"
+          vscode={vscode}
+        />
+        {/*
+         * CDXC:GlobalActions 2026-08-01:
+         * The built-in tab strip buttons are toggled here, next to the Global
+         * Actions that share the strip with them, because that is where a user
+         * goes when the strip is too crowded. The pane actions menu has no
+         * toggle: it is the only route to the remaining pane actions.
+         */}
+        <SettingsSection
+          description="Global actions share the tab strip with these built-in buttons. Hide the ones you do not use to make room."
+          title="Tab Strip Buttons"
+        >
+          <ToggleField
+            checked={hideTabStripNewTerminalButton}
+            description="Hide the New Terminal button from the tab strip."
+            label="Hide New Terminal button"
+            onChange={onHideTabStripNewTerminalButtonChange}
+          />
+          <ToggleField
+            checked={hideTabStripNewChatButton}
+            description="Hide the New Chat button from the tab strip."
+            label="Hide New Chat button"
+            onChange={onHideTabStripNewChatButtonChange}
+          />
+          <ToggleField
+            checked={hideTabStripNewBrowserButton}
+            description="Hide the New Browser Tab button from the tab strip."
+            label="Hide New Browser Tab button"
+            onChange={onHideTabStripNewBrowserButtonChange}
+          />
+        </SettingsSection>
+      </div>
+    </SettingsNativeScrollArea>
+  );
+}
+
+function ActionsSettingsSection({
+  commands,
+  description,
+  emptyDescription,
+  emptyTitle,
+  onCreate,
+  onDelete,
+  onEdit,
+  onReorder,
+  title,
+  vscode,
+}: {
+  commands: readonly SidebarCommandButton[];
+  description: string;
+  emptyDescription: string;
+  emptyTitle: string;
+  onCreate: (actionType: SidebarActionType) => void;
+  onDelete: (commandId: string) => void;
+  onEdit: (command: SidebarCommandButton) => void;
+  onReorder: (nextCommandIds: string[]) => void;
+  title: string;
+  vscode?: WebviewApi;
+}) {
   const handleDragEnd = ((event) => {
     if (event.canceled || !isSortableOperation(event.operation)) {
       return;
@@ -9042,122 +9268,67 @@ function ActionsSettingsTab({
       return;
     }
 
-    const nextCommandIds = moveId(
-      orderedCommands.map((command) => command.commandId),
-      source.initialIndex,
-      targetIndex,
+    onReorder(
+      moveId(
+        commands.map((command) => command.commandId),
+        source.initialIndex,
+        targetIndex,
+      ),
     );
-    setDraftCommandIds(nextCommandIds);
-    vscode?.postMessage({
-      commandIds: nextCommandIds,
-      requestId: createSettingsReorderRequestId("actions"),
-      type: "syncSidebarCommandOrder",
-    });
   }) satisfies DragDropEventHandlers["onDragEnd"];
 
-  if (!editorState && search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab)) {
-    return (
-      <SettingsNativeScrollArea className="h-full min-h-0">
-        <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">{searchEmptyState}</div>
-      </SettingsNativeScrollArea>
-    );
-  }
-
   return (
-    <SettingsNativeScrollArea className="h-full min-h-0">
-      <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
-        {!editorState && !hasConfiguredActions ? (
-          <div className="flex items-start gap-3 border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-            <IconInfoCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
-            <p className="m-0">
-              Set frequently used terminal or browser commands here so you can run them with one
-              click or a hotkey.
-            </p>
+    <SettingsSection
+      actions={
+        <>
+          <SettingButton
+            disabled={!vscode}
+            disabledReason="Adding actions needs the Ghostex app connection."
+            onClick={() => onCreate("terminal")}
+            type="button"
+            variant="outline"
+          >
+            <IconPlus aria-hidden="true" data-icon="inline-start" />
+            Terminal Action
+          </SettingButton>
+          <SettingButton
+            disabled={!vscode}
+            disabledReason="Adding actions needs the Ghostex app connection."
+            onClick={() => onCreate("browser")}
+            type="button"
+            variant="outline"
+          >
+            <IconPlus aria-hidden="true" data-icon="inline-start" />
+            Browser Action
+          </SettingButton>
+        </>
+      }
+      description={description}
+      title={title}
+    >
+      {commands.length > 0 ? (
+        <DragDropProvider onDragEnd={handleDragEnd}>
+          <div className="flex flex-col gap-2">
+            {commands.map((command, index) => (
+              <SettingsCommandRow
+                command={command}
+                index={index}
+                key={command.commandId}
+                onEdit={() => onEdit(command)}
+                onDelete={() => onDelete(command.commandId)}
+              />
+            ))}
           </div>
-        ) : null}
-        <SettingsSection
-          actions={
-            !editorState ? (
-              <>
-                <SettingButton
-                  disabled={!vscode}
-                  disabledReason="Adding actions needs the Ghostex app connection."
-                  onClick={() => openCreateCommandEditor("terminal")}
-                  type="button"
-                  variant="outline"
-                >
-                  <IconPlus aria-hidden="true" data-icon="inline-start" />
-                  Terminal Action
-                </SettingButton>
-                <SettingButton
-                  disabled={!vscode}
-                  disabledReason="Adding actions needs the Ghostex app connection."
-                  onClick={() => openCreateCommandEditor("browser")}
-                  type="button"
-                  variant="outline"
-                >
-                  <IconPlus aria-hidden="true" data-icon="inline-start" />
-                  Browser Action
-                </SettingButton>
-              </>
-            ) : null
-          }
-          /*
-           * CDXC:ActionsSettings 2026-06-15-14:00:
-           * The Actions section header needs explanatory copy because users may
-           * not know that terminal actions run in quick command terminals,
-           * browser actions open panes, project actions are shared with
-           * worktrees, and right-click exposes every configured project action.
-           */
-          description={
-            !editorState
-              ? "Actions are custom shortcuts for repeat work. Add terminal actions to run saved commands in quick command terminals, or browser actions to open saved URLs in browser panes. These actions are shared between a main project and its worktrees, and you can right-click the action button to show all configured actions for that project."
-              : undefined
-          }
-          title={editorState ? "Action" : "Actions"}
-        >
-          {editorState ? (
-            <ActionSettingsEditor
-              draft={editorState.draft}
-              existingCommands={commands}
-              lockedActionType={editorState.lockedActionType}
-              onCancel={() => setEditorState(undefined)}
-              onDelete={deleteEditorCommand}
-              onSave={saveCommand}
-            />
-          ) : (
-            <>
-              {orderedCommands.length > 0 ? (
-                <DragDropProvider onDragEnd={handleDragEnd}>
-                  <div className="flex flex-col gap-2">
-                    {orderedCommands.map((command, index) => (
-                      <SettingsCommandRow
-                        command={command}
-                        index={index}
-                        key={command.commandId}
-                        onEdit={() =>
-                          setEditorState({
-                            draft: createSettingsCommandDraftFromButton(command),
-                          })
-                        }
-                        onDelete={() => deleteCommand(command.commandId)}
-                      />
-                    ))}
-                  </div>
-                </DragDropProvider>
-              ) : (
-                <Empty className="border border-border bg-muted/20">
-                  <EmptyHeader>
-                    <EmptyTitle>No actions configured</EmptyTitle>
-                    <EmptyDescription>Add a terminal or browser action.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-            </>
-          )}
-        </SettingsSection>
-      </div>
-    </SettingsNativeScrollArea>
+        </DragDropProvider>
+      ) : (
+        <Empty className="border border-border bg-muted/20">
+          <EmptyHeader>
+            <EmptyTitle>{emptyTitle}</EmptyTitle>
+            <EmptyDescription>{emptyDescription}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </SettingsSection>
   );
 }
 
@@ -10029,7 +10200,7 @@ function haveSameOrder(left: readonly string[], right: readonly string[]): boole
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
-function createSettingsReorderRequestId(kind: "actions" | "agents"): string {
+function createSettingsReorderRequestId(kind: "actions" | "agents" | "globalActions"): string {
   return `settings-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 

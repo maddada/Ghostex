@@ -942,6 +942,16 @@ export type ghostexSettings = {
   keepAwakeWhileWorkingSessions: boolean;
   keepAwakePreventLidSleep: boolean;
   hideKeepAwakeTitlebarControl: boolean;
+  /**
+   * CDXC:GlobalActions 2026-08-01:
+   * The Agents tab strip ships New Terminal, New Chat, and New Browser Tab
+   * buttons. Users who run those from Global Actions or hotkeys can hide each
+   * one to make room in the strip. The pane overflow button is deliberately not
+   * hideable — it is the only way to reach the rest of the pane actions.
+   */
+  hideTabStripNewTerminalButton: boolean;
+  hideTabStripNewChatButton: boolean;
+  hideTabStripNewBrowserButton: boolean;
   showMacOSAttentionNotifications: boolean;
   hideFloatingSessionStatusIndicators: boolean;
   hideMenuBarSessionStatusIndicators: boolean;
@@ -1588,6 +1598,14 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * state.
    */
   hideKeepAwakeTitlebarControl: false,
+  /**
+   * CDXC:GlobalActions 2026-08-01:
+   * Every built-in tab strip button stays visible until the user hides it, so
+   * adding Global Actions never silently removes a control someone relies on.
+   */
+  hideTabStripNewTerminalButton: false,
+  hideTabStripNewChatButton: false,
+  hideTabStripNewBrowserButton: false,
   /**
    * CDXC:SessionAttentionNotifications 2026-05-10-16:46
    * macOS attention notifications are enabled by default so a background
@@ -2651,6 +2669,21 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       "hideKeepAwakeTitlebarControl",
       DEFAULT_ghostex_SETTINGS.hideKeepAwakeTitlebarControl,
+    ),
+    hideTabStripNewTerminalButton: readBoolean(
+      source,
+      "hideTabStripNewTerminalButton",
+      DEFAULT_ghostex_SETTINGS.hideTabStripNewTerminalButton,
+    ),
+    hideTabStripNewChatButton: readBoolean(
+      source,
+      "hideTabStripNewChatButton",
+      DEFAULT_ghostex_SETTINGS.hideTabStripNewChatButton,
+    ),
+    hideTabStripNewBrowserButton: readBoolean(
+      source,
+      "hideTabStripNewBrowserButton",
+      DEFAULT_ghostex_SETTINGS.hideTabStripNewBrowserButton,
     ),
     /**
      * CDXC:SessionAttentionNotifications 2026-05-10-16:46
