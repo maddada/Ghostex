@@ -23963,6 +23963,18 @@ pub struct GhostexGpuiApp {
     pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
     command_gxserver_cleanup_in_flight: HashSet<GpuiLocalWorkspaceSessionKey>,
     /*
+    CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+    Agents shell sessions that were just dragged out of the command pane and
+    whose gxserver row has not finished moving from the `commands` surface to
+    `workspace`. Sidebar-driven tab reconciliation deletes Agents sessions that
+    are absent from the sidebar projection, and a `commands`-surface row is
+    absent by definition, so these ids are held out of that prune until the
+    daemon confirms the move. Runtime-only: never persisted, and cleared on
+    success or after the bounded retry budget so a stuck update cannot pin a
+    session out of reconciliation forever.
+    */
+    agents_sessions_pending_surface_transfer: HashSet<TerminalSessionId>,
+    /*
     CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
     Command Close After Done deadlines are runtime-only countdowns derived from armed command sessions that are currently done. Store only command session ids, deadlines, and cancellation generations here; the persisted shell state carries only the safe armed boolean.
     */
@@ -24495,6 +24507,7 @@ impl GhostexGpuiApp {
                 command_gxserver_attach_pending: HashSet::new(),
                 pending_command_gxserver_cleanup,
                 command_gxserver_cleanup_in_flight: HashSet::new(),
+                agents_sessions_pending_surface_transfer: HashSet::new(),
                 command_close_after_done_timers: HashMap::new(),
                 command_close_after_done_generation: 0,
                 command_close_after_done_countdown_ticker_active: false,
@@ -40741,6 +40754,19 @@ impl GhostexGpuiApp {
         if self.agents_workspace_project_id.as_deref() != focus_state.active_project_id.as_deref() {
             return false;
         }
+        /*
+        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        A tab just dragged out of the command pane is live locally but its
+        gxserver row is still on the `commands` surface, so it is absent from
+        this projection by definition. Reconciling against that projection
+        would delete the session and take the running terminal with it, so
+        skip the pass entirely while any transfer is mid-flight. The hold is
+        released on daemon confirmation or after a bounded retry budget, and
+        the next sidebar patch reconciles normally.
+        */
+        if !self.agents_sessions_pending_surface_transfer.is_empty() {
+            return false;
+        }
         let changed = self.agents_workspace.reconcile_with_sidebar_tab_sessions(
             tab_sessions,
             &mut self.local_workspace_session_mappings,
@@ -56282,6 +56308,162 @@ impl GhostexGpuiApp {
         }
     }
 
+    fn transfer_live_command_tab_to_agents(
+        &mut self,
+        source_group_id: CommandPaneGroupId,
+        source_session_id: CommandSessionId,
+        target_pane_id: WorkspacePaneId,
+        placement: CommandToAgentsDropPlacement,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
+        /*
+        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        Dragging a command tab into the Agents workspace moves the running
+        terminal instead of re-creating it. The previous placeholder boundary
+        carried only the title, so the dragged tab became a fresh shell while
+        the real process was abandoned and its daemon session reaped moments
+        later by the command-model pruner.
+
+        The move is ordered deliberately:
+        1. read the daemon identity while the command row still exists;
+        2. take the engine record AND the gxserver mapping out of command
+           ownership BEFORE the model close, so the pruner never observes a
+           mapping whose session has disappeared and closes the very session
+           being moved;
+        3. insert the Agents tab as Running and startup-ineligible, so the
+           startup pipeline cannot spawn a second shell into it;
+        4. re-subscribe the view against the Agents event target and adopt an
+           Agents runtime id, because the engine record is retained only while
+           its runtime id matches the Agents registry;
+        5. map the session so the sidebar shows it and promote the daemon row
+           to the workspace surface.
+
+        Every step is synchronous: the frame that follows this call already
+        reconciles both surfaces.
+        */
+        let gxserver_key = self.command_gxserver_session_key_for_command_tab(source_session_id);
+        let zmx_session_name = self
+            .command_pane
+            .session(source_session_id)
+            .and_then(|session| session.zmx_session_name.clone());
+        let record = self.command_gpui_engine_terminals.remove(&source_session_id);
+        let mapping = self
+            .command_gxserver_session_mappings
+            .remove(&source_session_id);
+
+        let transferred = match placement {
+            CommandToAgentsDropPlacement::PaneBody(zone) => {
+                transfer_command_placeholder_to_workspace(
+                    &mut self.agents_workspace,
+                    &mut self.command_pane,
+                    source_group_id,
+                    source_session_id,
+                    target_pane_id,
+                    zone,
+                )
+            }
+            CommandToAgentsDropPlacement::TabStrip(insertion_index) => {
+                transfer_command_placeholder_to_workspace_tab_strip(
+                    &mut self.agents_workspace,
+                    &mut self.command_pane,
+                    source_group_id,
+                    source_session_id,
+                    target_pane_id,
+                    insertion_index,
+                )
+            }
+        };
+
+        let Some((inserted_pane_id, inserted_session_id)) = transferred else {
+            // The model transfer already rolled itself back, so restore the
+            // ownership we removed and leave the command tab exactly as it was.
+            if let Some(record) = record {
+                self.command_gpui_engine_terminals
+                    .insert(source_session_id, record);
+            }
+            if let Some(mapping) = mapping {
+                self.command_gxserver_session_mappings
+                    .insert(source_session_id, mapping);
+            }
+            return None;
+        };
+
+        let agents_runtime_session_id = self
+            .agents_terminal_runtime_sessions
+            .ensure_runtime_session_id(inserted_session_id);
+        if let Some(session) = self
+            .agents_workspace
+            .terminal_sessions
+            .iter_mut()
+            .find(|session| session.id == inserted_session_id)
+        {
+            session.zmx_session_name = zmx_session_name;
+            session.set_presentation_state_with_startup_eligibility(
+                TerminalSessionPresentationState::Running,
+                false,
+            );
+        }
+
+        if let Some(record) = record {
+            // Destructure rather than drop: `view` moves out intact, so the
+            // child process is never released, while the old subscription
+            // (bound to the command event target) dies with the binding.
+            let terminal_gpui_engine::GpuiEngineTerminalRecord {
+                view,
+                runtime_session_id: previous_runtime_session_id,
+                wait_after_command,
+                confirm_close_behavior,
+                _subscription,
+            } = record;
+            drop(_subscription);
+            if let Some(osc_state) = self
+                .command_terminal_runtime_osc_states
+                .remove(&previous_runtime_session_id)
+            {
+                self.agents_terminal_runtime_osc_states
+                    .insert(agents_runtime_session_id, osc_state);
+            }
+            let subscription = cx.subscribe(
+                &view,
+                move |this: &mut Self, _view, event: &terminal_element::TerminalViewEvent, cx| {
+                    this.handle_gpui_engine_terminal_view_event(
+                        GpuiEngineTerminalEventTarget::Agents(inserted_session_id),
+                        event,
+                        cx,
+                    );
+                },
+            );
+            self.agents_gpui_engine_terminals.insert(
+                inserted_session_id,
+                terminal_gpui_engine::GpuiEngineTerminalRecord {
+                    view,
+                    runtime_session_id: agents_runtime_session_id,
+                    wait_after_command,
+                    confirm_close_behavior,
+                    _subscription: subscription,
+                },
+            );
+        }
+
+        if let Some(key) = gxserver_key {
+            self.local_workspace_session_mappings
+                .insert(key.clone(), inserted_session_id);
+            self.local_app_shot_session_mappings
+                .insert(key.session_id.clone(), inserted_session_id);
+            self.agents_sessions_pending_surface_transfer
+                .insert(inserted_session_id);
+            self.promote_transferred_gxserver_session_surface_in_background(
+                key,
+                inserted_session_id,
+                0,
+                cx,
+            );
+        }
+
+        self.refresh_sidebar_command_pane_sessions_if_changed(cx);
+        Some((inserted_pane_id, inserted_session_id))
+    }
+
     fn handle_command_tab_workspace_pane_body_drop(
         &mut self,
         target_pane_id: WorkspacePaneId,
@@ -56306,14 +56488,13 @@ impl GhostexGpuiApp {
         self.workspace_drop_feedback = None;
         self.finish_command_tab_drag_state(cx);
 
-        let Some((inserted_pane_id, _inserted_session_id)) =
-            transfer_command_placeholder_to_workspace(
-                &mut self.agents_workspace,
-                &mut self.command_pane,
+        let Some((inserted_pane_id, _inserted_session_id)) = self
+            .transfer_live_command_tab_to_agents(
                 dragged.source_group_id,
                 dragged.session_id,
                 target_pane_id,
-                zone,
+                CommandToAgentsDropPlacement::PaneBody(zone),
+                cx,
             )
         else {
             cx.notify();
@@ -56358,14 +56539,13 @@ impl GhostexGpuiApp {
         self.workspace_drop_feedback = None;
         self.finish_command_tab_drag_state(cx);
 
-        let Some((inserted_pane_id, _inserted_session_id)) =
-            transfer_command_placeholder_to_workspace_tab_strip(
-                &mut self.agents_workspace,
-                &mut self.command_pane,
+        let Some((inserted_pane_id, _inserted_session_id)) = self
+            .transfer_live_command_tab_to_agents(
                 dragged.source_group_id,
                 dragged.session_id,
                 target_pane_id,
-                insertion_index,
+                CommandToAgentsDropPlacement::TabStrip(insertion_index),
+                cx,
             )
         else {
             cx.notify();
@@ -57073,6 +57253,71 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_app_modal_toast("warning", "Command terminal unavailable", message, cx);
         cx.notify();
         changed
+    }
+
+    fn promote_transferred_gxserver_session_surface_in_background(
+        &mut self,
+        key: GpuiLocalWorkspaceSessionKey,
+        shell_session_id: TerminalSessionId,
+        attempt: u32,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        The moved tab is already live locally, so this update runs off the UI
+        thread. Until it lands the session is held out of sidebar-driven
+        reconciliation by `agents_sessions_pending_surface_transfer`, because a
+        `commands`-surface row is absent from the sidebar tab projection and
+        reconciliation would otherwise delete the tab and kill the terminal the
+        user just dragged. Retry a bounded number of times, then release the
+        hold so reconciliation can resume rather than pinning it forever.
+        */
+        const MAX_ATTEMPTS: u32 = 5;
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let update_key = key.clone();
+            let result = background
+                .spawn(async move {
+                    gpui_update_command_terminal_gxserver_session_surface(&update_key, "workspace")
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if result.is_ok() {
+                    this.agents_sessions_pending_surface_transfer
+                        .remove(&shell_session_id);
+                    return;
+                }
+                if attempt + 1 >= MAX_ATTEMPTS {
+                    this.agents_sessions_pending_surface_transfer
+                        .remove(&shell_session_id);
+                    support_logs::append(
+                        support_logs::GpuiSupportLog::TerminalFocus,
+                        "gpui.commandTransfer.surfacePromotionFailed",
+                        serde_json::json!({ "sessionId": shell_session_id.0 }),
+                    );
+                    return;
+                }
+                let retry_key = key.clone();
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(Duration::from_secs(2)).await;
+                    let _ = this.update(cx, |this, cx| {
+                        if this
+                            .agents_sessions_pending_surface_transfer
+                            .contains(&shell_session_id)
+                        {
+                            this.promote_transferred_gxserver_session_surface_in_background(
+                                retry_key,
+                                shell_session_id,
+                                attempt + 1,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            });
+        })
+        .detach();
     }
 
     fn close_command_gxserver_session_in_background(
@@ -80664,6 +80909,13 @@ enum GpuiEngineTerminalEventTarget {
     Command(CommandSessionId),
 }
 
+/// Where a command tab dropped into the Agents workspace should land.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandToAgentsDropPlacement {
+    PaneBody(WorkspaceDropZone),
+    TabStrip(usize),
+}
+
 fn apply_gpui_terminal_runtime_action_events(
     osc_states: &mut HashMap<AgentsTerminalRuntimeSessionId, GpuiTerminalRuntimeOscState>,
     runtime_session_id: AgentsTerminalRuntimeSessionId,
@@ -87451,6 +87703,42 @@ fn gpui_update_command_terminal_gxserver_session_title(
         Ok(())
     } else {
         Err("gxserver returned an invalid command terminal rename result.".to_string())
+    }
+}
+
+fn gpui_update_command_terminal_gxserver_session_surface(
+    key: &GpuiLocalWorkspaceSessionKey,
+    surface: &str,
+) -> Result<(), String> {
+    /*
+    CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+    A command tab dragged into the Agents workspace keeps its live daemon
+    session, so the gxserver row has to change surfaces with it. This is not
+    cosmetic: the sidebar only projects `workspace` sessions, and an Agents tab
+    missing from that projection is reconciled away along with its shell
+    session. Send only the fixed surface enum plus gxserver ids; no terminal
+    input, command text, cwd, attach command, or renderer payload.
+    */
+    if surface != "workspace" && surface != "commands" {
+        return Err("The command terminal surface is invalid.".to_string());
+    }
+    let result = gpui_gxserver_rpc_result(
+        "/api/updateSession",
+        &serde_json::json!({
+            "projectId": key.project_id.as_str(),
+            "sessionId": key.session_id.as_str(),
+            "surface": surface,
+        }),
+        Duration::from_secs(10),
+    )?;
+    if result
+        .get("session")
+        .and_then(serde_json::Value::as_object)
+        .is_some()
+    {
+        Ok(())
+    } else {
+        Err("gxserver returned an invalid command terminal surface update result.".to_string())
     }
 }
 
