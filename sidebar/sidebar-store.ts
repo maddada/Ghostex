@@ -548,6 +548,7 @@ function preserveSidebarHudReferences(
 
   preserveIfEqual("agents");
   preserveIfEqual("commands");
+  preserveIfEqual("commandsByProject");
   preserveIfEqual("commandSessionIndicators");
   preserveIfEqual("git");
   preserveIfEqual("pendingAgentIds");

@@ -2254,7 +2254,27 @@ async fn route_http(
                     updated_projects.push(project);
                 }
                 let projects = repository.list_projects()?;
-                let hud = read_sidebar_hud(&projects, hud_active_project_id.as_deref());
+                let mut hud = read_sidebar_hud(&projects, hud_active_project_id.as_deref());
+                /*
+                CDXC:ProjectActions 2026-08-01:
+                Clients that render per-project quick actions (GPUI sidebar rows)
+                replace their whole HUD snapshot with this response, so the
+                mutation mirrors readSidebarHud's opt-in commandsByProject block.
+                Without it a Settings save would drop the per-project rows until
+                the next full HUD poll.
+                */
+                if params
+                    .get("includeAllProjectCommands")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    if let Some(hud) = hud.as_object_mut() {
+                        hud.insert(
+                            "commandsByProject".to_string(),
+                            read_sidebar_hud_commands_by_project(&projects),
+                        );
+                    }
+                }
                 let mut result = Map::new();
                 result.insert("hud".to_string(), hud);
                 if let Some(item_ids) = item_ids {

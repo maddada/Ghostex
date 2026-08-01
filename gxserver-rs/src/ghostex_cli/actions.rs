@@ -479,6 +479,10 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
                 && payload.get("playCompletionSound") != Some(&Value::Bool(false))
         ),
     );
+    saved_command.insert(
+        "showOnProjectRow".to_string(),
+        json!(payload.get("showOnProjectRow") == Some(&Value::Bool(true))),
+    );
     if action_type == "browser" {
         saved_command.insert("url".to_string(), json!(url));
     } else {
@@ -1054,6 +1058,16 @@ fn parse_save_command(rest: &[String], flags: &Flags) -> Value {
                 .get("playCompletionSound")
                 .map(parse_boolean)
                 .unwrap_or(true),
+        ),
+    );
+    map.insert(
+        "showOnProjectRow".to_string(),
+        Value::Bool(
+            flags
+                .0
+                .get("showOnProjectRow")
+                .map(parse_boolean)
+                .unwrap_or(false),
         ),
     );
     set_or_remove(&mut map, "url", flag_json(flags, "url"));
@@ -1993,6 +2007,7 @@ mod tests {
                 "commandId": "dev",
                 "name": "Dev Server",
                 "playCompletionSound": true,
+                "showOnProjectRow": false,
             })
         );
     }

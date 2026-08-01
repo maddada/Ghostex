@@ -19,6 +19,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Dev",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -29,6 +30,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Build",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -39,6 +41,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Test",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -49,6 +52,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Setup",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
     ]);
@@ -65,6 +69,7 @@ describe("createSidebarCommandButtons", () => {
           isDefault: true,
           name: "App",
           playCompletionSound: true,
+          showOnProjectRow: false,
         },
         {
           actionType: "browser",
@@ -73,6 +78,7 @@ describe("createSidebarCommandButtons", () => {
           isDefault: false,
           name: "Docs",
           playCompletionSound: false,
+          showOnProjectRow: false,
           url: "https://example.com/docs",
         },
       ]),
@@ -85,6 +91,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "App",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -95,6 +102,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Build",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -105,6 +113,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Test",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -115,6 +124,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Setup",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -125,6 +135,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: false,
         name: "Docs",
         playCompletionSound: false,
+        showOnProjectRow: false,
         url: "https://example.com/docs",
       },
     ]);
@@ -143,6 +154,7 @@ describe("createSidebarCommandButtons", () => {
           isDefault: false,
           name: "",
           playCompletionSound: true,
+          showOnProjectRow: false,
         },
       ]),
     ).toEqual(
@@ -152,6 +164,7 @@ describe("createSidebarCommandButtons", () => {
           icon: "bug",
           name: "",
           playCompletionSound: true,
+          showOnProjectRow: false,
         }),
       ]),
     );
@@ -168,6 +181,7 @@ describe("createSidebarCommandButtons", () => {
             isDefault: false,
             name: "Docs",
             playCompletionSound: false,
+            showOnProjectRow: false,
             url: "https://example.com/docs",
           },
         ],
@@ -182,6 +196,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Test",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -192,6 +207,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: false,
         name: "Docs",
         playCompletionSound: false,
+        showOnProjectRow: false,
         url: "https://example.com/docs",
       },
       {
@@ -202,6 +218,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Dev",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -212,6 +229,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Build",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -222,6 +240,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Setup",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
     ]);
@@ -237,6 +256,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Dev",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
       {
@@ -247,6 +267,7 @@ describe("createSidebarCommandButtons", () => {
         isDefault: true,
         name: "Setup",
         playCompletionSound: true,
+        showOnProjectRow: false,
         url: undefined,
       },
     ]);
@@ -264,6 +285,7 @@ describe("getFirstBrowserSidebarCommandUrl", () => {
           isDefault: false,
           name: "Docs",
           playCompletionSound: false,
+          showOnProjectRow: false,
           url: "https://example.com/docs",
         },
         {
@@ -273,6 +295,7 @@ describe("getFirstBrowserSidebarCommandUrl", () => {
           isDefault: false,
           name: "App",
           playCompletionSound: false,
+          showOnProjectRow: false,
           url: "https://example.com/app",
         },
       ],
@@ -307,6 +330,65 @@ describe("normalizeStoredSidebarCommands", () => {
         isDefault: true,
         name: "Dev server",
         playCompletionSound: true,
+        showOnProjectRow: false,
+      },
+    ]);
+  });
+
+  test("should keep saved project-row visibility and default legacy records to hidden", () => {
+    expect(
+      normalizeStoredSidebarCommands([
+        {
+          command: "lazygit",
+          commandId: "custom-lazygit",
+          isDefault: false,
+          name: "Lazygit",
+          showOnProjectRow: true,
+        },
+        {
+          commandId: "custom-docs",
+          isDefault: false,
+          name: "Docs",
+          showOnProjectRow: "yes",
+          url: "https://example.com/docs",
+        },
+        {
+          command: "vp test",
+          commandId: "custom-legacy",
+          isDefault: false,
+          name: "Legacy",
+        },
+      ]),
+    ).toEqual([
+      {
+        actionType: "terminal",
+        closeTerminalOnExit: false,
+        command: "lazygit",
+        commandId: "custom-lazygit",
+        isDefault: false,
+        name: "Lazygit",
+        playCompletionSound: true,
+        showOnProjectRow: true,
+      },
+      {
+        actionType: "browser",
+        closeTerminalOnExit: false,
+        commandId: "custom-docs",
+        isDefault: false,
+        name: "Docs",
+        playCompletionSound: false,
+        showOnProjectRow: false,
+        url: "https://example.com/docs",
+      },
+      {
+        actionType: "terminal",
+        closeTerminalOnExit: false,
+        command: "vp test",
+        commandId: "custom-legacy",
+        isDefault: false,
+        name: "Legacy",
+        playCompletionSound: true,
+        showOnProjectRow: false,
       },
     ]);
   });
@@ -319,6 +401,7 @@ describe("normalizeStoredSidebarCommands", () => {
           isDefault: false,
           name: " Docs ",
           playCompletionSound: true,
+          showOnProjectRow: false,
           url: " https://example.com/docs ",
         },
         {
@@ -327,6 +410,7 @@ describe("normalizeStoredSidebarCommands", () => {
           isDefault: false,
           name: "Broken",
           playCompletionSound: true,
+          showOnProjectRow: false,
         },
       ]),
     ).toEqual([
@@ -337,6 +421,7 @@ describe("normalizeStoredSidebarCommands", () => {
         isDefault: false,
         name: "Docs",
         playCompletionSound: false,
+        showOnProjectRow: false,
         url: "https://example.com/docs",
       },
     ]);
@@ -360,6 +445,7 @@ describe("normalizeStoredSidebarCommands", () => {
           isDefault: false,
           name: "",
           playCompletionSound: true,
+          showOnProjectRow: false,
         },
       ]),
     ).toEqual([
@@ -372,6 +458,7 @@ describe("normalizeStoredSidebarCommands", () => {
         isDefault: false,
         name: "",
         playCompletionSound: true,
+        showOnProjectRow: false,
       },
     ]);
   });
@@ -395,6 +482,7 @@ describe("normalizeStoredSidebarCommands", () => {
         isDefault: false,
         name: "",
         playCompletionSound: true,
+        showOnProjectRow: false,
       },
     ]);
   });
@@ -411,6 +499,7 @@ describe("getSidebarCommandPreviewLabel", () => {
         isDefault: true,
         name: "Dev",
         playCompletionSound: true,
+        showOnProjectRow: false,
       }),
     ).toBe(SIDEBAR_UNCONFIGURED_TERMINAL_COMMAND_LABEL);
   });

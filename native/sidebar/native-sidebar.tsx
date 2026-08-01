@@ -47068,6 +47068,7 @@ function saveSidebarCommand(
     isDefault: isDefaultSidebarCommandId(commandId),
     name,
     playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
+    showOnProjectRow: message.showOnProjectRow,
     /*
      * CDXC:TitlebarActions 2026-06-16-07:48:
      * Settings no longer writes per-action icon colors. Persist only the glyph

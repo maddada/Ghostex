@@ -518,6 +518,7 @@ export function reduceSidebarStoryWorkspace(
         name: message.name,
         playCompletionSound:
           message.actionType === "terminal" ? message.playCompletionSound : false,
+        showOnProjectRow: message.showOnProjectRow,
         url: message.actionType === "browser" ? message.url : undefined,
       };
 

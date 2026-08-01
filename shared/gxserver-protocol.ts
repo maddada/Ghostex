@@ -1334,6 +1334,7 @@ the refreshed HUD/project rows returned after persistence.
 */
 export interface GxserverReadSidebarHudParams {
   activeProjectId?: string;
+  includeAllProjectCommands?: boolean;
 }
 
 export interface GxserverSidebarHudAgentButton {
@@ -1354,15 +1355,35 @@ export interface GxserverSidebarHudCommandButton {
   isDefault: boolean;
   name: string;
   playCompletionSound: boolean;
+  showOnProjectRow?: boolean;
   url?: string;
 }
 
 export interface GxserverSidebarHudResponse {
   agents: readonly GxserverSidebarHudAgentButton[];
+  /**
+   * CDXC:ProjectActions 2026-08-01:
+   * Present only when the caller asked for `includeAllProjectCommands`.
+   * Keyed by project id with worktrees already resolved to their parent's
+   * Actions, mirroring the active-project `commands` resolution per project.
+   */
+  commandsByProject?: Readonly<Record<string, readonly GxserverSidebarHudCommandButton[]>>;
   commands: readonly GxserverSidebarHudCommandButton[];
 }
 
-export type GxserverSidebarHudSettingsMutationParams =
+/**
+ * CDXC:ProjectActions 2026-08-01:
+ * Any HUD settings mutation returns a full replacement HUD snapshot, so
+ * clients that render per-project quick actions ask the mutation for the same
+ * opt-in commandsByProject block readSidebarHud serves. The flag rides beside
+ * every mutation variant instead of inside one so agent mutations cannot
+ * silently drop the per-project rows.
+ */
+export type GxserverSidebarHudSettingsMutationParams = {
+  includeAllProjectCommands?: boolean;
+} & GxserverSidebarHudSettingsMutationIntent;
+
+type GxserverSidebarHudSettingsMutationIntent =
   | {
       acceptAllMode?: "inherit" | "enabled" | "disabled";
       activeProjectId?: string;
@@ -1395,6 +1416,7 @@ export type GxserverSidebarHudSettingsMutationParams =
       name: string;
       operation: "save";
       playCompletionSound?: boolean;
+      showOnProjectRow?: boolean;
       target: "command";
       url?: string;
     }

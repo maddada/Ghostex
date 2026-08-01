@@ -553,7 +553,12 @@ const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE = "ghostex.gpui.sidebar.commandAction";
 const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE = "ghostex.gpui.sidebar.commandRunEnd";
-const GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS = new Set(["commandId", "runMode", "type"]);
+const GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS = new Set([
+  "commandId",
+  "groupId",
+  "runMode",
+  "type",
+]);
 const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.gxserverPresentationFocusState";
@@ -13201,6 +13206,7 @@ class GpuiSidebarRuntime {
       name,
       playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
       operation: "save",
+      showOnProjectRow: message.showOnProjectRow,
       target: "command",
       url,
     });
@@ -14025,6 +14031,37 @@ class GpuiSidebarRuntime {
     return commands.find((command) => command.commandId === normalizedCommandId);
   }
 
+  /*
+  CDXC:ProjectActions 2026-08-01:
+  Project-row Action clicks resolve against the clicked project's own command
+  list from the HUD's commandsByProject block, never the active project's list,
+  so two projects with different Actions cannot cross-launch. A project id with
+  no per-project entry only falls back to the flat active list when it IS the
+  active project; otherwise the click is an unsupported no-op.
+  */
+  private resolveSidebarCommandForProject(
+    commandId: string,
+    projectId: string | undefined,
+  ): SidebarCommandButton | undefined {
+    if (!projectId) {
+      return this.resolveSidebarCommand(commandId);
+    }
+    const normalizedCommandId = commandId.trim();
+    if (!normalizedCommandId) {
+      return undefined;
+    }
+    const projectCommands = this.sidebarHud?.commandsByProject?.[projectId];
+    if (projectCommands) {
+      return ([...projectCommands] as SidebarCommandButton[]).find(
+        (command) => command.commandId === normalizedCommandId,
+      );
+    }
+    if (projectId !== this.activeProjectId) {
+      return undefined;
+    }
+    return this.resolveSidebarCommand(commandId);
+  }
+
   private createSidebarCommandSelectionMessage(
     commandId: string,
     originalMessage: SidebarToExtensionMessage,
@@ -14072,13 +14109,28 @@ class GpuiSidebarRuntime {
      *
      * CDXC:GPUICommandPane 2026-06-27-07:54:
      * Treat selector shape as part of the Action contract before looking up the HUD command. Extra launch/run-state fields are unsupported no-ops, not sanitized launches, while valid configured-but-empty selectors still reach Settings like macOS.
+     *
+     * CDXC:ProjectActions 2026-08-01:
+     * Project-row Action buttons pass the row's group id. Resolve the Action
+     * from that project's own command list and activate the project through
+     * the existing focus flow before dispatching, so the launch bridge payload
+     * stays project-blind and the command pane opens in the project the user
+     * clicked — the same ordering as clicking the row and then the titlebar
+     * action by hand.
      */
     const selectionMessage = this.createSidebarCommandSelectionMessage(commandId, originalMessage);
     if (!selectionMessage) {
       this.handleUnsupportedSidebarMessage(originalMessage);
       return;
     }
-    const command = this.resolveSidebarCommand(commandId);
+    const groupId =
+      originalMessage.type === "runSidebarCommand"
+        ? normalizeNonEmptyString(originalMessage.groupId ?? "")
+        : undefined;
+    const targetProjectId = groupId
+      ? parseGxserverPresentationProjectGroupId(groupId)
+      : undefined;
+    const command = this.resolveSidebarCommandForProject(commandId, targetProjectId);
     if (!command) {
       this.handleUnsupportedSidebarMessage(originalMessage);
       return;
@@ -14086,6 +14138,11 @@ class GpuiSidebarRuntime {
     if (!isSidebarCommandConfigured(command)) {
       this.openAppModal("settings");
       return;
+    }
+    if (targetProjectId && targetProjectId !== this.activeProjectId) {
+      this.focusProjectId(targetProjectId);
+      this.postGxserverPresentationFocusState();
+      this.postActiveProjectContext();
     }
     if (this.postSidebarCommandAction(command, selectionMessage)) {
       return;
@@ -14117,7 +14174,17 @@ class GpuiSidebarRuntime {
      * renderer. Apply the returned canonical project rows and HUD projection so
      * Settings rows and sidebar buttons refresh from the same daemon contract.
      */
-    const response = await client.mutateSidebarHudSettings(params);
+    const response = await client.mutateSidebarHudSettings({
+      ...params,
+      /*
+       * CDXC:ProjectActions 2026-08-01:
+       * The mutation result replaces the whole HUD snapshot, so every settings
+       * mutation must carry the per-project command block the sidebar rows
+       * render from — otherwise an agent or action save would blank them
+       * until the next full HUD poll.
+       */
+      includeAllProjectCommands: true,
+    });
     if (this.client !== client) {
       return undefined;
     }
@@ -14401,10 +14468,15 @@ class GpuiGxserverClient {
 
   async fetchSidebarHud(activeProjectId: string | undefined): Promise<GxserverSidebarHudResponse> {
     const normalizedActiveProjectId = activeProjectId?.trim();
-    return this.rpc<GxserverSidebarHudResponse>(
-      "/api/readSidebarHud",
-      normalizedActiveProjectId ? { activeProjectId: normalizedActiveProjectId } : {},
-    );
+    /*
+     * CDXC:ProjectActions 2026-08-01:
+     * The GPUI sidebar renders showOnProjectRow quick actions on every project
+     * row, so the HUD read always asks for the per-project command block.
+     */
+    return this.rpc<GxserverSidebarHudResponse>("/api/readSidebarHud", {
+      includeAllProjectCommands: true,
+      ...(normalizedActiveProjectId ? { activeProjectId: normalizedActiveProjectId } : {}),
+    });
   }
 
   async mutateSidebarHudSettings(
@@ -15114,6 +15186,14 @@ function createGpuiSidebarHudState({
   const commands = sidebarHud
     ? ([...sidebarHud.commands] as ReturnType<typeof createSidebarCommandButtons>)
     : createSidebarCommandButtons([], [], []);
+  const commandsByProject = sidebarHud?.commandsByProject
+    ? Object.fromEntries(
+        Object.entries(sidebarHud.commandsByProject).map(([projectId, projectCommands]) => [
+          projectId,
+          [...projectCommands] as ReturnType<typeof createSidebarCommandButtons>,
+        ]),
+      )
+    : undefined;
   const focusedSession = groups
     .flatMap((group) => group.sessions)
     .find(
@@ -15129,6 +15209,7 @@ function createGpuiSidebarHudState({
     agentManagerZoomPercent: settings.agentManagerZoomPercent,
     agents,
     commands,
+    ...(commandsByProject ? { commandsByProject } : {}),
     commandSessionIndicators: createGpuiSidebarCommandSessionIndicators(
       commands,
       commandPaneSessions,
