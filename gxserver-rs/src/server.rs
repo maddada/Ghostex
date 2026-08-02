@@ -6802,15 +6802,22 @@ async fn prepare_registered_worktree_project(
             candidate.get("projectId").and_then(Value::as_str) == Some(setup_project_id)
         })
         .cloned();
-    if setup_project
-        .as_ref()
-        .and_then(|project| project.get("gitConfig"))
-        .and_then(Value::as_object)
-        .and_then(|config| config.get("worktreeCommand"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|command| !command.is_empty())
-        .is_none()
+    /*
+    CDXC:GlobalProjectDefaults 2026-08-02:
+    This gate skips the setup call entirely when nothing is configured, so it has
+    to consult the Global Default too. Otherwise a project relying on the global
+    would return here and never reach the executor that would have run it.
+    */
+    if crate::global_project_defaults::resolve_with_global_default(
+        setup_project
+            .as_ref()
+            .and_then(|project| project.get("gitConfig"))
+            .and_then(Value::as_object)
+            .and_then(|config| config.get("worktreeCommand"))
+            .and_then(Value::as_str),
+        &crate::global_project_defaults::read_global_project_defaults().worktree_command,
+    )
+    .is_none()
     {
         return Ok(());
     }

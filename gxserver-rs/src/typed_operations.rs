@@ -300,19 +300,28 @@ fn resolve_project_operation_context(
     let beads_cwd = if endpoint_path == "/api/runBeadsAction"
         && params.get("projectBoardScope").and_then(Value::as_bool) == Some(true)
     {
-        project
+        /*
+        CDXC:GlobalProjectDefaults 2026-08-02:
+        The project's own Beads directory still wins. Only an unset one consults
+        the Global Default, and an unset global still yields None so the board
+        keeps launching from the project root exactly as it did before.
+        */
+        let project_directory = project
             .get("projectBoardConfig")
             .and_then(Value::as_object)
             .and_then(|config| config.get("beadsDirectory"))
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .map(|path| {
-                normalize_existing_directory_path_value(
-                    Some(&Value::String(path.to_string())),
-                    "beadsDirectory",
-                )
-            })
-            .transpose()?
+            .and_then(Value::as_str);
+        crate::global_project_defaults::resolve_with_global_default(
+            project_directory,
+            &crate::global_project_defaults::read_global_project_defaults().beads_directory,
+        )
+        .map(|path| {
+            normalize_existing_directory_path_value(
+                Some(&Value::String(path)),
+                "beadsDirectory",
+            )
+        })
+        .transpose()?
     } else {
         None
     };
@@ -494,11 +503,22 @@ async fn run_project_setup_command(
     }
     let action = action.expect("validated setup action");
     let setup_project = resolve_project_setup_command_project(params, context)?;
-    let command_text = normalize_project_setup_command(
+    /*
+    CDXC:GlobalProjectDefaults 2026-08-02:
+    A project without its own worktree command now runs the Global Default. With
+    no global configured this resolves to None and the operation still no-ops
+    below, which is the pre-feature behavior.
+    */
+    let resolved_setup_command = crate::global_project_defaults::resolve_with_global_default(
         setup_project
             .get("gitConfig")
             .and_then(Value::as_object)
-            .and_then(|config| config.get("worktreeCommand")),
+            .and_then(|config| config.get("worktreeCommand"))
+            .and_then(Value::as_str),
+        &crate::global_project_defaults::read_global_project_defaults().worktree_command,
+    );
+    let command_text = normalize_project_setup_command(
+        resolved_setup_command.map(Value::String).as_ref(),
     )?;
     if command_text.is_empty() {
         return Ok(json!({

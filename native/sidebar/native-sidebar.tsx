@@ -46378,11 +46378,20 @@ function resolveProjectBoardDisplayMetadata(project: NativeProject): {
   const gxserverProject = findGxserverProject(project.projectId);
   const name = textValue(gxserverProject?.name) ?? project.name;
   const path = textValue(gxserverProject?.path) ?? project.path;
+  /*
+  CDXC:GlobalProjectDefaults 2026-08-02:
+  The Global Default sits between the project's own key and the project-name
+  fallback, so a project that never set a key shows the global ticket prefix
+  while any project with its own key keeps it. An unset global leaves the
+  previous project-name fallback untouched.
+  */
+  const globalBeadsDisplayKey = textValue(settings.globalBeadsDisplayKey);
   const beadsDisplayKey = gxserverProject
     ? (textValue(gxserverProject.projectBoardConfig.beadsDisplayKey) ??
       textValue(gxserverProject.gitConfig.beadsDisplayKey) ??
+      globalBeadsDisplayKey ??
       name)
-    : (project.beadsDisplayKey ?? name);
+    : (project.beadsDisplayKey ?? globalBeadsDisplayKey ?? name);
   return {
     beadsDisplayKey,
     name,

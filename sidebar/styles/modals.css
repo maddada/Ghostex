@@ -4050,6 +4050,27 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
+ * CDXC:GlobalProjectDefaults 2026-08-02:
+ * The Inherited badge sits inline after a project field name to mark that the
+ * field is currently taking its value from Global Defaults. Keep it quiet: it
+ * reports state, it is not an action, so it must not compete with the field
+ * label it annotates.
+ */
+.settings-inherited-badge {
+  align-self: center;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  opacity: 0.65;
+  padding: 0 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/*
  * CDXC:RemoteMachines 2026-06-08-19:12:
  * Saved remote machine cards need a quiet summary header, compact SSH fields, and hover-revealed delete controls so the Remote tab matches Agents/Actions management styling in the settings modal.
  *

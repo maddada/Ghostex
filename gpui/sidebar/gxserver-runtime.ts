@@ -12940,8 +12940,17 @@ class GpuiSidebarRuntime {
     worktreeProject: GxserverProjectDomainState,
     setupCommandProject: GxserverProjectDomainState,
   ): Promise<void> {
-    const setupCommand = stringFromRecord(setupCommandProject.gitConfig, "worktreeCommand");
-    if (!setupCommand || !this.client) {
+    /*
+     * CDXC:GlobalProjectDefaults 2026-08-02:
+     * This gate decides whether to call the setup endpoint at all, so it has to
+     * see the Global Default the same way gxserver does. Without that, a project
+     * inheriting its worktree command would return here and the configured
+     * command would never run. gxserver still resolves the command it executes.
+     */
+    const setupCommand =
+      stringFromRecord(setupCommandProject.gitConfig, "worktreeCommand") ??
+      normalizeghostexSettings(this.runtimeSettings?.settings).globalWorktreeCommand;
+    if (!setupCommand.trim() || !this.client) {
       return;
     }
     const result = await this.client.rpc<GxserverTypedOperationResult>(

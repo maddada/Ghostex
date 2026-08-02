@@ -855,6 +855,17 @@ export type ghostexSettings = {
    * The Docs sidebar scans ./docs recursively and root artifacts by default, and users can add comma-separated project-relative folder roots from global Projects settings. Trim spaces around each folder name while preserving spaces inside names such as "my documents".
    */
   manageAdditionalDocsFolders: string;
+  /**
+   * CDXC:GlobalProjectDefaults 2026-08-02:
+   * Global Defaults for the three per-project fields on the Projects settings
+   * page. A project keeps overriding the default whenever its own value is
+   * non-empty; an empty project value now falls back here before falling back
+   * to the previous built-in behavior. Empty globals therefore preserve the
+   * exact pre-existing resolution for every project.
+   */
+  globalWorktreeCommand: string;
+  globalBeadsDisplayKey: string;
+  globalBeadsDirectory: string;
   showProjectEditorDiffFileCount: boolean;
   showUntrackedProjectDiffWhenNoTrackedChanges: boolean;
   completionBellEnabled: boolean;
@@ -1430,6 +1441,14 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Additional Docs scan folders are opt-in so existing projects continue to expose only ./docs plus root Markdown, HTML, and Excalidraw artifacts until the user lists more project-relative folders.
    */
   manageAdditionalDocsFolders: "",
+  /**
+   * CDXC:GlobalProjectDefaults 2026-08-02:
+   * New installs ship every Global Default empty so project resolution stays
+   * byte-for-byte identical to the pre-feature behavior until a user fills one in.
+   */
+  globalWorktreeCommand: "",
+  globalBeadsDisplayKey: "",
+  globalBeadsDirectory: "",
   /**
    * CDXC:ProjectDiffStats 2026-05-15-14:33:
    * Project-header git stats should hide the changed-file count by default and
@@ -2400,6 +2419,16 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         DEFAULT_ghostex_SETTINGS.manageAdditionalDocsFolders,
       ),
     ),
+    // CDXC:GlobalProjectDefaults 2026-08-02: Global Defaults for the Projects page fields.
+    globalWorktreeCommand: normalizeGlobalWorktreeCommand(
+      readString(source, "globalWorktreeCommand", DEFAULT_ghostex_SETTINGS.globalWorktreeCommand),
+    ),
+    globalBeadsDisplayKey: normalizeGlobalBeadsDisplayKey(
+      readString(source, "globalBeadsDisplayKey", DEFAULT_ghostex_SETTINGS.globalBeadsDisplayKey),
+    ),
+    globalBeadsDirectory: normalizeGlobalBeadsDirectory(
+      readString(source, "globalBeadsDirectory", DEFAULT_ghostex_SETTINGS.globalBeadsDirectory),
+    ),
     /**
      * CDXC:ProjectDiffStats 2026-05-15-14:33:
      * Missing or invalid older settings must keep project-header git stats in
@@ -3214,6 +3243,26 @@ export function normalizeManageAdditionalDocsFolders(value: string | undefined):
    * The Projects setting is typed as comma-separated text because folder names may contain spaces. Settings normalizes on every keystroke, so preserve the user's draft text here and let native trim comma boundaries and reject unsafe path shapes when scanning.
    */
   return (value ?? "").replace(/\0/gu, "").replace(/\r?\n/gu, ", ").slice(0, 1_000);
+}
+
+/*
+ * CDXC:GlobalProjectDefaults 2026-08-02:
+ * Each Global Default normalizes exactly like the per-project field it backs, so
+ * a value that is valid globally is also valid when a project stores it. The
+ * worktree cap matches the 16384-byte limit gxserver enforces on the project
+ * field, and the ticket key matches the three-character A-Z0-9 shape the
+ * Projects page already forces while typing.
+ */
+export function normalizeGlobalWorktreeCommand(value: string | undefined): string {
+  return (value ?? "").replace(/\0/gu, "").slice(0, 16_384);
+}
+
+export function normalizeGlobalBeadsDisplayKey(value: string | undefined): string {
+  return (value ?? "").toUpperCase().replace(/[^A-Z0-9]/gu, "").slice(0, 3);
+}
+
+export function normalizeGlobalBeadsDirectory(value: string | undefined): string {
+  return (value ?? "").replace(/\0/gu, "").trim().slice(0, 1_000);
 }
 
 function normalizeTerminalCursorStyle(value: string | undefined): TerminalCursorStyle {

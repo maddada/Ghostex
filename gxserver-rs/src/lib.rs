@@ -10,6 +10,7 @@ pub mod constants;
 pub mod domain;
 pub mod events;
 pub mod ghostex_cli;
+pub mod global_project_defaults;
 pub mod http_client;
 pub mod identity;
 pub mod ids;

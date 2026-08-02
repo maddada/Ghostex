@@ -5262,6 +5262,13 @@ export function SettingsModal({
           {!isFirstLaunchSetup ? (
           <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="projects">
             <ProjectsSettingsPanel
+              onGlobalBeadsDirectoryChange={(value) => updateDraft("globalBeadsDirectory", value)}
+              onGlobalBeadsDisplayKeyChange={(value) =>
+                updateDraft("globalBeadsDisplayKey", value)
+              }
+              onGlobalWorktreeCommandChange={(value) =>
+                updateDraft("globalWorktreeCommand", value)
+              }
               onManageAdditionalDocsFoldersChange={(value) =>
                 updateDraft("manageAdditionalDocsFolders", value)
               }
@@ -6312,7 +6319,31 @@ function formatRemoteMachineSshTarget(machine: RemoteMachineSettings): string {
   return machine.sshPort ? `${host}:${machine.sshPort}` : host;
 }
 
+/*
+ * CDXC:GlobalProjectDefaults 2026-08-02:
+ * A project field is "inherited" only while the project's own value is empty and
+ * a Global Default exists to take its place. The badge marks that state next to
+ * the field name, and the caller shows the inherited value as the input's
+ * placeholder so the effective value is visible without leaving the page.
+ */
+function InheritedSettingBadge() {
+  return (
+    <span className="settings-inherited-badge" title="Using the Global Default set above">
+      Inherited
+    </span>
+  );
+}
+
+function inheritedPlaceholder(projectValue: string, globalValue: string, fallback: string): string {
+  return projectValue.trim().length === 0 && globalValue.trim().length > 0
+    ? globalValue
+    : fallback;
+}
+
 function ProjectsSettingsPanel({
+  onGlobalBeadsDirectoryChange,
+  onGlobalBeadsDisplayKeyChange,
+  onGlobalWorktreeCommandChange,
   onManageAdditionalDocsFoldersChange,
   onPortlessEnabledChange,
   onPortlessProtocolChange,
@@ -6323,6 +6354,9 @@ function ProjectsSettingsPanel({
   settings,
   vscode,
 }: {
+  onGlobalBeadsDirectoryChange: (value: string) => void;
+  onGlobalBeadsDisplayKeyChange: (value: string) => void;
+  onGlobalWorktreeCommandChange: (value: string) => void;
   onManageAdditionalDocsFoldersChange: (value: string) => void;
   onPortlessEnabledChange: (checked: boolean) => void;
   onPortlessProtocolChange: (protocol: PortlessProtocol) => void;
@@ -6343,6 +6377,18 @@ function ProjectsSettingsPanel({
   const [command, setCommand] = useState(selectedProject?.worktreeCommand ?? "");
   const [beadsDisplayKey, setBeadsDisplayKey] = useState(selectedProject?.beadsDisplayKey ?? "");
   const [beadsDirectory, setBeadsDirectory] = useState(selectedProject?.beadsDirectory ?? "");
+  /*
+   * CDXC:GlobalProjectDefaults 2026-08-02:
+   * Track inheritance against the live draft text rather than the saved project
+   * value so the badge disappears the moment the user starts typing an override
+   * and returns when they clear the field again.
+   */
+  const isWorktreeCommandInherited =
+    command.trim().length === 0 && settings.globalWorktreeCommand.trim().length > 0;
+  const isBeadsDisplayKeyInherited =
+    beadsDisplayKey.trim().length === 0 && settings.globalBeadsDisplayKey.trim().length > 0;
+  const isBeadsDirectoryInherited =
+    beadsDirectory.trim().length === 0 && settings.globalBeadsDirectory.trim().length > 0;
 
   useEffect(() => {
     if (!projects.some((project) => project.projectId === selectedProjectId)) {
@@ -6487,6 +6533,70 @@ function ProjectsSettingsPanel({
           </CardContent>
         </Card>
         ) : null}
+        {shouldShowSettingsSection(search.sections.globalDefaults) ? (
+        <Card className="settings-project-command-card">
+          <CardContent className="flex flex-col gap-4 p-4">
+            {/*
+              CDXC:GlobalProjectDefaults 2026-08-02:
+              Global Defaults sits above the project selector because it configures every project at once. Each field mirrors the per-project field of the same name below; a project keeps winning whenever its own value is non-empty, so filling nothing in here leaves every project resolving exactly as it did before.
+            */}
+            <div className="settings-management-header-text">
+              <h3 className="settings-management-heading">Global Defaults</h3>
+              <p className="settings-management-description">
+                Applied to every project that does not set its own value below.
+              </p>
+            </div>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Worktree command</FieldLabel>
+                <SettingsTextarea
+                  aria-label="Global worktree command"
+                  className="settings-project-command-textarea"
+                  onChange={(event) => onGlobalWorktreeCommandChange(event.currentTarget.value)}
+                  placeholder="bun install"
+                  value={settings.globalWorktreeCommand}
+                />
+                <FieldDescription>
+                  Runs in every new worktree folder unless the project sets its own command.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Ticket key</FieldLabel>
+                <SettingsInput
+                  aria-label="Global ticket key"
+                  maxLength={3}
+                  onChange={(event) =>
+                    onGlobalBeadsDisplayKeyChange(
+                      event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/gu, ""),
+                    )
+                  }
+                  placeholder="ZMX"
+                  value={settings.globalBeadsDisplayKey}
+                />
+                <FieldDescription>
+                  Ticket prefix for every project board unless the project sets its own key.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Beads directory</FieldLabel>
+                <SettingsInput
+                  aria-label="Global Beads directory"
+                  onChange={(event) => onGlobalBeadsDirectoryChange(event.currentTarget.value)}
+                  placeholder="/Users/you/code/my-repo"
+                  value={settings.globalBeadsDirectory}
+                />
+                <FieldDescription>
+                  Absolute path every Project board reads its Beads workspace (.beads) from unless the project sets its own directory. Leave blank to keep using each project root.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
+        ) : null}
         {!shouldShowSettingsSection(search.sections.projectSettings) ? null : projects.length ===
           0 ? (
         <Empty>
@@ -6594,12 +6704,19 @@ function ProjectsSettingsPanel({
             */}
             <FieldGroup>
               <Field>
-                <FieldLabel>Worktree command</FieldLabel>
+                <FieldLabel>
+                  Worktree command
+                  {isWorktreeCommandInherited ? <InheritedSettingBadge /> : null}
+                </FieldLabel>
                 <SettingsTextarea
                   aria-label="Worktree command"
                   className="settings-project-command-textarea"
                   onChange={(event) => setCommand(event.currentTarget.value)}
-                  placeholder="bun install"
+                  placeholder={inheritedPlaceholder(
+                    command,
+                    settings.globalWorktreeCommand,
+                    "bun install",
+                  )}
                   value={command}
                 />
                 <FieldDescription>
@@ -6621,14 +6738,21 @@ function ProjectsSettingsPanel({
             */}
             <FieldGroup>
               <Field>
-                <FieldLabel>Ticket key</FieldLabel>
+                <FieldLabel>
+                  Ticket key
+                  {isBeadsDisplayKeyInherited ? <InheritedSettingBadge /> : null}
+                </FieldLabel>
                 <SettingsInput
                   aria-label="Ticket key"
                   maxLength={3}
                   onChange={(event) =>
                     setBeadsDisplayKey(event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/gu, ""))
                   }
-                  placeholder="ZMX"
+                  placeholder={inheritedPlaceholder(
+                    beadsDisplayKey,
+                    settings.globalBeadsDisplayKey,
+                    "ZMX",
+                  )}
                   value={beadsDisplayKey}
                 />
                 <FieldDescription>
@@ -6650,15 +6774,22 @@ function ProjectsSettingsPanel({
             */}
             <FieldGroup>
               <Field>
-                <FieldLabel>Beads directory</FieldLabel>
+                <FieldLabel>
+                  Beads directory
+                  {isBeadsDirectoryInherited ? <InheritedSettingBadge /> : null}
+                </FieldLabel>
                 <SettingsInput
                   aria-label="Beads directory"
                   onChange={(event) => setBeadsDirectory(event.currentTarget.value)}
-                  placeholder="/Users/you/code/my-repo"
+                  placeholder={inheritedPlaceholder(
+                    beadsDirectory,
+                    settings.globalBeadsDirectory,
+                    "/Users/you/code/my-repo",
+                  )}
                   value={beadsDirectory}
                 />
                 <FieldDescription>
-                  Absolute path the Project board reads its Beads workspace (.beads) from. Leave blank to use the project root.
+                  Absolute path the Project board reads its Beads workspace (.beads) from. Leave blank to use the Global Default, or the project root when that is empty too.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -10709,6 +10840,27 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
         ],
         title: "Docs",
+      },
+      {
+        id: "globalDefaults",
+        settings: [
+          {
+            key: "globalWorktreeCommand",
+            subtitle: "Worktree command every project uses unless it sets its own.",
+            title: "Global worktree command",
+          },
+          {
+            key: "globalTicketKey",
+            subtitle: "Ticket key every project uses unless it sets its own.",
+            title: "Global ticket key",
+          },
+          {
+            key: "globalBeadsDirectory",
+            subtitle: "Beads directory every project uses unless it sets its own.",
+            title: "Global Beads directory",
+          },
+        ],
+        title: "Global Defaults",
       },
       {
         id: "projectSettings",
