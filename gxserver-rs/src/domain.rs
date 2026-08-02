@@ -599,46 +599,80 @@ impl<'a> DomainRepository<'a> {
     */
     pub fn order_global_sidebar_commands(&self, command_ids: &[String]) -> DomainResult<()> {
         let timestamp = now_iso();
-        let stored_ids = {
-            let mut statement = self
-                .db
-                .prepare(
-                    r#"
-                    SELECT commandId FROM global_sidebar_commands
-                    ORDER BY sortOrder ASC, commandId ASC
-                    "#,
-                )
-                .map_err(sql_error)?;
-            let stored_ids = statement
-                .query_map([], |row| row.get::<_, String>("commandId"))
-                .map_err(sql_error)?
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(sql_error)?;
-            stored_ids
-        };
-        let mut next_order = command_ids
-            .iter()
-            .filter(|command_id| stored_ids.contains(command_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        for command_id in stored_ids {
-            if !next_order.contains(&command_id) {
-                next_order.push(command_id);
+        /*
+        One reorder is many row writes, so it takes the writer reservation before
+        reading the stored ids and commits or rolls back as a unit, mirroring
+        `update_session_order`. Without the transaction a failure partway leaves
+        some rows on the new sortOrder and some on the old — an interleaved list
+        that the server would then echo back as the confirmed order. Taking
+        BEGIN IMMEDIATE before the SELECT also closes the read-then-write race
+        against a concurrent save or delete, which would otherwise keep a stale
+        sortOrder that this reorder never accounted for.
+        */
+        self.db
+            .execute_batch("BEGIN IMMEDIATE TRANSACTION")
+            .map_err(sql_error)?;
+        let result = (|| -> DomainResult<()> {
+            let stored_ids = {
+                let mut statement = self
+                    .db
+                    .prepare(
+                        r#"
+                        SELECT commandId FROM global_sidebar_commands
+                        ORDER BY sortOrder ASC, commandId ASC
+                        "#,
+                    )
+                    .map_err(sql_error)?;
+                let stored_ids = statement
+                    .query_map([], |row| row.get::<_, String>("commandId"))
+                    .map_err(sql_error)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(sql_error)?;
+                stored_ids
+            };
+            /*
+            A repeated id would otherwise consume two index positions — the
+            append guard below skips the duplicate, but the write loop would
+            still assign it twice — so requested ids are deduplicated first.
+            */
+            let mut next_order: Vec<String> = Vec::with_capacity(stored_ids.len());
+            for command_id in command_ids {
+                if stored_ids.contains(command_id) && !next_order.contains(command_id) {
+                    next_order.push(command_id.clone());
+                }
+            }
+            for command_id in stored_ids {
+                if !next_order.contains(&command_id) {
+                    next_order.push(command_id);
+                }
+            }
+            for (index, command_id) in next_order.iter().enumerate() {
+                self.db
+                    .execute(
+                        r#"
+                        UPDATE global_sidebar_commands
+                        SET sortOrder = ?2, updatedAt = ?3
+                        WHERE commandId = ?1
+                        "#,
+                        params![command_id, (index + 1) as f64, timestamp],
+                    )
+                    .map_err(sql_error)?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                if let Err(error) = self.db.execute_batch("COMMIT") {
+                    let _ = self.db.execute_batch("ROLLBACK");
+                    return Err(sql_error(error));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.db.execute_batch("ROLLBACK");
+                Err(error)
             }
         }
-        for (index, command_id) in next_order.iter().enumerate() {
-            self.db
-                .execute(
-                    r#"
-                    UPDATE global_sidebar_commands
-                    SET sortOrder = ?2, updatedAt = ?3
-                    WHERE commandId = ?1
-                    "#,
-                    params![command_id, (index + 1) as f64, timestamp],
-                )
-                .map_err(sql_error)?;
-        }
-        Ok(())
     }
 
     pub fn get_project(&self, project_id: &str) -> DomainResult<Option<Value>> {

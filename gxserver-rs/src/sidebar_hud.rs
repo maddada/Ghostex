@@ -787,12 +787,21 @@ fn global_sidebar_command_save_mutation(
 ) -> Result<SidebarHudSettingsMutation, DomainStateError> {
     let command_id = optional_trimmed_param(params, "commandId")
         .unwrap_or_else(create_custom_sidebar_command_id);
-    let mut next_command = stored_sidebar_command_from_save_params(params, command_id.clone())?;
     /*
-    The four default actions (dev/build/test/setup) are project-scoped. A Global
-    Action is always user-created, so it can never be a default no matter what id
-    the client sends, and nothing here resurrects a deleted default.
+    The four default actions (dev/build/test/setup) are project-scoped, so their
+    ids are reserved and a Global Action may never claim one. Rejecting at save
+    is what makes that hold on BOTH paths: the read projection recomputes
+    is_default from the id itself, so a stored Global Action called "dev" would
+    come back marked as a default however it was written. Rejecting here also
+    keeps global and project ids from colliding on the reserved names, which a
+    run-by-id selector could not otherwise tell apart.
     */
+    if is_default_sidebar_command_id(&command_id) {
+        return Err(DomainStateError::bad_request(
+            "Global actions cannot use a built-in action id.",
+        ));
+    }
+    let mut next_command = stored_sidebar_command_from_save_params(params, command_id.clone())?;
     next_command.is_default = false;
     Ok(SidebarHudSettingsMutation {
         global_command_update: Some(GlobalSidebarCommandUpdate::Save {
@@ -2088,5 +2097,53 @@ mod tests {
         .unwrap()
         .clone();
         assert!(create_sidebar_hud_settings_mutation(&projects, &params).is_err());
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-01-19:00:
+    A Global Action may not claim a reserved built-in id. The read projection
+    recomputes isDefault from the id, so a stored global "dev" would come back
+    marked as a default however it was written, and a run-by-id selector could
+    not tell it apart from the project action of the same name.
+    */
+    #[test]
+    fn global_command_save_rejects_reserved_default_ids() {
+        let projects = Vec::new();
+        for command_id in ["dev", "build", "test", "setup"] {
+            let params = json!({
+                "actionType": "terminal",
+                "command": "echo hi",
+                "commandId": command_id,
+                "name": "Reserved",
+                "operation": "save",
+                "target": "globalCommand"
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            assert!(
+                create_sidebar_hud_settings_mutation(&projects, &params).is_err(),
+                "expected reserved global command id {command_id} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn global_command_save_needs_no_project() {
+        let projects = Vec::new();
+        let params = json!({
+            "actionType": "terminal",
+            "command": "gh pr list",
+            "name": "PRs",
+            "operation": "save",
+            "target": "globalCommand"
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let mutation = create_sidebar_hud_settings_mutation(&projects, &params)
+            .expect("global saves must not require an active project");
+        assert!(mutation.updates.is_empty());
+        assert!(mutation.global_command_update.is_some());
     }
 }
