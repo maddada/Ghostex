@@ -98611,6 +98611,7 @@ struct GpuiStoredSidebarCommand {
     is_default: bool,
     name: String,
     play_completion_sound: bool,
+    show_on_project_row: bool,
     url: Option<String>,
 }
 
@@ -98818,6 +98819,7 @@ enum GpuiSidebarCommandMetadataWrite {
         name: String,
         play_completion_sound: bool,
         scope: GpuiSidebarCommandScope,
+        show_on_project_row: bool,
         url: Option<String>,
     },
     Delete {
@@ -99342,6 +99344,7 @@ fn gpui_default_sidebar_command_button_value(
         "isDefault": true,
         "name": command.name,
         "playCompletionSound": true,
+        "showOnProjectRow": false,
     })
 }
 
@@ -99379,6 +99382,10 @@ fn gpui_sidebar_command_button_value(command: &GpuiStoredSidebarCommand) -> serd
     button.insert(
         "playCompletionSound".to_string(),
         serde_json::Value::Bool(command.play_completion_sound),
+    );
+    button.insert(
+        "showOnProjectRow".to_string(),
+        serde_json::Value::Bool(command.show_on_project_row),
     );
     if let Some(url) = command.url.as_ref() {
         button.insert("url".to_string(), serde_json::Value::String(url.clone()));
@@ -99589,6 +99596,11 @@ fn gpui_normalized_stored_sidebar_commands(
             .unwrap_or(false)
             || gpui_is_default_sidebar_command_id(command_id);
 
+        let show_on_project_row = item
+            .get("showOnProjectRow")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+
         if action_type == "browser" {
             let Some(url) = url else {
                 continue;
@@ -99602,6 +99614,7 @@ fn gpui_normalized_stored_sidebar_commands(
                 is_default,
                 name,
                 play_completion_sound: false,
+                show_on_project_row,
                 url: Some(url),
             });
             seen_command_ids.insert(command_id.to_string());
@@ -99630,6 +99643,7 @@ fn gpui_normalized_stored_sidebar_commands(
                 .get("playCompletionSound")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(true),
+            show_on_project_row,
             url: None,
         });
         seen_command_ids.insert(command_id.to_string());
@@ -99809,6 +99823,10 @@ fn gpui_sidebar_command_metadata_write_from_command(
                         .get("playCompletionSound")
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(true),
+                show_on_project_row: command
+                    .get("showOnProjectRow")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
                 url: (action_type == "browser").then_some(url).flatten(),
             })
         }
@@ -99937,6 +99955,7 @@ fn gpui_sidebar_command_mutation_params(
             icon,
             name,
             play_completion_sound,
+            show_on_project_row,
             url,
         } => {
             params.insert(
@@ -99962,6 +99981,10 @@ fn gpui_sidebar_command_mutation_params(
             params.insert(
                 "playCompletionSound".to_string(),
                 serde_json::Value::Bool(*play_completion_sound),
+            );
+            params.insert(
+                "showOnProjectRow".to_string(),
+                serde_json::Value::Bool(*show_on_project_row),
             );
             gpui_insert_optional_nonempty_string(&mut params, "url", url.as_deref());
         }
@@ -100256,6 +100279,7 @@ fn gpui_next_sidebar_command_metadata_state(
             icon,
             name,
             play_completion_sound,
+            show_on_project_row,
             url,
             ..
         } => {
@@ -100277,6 +100301,7 @@ fn gpui_next_sidebar_command_metadata_state(
                 is_default: gpui_is_default_sidebar_command_id(&next_command_id),
                 name,
                 play_completion_sound: action_type == "terminal" && play_completion_sound,
+                show_on_project_row,
                 url: (action_type == "browser").then_some(url).flatten(),
             };
             gpui_reject_duplicate_sidebar_command_title(
@@ -100670,6 +100695,10 @@ fn gpui_stored_sidebar_commands_value(commands: &[GpuiStoredSidebarCommand]) -> 
                 item.insert(
                     "playCompletionSound".to_string(),
                     serde_json::Value::Bool(command.play_completion_sound),
+                );
+                item.insert(
+                    "showOnProjectRow".to_string(),
+                    serde_json::Value::Bool(command.show_on_project_row),
                 );
                 if let Some(url) = command.url.as_ref() {
                     item.insert("url".to_string(), serde_json::Value::String(url.clone()));

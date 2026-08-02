@@ -43,6 +43,7 @@ struct StoredSidebarCommand {
     links: Vec<StoredSidebarCommandLink>,
     name: String,
     play_completion_sound: bool,
+    show_on_project_row: bool,
     url: Option<String>,
 }
 
@@ -771,6 +772,10 @@ fn stored_sidebar_command_from_save_params(
                 .get("playCompletionSound")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
+        show_on_project_row: params
+            .get("showOnProjectRow")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         url: (action_type == "browser").then_some(url).flatten(),
     })
 }
@@ -1132,6 +1137,7 @@ fn default_sidebar_command_button_value(command: &DefaultSidebarCommand) -> Valu
     button.insert("isDefault".to_string(), Value::Bool(true));
     button.insert("name".to_string(), Value::String(command.name.to_string()));
     button.insert("playCompletionSound".to_string(), Value::Bool(true));
+    button.insert("showOnProjectRow".to_string(), Value::Bool(false));
     Value::Object(button)
 }
 
@@ -1163,6 +1169,10 @@ fn sidebar_command_button_value(command: &StoredSidebarCommand) -> Value {
     button.insert(
         "playCompletionSound".to_string(),
         Value::Bool(command.play_completion_sound),
+    );
+    button.insert(
+        "showOnProjectRow".to_string(),
+        Value::Bool(command.show_on_project_row),
     );
     if let Some(url) = command.url.as_ref() {
         button.insert("url".to_string(), Value::String(url.clone()));
@@ -1257,6 +1267,11 @@ fn normalized_stored_sidebar_commands(candidate: Option<&Value>) -> Vec<StoredSi
             .unwrap_or(false)
             || is_default_sidebar_command_id(command_id);
 
+        let show_on_project_row = item
+            .get("showOnProjectRow")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
         if action_type == "browser" {
             let Some(url) = url else {
                 continue;
@@ -1271,6 +1286,7 @@ fn normalized_stored_sidebar_commands(candidate: Option<&Value>) -> Vec<StoredSi
                 links: Vec::new(),
                 name,
                 play_completion_sound: false,
+                show_on_project_row,
                 url: Some(url),
             });
             seen_command_ids.insert(command_id.to_string());
@@ -1300,6 +1316,7 @@ fn normalized_stored_sidebar_commands(candidate: Option<&Value>) -> Vec<StoredSi
                 .get("playCompletionSound")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
+            show_on_project_row,
             url: None,
         });
         seen_command_ids.insert(command_id.to_string());
@@ -1501,6 +1518,10 @@ fn stored_sidebar_commands_value(commands: &[StoredSidebarCommand]) -> Value {
                 item.insert(
                     "playCompletionSound".to_string(),
                     Value::Bool(command.play_completion_sound),
+                );
+                item.insert(
+                    "showOnProjectRow".to_string(),
+                    Value::Bool(command.show_on_project_row),
                 );
                 if let Some(url) = command.url.as_ref() {
                     item.insert("url".to_string(), Value::String(url.clone()));

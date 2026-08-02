@@ -39,6 +39,7 @@ describe("normalizeProjectSidebarCommandsStore", () => {
             isDefault: false,
             name: "Dev Server",
             playCompletionSound: true,
+            showOnProjectRow: false,
           },
         ],
         deletedDefaultCommandIds: ["setup"],

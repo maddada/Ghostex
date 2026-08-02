@@ -5670,6 +5670,7 @@ type SettingsCommandDraft = {
   links?: SidebarCommandLink[];
   name: string;
   playCompletionSound: boolean;
+  showOnProjectRow: boolean;
   url?: string;
 };
 
@@ -9073,6 +9074,7 @@ function ActionsSettingsTab({
       links: draft.links,
       name: draft.name,
       playCompletionSound: draft.playCompletionSound,
+      showOnProjectRow: draft.showOnProjectRow,
       url: draft.url,
     };
     if (scope === "global") {
@@ -9449,6 +9451,7 @@ function ActionSettingsEditor({
   const [links, setLinks] = useState<SidebarCommandLink[]>(draft.links ?? []);
   const [name, setName] = useState(draft.name);
   const [playCompletionSound, setPlayCompletionSound] = useState(draft.playCompletionSound);
+  const [showOnProjectRow, setShowOnProjectRow] = useState(draft.showOnProjectRow);
   const [url, setUrl] = useState(
     draft.url ??
       ((lockedActionType ?? draft.actionType) === "browser" ? DEFAULT_BROWSER_ACTION_URL : ""),
@@ -9457,6 +9460,7 @@ function ActionSettingsEditor({
   const closeTerminalOnExitId = useId();
   const commandId = useId();
   const nameId = useId();
+  const showOnProjectRowId = useId();
   const soundId = useId();
   const urlId = useId();
   const isActionTypeLocked = lockedActionType !== undefined;
@@ -9491,6 +9495,7 @@ function ActionSettingsEditor({
         : undefined,
     name: trimmedName,
     playCompletionSound: actionType === "terminal" ? playCompletionSound : false,
+    showOnProjectRow,
     url: actionType === "browser" ? url.trim() : undefined,
   });
 
@@ -9692,6 +9697,23 @@ function ActionSettingsEditor({
           </Field>
         </>
       )}
+      {/*
+       * CDXC:ProjectActions 2026-08-01:
+       * Both terminal and browser actions can opt into the project's sidebar
+       * row, so this toggle lives outside the action-type branch above.
+       */}
+      <Field className="items-center justify-between" orientation="horizontal">
+        <FieldContent>
+          <FieldLabel className="text-sm" htmlFor={showOnProjectRowId}>
+            Show on the project&apos;s sidebar row
+          </FieldLabel>
+        </FieldContent>
+        <Switch
+          checked={showOnProjectRow}
+          id={showOnProjectRowId}
+          onCheckedChange={setShowOnProjectRow}
+        />
+      </Field>
       {/*
        * CDXC:ActionsSettings 2026-06-18-10:11:
        * Settings > Actions must let users delete any selected action from the edit surface itself, including default Build/Test actions whose deletion is represented by deletedDefaultCommandIds. Keep this wired to the same deleteSidebarCommand path as the row trash button so default and custom actions share one behavior.
@@ -10050,6 +10072,7 @@ function createSettingsCommandDraft(actionType: SidebarActionType): SettingsComm
     links: [],
     name: "",
     playCompletionSound: actionType === "terminal",
+    showOnProjectRow: false,
     url: actionType === "browser" ? DEFAULT_BROWSER_ACTION_URL : undefined,
   };
 }
@@ -10064,6 +10087,7 @@ function createSettingsCommandDraftFromButton(command: SidebarCommandButton): Se
     links: command.links ?? [],
     name: command.name,
     playCompletionSound: command.playCompletionSound,
+    showOnProjectRow: command.showOnProjectRow,
     url: command.url,
   };
 }
@@ -10625,6 +10649,27 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle:
               "Actions are custom shortcuts for repeat work, shared between a main project and its worktrees.",
             title: "Custom actions",
+          },
+          {
+            key: "globalActions",
+            subtitle:
+              "Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.",
+            title: "Global Actions",
+          },
+          {
+            key: "hideTabStripNewTerminalButton",
+            subtitle: "Hide the New Terminal button from the tab strip.",
+            title: "Hide New Terminal button",
+          },
+          {
+            key: "hideTabStripNewChatButton",
+            subtitle: "Hide the New Chat button from the tab strip.",
+            title: "Hide New Chat button",
+          },
+          {
+            key: "hideTabStripNewBrowserButton",
+            subtitle: "Hide the New Browser Tab button from the tab strip.",
+            title: "Hide New Browser Tab button",
           },
         ],
         title: "Actions",
