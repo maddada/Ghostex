@@ -797,6 +797,15 @@ export type SidebarHudState = {
   appIconPickerUnavailable?: boolean;
   buildStamp?: string;
   commands: SidebarCommandButton[];
+  /**
+   * CDXC:ProjectActions 2026-08-01:
+   * Per-project Action buttons keyed by project id (worktrees already resolved
+   * to their parent's Actions by gxserver). Project rows read their own entry
+   * so showOnProjectRow actions render for every visible project, not just the
+   * active one. Hosts that cannot serve the block omit it and rows fall back
+   * to rendering nothing.
+   */
+  commandsByProject?: Record<string, SidebarCommandButton[]>;
   commandSessionIndicators: SidebarCommandSessionIndicator[];
   completionBellEnabled: boolean;
   completionSound: CompletionSoundSetting;
@@ -2502,9 +2511,17 @@ export type SidebarToExtensionMessage =
       /*
       CDXC:GPUICommandPane 2026-06-26-05:11:
       `runSidebarCommand` is a narrow Action selector: renderer messages may provide only the saved command id and optional run mode. Native and GPUI hosts must resolve command text, URLs, saved close-on-exit metadata, cwd/env, paths, output, and launch behavior from trusted command/HUD state.
+
+      CDXC:ProjectActions 2026-08-01:
+      Project-row Action buttons add an optional group selector like
+      `runSidebarAgent` already carries. The host resolves the group to its
+      project, activates that project through the existing focus flow, and only
+      then dispatches the trusted launch — the message never gains launch
+      metadata or project paths.
       */
       type: "runSidebarCommand";
       commandId: string;
+      groupId?: string;
       runMode?: SidebarCommandRunMode;
     }
   | {
@@ -2614,6 +2631,7 @@ export type SidebarToExtensionMessage =
       links?: SidebarCommandLink[];
       name: string;
       playCompletionSound: boolean;
+      showOnProjectRow: boolean;
       command?: string;
       url?: string;
     }

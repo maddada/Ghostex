@@ -505,6 +505,10 @@ fn save_gxserver_command(payload: &Value, flags: &Flags) -> CliResult<Value> {
                 && payload.get("playCompletionSound") != Some(&Value::Bool(false))
         ),
     );
+    saved_command.insert(
+        "showOnProjectRow".to_string(),
+        json!(payload.get("showOnProjectRow") == Some(&Value::Bool(true))),
+    );
     if action_type == "browser" {
         saved_command.insert("url".to_string(), json!(url));
     } else {
@@ -1133,6 +1137,16 @@ fn parse_save_command(rest: &[String], flags: &Flags) -> Value {
                 .get("playCompletionSound")
                 .map(parse_boolean)
                 .unwrap_or(true),
+        ),
+    );
+    map.insert(
+        "showOnProjectRow".to_string(),
+        Value::Bool(
+            flags
+                .0
+                .get("showOnProjectRow")
+                .map(parse_boolean)
+                .unwrap_or(false),
         ),
     );
     set_or_remove(&mut map, "url", flag_json(flags, "url"));
@@ -2102,8 +2116,25 @@ mod tests {
                 "commandId": "dev",
                 "name": "Dev Server",
                 "playCompletionSound": true,
+                "showOnProjectRow": false,
             })
         );
+    }
+
+    #[test]
+    fn save_command_preserves_enabled_show_on_project_row() {
+        // The flag is opt-in, so the enabled path needs its own coverage: a
+        // default-only assertion would still pass if the flag were hardcoded.
+        let (rest, flags) = parsed(&[
+            "--showOnProjectRow",
+            "true",
+            "lazygit",
+            "Lazygit",
+            "lazygit",
+        ]);
+        let payload = parse_save_command(&rest, &flags);
+        assert_eq!(payload.get("showOnProjectRow"), Some(&json!(true)));
+        assert_eq!(payload.get("commandId"), Some(&json!("lazygit")));
     }
 
     #[test]

@@ -33,6 +33,7 @@ import {
   useLayoutEffect,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -48,6 +49,9 @@ import {
 } from "../shared/session-grid-contract";
 import type { SidebarProjectDiffStats } from "../shared/project-diff-stats";
 import type { SidebarAgentButton } from "../shared/sidebar-agents";
+import type { SidebarCommandButton } from "../shared/sidebar-commands";
+import { DEFAULT_SIDEBAR_COMMAND_ICON } from "../shared/sidebar-command-icons";
+import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
 import {
   DEFAULT_ghostex_SETTINGS,
   clampProjectSessionListCollapsedCount,
@@ -695,6 +699,25 @@ export function SessionGroupSection({
       (candidate) => candidate?.projectContext?.worktree?.parentProjectId === projectId,
     ).length;
   });
+  /*
+   * CDXC:ProjectActions 2026-08-01:
+   * Project rows render only the Actions the user flagged showOnProjectRow,
+   * read from the HUD's per-project block so every row shows its own project's
+   * Actions instead of the active project's. Hosts that do not serve
+   * commandsByProject (legacy macOS) leave the map empty and rows render no
+   * extra buttons.
+   */
+  const projectCommands = useSidebarStore((state) => {
+    const projectId = state.groupsById[groupId]?.projectContext?.editor.projectId;
+    if (!projectId) {
+      return undefined;
+    }
+    return state.hud.commandsByProject?.[projectId];
+  });
+  const projectRowCommands = useMemo(
+    () => (projectCommands ?? []).filter((command) => command.showOnProjectRow),
+    [projectCommands],
+  );
   const orderedSessionIds = orderedSessionIdsProp ?? storedSessionIds;
   const [contextMenuPosition, setContextMenuPosition] = useState<GroupContextMenuPosition>();
   const [customThemeColor, setCustomThemeColor] = useState(DEFAULT_WORKSPACE_THEME_COLOR);
@@ -1537,6 +1560,23 @@ export function SessionGroupSection({
     });
   };
 
+  const requestRunProjectRowCommand = (command: SidebarCommandButton) => {
+    if (!projectContext) {
+      return;
+    }
+    /*
+     * CDXC:ProjectActions 2026-08-01:
+     * Row Action clicks stay selector-shaped like the Command Palette: command
+     * id plus the row's group id. The host resolves launch metadata from its
+     * trusted per-project HUD state and activates the project before running.
+     */
+    vscode.postMessage({
+      commandId: command.commandId,
+      groupId: group.groupId,
+      type: "runSidebarCommand",
+    });
+  };
+
   const requestCloseGroup = () => {
     if (!canClose) {
       return;
@@ -2284,6 +2324,32 @@ export function SessionGroupSection({
                             stroke={2}
                           />
                         </ProjectHeaderActionButton>
+                        {projectHeaderActions === "all"
+                          ? projectRowCommands.map((command) => {
+                              const commandLabel = command.name.trim() || "Run Action";
+                              return (
+                                <ProjectHeaderActionButton
+                                  aria-label={`Run ${commandLabel} in ${group.title}`}
+                                  className="group-add-button group-project-row-command-button"
+                                  key={command.commandId}
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    requestRunProjectRowCommand(command);
+                                  }}
+                                  tooltip={commandLabel}
+                                  type="button"
+                                >
+                                  <SidebarCommandIconGlyph
+                                    className="group-add-icon"
+                                    icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON}
+                                    size={14}
+                                    stroke={2}
+                                  />
+                                </ProjectHeaderActionButton>
+                              );
+                            })
+                          : null}
                         {projectHeaderActions === "all" ? (
                           <div className="group-control-anchor">
                             <div

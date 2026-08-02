@@ -318,6 +318,20 @@ export function createSidebarStoryMessage(
       ...(workspace.options.autoSettleAfterDaysByMachineId
         ? { autoSettleAfterDaysByMachineId: workspace.options.autoSettleAfterDaysByMachineId }
         : {}),
+      /*
+       * CDXC:ProjectActions 2026-08-01:
+       * Project rows read their Actions from `commandsByProject`, not the flat
+       * active-project list, so the story harness has to publish the same block
+       * the daemon does or a flagged Action can never render on a story row.
+       * Every story project context sees the same command set because the
+       * harness models one Actions store.
+       */
+      commandsByProject: Object.fromEntries(
+        groups
+          .map((group) => group.projectContext?.editor.projectId)
+          .filter((projectId): projectId is string => Boolean(projectId))
+          .map((projectId) => [projectId, workspace.options.commands]),
+      ),
       recentProjects: workspace.options.recentProjects,
       settings: workspace.options.settings,
     },
@@ -519,6 +533,7 @@ export function reduceSidebarStoryWorkspace(
         name: message.name,
         playCompletionSound:
           message.actionType === "terminal" ? message.playCompletionSound : false,
+        showOnProjectRow: message.showOnProjectRow,
         url: message.actionType === "browser" ? message.url : undefined,
       };
 

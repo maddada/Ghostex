@@ -71,6 +71,7 @@ export type SidebarCommandButton = {
   links?: SidebarCommandLink[];
   name: string;
   playCompletionSound: boolean;
+  showOnProjectRow: boolean;
   url?: string;
 };
 
@@ -90,6 +91,14 @@ export type StoredSidebarCommand = {
   links?: SidebarCommandLink[];
   name: string;
   playCompletionSound: boolean;
+  /**
+   * CDXC:ProjectActions 2026-08-01:
+   * Actions flagged showOnProjectRow render as inline icon buttons on their
+   * project's sidebar row beside the built-in header actions. Older saved
+   * records lack the field; normalization defaults it to false so existing
+   * Actions keep their titlebar-only behavior.
+   */
+  showOnProjectRow: boolean;
   command?: string;
   url?: string;
 };
@@ -136,6 +145,7 @@ export function createDefaultSidebarCommandButtons(): SidebarCommandButton[] {
     isDefault: true,
     name: command.name,
     playCompletionSound: true,
+    showOnProjectRow: false,
     url: undefined,
   }));
 }
@@ -245,6 +255,7 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
         isDefault,
         name,
         playCompletionSound: false,
+        showOnProjectRow: partialItem.showOnProjectRow === true,
         ...(icon ? { icon } : {}),
         url,
       });
@@ -272,6 +283,7 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
         typeof partialItem.playCompletionSound === "boolean"
           ? partialItem.playCompletionSound
           : true,
+      showOnProjectRow: partialItem.showOnProjectRow === true,
       ...(icon ? { icon } : {}),
       ...(links.length > 0 ? { links } : {}),
     });
@@ -315,6 +327,7 @@ function defaultAction(command: (typeof DEFAULT_SIDEBAR_COMMANDS)[number]): Side
     isDefault: true,
     name: command.name,
     playCompletionSound: true,
+    showOnProjectRow: false,
     url: undefined,
   };
 }
@@ -329,6 +342,7 @@ function normalizeStoredCommandButton(command: StoredSidebarCommand): SidebarCom
         isDefault: command.isDefault,
         name: command.name,
         playCompletionSound: false,
+        showOnProjectRow: command.showOnProjectRow === true,
         ...(command.icon ? { icon: command.icon } : {}),
         url: command.url,
       }
@@ -340,6 +354,7 @@ function normalizeStoredCommandButton(command: StoredSidebarCommand): SidebarCom
         isDefault: command.isDefault,
         name: command.name,
         playCompletionSound: command.playCompletionSound,
+        showOnProjectRow: command.showOnProjectRow === true,
         ...(command.icon ? { icon: command.icon } : {}),
         ...(command.links && command.links.length > 0 ? { links: command.links } : {}),
         url: undefined,

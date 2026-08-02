@@ -5657,6 +5657,7 @@ type SettingsCommandDraft = {
   links?: SidebarCommandLink[];
   name: string;
   playCompletionSound: boolean;
+  showOnProjectRow: boolean;
   url?: string;
 };
 
@@ -9011,6 +9012,7 @@ function ActionsSettingsTab({
       links: draft.links,
       name: draft.name,
       playCompletionSound: draft.playCompletionSound,
+      showOnProjectRow: draft.showOnProjectRow,
       type: "saveSidebarCommand",
       url: draft.url,
     });
@@ -9270,6 +9272,7 @@ function ActionSettingsEditor({
   const [links, setLinks] = useState<SidebarCommandLink[]>(draft.links ?? []);
   const [name, setName] = useState(draft.name);
   const [playCompletionSound, setPlayCompletionSound] = useState(draft.playCompletionSound);
+  const [showOnProjectRow, setShowOnProjectRow] = useState(draft.showOnProjectRow);
   const [url, setUrl] = useState(
     draft.url ??
       ((lockedActionType ?? draft.actionType) === "browser" ? DEFAULT_BROWSER_ACTION_URL : ""),
@@ -9278,6 +9281,7 @@ function ActionSettingsEditor({
   const closeTerminalOnExitId = useId();
   const commandId = useId();
   const nameId = useId();
+  const showOnProjectRowId = useId();
   const soundId = useId();
   const urlId = useId();
   const isActionTypeLocked = lockedActionType !== undefined;
@@ -9312,6 +9316,7 @@ function ActionSettingsEditor({
         : undefined,
     name: trimmedName,
     playCompletionSound: actionType === "terminal" ? playCompletionSound : false,
+    showOnProjectRow,
     url: actionType === "browser" ? url.trim() : undefined,
   });
 
@@ -9513,6 +9518,23 @@ function ActionSettingsEditor({
           </Field>
         </>
       )}
+      {/*
+       * CDXC:ProjectActions 2026-08-01:
+       * Both terminal and browser actions can opt into the project's sidebar
+       * row, so this toggle lives outside the action-type branch above.
+       */}
+      <Field className="items-center justify-between" orientation="horizontal">
+        <FieldContent>
+          <FieldLabel className="text-sm" htmlFor={showOnProjectRowId}>
+            Show on the project&apos;s sidebar row
+          </FieldLabel>
+        </FieldContent>
+        <Switch
+          checked={showOnProjectRow}
+          id={showOnProjectRowId}
+          onCheckedChange={setShowOnProjectRow}
+        />
+      </Field>
       {/*
        * CDXC:ActionsSettings 2026-06-18-10:11:
        * Settings > Actions must let users delete any selected action from the edit surface itself, including default Build/Test actions whose deletion is represented by deletedDefaultCommandIds. Keep this wired to the same deleteSidebarCommand path as the row trash button so default and custom actions share one behavior.
@@ -9871,6 +9893,7 @@ function createSettingsCommandDraft(actionType: SidebarActionType): SettingsComm
     links: [],
     name: "",
     playCompletionSound: actionType === "terminal",
+    showOnProjectRow: false,
     url: actionType === "browser" ? DEFAULT_BROWSER_ACTION_URL : undefined,
   };
 }
@@ -9885,6 +9908,7 @@ function createSettingsCommandDraftFromButton(command: SidebarCommandButton): Se
     links: command.links ?? [],
     name: command.name,
     playCompletionSound: command.playCompletionSound,
+    showOnProjectRow: command.showOnProjectRow,
     url: command.url,
   };
 }
