@@ -19,6 +19,18 @@
 
 /* --- Composer -------------------------------------------------------------- */
 
+/* The textarea backend uses field-sizing:content so it grows with the draft.
+   That intrinsic sizing also applies horizontally, so a pasted line with no
+   break opportunity (a long URL, a base64 blob) would make the input's
+   min-content width enormous and push the whole page past the viewport.
+   Pin the width to the row and let any long run wrap mid-token instead. */
+.ghostex-chat-composer-input {
+  min-width: 0;
+  width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* 3px scrollbar in the chat input (the Monaco backend gets the same width via
    verticalScrollbarSize). */
 .ghostex-chat-composer-input::-webkit-scrollbar {

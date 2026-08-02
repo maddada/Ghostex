@@ -955,6 +955,16 @@ fn to_cli_session(
         "delayedSendRemainingLabel",
         &[p("delayedSendRemainingLabel")],
     );
+    insert_js(
+        &mut map,
+        "sendWhenAllProjectSessionsStopActive",
+        &[p("sendWhenAllProjectSessionsStopActive")],
+    );
+    insert_js(
+        &mut map,
+        "sendWhenAgentStopsActive",
+        &[p("sendWhenAgentStopsActive")],
+    );
     map.insert("isLive".to_string(), json!(is_live));
     insert_js(
         &mut map,

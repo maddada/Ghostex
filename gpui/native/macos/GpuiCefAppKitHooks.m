@@ -130,6 +130,69 @@ static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView* view);
 static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view);
 static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event);
 static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
+static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event);
+
+/*
+ CDXC:GPUISidebarPointerTracking 2026-08-02:
+ The sidebar CEF surface is a native sibling of GPUI chrome, Ghostty terminal
+ hosts, and other CEF panes, so its renderer never receives a reliable
+ mouse-leave when the pointer crosses into one of those siblings: Chromium can
+ keep the last :hover row (and its hover-only Close button) painted, and an
+ open sidebar context menu cannot see clicks that land outside its own
+ document. NSApplication's sendEvent: is the app's single mouse-event entry
+ point for every window, so observe — never reroute — mouse moves and downs
+ here, compare the location against the registered sidebar view's frame, and
+ report inside/outside transitions plus outside mouse-downs to Rust. Rust
+ forwards both into the sidebar page (the existing
+ data-native-pointer-inside CSS contract and context-menu dismissal).
+*/
+static __weak NSView* g_ghostexGpuiSidebarPointerTrackingView = nil;
+static BOOL g_ghostexGpuiSidebarPointerInside = NO;
+
+extern void GhostexGpuiSidebarPointerInsideChanged(bool inside);
+extern void GhostexGpuiSidebarOutsideMouseDown(void);
+
+void GhostexGpuiCEFSetSidebarPointerTrackingView(void* view) {
+  NSView* sidebarView = (__bridge NSView*)view;
+  g_ghostexGpuiSidebarPointerTrackingView = sidebarView;
+  // Unknown until the next mouse event recomputes it against the new view.
+  g_ghostexGpuiSidebarPointerInside = NO;
+  // Pointer-moved events are only generated for a window that asks for them.
+  sidebarView.window.acceptsMouseMovedEvents = YES;
+}
+
+static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
+  NSEventType type = event.type;
+  BOOL isMove = type == NSEventTypeMouseMoved || type == NSEventTypeLeftMouseDragged ||
+                type == NSEventTypeRightMouseDragged || type == NSEventTypeOtherMouseDragged;
+  BOOL isDown = type == NSEventTypeLeftMouseDown || type == NSEventTypeRightMouseDown ||
+                type == NSEventTypeOtherMouseDown;
+  if (!isMove && !isDown) {
+    return;
+  }
+  NSView* sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
+  if (!sidebarView) {
+    return;
+  }
+  BOOL inside = NO;
+  NSWindow* window = event.window;
+  if (isDown) {
+    // A window that never got armed at registration time (view not yet in a
+    // window) still delivers button events, so re-arm from one of those.
+    sidebarView.window.acceptsMouseMovedEvents = YES;
+  }
+  if (window && sidebarView.window == window && !sidebarView.isHiddenOrHasHiddenAncestor) {
+    NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds toView:nil];
+    inside = NSPointInRect(event.locationInWindow, frameInWindow);
+  }
+  if (inside != g_ghostexGpuiSidebarPointerInside) {
+    g_ghostexGpuiSidebarPointerInside = inside;
+    GhostexGpuiSidebarPointerInsideChanged(inside);
+  }
+  if (isDown && !inside) {
+    GhostexGpuiSidebarOutsideMouseDown();
+  }
+}
 
 @interface GhostexGpuiFirstResponderObserver : NSObject
 @property(nonatomic, weak) NSWindow* window;
@@ -249,6 +312,10 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
    produces.
    */
   event = GhostexGpuiNormalizedNavigationKeyEvent(event);
+
+  // Observe-only sidebar pointer tracking (see GPUISidebarPointerTracking
+  // above); the event continues unchanged to its normal target.
+  GhostexGpuiSidebarPointerTrackingObserveEvent(event);
 
   /*
    CDXC:GPUIKeyboardRouter 2026-07-24:

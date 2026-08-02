@@ -191,6 +191,7 @@ export type OpenAppModalMessage =
        * current remaining duration and offer cancellation instead of acting as
        * a blind new-schedule dialog.
        */
+      closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
       modal: "delayedSend";

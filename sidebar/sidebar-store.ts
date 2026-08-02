@@ -1258,6 +1258,9 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.delayedSendDeadlineAt === right.delayedSendDeadlineAt &&
     left.delayedSendRemainingLabel === right.delayedSendRemainingLabel &&
     left.delayedSendRemainingMs === right.delayedSendRemainingMs &&
+    left.sendWhenAllProjectSessionsStopActive ===
+      right.sendWhenAllProjectSessionsStopActive &&
+    left.sendWhenAgentStopsActive === right.sendWhenAgentStopsActive &&
     left.detail === right.detail &&
     left.displayTitle === right.displayTitle &&
     left.displayTitleTooltip === right.displayTitleTooltip &&

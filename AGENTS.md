@@ -149,3 +149,7 @@ Corollary: after you verify a surgical bug fix, tell the user it should be commi
 ### Rules for running commands
 
 - Never run "bun run start" or any command that would restart the app unless I ask you to.
+
+###  Don't switch the repo to another branch ever
+  - We run multiple agents at a time on 1 worktree so agents should never switch the branch this folder is on away from main
+  - If you need to do work that requires switching to a new branch then please create a temp worktree and do the needed work there.

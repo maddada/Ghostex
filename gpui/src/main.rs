@@ -517,6 +517,7 @@ pub extern "C" fn GhostexGpuiTerminalGetImePoint(
 thread_local! {
     static GPUI_APP_SHOTS_CALLBACK_TARGET: RefCell<Option<GpuiAppShotsCallbackTarget>> = const { RefCell::new(None) };
     static GPUI_MENU_BAR_STATUS_CALLBACK_TARGET: RefCell<Option<GpuiMenuBarStatusCallbackTarget>> = const { RefCell::new(None) };
+    static GPUI_SIDEBAR_POINTER_CALLBACK_TARGET: RefCell<Option<GpuiSidebarPointerCallbackTarget>> = const { RefCell::new(None) };
     static GPUI_SESSION_ATTENTION_NOTIFICATION_CALLBACK_TARGET: RefCell<Option<GpuiSessionAttentionNotificationCallbackTarget>> = const { RefCell::new(None) };
     static GPUI_ACCESSIBILITY_DISPLAY_OPTIONS_CALLBACK_TARGET: RefCell<Option<GpuiAccessibilityDisplayOptionsCallbackTarget>> = const { RefCell::new(None) };
     static GPUI_SPARKLE_UPDATER_CALLBACK_TARGET: RefCell<Option<GpuiSparkleUpdaterCallbackTarget>> = const { RefCell::new(None) };
@@ -542,6 +543,13 @@ struct GpuiAppShotsCallbackTarget {
 #[cfg(target_os = "macos")]
 #[derive(Clone)]
 struct GpuiMenuBarStatusCallbackTarget {
+    app: gpui::WeakEntity<GhostexGpuiApp>,
+    async_app: gpui::AsyncApp,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone)]
+struct GpuiSidebarPointerCallbackTarget {
     app: gpui::WeakEntity<GhostexGpuiApp>,
     async_app: gpui::AsyncApp,
 }
@@ -1013,7 +1021,7 @@ const APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_HEIGHT: f32 = 500.0;
 const APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_WIDTH: f32 = 550.0;
 const APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_HEIGHT: f32 = 680.0;
 const APP_MODAL_HOST_DELAYED_SEND_WINDOW_WIDTH: f32 = 470.0;
-const APP_MODAL_HOST_DELAYED_SEND_WINDOW_HEIGHT: f32 = 365.0;
+const APP_MODAL_HOST_DELAYED_SEND_WINDOW_HEIGHT: f32 = 501.0;
 const APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH: f32 = 570.0;
 /*
  * CDXC:GPUIAppModalSizes 2026-07-26-07:20:
@@ -2930,7 +2938,7 @@ impl GpuiAppModalKind {
             Self::StashedPrompts => "Ghostex Prompts",
             Self::ScratchPad => "Ghostex Scratch Pad",
             Self::AgentsHub => "Ghostex Agents Hub",
-            Self::DelayedSend => "Ghostex Delayed Actions",
+            Self::DelayedSend => "Ghostex Session Automations",
             Self::RenameSession => "Ghostex Rename Session",
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
@@ -10439,7 +10447,6 @@ enum GpuiBrowserZoomCommand {
 
 #[derive(Clone, Copy)]
 enum WorkspaceTabActionIcon {
-    TerminalView,
     NewTerminal,
     NewT3Chat,
     NewBrowser,
@@ -24337,6 +24344,8 @@ impl Drop for GhostexGpuiApp {
         #[cfg(target_os = "macos")]
         unregister_gpui_menu_bar_status_callback_target();
         #[cfg(target_os = "macos")]
+        unregister_gpui_sidebar_pointer_callback_target();
+        #[cfg(target_os = "macos")]
         unregister_gpui_session_attention_notification_callback_target();
         #[cfg(target_os = "macos")]
         unregister_gpui_accessibility_display_options_callback_target();
@@ -24730,6 +24739,8 @@ impl GhostexGpuiApp {
             register_gpui_app_shots_callback_target(cx.weak_entity(), cx.to_async());
             #[cfg(target_os = "macos")]
             register_gpui_menu_bar_status_callback_target(cx.weak_entity(), cx.to_async());
+            #[cfg(target_os = "macos")]
+            register_gpui_sidebar_pointer_callback_target(cx.weak_entity(), cx.to_async());
             #[cfg(target_os = "macos")]
             register_gpui_session_attention_notification_callback_target(
                 cx.weak_entity(),
@@ -26891,6 +26902,14 @@ impl GhostexGpuiApp {
                         is_working,
                         now_instant,
                     ),
+                    "sendWhenAllProjectSessionsStopActive": matches!(
+                        &watcher.scope,
+                        GpuiAgentsSendWhenStoppedScope::Project(_)
+                    ),
+                    "sendWhenAgentStopsActive": matches!(
+                        &watcher.scope,
+                        GpuiAgentsSendWhenStoppedScope::Session
+                    ),
                     "sessionId": external_session_id,
                 }))
             })
@@ -28148,8 +28167,8 @@ impl GhostexGpuiApp {
             let mut async_cx = async_cx.clone();
             foreground
                 .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, _window, cx| {
-                        this.receive_session_chat_host_action(session_id, &payload, cx);
+                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
+                        this.receive_session_chat_host_action(session_id, &payload, window, cx);
                     });
                 })
                 .detach();
@@ -28160,6 +28179,7 @@ impl GhostexGpuiApp {
         &mut self,
         session_id: TerminalSessionId,
         payload: &str,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         use terminal_element::TerminalAgentActionRequest;
@@ -28197,7 +28217,16 @@ impl GhostexGpuiApp {
         // session; focus that pane so the focused-session guard and the
         // "for focused session" modal openers resolve to this session.
         if self.focused_agents_or_companion_shell_session_id() != Some(session_id) {
-            if let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) {
+            if self.active_mode.is_project_editor_mode() {
+                // The chat surface is showing in the companion side pane;
+                // focus its slot so focused-session guards resolve here.
+                self.focus_project_editor_companion_terminal_session(
+                    self.active_mode,
+                    session_id,
+                    window,
+                    cx,
+                );
+            } else if let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) {
                 self.focus_agents_pane(pane_id, cx);
             }
         }
@@ -28340,6 +28369,10 @@ impl GhostexGpuiApp {
         title: &str,
     ) -> serde_json::Value {
         let mut message = serde_json::json!({
+            "closeAfterDoneActive": self
+                .command_pane
+                .session(session_id)
+                .is_some_and(|session| session.close_after_done_armed),
             "modal": GpuiAppModalKind::DelayedSend.modal_id(),
             "sessionId": gpui_command_session_external_id(session_id),
             "title": title,
@@ -40388,15 +40421,26 @@ impl GhostexGpuiApp {
             }
         }
 
-        let visible_session_ids = if self.active_mode == TitlebarMode::Agents
-            && !self.workspace_tab_drag_active
-            && !self.browser_tab_drag_active
-            && !self.command_tab_drag_active
-        {
+        let drag_active = self.workspace_tab_drag_active
+            || self.browser_tab_drag_active
+            || self.command_tab_drag_active;
+        let visible_session_ids = if drag_active {
+            HashSet::new()
+        } else if self.active_mode == TitlebarMode::Agents {
             self.agents_workspace
                 .rendered_leaf_order()
                 .into_iter()
                 .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
+                .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
+                .collect::<HashSet<_>>()
+        } else if self.active_mode.is_project_editor_mode() {
+            // CDXC:GPUISessionChatSurface 2026-08-02: the companion side pane
+            // shows chat-mode sessions in Code/Browser/Kanban/Automate/Docs
+            // too. The mount-slot enumeration already gates on companion
+            // visibility, mode wakefulness, and slot eligibility.
+            self.current_project_editor_companion_terminal_body_mount_slots()
+                .into_iter()
+                .map(|slot_id| slot_id.session_id)
                 .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
                 .collect::<HashSet<_>>()
         } else {
@@ -55693,7 +55737,22 @@ impl GhostexGpuiApp {
             None,
             cx,
         ) {
-            Ok(sidebar) => self.sidebar = Some(sidebar),
+            Ok(sidebar) => {
+                /*
+                CDXC:GPUISidebarPointerTracking 2026-08-02:
+                Hand the sidebar's CEF child view to the AppKit sendEvent
+                observer so pointer crossings of its frame, and mouse-downs
+                outside it, become the page's hover-suppression and
+                context-menu-dismissal signals.
+                */
+                #[cfg(target_os = "macos")]
+                if let Some(native_view) =
+                    sidebar.read(cx).native_view_for_sidebar_pointer_tracking()
+                {
+                    cef::set_sidebar_pointer_tracking_view(native_view);
+                }
+                self.sidebar = Some(sidebar);
+            }
             Err(error) => {
                 // The sidebar profile uses the pre-initialized global app-ui
                 // context, so a creation failure here is unexpected. Retry
@@ -61901,6 +61960,14 @@ impl GhostexGpuiApp {
         insertion_index: usize,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        /*
+        CDXC:GPUIWorkspaceTabEndGap 2026-08-03:
+        The end-of-strip drop target is interaction chrome, not permanent tab
+        spacing. Keep its 24px normal-layout target while either supported tab
+        drag is active, but collapse it at rest so the final workspace tab is
+        flush with the fixed action cluster.
+        */
+        let drag_active = self.workspace_tab_drag_active || self.command_tab_drag_active;
         let show_insertion_marker = self.workspace_drop_feedback
             == Some(WorkspaceDropFeedback {
                 pane_id,
@@ -61914,8 +61981,8 @@ impl GhostexGpuiApp {
             ))
             .relative()
             .h_full()
-            .flex_grow_1()
-            .min_w(px(24.0))
+            .when(drag_active, |this| this.flex_grow_1().min_w(px(24.0)))
+            .when(!drag_active, |this| this.w(px(0.0)).flex_shrink_0())
             .when(show_insertion_marker, |this| {
                 this.child(self.render_workspace_tab_insertion_marker(
                     pane_id,
@@ -62105,41 +62172,21 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
-        In terminal view the Terminal/Chat toggle lives in the terminal's
-        top-right agent action overlay next to the Agent Actions button. In
-        chat view that overlay is parked with the terminal and any gpui-drawn
-        overlay would sit UNDER the native CEF chat view, so the way back to
-        the terminal renders here in gpui-owned tab chrome instead — strict
-        normal layout, never covered by the CEF surface.
+        CDXC:GPUISessionChatSurface 2026-08-02:
+        The Terminal/Chat toggle lives in the floating top-right cluster over
+        the surface itself: the terminal's agent-action overlay in terminal
+        view, and the chat page's own in-DOM cluster in chat view (a
+        gpui-drawn overlay would sit UNDER the native CEF chat view). The tab
+        chrome hosts no toggle.
         */
-        let terminal_toggle_visible = self
-            .agents_workspace
-            .active_session_in_pane(pane_id)
-            .is_some_and(|session_id| self.agents_chat_mode_sessions.contains(&session_id));
-        let cluster_width = WORKSPACE_TAB_ACTION_CLUSTER_WIDTH
-            + if terminal_toggle_visible {
-                WORKSPACE_TAB_ACTION_BUTTON_WIDTH
-            } else {
-                0.0
-            };
         h_flex()
             .id(format!("ghostex-gpui-workspace-tab-actions-{}", pane_id.0))
             .flex_shrink_0()
             .h_full()
-            .w(px(cluster_width))
+            .w(px(WORKSPACE_TAB_ACTION_CLUSTER_WIDTH))
             .items_center()
             .justify_center()
             .bg(workspace_tab_action_cluster_color())
-            .when(terminal_toggle_visible, |this| {
-                this.child(self.render_workspace_tab_action_button(
-                    pane_id,
-                    "terminal-view",
-                    WorkspaceTabActionIcon::TerminalView,
-                    "Terminal View",
-                    cx,
-                ))
-            })
             .child(self.render_workspace_tab_action_button(
                 pane_id,
                 "new-terminal",
@@ -62204,13 +62251,6 @@ impl GhostexGpuiApp {
                     window.prevent_default();
                     cx.stop_propagation();
                     match icon {
-                        WorkspaceTabActionIcon::TerminalView => {
-                            if let Some(session_id) =
-                                this.agents_workspace.active_session_in_pane(pane_id)
-                            {
-                                this.toggle_agents_session_chat_mode(session_id, cx);
-                            }
-                        }
                         WorkspaceTabActionIcon::NewTerminal => {
                             this.add_agents_registered_terminal_tab(pane_id, cx);
                         }
@@ -62235,7 +62275,6 @@ impl GhostexGpuiApp {
 
     fn render_workspace_tab_action_icon(&self, icon: WorkspaceTabActionIcon) -> AnyElement {
         let path = match icon {
-            WorkspaceTabActionIcon::TerminalView => "titlebar/terminal-2.svg",
             WorkspaceTabActionIcon::NewTerminal => COMMAND_ICON_PLUS,
             WorkspaceTabActionIcon::NewT3Chat => TITLEBAR_ICON_MESSAGE,
             WorkspaceTabActionIcon::NewBrowser => BROWSER_ICON_WORLD,
@@ -62927,8 +62966,16 @@ impl GhostexGpuiApp {
         plus ordinary placeholder layout children. No terminal mount canvas,
         native geometry probe, overlay, or hidden hit region participates.
         */
+        let content = self.render_session_chat_surface_content(session_id);
+        self.render_agents_session_chat_body_frame(pane_id, session_id, content, cx)
+    }
+
+    /// The chat surface (or its loading/unavailable placeholder) for one
+    /// session — shared by the Agents workspace body and the project-editor
+    /// companion slot body.
+    fn render_session_chat_surface_content(&self, session_id: TerminalSessionId) -> AnyElement {
         let surface = self.agents_chat_surfaces.get(&session_id).cloned();
-        let content = if let Some(surface) = surface {
+        if let Some(surface) = surface {
             div()
                 .id(format!("ghostex-gpui-session-chat-cef-{}", session_id.0))
                 .relative()
@@ -62996,8 +63043,16 @@ impl GhostexGpuiApp {
                         }),
                 )
                 .into_any_element()
-        };
+        }
+    }
 
+    fn render_agents_session_chat_body_frame(
+        &self,
+        pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+        content: AnyElement,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         div()
             .id(format!(
                 "ghostex-gpui-session-chat-body-{}-{}",
@@ -63663,6 +63718,25 @@ impl GhostexGpuiApp {
         show_focus_outline: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        /*
+        CDXC:GPUISessionChatSurface 2026-08-02:
+        Chat mode swaps this companion slot's terminal body for the same
+        per-session chat surface the Agents workspace shows (same slot, T3
+        precedent); the terminal mount parks exactly like an Agents tab in
+        chat mode. The way back is the chat page's in-DOM cluster.
+        */
+        if let Some(session_id) = session_id {
+            if self.agents_chat_mode_sessions.contains(&session_id) {
+                return self.render_project_editor_companion_session_chat_body(
+                    mode,
+                    slot,
+                    session_id,
+                    flex_grow,
+                    show_focus_outline,
+                    cx,
+                );
+            }
+        }
         let slot_id = session_id
             .map(|session_id| ProjectEditorCompanionTerminalBodyMountSlotId { mode, session_id })
             .filter(|slot_id| {
@@ -63850,6 +63924,58 @@ impl GhostexGpuiApp {
                         .child(label),
                 )
             })
+            .into_any_element()
+    }
+
+    fn render_project_editor_companion_session_chat_body(
+        &self,
+        mode: TitlebarMode,
+        slot: ProjectEditorCompanionTerminalSlot,
+        session_id: TerminalSessionId,
+        flex_grow: f32,
+        show_focus_outline: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let has_terminal_split = self
+            .project_editor_companion_secondary_terminal_session_id
+            .is_some();
+        let slot_slug = match slot {
+            ProjectEditorCompanionTerminalSlot::Top => "top",
+            ProjectEditorCompanionTerminalSlot::Bottom => "bottom",
+        };
+        div()
+            .id(format!(
+                "ghostex-gpui-project-editor-companion-chat-body-{}-{}-{}",
+                mode.element_slug(),
+                slot_slug,
+                session_id.0
+            ))
+            .relative()
+            .flex_grow(flex_grow)
+            .flex_shrink_1()
+            .flex_basis(relative(0.0))
+            .min_w_0()
+            .min_h_0()
+            .w_full()
+            .overflow_hidden()
+            .when(has_terminal_split, |this| {
+                this.border_1().border_color(if show_focus_outline {
+                    workspace_pane_focused_border_color()
+                } else {
+                    rgb(0x000000).opacity(0.0).into()
+                })
+            })
+            .bg(rgb(0x191919))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                    this.focus_project_editor_companion_terminal_session(
+                        mode, session_id, window, cx,
+                    );
+                    cx.notify();
+                }),
+            )
+            .child(self.render_session_chat_surface_content(session_id))
             .into_any_element()
     }
 
@@ -64046,7 +64172,7 @@ impl GhostexGpuiApp {
             .flex()
             .flex_shrink_0()
             .h_full()
-            .w(px(31.0))
+            .w(px(41.0))
             .items_center()
             .justify_center()
             .border_l_1()
@@ -65613,7 +65739,7 @@ impl GhostexGpuiApp {
                     .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, |window, cx| {
                         Tooltip::new("New browser tab").build(window, cx)
                     })
-                    .child(self.render_browser_tab_new_icon()),
+                    .child(self.render_browser_tab_new_icon(17.0)),
             )
             .child(
                 div()
@@ -65660,25 +65786,27 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    fn render_browser_tab_new_icon(&self) -> AnyElement {
+    fn render_browser_tab_new_icon(&self, size: f32) -> AnyElement {
+        let arm_length = size - 2.0;
+        let arm_offset = (size - 1.0) / 2.0;
         div()
             .relative()
-            .size(px(17.0))
+            .size(px(size))
             .child(
                 div()
                     .absolute()
-                    .left(px(8.0))
+                    .left(px(arm_offset))
                     .top(px(1.0))
                     .w(px(1.0))
-                    .h(px(15.0))
+                    .h(px(arm_length))
                     .bg(browser_tab_action_icon_color()),
             )
             .child(
                 div()
                     .absolute()
                     .left(px(1.0))
-                    .top(px(8.0))
-                    .w(px(15.0))
+                    .top(px(arm_offset))
+                    .w(px(arm_length))
                     .h(px(1.0))
                     .bg(browser_tab_action_icon_color()),
             )
@@ -66675,6 +66803,49 @@ impl GhostexGpuiApp {
         });
         let script = gpui_workspace_terminal_runtime_action_script(&message);
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+    }
+
+    /*
+    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    Report an observed pointer crossing of the sidebar's native frame into the
+    page. The sidebar CEF surface is a native sibling of GPUI chrome, Ghostty
+    terminal hosts, and the other CEF panes, so Chromium never sees the pointer
+    leave and can hold the last hovered row's `:hover` state indefinitely. The
+    page turns this into the shared `data-native-pointer-inside` contract that
+    the sidebar stylesheet already declares suppressors against.
+    */
+    #[cfg(target_os = "macos")]
+    fn dispatch_gpui_sidebar_pointer_inside(
+        &mut self,
+        inside: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(sidebar) = self.sidebar.clone() else {
+            return false;
+        };
+        let script = gpui_sidebar_native_pointer_inside_script(inside);
+        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+    }
+
+    /*
+    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    A mouse-down landed outside the sidebar's native frame, so any open sidebar
+    context menu must close. The page's own backdrop only covers the sidebar
+    document, and its window-blur dismissal never fires here: the sidebar
+    surface is mouse-focus passive, so clicking a terminal pane or a titlebar
+    button does not blur a browsing context that never held focus.
+    */
+    #[cfg(target_os = "macos")]
+    fn dispatch_gpui_sidebar_dismiss_context_menus(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(sidebar) = self.sidebar.clone() else {
+            return false;
+        };
+        sidebar.update(cx, |surface, _| {
+            surface.execute_app_owned_script(GPUI_SIDEBAR_DISMISS_CONTEXT_MENUS_SCRIPT)
+        })
     }
 
     /// The titlebar Git control opens an in-app PopupMenu projected from the
@@ -69961,7 +70132,7 @@ impl GhostexGpuiApp {
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, |window, cx| {
                 Tooltip::new("New browser tab").build(window, cx)
             })
-            .child(self.render_browser_tab_new_icon())
+            .child(self.render_browser_tab_new_icon(12.0))
             .into_any_element()
     }
 
@@ -75506,6 +75677,13 @@ impl CefSurface {
         self.browser.focus();
     }
 
+    /// The surface's CEF child view, for the AppKit pointer observer that turns
+    /// pointer crossings of the sidebar frame into page-side hover state.
+    #[cfg(target_os = "macos")]
+    fn native_view_for_sidebar_pointer_tracking(&self) -> Option<*mut std::ffi::c_void> {
+        self.browser.native_view()
+    }
+
     #[cfg(target_os = "macos")]
     fn native_view_contains_responder(&self, responder: *mut std::ffi::c_void) -> bool {
         self.browser
@@ -76047,6 +76225,19 @@ fn main() {
                 cx.observe_window_activation(window, |app, window, cx| {
                     if !window.is_window_active() {
                         app.close_gpui_titlebar_popup(None, window, cx);
+                        /*
+                        CDXC:GPUISidebarPointerTracking 2026-08-02:
+                        Pointer-moved events stop arriving once the window is
+                        no longer active, so the last crossing the observer saw
+                        may have been an enter. Report the pointer as outside
+                        and close any open sidebar context menu, the same way
+                        leaving for another app closes a native menu.
+                        */
+                        #[cfg(target_os = "macos")]
+                        {
+                            app.dispatch_gpui_sidebar_pointer_inside(false, cx);
+                            app.dispatch_gpui_sidebar_dismiss_context_menus(cx);
+                        }
                     }
                 })
                 .detach();
@@ -87085,6 +87276,32 @@ fn gpui_workspace_terminal_runtime_action_script(message: &serde_json::Value) ->
     )
 }
 
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-02:
+`data-native-pointer-inside` is a pure CSS state flag whose only writer is the
+native pointer observer, so it is set directly on `document.body` rather than
+through a page bridge: the attribute exists from the first paint, no page code
+has to be mounted for the write to land, and an absent attribute is already the
+correct "pointer position unknown, hover normally" state.
+*/
+#[cfg(target_os = "macos")]
+fn gpui_sidebar_native_pointer_inside_script(inside: bool) -> String {
+    format!(
+        "(function(){{if(document.body){{document.body.dataset.nativePointerInside={};}}}})(); undefined;",
+        if inside { "'true'" } else { "'false'" }
+    )
+}
+
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-02:
+Dismissal needs page code — the open menus live in a module-scoped registry
+inside the sidebar bundle — so it goes through the sidebar's own bridge. If the
+bridge is not installed the page cannot have an open menu either, so there is
+nothing to queue.
+*/
+#[cfg(target_os = "macos")]
+const GPUI_SIDEBAR_DISMISS_CONTEXT_MENUS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarContextMenus==='function'){bridge.dismissSidebarContextMenus();}})(); undefined;";
+
 fn gpui_workspace_terminal_lifecycle_request_script(message: &serde_json::Value) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalLifecycleRequest==='function'&&typeof bridge.postWorkspaceTerminalLifecycleResult==='function'){{bridge.onWorkspaceTerminalLifecycleRequest(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalLifecycleRequests)?bridge.pendingWorkspaceTerminalLifecycleRequests:[];pending.push(payload);bridge.pendingWorkspaceTerminalLifecycleRequests=pending;}}}})(); undefined;"
@@ -91494,6 +91711,28 @@ fn gpui_app_shots_callback_target() -> Option<GpuiAppShotsCallbackTarget> {
 }
 
 #[cfg(target_os = "macos")]
+fn register_gpui_sidebar_pointer_callback_target(
+    app: gpui::WeakEntity<GhostexGpuiApp>,
+    async_app: gpui::AsyncApp,
+) {
+    GPUI_SIDEBAR_POINTER_CALLBACK_TARGET.with(|target| {
+        *target.borrow_mut() = Some(GpuiSidebarPointerCallbackTarget { app, async_app });
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn unregister_gpui_sidebar_pointer_callback_target() {
+    GPUI_SIDEBAR_POINTER_CALLBACK_TARGET.with(|target| {
+        *target.borrow_mut() = None;
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_sidebar_pointer_callback_target() -> Option<GpuiSidebarPointerCallbackTarget> {
+    GPUI_SIDEBAR_POINTER_CALLBACK_TARGET.with(|target| target.borrow().clone())
+}
+
+#[cfg(target_os = "macos")]
 fn register_gpui_menu_bar_status_callback_target(
     app: gpui::WeakEntity<GhostexGpuiApp>,
     async_app: gpui::AsyncApp,
@@ -92302,6 +92541,52 @@ pub extern "C" fn GhostexGpuiFirstResponderDidChange(
     responder: *mut std::ffi::c_void,
 ) {
     queue_gpui_first_responder_transition(gpui_root_view, responder);
+}
+
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-02:
+The sidebar renderer cannot observe the pointer once it crosses into a native
+sibling (GPUI chrome, a Ghostty terminal host, another CEF pane), so Chromium
+keeps the last hovered row's :hover state — which is what pinned the hover-only
+Close button on a session row after the pointer had already left — and an open
+sidebar context menu never learns about clicks that land outside its document.
+The AppKit sendEvent observer reports both facts here; both are forwarded into
+the page through the sidebar's existing app-owned script boundary.
+*/
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiSidebarPointerInsideChanged(inside: bool) {
+    let Some(target) = gpui_sidebar_pointer_callback_target() else {
+        return;
+    };
+    let app = target.app.clone();
+    let mut async_app = target.async_app.clone();
+    let foreground = target.async_app.foreground_executor().clone();
+    foreground
+        .spawn(async move {
+            let _ = app.update(&mut async_app, |this, cx| {
+                this.dispatch_gpui_sidebar_pointer_inside(inside, cx);
+            });
+        })
+        .detach();
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiSidebarOutsideMouseDown() {
+    let Some(target) = gpui_sidebar_pointer_callback_target() else {
+        return;
+    };
+    let app = target.app.clone();
+    let mut async_app = target.async_app.clone();
+    let foreground = target.async_app.foreground_executor().clone();
+    foreground
+        .spawn(async move {
+            let _ = app.update(&mut async_app, |this, cx| {
+                this.dispatch_gpui_sidebar_dismiss_context_menus(cx);
+            });
+        })
+        .detach();
 }
 
 #[cfg(target_os = "macos")]

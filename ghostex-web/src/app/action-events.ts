@@ -6,6 +6,8 @@ export type OpenRecentProjectsModalDetail = Pick<
   "machineId" | "machineName"
 >;
 
+export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal: "delayedSend" }>;
+
 /*
  * CDXC:AddProject 2026-07-30:
  * The add-project dialog opens from two different web entry points — the
@@ -33,6 +35,7 @@ declare global {
     "ghostex-web:closeAppModal": CustomEvent;
     "ghostex-web:openAddProjectModal": CustomEvent<OpenAddProjectModalDetail>;
     "ghostex-web:openCommandPane": CustomEvent;
+    "ghostex-web:openDelayedActionsModal": CustomEvent<OpenDelayedActionsModalDetail>;
     "ghostex-web:openRecentProjectsModal": CustomEvent<OpenRecentProjectsModalDetail>;
     "ghostex-web:runTitlebarAction": CustomEvent<RunTitlebarActionDetail>;
   }

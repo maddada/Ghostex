@@ -491,6 +491,10 @@ export type SidebarSessionItem = {
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
+  /** True when Delayed Send is armed for every agent in this project to finish. */
+  sendWhenAllProjectSessionsStopActive?: boolean;
+  /** True when Delayed Send is armed for this agent to finish. */
+  sendWhenAgentStopsActive?: boolean;
   /**
    * CDXC:PanePopOut 2026-05-19-10:15:
    * Sidebar session context menus need the live pop-out presentation flag so

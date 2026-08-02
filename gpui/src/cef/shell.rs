@@ -683,6 +683,17 @@ pub fn install_first_responder_observer(native_view: *mut c_void) {
 }
 
 #[cfg(target_os = "macos")]
+pub fn set_sidebar_pointer_tracking_view(native_view: *mut c_void) {
+    /*
+    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    Registers the sidebar CEF child view with the AppKit sendEvent observer so
+    Rust learns when the pointer crosses the sidebar's frame and when a
+    mouse-down lands outside it (sticky-hover reset + context-menu dismissal).
+    */
+    platform::set_sidebar_pointer_tracking_view(native_view);
+}
+
+#[cfg(target_os = "macos")]
 pub fn native_view_contains_responder(
     root_native_view: *mut c_void,
     responder: *mut c_void,

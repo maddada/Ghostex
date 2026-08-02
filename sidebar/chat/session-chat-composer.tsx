@@ -594,7 +594,10 @@ export const SessionChatComposer = forwardRef<
   const sendDisabled = isWorking ? false : disabled || draft.trim() === "";
 
   return (
-    <div className="relative">
+    // min-w-0 all the way down to the input: this sits in a grid/flex column,
+    // whose items are min-width:auto by default, so an unbreakable pasted run
+    // would otherwise widen the composer past the pane and scroll the page.
+    <div className="relative min-w-0">
       {slashOpen ? (
         <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
           <div
@@ -646,7 +649,7 @@ export const SessionChatComposer = forwardRef<
       ) : null}
       <div
         className={cn(
-          "rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
+          "min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
           disabled && "opacity-60",
         )}
         data-disabled={disabled ? "true" : undefined}
@@ -685,7 +688,7 @@ export const SessionChatComposer = forwardRef<
             ) : null}
           </div>
         ) : null}
-        <div className="flex items-end gap-2 pb-1.5">
+        <div className="flex min-w-0 items-end gap-2 pb-1.5">
         {useMonaco ? (
           <SessionChatMonacoInput
             disabled={disabled}
@@ -708,7 +711,7 @@ export const SessionChatComposer = forwardRef<
           />
         ) : (
           <textarea
-            className="ghostex-chat-composer-input max-h-40 min-h-6 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
+            className="ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
             disabled={disabled}
             onChange={(event) => {
               updateDraft(event.target.value);

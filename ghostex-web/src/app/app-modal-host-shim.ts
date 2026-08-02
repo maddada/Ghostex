@@ -1,6 +1,7 @@
 import type { OpenAppModalMessage } from "@/sidebar/app-modal-host-bridge";
 import type {
   OpenAddProjectModalDetail,
+  OpenDelayedActionsModalDetail,
   OpenRecentProjectsModalDetail,
 } from "./action-events";
 
@@ -34,6 +35,15 @@ function handleAppModalHostMessage(message: unknown): void {
 
   if (message.type === "open" && isAddProjectModal(message.modal)) {
     openAddProjectModal(message);
+    return;
+  }
+
+  if (message.type === "open" && message.modal === "delayedSend") {
+    window.dispatchEvent(
+      new CustomEvent("ghostex-web:openDelayedActionsModal", {
+        detail: message as OpenDelayedActionsModalDetail,
+      }),
+    );
     return;
   }
 

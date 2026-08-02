@@ -63,7 +63,7 @@ pub enum Parser {
     RenameRequest,
     SessionBoolean(&'static str),
     SessionTag,
-    /// parse a session selector plus `--delay-ms` for scheduleDelayedSend.
+    /// Parse a session selector plus one Delayed Send trigger.
     DelayedSend,
     SendText,
     SendKey,
@@ -1364,14 +1364,36 @@ fn parse_session_boolean(name: &str, rest: &[String], flags: &Flags) -> Value {
 
 fn parse_delayed_send(rest: &[String], flags: &Flags) -> CliResult<Value> {
     let mut map = parse_session_selector(rest, flags);
+    let send_when_agent_stops = flags.truthy("whenAgentFinishes");
+    let send_when_all_project_sessions_stop = flags.truthy("whenAllAgentsFinish");
     let delay_ms = flags.number("delayMs").filter(|value| value.is_finite());
-    let Some(delay_ms) = delay_ms else {
+
+    let trigger_count = usize::from(delay_ms.is_some())
+        + usize::from(send_when_agent_stops)
+        + usize::from(send_when_all_project_sessions_stop);
+    if trigger_count == 0 {
         return Err(CliError::Other(
-            "Missing --delay-ms. Delayed Send needs a whole-minute delay in milliseconds."
+            "Missing Delayed Send trigger. Use --delay-ms, --when-agent-finishes, or --when-all-agents-finish."
                 .to_string(),
         ));
-    };
-    map.insert("delayMs".to_string(), js_number_to_value(delay_ms));
+    }
+    if trigger_count > 1 {
+        return Err(CliError::Other(
+            "Choose exactly one Delayed Send trigger: --delay-ms, --when-agent-finishes, or --when-all-agents-finish."
+                .to_string(),
+        ));
+    }
+
+    if let Some(delay_ms) = delay_ms {
+        map.insert("delayMs".to_string(), js_number_to_value(delay_ms));
+    } else if send_when_agent_stops {
+        map.insert("sendWhenAgentStops".to_string(), Value::Bool(true));
+    } else {
+        map.insert(
+            "sendWhenAllProjectSessionsStop".to_string(),
+            Value::Bool(true),
+        );
+    }
     Ok(Value::Object(map))
 }
 
@@ -1981,6 +2003,36 @@ mod tests {
         let (rest, flags) = parsed(&["--session-id", "G1abc"]);
         let payload = parse_session_boolean("sleeping", &rest, &flags);
         assert_eq!(payload, json!({ "sessionId": "G1abc", "sleeping": true }));
+    }
+
+    #[test]
+    fn delayed_send_accepts_each_trigger_and_rejects_ambiguous_triggers() {
+        let (rest, flags) = parsed(&["--session-id", "G1abc", "--delay-ms", "300000"]);
+        assert_eq!(
+            parse_delayed_send(&rest, &flags).expect("delay trigger"),
+            json!({ "delayMs": 300000, "sessionId": "G1abc" })
+        );
+
+        let (rest, flags) = parsed(&["--session-id", "G1abc", "--when-agent-finishes"]);
+        assert_eq!(
+            parse_delayed_send(&rest, &flags).expect("agent trigger"),
+            json!({ "sendWhenAgentStops": true, "sessionId": "G1abc" })
+        );
+
+        let (rest, flags) = parsed(&["--session-id", "G1abc", "--when-all-agents-finish"]);
+        assert_eq!(
+            parse_delayed_send(&rest, &flags).expect("project trigger"),
+            json!({ "sendWhenAllProjectSessionsStop": true, "sessionId": "G1abc" })
+        );
+
+        let (rest, flags) = parsed(&[
+            "--session-id",
+            "G1abc",
+            "--delay-ms",
+            "300000",
+            "--when-agent-finishes",
+        ]);
+        assert!(parse_delayed_send(&rest, &flags).is_err());
     }
 
     #[test]

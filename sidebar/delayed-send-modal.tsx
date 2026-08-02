@@ -8,7 +8,14 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,21 +24,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 const MAX_DELAY_MS = 2_147_483_647;
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 
+type DelayedSendTrigger = "afterDelay" | "agentStops" | "allAgentsStop";
+
 export type DelayedSendModalProps = {
+  closeAfterDoneActive?: boolean;
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   isOpen: boolean;
@@ -40,7 +53,7 @@ export type DelayedSendModalProps = {
   onConfirm: (
     delayMs: number,
     sendWhenAgentStops: boolean,
-    sendWhenAllProjectSessionsStop: boolean,
+    sendWhenAllProjectSessionsStop: boolean
   ) => void;
   onToggleCloseAfterDone: () => void;
   sendWhenAllProjectSessionsStopActive?: boolean;
@@ -77,12 +90,14 @@ export type DelayedSendModalProps = {
  * retry minutes focus over the first few animation frames/timeouts. Pressing
  * Enter while editing the duration must schedule the timer immediately.
  *
- * CDXC:DelayedSend 2026-06-19-14:24:
- * The duration controls should not include helper copy. When a timer is active,
- * keep Cancel Timer inside the dialog by sharing the bottom cancel row; without
- * an active timer, Cancel remains the only full-width action in that row.
+ * CDXC:SessionAutomations 2026-08-02:
+ * Delayed Send and Close After Done share one automation editor. The send
+ * trigger is a mutually-exclusive Select, both automations expose their real
+ * enabled state through switches, and disabling an active send cancels it when
+ * the user saves.
  */
 export function DelayedSendModal({
+  closeAfterDoneActive = false,
   delayedSendDeadlineAt,
   delayedSendRemainingLabel,
   isOpen,
@@ -98,14 +113,14 @@ export function DelayedSendModal({
 }: DelayedSendModalProps) {
   const [hours, setHours] = useState("0");
   const [minutes, setMinutes] = useState("5");
-  const [sendWhenAgentStops, setSendWhenAgentStops] = useState(sendWhenAgentStopsActive);
-  const [sendWhenAllProjectSessionsStop, setSendWhenAllProjectSessionsStop] = useState(
-    sendWhenAllProjectSessionsStopActive,
-  );
+  const [sendEnterEnabled, setSendEnterEnabled] = useState(true);
+  const [trigger, setTrigger] = useState<DelayedSendTrigger>("afterDelay");
+  const [closeAfterDoneEnabled, setCloseAfterDoneEnabled] = useState(closeAfterDoneActive);
   const hoursInputId = useId();
   const minutesInputId = useId();
-  const sendWhenAgentStopsId = useId();
-  const sendWhenAllProjectSessionsStopId = useId();
+  const sendEnterEnabledId = useId();
+  const sendTriggerId = useId();
+  const closeAfterDoneEnabledId = useId();
   const minutesInputRef = useRef<HTMLInputElement>(null);
   const focusRetryTimeoutIdsRef = useRef<number[]>([]);
   const focusRetryAnimationFrameIdsRef = useRef<number[]>([]);
@@ -144,11 +159,11 @@ export function DelayedSendModal({
   const handleOpenAutoFocus = useCallback(
     (event: { preventDefault: () => void }) => {
       event.preventDefault();
-      if (!sendWhenAgentStops && !sendWhenAllProjectSessionsStop) {
+      if (sendEnterEnabled && trigger === "afterDelay") {
         scheduleMinutesFocus();
       }
     },
-    [scheduleMinutesFocus, sendWhenAgentStops, sendWhenAllProjectSessionsStop],
+    [scheduleMinutesFocus, sendEnterEnabled, trigger]
   );
 
   useEffect(() => {
@@ -166,15 +181,21 @@ export function DelayedSendModal({
       !shouldSendWhenAllProjectSessionsStop &&
       supportsSendWhenAgentStops &&
       sendWhenAgentStopsActive;
-    setSendWhenAgentStops(shouldSendWhenAgentStops);
-    setSendWhenAllProjectSessionsStop(shouldSendWhenAllProjectSessionsStop);
+    const initialTrigger: DelayedSendTrigger = shouldSendWhenAllProjectSessionsStop
+      ? "allAgentsStop"
+      : shouldSendWhenAgentStops
+        ? "agentStops"
+        : "afterDelay";
+    setSendEnterEnabled(true);
+    setTrigger(initialTrigger);
+    setCloseAfterDoneEnabled(closeAfterDoneActive);
     /*
      * CDXC:DelayedSend 2026-05-21-12:21:
      * Opening or editing Delayed Send should select the minutes field, not
      * merely place a caret there, so typing immediately replaces the common
      * duration value without requiring Cmd+A or manual deletion.
      */
-    if (shouldSendWhenAgentStops || shouldSendWhenAllProjectSessionsStop) {
+    if (initialTrigger !== "afterDelay") {
       clearScheduledMinutesFocus();
     } else {
       scheduleMinutesFocus();
@@ -184,6 +205,7 @@ export function DelayedSendModal({
     };
   }, [
     clearScheduledMinutesFocus,
+    closeAfterDoneActive,
     delayedSendDeadlineAt,
     isOpen,
     scheduleMinutesFocus,
@@ -199,32 +221,67 @@ export function DelayedSendModal({
 
   const delayMs = getDelayMs(hours, minutes);
   const isValidDelay = delayMs >= MINUTE_MS && delayMs <= MAX_DELAY_MS;
-  const hasStatusTrigger = sendWhenAgentStops || sendWhenAllProjectSessionsStop;
+  const hasStatusTrigger = trigger !== "afterDelay";
   const isValidSchedule = hasStatusTrigger || isValidDelay;
-  const hasActiveTimer = Boolean(delayedSendRemainingLabel);
+  const hasActiveSend = Boolean(
+    delayedSendRemainingLabel || sendWhenAgentStopsActive || sendWhenAllProjectSessionsStopActive
+  );
+  const closeAfterDoneChanged = closeAfterDoneEnabled !== closeAfterDoneActive;
+  const canDisableActiveSend = !hasActiveSend || Boolean(onCancelTimer);
+  const canSave = sendEnterEnabled
+    ? isValidSchedule
+    : canDisableActiveSend && (hasActiveSend || closeAfterDoneChanged);
+  const sendWhenAgentStops = trigger === "agentStops";
+  const sendWhenAllProjectSessionsStop = trigger === "allAgentsStop";
   const trimmedSessionTitle = sessionTitle?.trim();
   const sessionLabel = trimmedSessionTitle
     ? `"${trimmedSessionTitle}" agent session`
     : "this agent session";
+  const triggerOptions: { label: string; value: DelayedSendTrigger }[] = [
+    { label: "After a delay", value: "afterDelay" },
+    ...(supportsSendWhenAgentStops
+      ? [{ label: "When this agent finishes", value: "agentStops" as const }]
+      : []),
+    ...(supportsSendWhenAllProjectSessionsStop
+      ? [{ label: "When all agents finish", value: "allAgentsStop" as const }]
+      : []),
+  ];
+  const sendAutomationDescription = !sendEnterEnabled
+    ? "No Enter keypress will be scheduled."
+    : sendWhenAllProjectSessionsStopActive
+      ? "Active when all agents finish working."
+      : sendWhenAgentStopsActive
+        ? "Active when this agent finishes working."
+        : delayedSendRemainingLabel
+          ? `Active. Enter sends in ${delayedSendRemainingLabel}.`
+          : "Press Enter later using the selected trigger.";
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isValidSchedule) {
+    if (!canSave) {
       return;
     }
-    onConfirm(delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop);
+    if (closeAfterDoneChanged) {
+      onToggleCloseAfterDone();
+    }
+    if (sendEnterEnabled) {
+      onConfirm(delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop);
+    } else if (hasActiveSend) {
+      onCancelTimer?.();
+    }
   };
   const submitFromDurationInput = (event: KeyboardEvent<HTMLInputElement>) => {
     if (
       event.key !== "Enter" ||
       event.nativeEvent.isComposing ||
+      !sendEnterEnabled ||
       hasStatusTrigger ||
       !isValidDelay
     ) {
       return;
     }
     event.preventDefault();
-    onConfirm(delayMs, false, false);
+    event.currentTarget.form?.requestSubmit();
   };
 
   return (
@@ -243,148 +300,129 @@ export function DelayedSendModal({
       >
         <form className="delayed-send-form" onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle className="text-xl">Delayed Actions</DialogTitle>
-            <DialogDescription>
-              {sendWhenAllProjectSessionsStop
-                ? `Press Enter in ${sessionLabel} after all agents in this project have finished working for 10 seconds.`
-                : sendWhenAgentStops
-                  ? `Press Enter in ${sessionLabel} after the agent has finished working for 10 seconds.`
-                  : `Press Enter in ${sessionLabel} after this delay.`}
-              {delayedSendRemainingLabel ? (
-                <>
-                  <br />
-                  {sendWhenAllProjectSessionsStopActive
-                    ? "Send when all agents finish working is active."
-                    : sendWhenAgentStopsActive
-                      ? "Send when agent finishes working is active."
-                      : `Current timer sends in ${delayedSendRemainingLabel}.`}
-                </>
-              ) : null}
-            </DialogDescription>
+            <DialogTitle className="text-xl">Session Automations</DialogTitle>
+            <DialogDescription>{`Automations for ${sessionLabel}.`}</DialogDescription>
           </DialogHeader>
-          <FieldGroup className="delayed-send-field-group">
-            <div className="delayed-send-duration-grid">
-              <Field data-disabled={hasStatusTrigger || undefined}>
-                <FieldLabel htmlFor={hoursInputId}>Hours</FieldLabel>
-                <Input
-                  aria-label="Hours"
-                  disabled={hasStatusTrigger}
-                  id={hoursInputId}
-                  min={0}
-                  onChange={(event) => setHours(event.currentTarget.value)}
-                  onKeyDown={submitFromDurationInput}
-                  step={1}
-                  type="number"
-                  value={hours}
-                />
-              </Field>
-              <Field data-disabled={hasStatusTrigger || undefined}>
-                <FieldLabel htmlFor={minutesInputId}>Minutes</FieldLabel>
-                <Input
-                  aria-label="Minutes"
-                  autoFocus={!hasStatusTrigger}
-                  disabled={hasStatusTrigger}
-                  id={minutesInputId}
-                  min={0}
-                  onChange={(event) => setMinutes(event.currentTarget.value)}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onKeyDown={submitFromDurationInput}
-                  ref={minutesInputRef}
-                  step={1}
-                  type="number"
-                  value={minutes}
-                />
-              </Field>
-            </div>
-            {supportsSendWhenAgentStops || supportsSendWhenAllProjectSessionsStop ? (
-              <FieldSet className="gap-3">
-                <FieldLegend className="sr-only">Send trigger</FieldLegend>
-                <FieldGroup data-slot="checkbox-group">
-                  {supportsSendWhenAgentStops ? (
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        checked={sendWhenAgentStops}
-                        id={sendWhenAgentStopsId}
-                        onCheckedChange={(checked) => {
-                          setSendWhenAgentStops(checked);
-                          if (checked) {
-                            setSendWhenAllProjectSessionsStop(false);
-                            clearScheduledMinutesFocus();
-                          } else {
+          <div className="delayed-send-automation-stack">
+            <Card className="delayed-send-automation-card" size="sm">
+              <CardHeader>
+                <CardTitle>Send Enter</CardTitle>
+                <CardDescription>{sendAutomationDescription}</CardDescription>
+                <CardAction>
+                  <Switch
+                    aria-label="Send Enter automation"
+                    checked={sendEnterEnabled}
+                    id={sendEnterEnabledId}
+                    onCheckedChange={(checked) => {
+                      setSendEnterEnabled(checked);
+                      if (checked && trigger === "afterDelay") {
+                        window.requestAnimationFrame(scheduleMinutesFocus);
+                      } else {
+                        clearScheduledMinutesFocus();
+                      }
+                    }}
+                  />
+                </CardAction>
+              </CardHeader>
+              {sendEnterEnabled ? (
+                <CardContent>
+                  <FieldGroup className="delayed-send-field-group">
+                    <Field>
+                      <FieldLabel htmlFor={sendTriggerId}>Trigger</FieldLabel>
+                      <Select
+                        disabled={triggerOptions.length === 1}
+                        items={triggerOptions}
+                        onValueChange={(value) => {
+                          const nextTrigger = value as DelayedSendTrigger;
+                          setTrigger(nextTrigger);
+                          if (nextTrigger === "afterDelay") {
                             window.requestAnimationFrame(scheduleMinutesFocus);
+                          } else {
+                            clearScheduledMinutesFocus();
                           }
                         }}
-                      />
-                      <FieldLabel htmlFor={sendWhenAgentStopsId}>
-                        Send when agent finishes working
-                      </FieldLabel>
+                        value={trigger}
+                      >
+                        <SelectTrigger className="w-full" id={sendTriggerId}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            {triggerOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </Field>
-                  ) : null}
-                  {supportsSendWhenAllProjectSessionsStop ? (
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        checked={sendWhenAllProjectSessionsStop}
-                        id={sendWhenAllProjectSessionsStopId}
-                        onCheckedChange={(checked) => {
-                          setSendWhenAllProjectSessionsStop(checked);
-                          if (checked) {
-                            setSendWhenAgentStops(false);
-                            clearScheduledMinutesFocus();
-                          } else {
-                            window.requestAnimationFrame(scheduleMinutesFocus);
-                          }
-                        }}
-                      />
-                      <FieldLabel htmlFor={sendWhenAllProjectSessionsStopId}>
-                        Send when all agents finish working
-                      </FieldLabel>
-                    </Field>
-                  ) : null}
-                </FieldGroup>
-              </FieldSet>
-            ) : null}
-          </FieldGroup>
-          <FieldSet className="gap-3">
-            <FieldLegend>Session actions</FieldLegend>
-            <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
-              <div className="min-w-0">
-                <div className="text-sm font-medium">Close After Done</div>
-                <div className="text-xs text-muted-foreground">
-                  Toggle closing this terminal after it stays Done for 3 minutes.
-                </div>
-              </div>
-              <Button onClick={onToggleCloseAfterDone} type="button" variant="outline">
-                Toggle
-              </Button>
-            </div>
-          </FieldSet>
-          <DialogFooter className="delayed-send-footer">
-            <Button className="delayed-send-action-button" disabled={!isValidSchedule} type="submit">
-              {hasStatusTrigger ? "Schedule Send" : "Set Timer"}
-            </Button>
-            <div
-              className="delayed-send-cancel-row"
-              data-has-active-timer={hasActiveTimer ? "true" : "false"}
-            >
-              {hasActiveTimer ? (
-                <Button
-                  className="delayed-send-action-button"
-                  onClick={onCancelTimer}
-                  type="button"
-                  variant="destructive"
-                >
-                  Cancel Timer
-                </Button>
+                    {trigger === "afterDelay" ? (
+                      <div className="delayed-send-duration-grid">
+                        <Field>
+                          <FieldLabel htmlFor={hoursInputId}>Hours</FieldLabel>
+                          <Input
+                            aria-label="Hours"
+                            id={hoursInputId}
+                            min={0}
+                            onChange={(event) => setHours(event.currentTarget.value)}
+                            onKeyDown={submitFromDurationInput}
+                            step={1}
+                            type="number"
+                            value={hours}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={minutesInputId}>Minutes</FieldLabel>
+                          <Input
+                            aria-label="Minutes"
+                            autoFocus
+                            id={minutesInputId}
+                            min={0}
+                            onChange={(event) => setMinutes(event.currentTarget.value)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onKeyDown={submitFromDurationInput}
+                            ref={minutesInputRef}
+                            step={1}
+                            type="number"
+                            value={minutes}
+                          />
+                        </Field>
+                      </div>
+                    ) : null}
+                  </FieldGroup>
+                </CardContent>
               ) : null}
-              <Button
-                className="delayed-send-action-button"
-                onClick={onCancel}
-                type="button"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-            </div>
+            </Card>
+            <Card className="delayed-send-automation-card" size="sm">
+              <CardHeader>
+                <CardTitle>Close session after Done</CardTitle>
+                <CardDescription>
+                  Closes this terminal after it remains Done for 3 minutes.
+                </CardDescription>
+                <CardAction>
+                  <Switch
+                    aria-label="Close session after Done"
+                    checked={closeAfterDoneEnabled}
+                    id={closeAfterDoneEnabledId}
+                    onCheckedChange={setCloseAfterDoneEnabled}
+                  />
+                </CardAction>
+              </CardHeader>
+            </Card>
+          </div>
+          <DialogFooter className="delayed-send-footer">
+            <Button
+              className="delayed-send-action-button"
+              onClick={onCancel}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button className="delayed-send-action-button" disabled={!canSave} type="submit">
+              Save changes
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -355,7 +355,7 @@ export function SessionChatMonacoInput({
 
   return (
     <div
-      className="min-h-6 w-full flex-1 overflow-hidden"
+      className="min-h-6 w-full min-w-0 flex-1 overflow-hidden"
       data-session-chat-typing-redirect-ignore="true"
       ref={containerRef}
     />

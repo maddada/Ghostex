@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import "../../sidebar/styles.css";
 import { SidebarApp } from "../../sidebar/sidebar-app";
+import { dismissAllSidebarContextMenus } from "../../sidebar/sidebar-context-menu-portal";
 import { createGpuiSidebarRuntime } from "./gxserver-runtime";
 import "./sidebar.css";
 
@@ -33,6 +34,21 @@ while the document lacks native focus, which is the sidebar's normal state.
 The CEF helper's renderer-side focused-node callback reports editable-focus
 transitions to Rust instead, which grants/releases native keyboard focus.
 */
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-02:
+An open sidebar context menu closes on Escape, on its own in-sidebar backdrop,
+and on window blur — but none of those fire when the click lands on a native
+sibling. The sidebar CEF surface is mouse-focus passive, so clicking a terminal
+pane or a titlebar button never blurs a browsing context that never held focus,
+and the backdrop only covers the sidebar document. Rust's AppKit pointer
+observer sees those clicks and calls this, the page-side half of the same
+dismissal contract the deprecated macOS host had.
+*/
+window.ghostexGpui = window.ghostexGpui ?? {};
+window.ghostexGpui.dismissSidebarContextMenus = () => {
+  dismissAllSidebarContextMenus();
+};
+
 const gpuiSidebarRuntime = createGpuiSidebarRuntime();
 const root = createRoot(rootElement);
 

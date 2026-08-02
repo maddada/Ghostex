@@ -1470,12 +1470,18 @@ export function SortableSessionCard({
      * Terminal session context menus mirror the native title-bar clock action:
      * open the full-window timer modal and let native press Enter later for
      * the command text already staged in that terminal.
-     */
+    */
     openAppModal({
+      closeAfterDoneActive: session.closeAfterDone === true,
       delayedSendDeadlineAt: session.delayedSendDeadlineAt,
       delayedSendRemainingLabel: session.delayedSendRemainingLabel,
       modal: "delayedSend",
+      sendWhenAllProjectSessionsStopActive:
+        session.sendWhenAllProjectSessionsStopActive === true,
+      sendWhenAgentStopsActive: session.sendWhenAgentStopsActive === true,
       sessionId: session.sessionId,
+      supportsSendWhenAgentStops: true,
+      supportsSendWhenAllProjectSessionsStop: true,
       title: getSessionRenameInitialTitle(session),
       type: "open",
     });

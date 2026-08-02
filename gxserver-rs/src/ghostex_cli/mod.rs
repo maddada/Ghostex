@@ -412,7 +412,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             run_bridge_action("pinSession", Parser::SessionBoolean("pinned"), plain, args)
         }
         "delayed-send" => {
-            // `--cancel` clears the armed timer; otherwise `--delay-ms` arms one.
+            // `--cancel` clears the armed automation; otherwise the parser
+            // accepts the timer and both agent-completion trigger modes.
             if args.iter().any(|arg| arg == "--cancel") {
                 run_bridge_action("cancelDelayedSend", Parser::SessionSelector, plain, args)
             } else {

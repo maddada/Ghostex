@@ -208,6 +208,7 @@ type AppModalHostMessage =
       agentDraft?: AgentConfigDraft;
       access?: T3BrowserAccessMessage;
       collapsedGroupsById?: Record<string, true>;
+      closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
       sendWhenAllProjectSessionsStopActive?: boolean;
@@ -370,6 +371,7 @@ type AddRepositoryModalState = {
 };
 
 type DelayedSendModalState = {
+  closeAfterDoneActive?: boolean;
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   sendWhenAllProjectSessionsStopActive?: boolean;
@@ -988,6 +990,19 @@ function AppModalHost() {
   const portless = useSidebarStore((state) => state.hud.portless);
   const customThemeColor = useSidebarStore((state) => state.hud.customThemeColor);
   const theme = useSidebarStore((state) => state.hud.theme);
+  const delayedSendCloseAfterDoneActive = useSidebarStore((state) => {
+    const sessionId = delayedSend?.sessionId;
+    if (!sessionId) {
+      return false;
+    }
+    return (
+      delayedSend.closeAfterDoneActive ??
+      state.sessionsById[sessionId]?.closeAfterDone ??
+      state.hud.commandSessionIndicators.find((session) => session.sessionId === sessionId)
+        ?.closeAfterDone ??
+      false
+    );
+  });
   const [gitCommitPromptAgentId, setGitCommitPromptAgentId] = useState(() =>
     readPromptAgentModalOverride("gitCommit"),
   );
@@ -1650,6 +1665,7 @@ function AppModalHost() {
         vscode={vscode}
       />
       <DelayedSendModal
+        closeAfterDoneActive={delayedSendCloseAfterDoneActive}
         delayedSendDeadlineAt={delayedSend?.delayedSendDeadlineAt}
         delayedSendRemainingLabel={delayedSend?.delayedSendRemainingLabel}
         isOpen={activeModal === "delayedSend" && delayedSend !== undefined}
@@ -2611,6 +2627,10 @@ function useModalStateFromNative() {
               throw new Error("Delayed Actions modal request is missing sessionId.");
             }
             setDelayedSend({
+              closeAfterDoneActive:
+                typeof message.closeAfterDoneActive === "boolean"
+                  ? message.closeAfterDoneActive
+                  : undefined,
               delayedSendDeadlineAt:
                 typeof message.delayedSendDeadlineAt === "string"
                   ? message.delayedSendDeadlineAt

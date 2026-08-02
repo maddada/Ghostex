@@ -212,9 +212,10 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     /*
     Composer image paste. gxserver's saveSessionChatImage endpoint has no CLI
     verb (base64 bytes would blow past ARG_MAX on the SSH command line), so RN
-    stages the bytes as a local cache file and SFTPs them to the machine with
-    the same uploader the terminal attach flow uses; the returned absolute
-    path goes into the message as `[Image #N](path)`.
+    stages the bytes as a local cache file and SFTPs them into ~/.ghostex/i on
+    the machine — the same directory that endpoint writes, so the path reads
+    back identically to a desktop or web upload; the returned absolute path
+    goes into the message as `[Image #N](path)`.
     */
     saveImage(params) {
       return bridgeCall<GxserverSaveSessionChatImageResult>("saveImage", {
@@ -222,8 +223,8 @@ function createMobileSessionChatTransport(): SessionChatTransport {
         ...(params.suggestedName !== undefined ? { suggestedName: params.suggestedName } : {}),
       });
     },
-    // Non-image attachments ride the same SFTP staging route; the returned
-    // machine path becomes the "[File #N](path)" reference.
+    // Non-image attachments ride the same SFTP staging route into
+    // ~/.ghostex/f; the returned machine path becomes "[File #N](path)".
     saveAttachment(params) {
       return bridgeCall<GxserverSaveSessionChatAttachmentResult>("saveAttachment", {
         base64Data: params.base64Data,

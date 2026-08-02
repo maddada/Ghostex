@@ -104,6 +104,36 @@ async function runChatAgentAction(
   }
 }
 
+/**
+ * The cluster contract for a web workspace session: the primary switch button
+ * plus the gxserver-backed action row. Shared by the chat layer (switch =
+ * back to terminal) and the terminal layer's floating overlay (switch = to
+ * chat) so both surfaces offer the identical Agent Actions row.
+ */
+export function createWebSessionHostActions(
+  session: WorkspaceSession,
+  onSwitchSurface: () => void,
+): SessionChatHostActions {
+  return {
+    onSwitchToTerminal: onSwitchSurface,
+    actions: [
+      {
+        id: "rename",
+        label: "Rename",
+        input: { initialValue: session.title, placeholder: "Session name" },
+      },
+      { id: "sleep", label: "Sleep" },
+      { id: "fork", label: "Fork" },
+      { id: "fullReload", label: "Full Reload" },
+    ],
+    onAction: (id, value) => {
+      runChatAgentAction(session, id, value).catch((error: unknown) => {
+        console.error(`[ghostex-web chat] ${id} action failed`, error);
+      });
+    },
+  };
+}
+
 export function SessionChatHost({
   onSwitchToTerminal,
   session,
@@ -121,24 +151,7 @@ export function SessionChatHost({
   const hostActions = useMemo<SessionChatHostActions | undefined>(
     () =>
       onSwitchToTerminal
-        ? {
-            onSwitchToTerminal,
-            actions: [
-              {
-                id: "rename",
-                label: "Rename",
-                input: { initialValue: session.title, placeholder: "Session name" },
-              },
-              { id: "sleep", label: "Sleep" },
-              { id: "fork", label: "Fork" },
-              { id: "fullReload", label: "Full Reload" },
-            ],
-            onAction: (id, value) => {
-              runChatAgentAction(session, id, value).catch((error: unknown) => {
-                console.error(`[ghostex-web chat] ${id} action failed`, error);
-              });
-            },
-          }
+        ? createWebSessionHostActions(session, onSwitchToTerminal)
         : undefined,
     [onSwitchToTerminal, session],
   );

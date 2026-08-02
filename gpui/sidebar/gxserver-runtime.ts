@@ -200,6 +200,8 @@ export type GpuiWorkspaceSessionDelayedSendSummary = {
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
+  sendWhenAllProjectSessionsStopActive?: boolean;
+  sendWhenAgentStopsActive?: boolean;
   sessionId: string;
 };
 
@@ -247,6 +249,13 @@ export type GhostexGpuiSidebarBridge = {
   onStatusPetActivation?: (payload: unknown) => void;
   onTitlebarGitAction?: (payload: unknown) => void;
   onWorktreeModalCommand?: (payload: unknown) => void;
+  /**
+   * CDXC:GPUISidebarPointerTracking 2026-08-02:
+   * Close every open sidebar context menu because a native mouse-down landed
+   * outside the sidebar's frame. Installed by the sidebar entry point, called
+   * by Rust's AppKit pointer observer.
+   */
+  dismissSidebarContextMenus?: () => void;
   onWorkspaceFirstPromptTitleGenerationCancel?: (payload: unknown) => void;
   onWorkspaceFolderPicked?: (payload: unknown) => void;
   onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;
@@ -8020,6 +8029,10 @@ class GpuiSidebarRuntime {
       deadlineAt: delayedSend.delayedSendDeadlineAt,
       remainingLabel: delayedSend.delayedSendRemainingLabel,
       remainingMs: delayedSend.delayedSendRemainingMs,
+      sendWhenAllProjectSessionsStopActive:
+        delayedSend.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
+      sendWhenAgentStopsActive:
+        delayedSend.sendWhenAgentStopsActive === true ? true : undefined,
     };
   }
 
@@ -14801,10 +14814,15 @@ function normalizeGpuiWorkspaceSessionDelayedSends(
     const delayedSendRemainingMs = normalizeGpuiCommandPaneTimerRemainingMs(
       record.delayedSendRemainingMs,
     );
+    const sendWhenAllProjectSessionsStopActive =
+      record.sendWhenAllProjectSessionsStopActive === true;
+    const sendWhenAgentStopsActive = record.sendWhenAgentStopsActive === true;
     if (
       !delayedSendDeadlineAt &&
       !delayedSendRemainingLabel &&
-      delayedSendRemainingMs === undefined
+      delayedSendRemainingMs === undefined &&
+      !sendWhenAllProjectSessionsStopActive &&
+      !sendWhenAgentStopsActive
     ) {
       return [];
     }
@@ -14813,6 +14831,10 @@ function normalizeGpuiWorkspaceSessionDelayedSends(
         ...(delayedSendDeadlineAt ? { delayedSendDeadlineAt } : {}),
         ...(delayedSendRemainingLabel ? { delayedSendRemainingLabel } : {}),
         ...(delayedSendRemainingMs !== undefined ? { delayedSendRemainingMs } : {}),
+        ...(sendWhenAllProjectSessionsStopActive
+          ? { sendWhenAllProjectSessionsStopActive: true }
+          : {}),
+        ...(sendWhenAgentStopsActive ? { sendWhenAgentStopsActive: true } : {}),
         sessionId,
       },
     ];

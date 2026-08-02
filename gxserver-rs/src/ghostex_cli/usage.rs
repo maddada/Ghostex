@@ -257,8 +257,8 @@ pub fn usage() -> String {
         ),
         format_help_command("tag-session <id> <tag|none>", "Set or clear a session tag"),
         format_help_command(
-            "delayed-send <id> --delay-ms <n> | --cancel",
-            "Arm or cancel a Delayed Send Enter timer",
+            "delayed-send <id> (--delay-ms <n> | --when-agent-finishes | --when-all-agents-finish) | --cancel",
+            "Arm or cancel a Session Automations Enter trigger",
         ),
         format_help_command(
             "close-after-done <id>",

@@ -46,7 +46,9 @@ import {
 import { prepareSessionAttach, RestoreBlockedError, type AttachIntent } from "./attach-flow";
 import "./action-events";
 import { CommandPane } from "./command-pane";
-import { SessionChatHost } from "./session-chat-host";
+import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
+import { SessionChatHostActionsCluster } from "@/sidebar/chat/session-chat-host-actions-cluster";
+import { createWebSessionHostActions, SessionChatHost } from "./session-chat-host";
 import {
   createWorkspaceSessionId,
   domainSessionToWorkspaceSession,
@@ -504,7 +506,7 @@ export function IntegratedAgentsPage() {
           renderChatBody={(session, controls) => (
             <SessionChatHost onSwitchToTerminal={controls.switchToTerminal} session={session} />
           )}
-          renderTerminalBody={(session) => {
+          renderTerminalBody={(session, controls) => {
             const machine = connections.find(
               (state) => state.machine.machineId === session.machineId,
             )?.machine;
@@ -512,24 +514,35 @@ export function IntegratedAgentsPage() {
             if (!machine) {
               return <div className="workspace-terminal-unavailable">Machine connection unavailable.</div>;
             }
+            const chatEligible =
+              session.agentId !== undefined
+              && resolveSessionChatTranscriptAgent(session.agentId) !== null;
             return (
-              <SessionTerminal
-                aria-label={`Terminal ${session.title}`}
-                authToken={machine.authToken}
-                autoFocus
-                baseUrl={machine.baseUrl}
-                customKeyEventHandler={(event) =>
-                  !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f")
-                }
-                onError={(nextError: TerminalWsClientError) => setError(nextError.message)}
-                onReady={() => void deliverStartupText(session)}
-                projectId={session.projectId as GxserverProjectId}
-                ref={(handle) => {
-                  if (handle) terminalHandles.current.set(id, handle);
-                  else terminalHandles.current.delete(id);
-                }}
-                sessionId={session.sessionId as GxserverSessionId}
-              />
+              <div className="workspace-terminal-surface">
+                <SessionTerminal
+                  aria-label={`Terminal ${session.title}`}
+                  authToken={machine.authToken}
+                  autoFocus
+                  baseUrl={machine.baseUrl}
+                  customKeyEventHandler={(event) =>
+                    !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f")
+                  }
+                  onError={(nextError: TerminalWsClientError) => setError(nextError.message)}
+                  onReady={() => void deliverStartupText(session)}
+                  projectId={session.projectId as GxserverProjectId}
+                  ref={(handle) => {
+                    if (handle) terminalHandles.current.set(id, handle);
+                    else terminalHandles.current.delete(id);
+                  }}
+                  sessionId={session.sessionId as GxserverSessionId}
+                />
+                {chatEligible ? (
+                  <SessionChatHostActionsCluster
+                    hostActions={createWebSessionHostActions(session, controls.switchToChat)}
+                    surface="terminal"
+                  />
+                ) : null}
+              </div>
             );
           }}
         />

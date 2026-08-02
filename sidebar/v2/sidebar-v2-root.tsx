@@ -1659,10 +1659,16 @@ export function SidebarV2Root({
                */
               onDelayedSend: () =>
                 openAppModal({
+                  closeAfterDoneActive: menuSession.closeAfterDone === true,
                   delayedSendDeadlineAt: menuSession.delayedSendDeadlineAt,
                   delayedSendRemainingLabel: menuSession.delayedSendRemainingLabel,
                   modal: "delayedSend",
+                  sendWhenAllProjectSessionsStopActive:
+                    menuSession.sendWhenAllProjectSessionsStopActive === true,
+                  sendWhenAgentStopsActive: menuSession.sendWhenAgentStopsActive === true,
                   sessionId: menuSession.sessionId,
+                  supportsSendWhenAgentStops: true,
+                  supportsSendWhenAllProjectSessionsStop: true,
                   title: sidebarV2SessionModalTitle(menuSession),
                   type: "open",
                 }),

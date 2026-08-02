@@ -8,7 +8,6 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
 import {
   addWorkspaceSession,
   closeWorkspaceTab,
@@ -68,6 +67,11 @@ export interface WorkspaceChatBodyControls {
   switchToTerminal(): void;
 }
 
+/** Pane controls handed to the terminal body for its floating surface chrome. */
+export interface WorkspaceTerminalBodyControls {
+  switchToChat(): void;
+}
+
 export interface AgentsWorkspaceProps {
   sessions?: WorkspaceSession[];
   availableSessions?: WorkspaceSession[];
@@ -75,7 +79,10 @@ export interface AgentsWorkspaceProps {
   openRequest?: WorkspaceOpenRequest;
   primaryMachineId?: string;
   debugSeed?: boolean;
-  renderTerminalBody?(session: WorkspaceSession): ReactNode;
+  renderTerminalBody?(
+    session: WorkspaceSession,
+    controls: WorkspaceTerminalBodyControls,
+  ): ReactNode;
   renderChatBody?(session: WorkspaceSession, controls: WorkspaceChatBodyControls): ReactNode;
   onNewTerminal?(paneId: string, splitAxis?: WorkspaceSplitAxis): void;
   onPlaceholderAction?(session: WorkspaceSession, action: WorkspacePlaceholderAction): void;
@@ -299,10 +306,6 @@ function Pane({
     : undefined;
   const focused = model.focusedPane === leaf.paneId;
   const surfaceMode = active?.sessionSurfaceMode ?? "terminal";
-  // Chat sessions must always be able to toggle back to the terminal even if
-  // the agent is no longer recognized as chat-eligible.
-  const showSurfaceToggle = !!active
-    && (surfaceMode === "chat" || resolveSessionChatTranscriptAgent(active.agentId) !== null);
   const setSurfaceMode = (mode: "terminal" | "chat") => {
     if (leaf.tabGroup.activeTab) {
       onChange(setWorkspaceSessionSurfaceMode(model, leaf.tabGroup.activeTab, mode));
@@ -411,34 +414,11 @@ function Pane({
           />
         </div>
         <div className="workspace-tabbar__actions">
-          {showSurfaceToggle && (
-            <div aria-label="Session view" className="workspace-surface-toggle" role="group">
-              <button
-                aria-label="Terminal view"
-                aria-pressed={surfaceMode === "terminal"}
-                className={`workspace-surface-toggle__option${
-                  surfaceMode === "terminal" ? " workspace-surface-toggle__option--active" : ""
-                }`}
-                onClick={() => setSurfaceMode("terminal")}
-                title="Terminal"
-                type="button"
-              >
-                <WorkspaceIcon name="terminal" />
-              </button>
-              <button
-                aria-label="Chat view"
-                aria-pressed={surfaceMode === "chat"}
-                className={`workspace-surface-toggle__option${
-                  surfaceMode === "chat" ? " workspace-surface-toggle__option--active" : ""
-                }`}
-                onClick={() => setSurfaceMode("chat")}
-                title="Chat"
-                type="button"
-              >
-                <WorkspaceIcon name="chat" />
-              </button>
-            </div>
-          )}
+          {/*
+            The terminal↔chat switch lives in the floating top-right cluster
+            over the surface itself (SessionChatHostActionsCluster), matching
+            the gpui terminal overlay — no tab-bar toggle.
+          */}
           <button aria-label="Find in terminal" onClick={() => onFindOpenChange(true)} type="button">
             <WorkspaceIcon name="find" />
           </button>
@@ -497,7 +477,9 @@ function Pane({
                 surfaceMode === "chat" ? " workspace-surface-layer--hidden" : ""
               }`}
             >
-              {renderTerminalBody?.(active) ?? (
+              {renderTerminalBody?.(active, {
+                switchToChat: () => setSurfaceMode("chat"),
+              }) ?? (
                 <div className="workspace-terminal-slot">
                   <span>{active.title}</span>
                   <small>Terminal body slot</small>
