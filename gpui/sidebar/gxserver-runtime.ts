@@ -623,6 +623,8 @@ const GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE =
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.sessionCompletionSound";
+/** Which Actions list a run-by-id selector names. Absent means project. */
+type SidebarCommandScope = "global" | "project";
 const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE = "ghostex.gpui.sidebar.globalActions";
 /*
@@ -1892,7 +1894,7 @@ class GpuiSidebarRuntime {
     if (!selection) {
       return;
     }
-    this.runSidebarCommand(selection.commandId, selection);
+    this.runSidebarCommand(selection.message.commandId, selection.message, selection.scope);
   }
 
   private requestT3SessionBrowserAccess(sessionId: string): void {
@@ -4893,17 +4895,25 @@ class GpuiSidebarRuntime {
     if (payload === this.postedGlobalActionsPayload) {
       return;
     }
-    this.postedGlobalActionsPayload = payload;
+    /*
+     * Cache only what the bridge confirmed it took. An absent CEF function
+     * makes the optional call return undefined WITHOUT throwing, and a rejected
+     * payload returns false, so caching before the call would record an
+     * undelivered payload as sent and leave the strip empty until some
+     * unrelated HUD change happened to produce a different payload. Leaving the
+     * cache unset instead means the next HUD refresh retries on its own.
+     */
+    let delivered = false;
     try {
-      window.ghostexGpui?.postGlobalActions?.(payload);
+      delivered = window.ghostexGpui?.postGlobalActions?.(payload) === true;
     } catch {
       /*
-       * The strip is presentation-only. If CEF has not installed the fixed
-       * function or rejects the payload, keep this runtime authoritative and
-       * do not log raw payloads or invent native state.
+       * The strip is presentation-only. Keep this runtime authoritative and do
+       * not log raw payloads or invent native state.
        */
-      this.postedGlobalActionsPayload = undefined;
+      delivered = false;
     }
+    this.postedGlobalActionsPayload = delivered ? payload : undefined;
   }
 
   private postGpuiStatusPetState(): void {
@@ -14171,28 +14181,30 @@ class GpuiSidebarRuntime {
     return agents.find((agent) => agent.agentId === normalizedAgentId);
   }
 
-  private resolveSidebarCommand(commandId: string): SidebarCommandButton | undefined {
+  /*
+   * CDXC:GlobalActions 2026-08-01:
+   * Scope selects the list exclusively rather than falling through from one to
+   * the other. A tab strip click names a Global Action, so resolving it against
+   * project commands — which a shared id would allow — would run something the
+   * user did not click. Global ids are additionally barred from the reserved
+   * built-in names at save time, so the two spaces cannot collide there either.
+   */
+  private resolveSidebarCommand(
+    commandId: string,
+    scope: SidebarCommandScope = "project",
+  ): SidebarCommandButton | undefined {
     const normalizedCommandId = commandId.trim();
     if (!normalizedCommandId) {
       return undefined;
     }
+    if (scope === "global") {
+      const globalCommands = (this.sidebarHud?.globalCommands ?? []) as SidebarCommandButton[];
+      return globalCommands.find((command) => command.commandId === normalizedCommandId);
+    }
     const commands = this.sidebarHud
       ? ([...this.sidebarHud.commands] as SidebarCommandButton[])
       : createSidebarCommandButtons([], [], []);
-    const command = commands.find((command) => command.commandId === normalizedCommandId);
-    if (command) {
-      return command;
-    }
-    /*
-     * CDXC:GlobalActions 2026-08-01:
-     * Global Actions are runnable from the same selector-shaped paths as
-     * Project Actions — the gpui tab strip and the Command Palette both send
-     * just an id — so resolution falls through to the global list. Project
-     * Actions are checked first: a project that defines its own action with the
-     * same id keeps its own behavior rather than being shadowed by a global one.
-     */
-    const globalCommands = (this.sidebarHud?.globalCommands ?? []) as SidebarCommandButton[];
-    return globalCommands.find((command) => command.commandId === normalizedCommandId);
+    return commands.find((command) => command.commandId === normalizedCommandId);
   }
 
   private createSidebarCommandSelectionMessage(
@@ -14227,7 +14239,11 @@ class GpuiSidebarRuntime {
     };
   }
 
-  private runSidebarCommand(commandId: string, originalMessage: SidebarToExtensionMessage): void {
+  private runSidebarCommand(
+    commandId: string,
+    originalMessage: SidebarToExtensionMessage,
+    scope: SidebarCommandScope = "project",
+  ): void {
     /*
      * CDXC:GPUICommandPane 2026-06-26-05:11:
      * The shared SidebarApp and Command Palette emit `runSidebarCommand` as an
@@ -14248,7 +14264,7 @@ class GpuiSidebarRuntime {
       this.handleUnsupportedSidebarMessage(originalMessage);
       return;
     }
-    const command = this.resolveSidebarCommand(commandId);
+    const command = this.resolveSidebarCommand(commandId, scope);
     if (!command) {
       this.handleUnsupportedSidebarMessage(originalMessage);
       return;
@@ -16454,15 +16470,30 @@ function normalizeGpuiCommandPaletteSessionFocus(value: unknown): string | undef
   return sessionId;
 }
 
+/*
+ * CDXC:GlobalActions 2026-08-01:
+ * The tab strip runs Global Actions and the Command Palette runs Project
+ * Actions, and both send only an id. Without a scope on the selector the two
+ * id spaces are indistinguishable, so a Global Action whose id also exists as a
+ * project action would launch the project one. Scope is optional and absent
+ * means project, which keeps every existing palette sender unchanged.
+ */
 function normalizeGpuiCommandPaletteRunSidebarCommand(
   value: unknown,
-): Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }> | undefined {
+):
+  | {
+      message: Extract<SidebarToExtensionMessage, { type: "runSidebarCommand" }>;
+      scope: SidebarCommandScope;
+    }
+  | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
   if (
-    Object.keys(record).some((key) => !["commandId", "runMode", "type", "version"].includes(key))
+    Object.keys(record).some(
+      (key) => !["commandId", "runMode", "scope", "type", "version"].includes(key),
+    )
   ) {
     return undefined;
   }
@@ -16476,19 +16507,32 @@ function normalizeGpuiCommandPaletteRunSidebarCommand(
   if (!commandId) {
     return undefined;
   }
+  let scope: SidebarCommandScope = "project";
+  if (Object.prototype.hasOwnProperty.call(record, "scope")) {
+    if (record.scope !== "global" && record.scope !== "project") {
+      return undefined;
+    }
+    scope = record.scope;
+  }
   if (!Object.prototype.hasOwnProperty.call(record, "runMode")) {
     return {
-      commandId,
-      type: "runSidebarCommand",
+      message: {
+        commandId,
+        type: "runSidebarCommand",
+      },
+      scope,
     };
   }
   if (!isSidebarCommandRunMode(record.runMode)) {
     return undefined;
   }
   return {
-    commandId,
-    runMode: record.runMode,
-    type: "runSidebarCommand",
+    message: {
+      commandId,
+      runMode: record.runMode,
+      type: "runSidebarCommand",
+    },
+    scope,
   };
 }
 

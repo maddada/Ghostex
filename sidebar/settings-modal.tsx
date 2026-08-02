@@ -5308,6 +5308,7 @@ export function SettingsModal({
           {!isFirstLaunchSetup ? (
           <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="actions">
             <ActionsSettingsTab
+              getSettingModificationProps={getSettingModificationProps}
               hideTabStripNewBrowserButton={draft.hideTabStripNewBrowserButton}
               hideTabStripNewChatButton={draft.hideTabStripNewChatButton}
               hideTabStripNewTerminalButton={draft.hideTabStripNewTerminalButton}
@@ -9000,6 +9001,7 @@ function useSettingsCommandOrder(commands: readonly SidebarCommandButton[]) {
 }
 
 function ActionsSettingsTab({
+  getSettingModificationProps,
   hideTabStripNewBrowserButton,
   hideTabStripNewChatButton,
   hideTabStripNewTerminalButton,
@@ -9010,6 +9012,9 @@ function ActionsSettingsTab({
   searchEmptyState,
   vscode,
 }: {
+  getSettingModificationProps: <Key extends keyof ghostexSettings>(
+    key: Key,
+  ) => Required<SettingModificationProps>;
   hideTabStripNewBrowserButton: boolean;
   hideTabStripNewChatButton: boolean;
   hideTabStripNewTerminalButton: boolean;
@@ -9207,18 +9212,21 @@ function ActionsSettingsTab({
           <ToggleField
             checked={hideTabStripNewTerminalButton}
             description="Hide the New Terminal button from the tab strip."
+            {...getSettingModificationProps("hideTabStripNewTerminalButton")}
             label="Hide New Terminal button"
             onChange={onHideTabStripNewTerminalButtonChange}
           />
           <ToggleField
             checked={hideTabStripNewChatButton}
             description="Hide the New Chat button from the tab strip."
+            {...getSettingModificationProps("hideTabStripNewChatButton")}
             label="Hide New Chat button"
             onChange={onHideTabStripNewChatButtonChange}
           />
           <ToggleField
             checked={hideTabStripNewBrowserButton}
             description="Hide the New Browser Tab button from the tab strip."
+            {...getSettingModificationProps("hideTabStripNewBrowserButton")}
             label="Hide New Browser Tab button"
             onChange={onHideTabStripNewBrowserButtonChange}
           />

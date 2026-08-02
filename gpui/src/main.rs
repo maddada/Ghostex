@@ -62222,7 +62222,12 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    this.dispatch_gpui_command_palette_run_sidebar_command(&command_id, None, cx);
+                    this.dispatch_gpui_run_sidebar_command_with_scope(
+                        &command_id,
+                        None,
+                        Some("global"),
+                        cx,
+                    );
                 }),
             )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
@@ -71321,6 +71326,24 @@ impl GhostexGpuiApp {
         run_mode: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        self.dispatch_gpui_run_sidebar_command_with_scope(command_id, run_mode, None, cx)
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-01-19:00:
+    A run-by-id selector cannot tell a Global Action from a Project Action with
+    the same id, so the tab strip stamps its scope and the sidebar runtime
+    resolves that list exclusively. The Command Palette keeps sending no scope,
+    which the runtime reads as project — unchanged behaviour for every existing
+    caller.
+    */
+    fn dispatch_gpui_run_sidebar_command_with_scope(
+        &mut self,
+        command_id: &str,
+        run_mode: Option<&str>,
+        scope: Option<&'static str>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         // The palette payload is an Action selector only (command id + optional
         // run mode). The sidebar runtime resolves the trusted saved/HUD command
         // and executes through the existing strict SidebarCommandAction bridge;
@@ -71343,6 +71366,9 @@ impl GhostexGpuiApp {
         });
         if let Some(run_mode) = run_mode {
             message["runMode"] = serde_json::json!(run_mode);
+        }
+        if let Some(scope) = scope {
+            message["scope"] = serde_json::json!(scope);
         }
         let script = gpui_command_palette_run_sidebar_command_script(&message);
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
