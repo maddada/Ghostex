@@ -297,7 +297,7 @@ async function buildGxserver(config) {
     "--target",
     config.rustTarget,
   ], { cwd: repoRoot });
-  const releaseDir = path.join(gxserverRoot, "target", config.rustTarget, "release");
+  const releaseDir = path.join(cargoTargetRoot(gxserverRoot), config.rustTarget, "release");
   return {
     ghostexBin: path.join(releaseDir, "ghostex"),
     gxserverBin: path.join(releaseDir, "gxserver"),
@@ -324,7 +324,12 @@ async function buildGhostexTui(config) {
       ZIG: config.tuiZigBin || "zig",
     },
   });
-  return path.join(config.tuiRoot, "target", config.rustTarget, "release", "ghostex-tui");
+  return path.join(cargoTargetRoot(config.tuiRoot), config.rustTarget, "release", "ghostex-tui");
+}
+
+function cargoTargetRoot(defaultRoot) {
+  const configured = process.env.CARGO_TARGET_DIR?.trim();
+  return configured ? path.resolve(repoRoot, configured) : path.join(defaultRoot, "target");
 }
 
 async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
@@ -352,6 +357,7 @@ async function buildBeads(config, workRoot) {
   const shortCommit = commit.slice(0, 12) || "dev";
   await run("go", [
     "build",
+    "-buildvcs=false",
     "-tags",
     "gms_pure_go",
     "-trimpath",
@@ -487,6 +493,7 @@ async function resolveBeadsRoot(explicitRoot) {
     explicitRoot,
     process.env.BEADS_ROOT,
     process.env.GHOSTEX_BEADS_ROOT,
+    path.join(repoRoot, ".dependencies", "beads"),
     path.join(repoRoot, "beads"),
     path.join(os.homedir(), "dev", "_active", "beads"),
     path.join(os.homedir(), "dev", "_references", "beads"),

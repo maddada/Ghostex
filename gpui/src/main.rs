@@ -31038,6 +31038,24 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        #[cfg(target_os = "windows")]
+        let params = if remote_machine_id.is_none() {
+            match gpui_add_project_dialog_translate_local_windows_paths(operation, params) {
+                Ok(params) => params,
+                Err(error) => {
+                    self.dispatch_gpui_add_project_dialog_result(
+                        request_id,
+                        false,
+                        None,
+                        Some(error.as_str()),
+                        cx,
+                    );
+                    return;
+                }
+            }
+        } else {
+            params
+        };
         let target = match remote_machine_id.as_deref() {
             Some(remote_machine_id) => {
                 match self.gpui_remote_gxserver_request_target(remote_machine_id) {
@@ -75842,16 +75860,6 @@ fn main() {
         // Native app menu bar (macOS installMainMenu parity); menu actions
         // dispatch through the focused window's normal action chain.
         cx.set_menus(ghostex_gpui_main_menus_for_source_focus(false));
-        // Quit on last window close (macOS ShouldTerminateAfterLastWindowClosed
-        // parity); the frame persists first so a close-to-quit keeps it.
-        cx.on_window_closed(|cx, _window_id| {
-            persist_gpui_window_frame_state();
-            if cx.windows().is_empty() {
-                GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
-                cx.quit();
-            }
-        })
-        .detach();
         cx.bind_keys([
             KeyBinding::new("cmd-a", CefSelectAll, Some(CEF_KEY_CONTEXT)),
             KeyBinding::new("f12", OpenCommandPane, None),
@@ -75924,7 +75932,7 @@ fn main() {
         CDXC:GPUICefStartup 2026-06-14-13:09:
         CEF startup must run after GPUI completes the first frame because initializing native Chromium children during root construction can stall the GPUI launch path without producing helper processes. Schedule CEF surface creation on the next frame, then explicitly refresh the window so the sidebar and browser elements enter the normal GPUI layout pass.
         */
-        cx.open_window(options, |window, cx| {
+        let main_window = cx.open_window(options, |window, cx| {
             window.activate_window();
             let view = GhostexGpuiApp::new(window, cx).expect("failed to create Ghostex app");
             register_ghostex_gpui_main_menu_actions(
@@ -75981,6 +75989,26 @@ fn main() {
             cx.new(|cx| Root::new(view, window, cx).bg(workspace_background_color()))
         })
         .expect("failed to open GPUI window");
+        let main_window_id = main_window.window_id();
+        /*
+        CDXC:GPUIWindowsMainWindowQuit 2026-08-02:
+        The main workspace window owns application lifetime. App-modal, toast,
+        and titlebar child windows can still be registered when the user closes
+        the workspace, so waiting for `cx.windows()` to become empty leaves a
+        headless Ghostex process holding CEF's persistent-profile singleton.
+        A subsequent Ghostex.exe then reaches `cef_initialize` while that stale
+        owner is alive and exits with "CEF initialization returned false".
+        Quit when the main window itself closes; keep the empty-window arm for
+        defensive parity if a platform closes every child before this observer.
+        */
+        cx.on_window_closed(move |cx, window_id| {
+            persist_gpui_window_frame_state();
+            if window_id == main_window_id || cx.windows().is_empty() {
+                GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
+                cx.quit();
+            }
+        })
+        .detach();
     });
     cef::shutdown();
 }
@@ -83826,6 +83854,61 @@ fn gpui_add_project_dialog_params(
         }
     }
     Some(serde_json::Value::Object(forwarded))
+}
+
+#[cfg(target_os = "windows")]
+fn gpui_add_project_dialog_translate_local_windows_paths(
+    operation: GpuiAddProjectDialogOperation,
+    mut params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    /*
+    CDXC:AddProjectWindowsWslPaths 2026-08-02:
+    The Windows shell deliberately runs its one local gxserver inside WSL2.
+    The shared dialog accepts Win32 drive and UNC paths on a Win32 machine,
+    but those paths are not absolute to the Linux daemon. Translate only the
+    filesystem fields for this computer before they cross the localhost RPC
+    boundary. WSL-native paths, relative paths already resolved by the dialog,
+    repository URLs, job ids, and every remote-machine request remain exactly
+    as supplied; gxserver continues to store one canonical WSL project path.
+    */
+    let fields: &[&str] = match operation {
+        GpuiAddProjectDialogOperation::Add => &["path"],
+        GpuiAddProjectDialogOperation::Browse => &["partialPath", "cwd"],
+        GpuiAddProjectDialogOperation::StartClone => &["destinationPath"],
+        GpuiAddProjectDialogOperation::CancelCloneJob
+        | GpuiAddProjectDialogOperation::DiscoverSourceControl
+        | GpuiAddProjectDialogOperation::ListMachines
+        | GpuiAddProjectDialogOperation::LookupRepository
+        | GpuiAddProjectDialogOperation::ReadCloneJob => &[],
+    };
+    let Some(object) = params.as_object_mut() else {
+        return Err("The add-project request was invalid.".to_string());
+    };
+    for field in fields {
+        let Some(path) = object
+            .get(*field)
+            .and_then(serde_json::Value::as_str)
+            .filter(|path| gpui_add_project_dialog_is_windows_absolute_path(path))
+        else {
+            continue;
+        };
+        let translated = windows_terminal_backend::wsl_path_for_windows_path(Path::new(path))
+            .map_err(|_| {
+                "The selected Windows path could not be translated into WSL.".to_string()
+            })?;
+        object.insert((*field).to_string(), serde_json::Value::String(translated));
+    }
+    Ok(params)
+}
+
+#[cfg(target_os = "windows")]
+fn gpui_add_project_dialog_is_windows_absolute_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    value.starts_with("\\\\")
+        || (bytes.len() >= 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes.len() == 2 || matches!(bytes[2], b'/' | b'\\')))
 }
 
 fn gpui_add_project_dialog_local_platform() -> &'static str {

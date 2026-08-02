@@ -33,7 +33,11 @@ const expectedChangedFiles = [
 const cleanOnly = process.argv.slice(2).includes("--clean");
 
 function git(cwd, args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  return execFileSync(
+    "git",
+    ["-c", `safe.directory=${cwd}`, ...args],
+    { cwd, encoding: "utf8" },
+  ).trim();
 }
 
 function referenceMetadata() {
@@ -54,6 +58,7 @@ function exactPatchedCheckout(checkout) {
     "diff",
     "--no-ext-diff",
     "--binary",
+    "--abbrev=7",
     "--",
     "crates/ui/src/tooltip.rs",
   ]);
@@ -61,6 +66,7 @@ function exactPatchedCheckout(checkout) {
     "diff",
     "--no-ext-diff",
     "--binary",
+    "--abbrev=7",
     "--",
     "crates/ui/src/menu/popup_menu.rs",
     "crates/ui/src/scroll/scrollbar.rs",
@@ -147,7 +153,7 @@ function verifyContract(checkout, revision) {
 const metadata = referenceMetadata();
 const configuredReference = process.env.GHOSTEX_RELEASE_GPUI_COMPONENT_REFERENCE;
 const localReference = resolve(
-  configuredReference ?? join(repoRoot, "../..", "_references/gpui-component"),
+  configuredReference ?? join(repoRoot, ".dependencies/gpui-component"),
 );
 let checkout;
 let temporaryRoot;

@@ -10,10 +10,8 @@ import {
   openSync,
   readFileSync,
   readSync,
-  renameSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -27,6 +25,11 @@ const appName = "Ghostex";
 const bundleId = "com.madda.ghostex.gpui";
 const isDarwin = process.platform === "darwin";
 const isWindows = process.platform === "win32";
+const isWsl = process.platform === "linux" && (
+  Boolean(process.env.WSL_DISTRO_NAME?.trim()) ||
+  readFileSync("/proc/sys/kernel/osrelease", "utf8").toLowerCase().includes("microsoft")
+);
+const targetsWindows = isWindows || isWsl;
 const installDir = resolveGpuiInstallDir();
 const protocolVersion = 1;
 const gxserverBaseUrl = "http://127.0.0.1:58744";
@@ -36,8 +39,12 @@ const quietLogTailLines = 220;
 const quietLogDisplayLineMaxChars = 1200;
 const quietLogDisplayLineHeadChars = 760;
 const quietLogDisplayLineTailChars = 260;
-const pinnedBeadsRevision = "672d942083a1fd0c8603fa1e77620c58ba9d47c8";
-const pinnedBeadsRepository = "https://github.com/steveyegge/beads.git";
+const pinnedDependencyRevisions = new Map([
+  ["zed", "1a246efd7e1b83ab568ec5e3e6c1a43a42e1abba"],
+  ["cef-rs", "0ddbc2accc06a3ac7f18e1543f752c3fb65161f2"],
+  ["gpui-component", "bc174a7ec4534b2a4174fddde314b38d30d69093"],
+  ["beads", "672d942083a1fd0c8603fa1e77620c58ba9d47c8"],
+]);
 /*
 CDXC:GPUIStartCommand 2026-07-08-04:55:
 `bun run gpui` builds the staged GPUI package and installs it to a stable,
@@ -48,10 +55,10 @@ sessions across the relaunch, and runs the installed executable.
 */
 const appPath = isDarwin
   ? path.join(gpuiDir, "build", "macos", `${appName}.app`)
-  : isWindows
+  : targetsWindows
     ? path.join(gpuiDir, "build", "windows", appName)
     : path.join(gpuiDir, "build", "linux", appName);
-const installedAppPath = isWindows
+const installedAppPath = targetsWindows
   ? appPath
   : path.join(installDir, isDarwin ? `${appName}.app` : appName);
 const linuxAppExecutable = path.join(installedAppPath, "Ghostex");
@@ -61,13 +68,31 @@ const buildScript = path.join(
   "scripts",
   isDarwin
     ? "build-macos-app.sh"
-    : isWindows
-      ? "build-windows-app.ps1"
+    : targetsWindows
+      ? isWsl ? "build-windows-app-wsl.sh" : "build-windows-app.ps1"
       : "build-linux-app.sh",
 );
 const localStartLockFile = path.join(repoRoot, "build", "ghostex-gpui-local-start.lock");
-const referencesRoot = path.resolve(gpuiDir, "..", "..", "..", "_references");
-const customReferencesRoot = path.resolve(referencesRoot, "..", "custom");
+const dependenciesRoot = path.join(repoRoot, ".dependencies");
+const dependencyPatchSpecs = new Map([
+  ["zed", [{
+    abbrev: 10,
+    patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "zed-windows-native-child-key-dispatch.patch"),
+    paths: ["crates/gpui_windows/src/platform.rs"],
+  }]],
+  ["gpui-component", [
+    {
+      abbrev: 7,
+      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "gpui-component-managed-tooltip-placement.patch"),
+      paths: ["crates/ui/src/tooltip.rs"],
+    },
+    {
+      abbrev: 7,
+      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "gpui-component-scrollbar-options.patch"),
+      paths: ["crates/ui/src/menu/popup_menu.rs", "crates/ui/src/scroll/scrollbar.rs"],
+    },
+  ]],
+]);
 const startOptions = validateStartArguments(process.argv.slice(2));
 const startVerbose = startOptions.verbose;
 const startEnvironment = withoutColorDisablingEnvironment(process.env);
@@ -75,7 +100,7 @@ const windowsArch = process.arch === "arm64" ? "arm64" : "x64";
 const explicitWindowsWslArchive = process.env.GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE?.trim();
 const explicitWindowsWslCodeServerArchive =
   process.env.GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE?.trim();
-const windowsWslArchive = isWindows
+const windowsWslArchive = targetsWindows
   ? explicitWindowsWslArchive
     ? path.resolve(explicitWindowsWslArchive)
     : path.join(
@@ -86,7 +111,7 @@ const windowsWslArchive = isWindows
       `gxserver-linux-${windowsArch}.tar.gz`,
     )
   : undefined;
-const windowsWslCodeServerArchive = isWindows
+const windowsWslCodeServerArchive = targetsWindows
   ? explicitWindowsWslCodeServerArchive
     ? path.resolve(explicitWindowsWslCodeServerArchive)
     : path.join(
@@ -121,7 +146,7 @@ const buildEnvironment = {
       ...(startVerbose ? { GHOSTEX_GPUI_START_VERBOSE: "1", GHOSTEX_START_VERBOSE: "1" } : {}),
     }
     : {}),
-  ...(isWindows
+  ...(targetsWindows
     ? {
       GHOSTEX_WINDOWS_ARCH: windowsArch,
       GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: "1",
@@ -136,11 +161,17 @@ let activeStartStep;
 ensureSupportedHost();
 if (isWindows) {
   acquireWindowsLocalStartLock();
-  ensureWindowsWslRuntimeArchive();
 } else {
   reexecUnderLocalStartLock();
 }
-const platformLabel = isDarwin ? `${configuration}, ${arch}` : isWindows ? "Windows, WSL2" : "Linux";
+if (targetsWindows) {
+  ensureWindowsWslRuntimeArchive();
+}
+const platformLabel = isDarwin
+  ? `${configuration}, ${arch}`
+  : targetsWindows
+    ? isWsl ? "Windows via WSL2" : "Windows, WSL2"
+    : "Linux";
 logStartStep(`Checking local GPUI resources (${platformLabel})...`);
 ensureLocalReferenceCheckouts();
 if (isDarwin) {
@@ -165,7 +196,7 @@ if (isDarwin) {
     includeBundleId: false,
   });
 }
-if (!isDarwin && !isWindows) {
+if (!isDarwin && !targetsWindows) {
   /*
   CDXC:LinuxRuntimePackaging 2026-07-18:
   gxserver and zmx are one protocol-coupled runtime. The Linux app packager
@@ -175,7 +206,15 @@ if (!isDarwin && !isWindows) {
   current source before staging every local GPUI build.
   */
   logStartStep("Building local gxserver and zmx runtime...");
-  run(process.execPath, [
+  const packagedRuntimeBinDir = path.join(
+    repoRoot,
+    "build",
+    "remote-gxserver-linux",
+    process.arch,
+    "package",
+    "bin",
+  );
+  const packageArgs = [
     path.join(repoRoot, "gxserver-rs", "package-remote-linux.mjs"),
     "--arch",
     process.arch,
@@ -183,11 +222,16 @@ if (!isDarwin && !isWindows) {
     process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu",
     "--zig-target",
     process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu",
-    "--bd-bin",
-    path.join(repoRoot, "build", "remote-gxserver-linux", process.arch, "package", "bin", "bd"),
-    "--tui-bin",
-    path.join(repoRoot, "build", "remote-gxserver-linux", process.arch, "package", "bin", "ghostex-tui"),
-  ], {
+  ];
+  const packagedBd = path.join(packagedRuntimeBinDir, "bd");
+  const packagedTui = path.join(packagedRuntimeBinDir, "ghostex-tui");
+  if (existsSync(packagedBd)) {
+    packageArgs.push("--bd-bin", packagedBd);
+  }
+  if (existsSync(packagedTui)) {
+    packageArgs.push("--tui-bin", packagedTui);
+  }
+  run(process.execPath, packageArgs, {
     env: buildEnvironment,
     quietLabel: "Linux gxserver runtime build",
   });
@@ -204,7 +248,7 @@ logStartDetail("GPUI build completed.");
 if (!existsSync(appPath)) {
   throw new Error(`Built GPUI app is missing at ${appPath}.`);
 }
-if (isWindows) {
+if (targetsWindows) {
   logStartStep(`Opening ${appName}...`);
   launchWindowsGpuiApp();
 } else if (isDarwin) {
@@ -443,8 +487,10 @@ function reexecUnderLocalStartLock() {
   CDXC:GPUIStartCommand 2026-06-21-18:43:
   `bun run gpui` must be the GPUI equivalent of the macOS local start command: one root command builds the local CEF/GPUI bundle, prevents overlapping rebuilds, closes only the matching GPUI bundle before replacing it, and launches the rebuilt app without using Cua Driver or the main Ghostex start path.
 
-  CDXC:GPUIStartCommand 2026-06-21-18:54:
-  The GPUI manifest intentionally patches Zed, cef-rs, and gpui-component through a shared `_references` folder so the port builds against inspected local codebases. The start command may materialize missing reference entries as symlinks to existing `/Users/madda/dev/custom` checkouts, but it must not overwrite a present path because reference repos can contain user or agent work.
+  CDXC:GPUIDependencies 2026-08-02:
+  Zed, cef-rs, and gpui-component are pinned submodules under the repository's
+  `.dependencies` tree. Initialize an absent checkout, but never replace a
+  present incomplete directory because it may contain user or agent work.
   */
   if (process.env.GHOSTEX_GPUI_START_LOCK_HELD === "1") {
     return;
@@ -470,7 +516,7 @@ function reexecUnderLocalStartLock() {
 }
 
 function ensureLocalReferenceCheckouts() {
-  mkdirSync(referencesRoot, { recursive: true });
+  mkdirSync(dependenciesRoot, { recursive: true });
   ensureReferenceCheckout({
     name: "zed",
     requiredRelativePath: path.join("crates", "gpui", "Cargo.toml"),
@@ -493,90 +539,116 @@ function ensurePinnedBeadsReferenceCheckout() {
   the pinned Beads source checkout part of `bun run gpui` preparation instead
   of silently producing an app whose Kanban view cannot work.
   */
-  const expectedPath = path.join(referencesRoot, "beads");
+  const expectedPath = path.join(dependenciesRoot, "beads");
   const requiredPaths = [path.join(expectedPath, "go.mod"), path.join(expectedPath, "cmd", "bd")];
   if (requiredPaths.every(existsSync)) {
-    requirePinnedBeadsRevision(expectedPath);
+    requirePinnedDependencyRevision("beads", expectedPath);
     return;
   }
   if (pathExistsWithoutFollowingFinalSymlink(expectedPath)) {
     throw new Error(
-      `GPUI Beads reference ${expectedPath} exists but is incomplete. Refusing to overwrite it; fix or replace that reference checkout manually.`,
+      `GPUI Beads dependency ${expectedPath} exists but is incomplete. Refusing to overwrite it; fix or replace that submodule checkout manually.`,
     );
   }
-
-  const customPath = path.join(customReferencesRoot, "beads");
-  if (existsSync(path.join(customPath, "go.mod")) && existsSync(path.join(customPath, "cmd", "bd"))) {
-    requirePinnedBeadsRevision(customPath);
-    symlinkSync(customPath, expectedPath, "dir");
-    console.log(`Linked ${expectedPath} -> ${customPath}`);
-    return;
+  initializeDependencySubmodule("beads");
+  if (!requiredPaths.every(existsSync)) {
+    throw new Error(`GPUI Beads dependency ${expectedPath} is incomplete after submodule initialization.`);
   }
-
-  const stagingPath = path.join(referencesRoot, `.beads-${process.pid}`);
-  try {
-    run("git", ["init", stagingPath], { env: startEnvironment, quietLabel: "Beads checkout initialization" });
-    run("git", ["-C", stagingPath, "fetch", "--depth=1", pinnedBeadsRepository, pinnedBeadsRevision], {
-      env: startEnvironment,
-      quietLabel: "Pinned Beads download",
-    });
-    run("git", ["-C", stagingPath, "checkout", "--detach", "FETCH_HEAD"], {
-      env: startEnvironment,
-      quietLabel: "Pinned Beads checkout",
-    });
-    renameSync(stagingPath, expectedPath);
-  } catch (error) {
-    rmSync(stagingPath, { force: true, recursive: true });
-    throw error;
-  }
-  requirePinnedBeadsRevision(expectedPath);
+  requirePinnedDependencyRevision("beads", expectedPath);
 }
 
-function requirePinnedBeadsRevision(checkoutPath) {
-  const revisionResult = spawnSync("git", ["-C", checkoutPath, "rev-parse", "HEAD"], {
-    encoding: "utf8",
-    env: startEnvironment,
-  });
-  const revision = revisionResult.status === 0 ? revisionResult.stdout.trim() : "";
-  if (revision !== pinnedBeadsRevision) {
+function requirePinnedDependencyRevision(name, checkoutPath) {
+  const expectedRevision = pinnedDependencyRevisions.get(name);
+  const revision = dependencyGitOutput(checkoutPath, ["rev-parse", "HEAD"]);
+  if (!expectedRevision || revision !== expectedRevision) {
     throw new Error(
-      `GPUI Beads reference ${checkoutPath} is at ${revision || "an unreadable revision"}, expected ${pinnedBeadsRevision}. Refusing to alter an existing checkout because it may contain user work.`,
+      `GPUI dependency ${checkoutPath} is at ${revision || "an unreadable revision"}, expected ${expectedRevision ?? "a pinned revision"}. Refusing to alter an existing checkout because it may contain user work.`,
     );
   }
-  const statusResult = spawnSync("git", ["-C", checkoutPath, "status", "--porcelain", "--untracked-files=all"], {
-    encoding: "utf8",
-    env: startEnvironment,
-  });
-  if (statusResult.status !== 0 || statusResult.stdout.trim()) {
+  if (name === "beads" && dependencyGitOutput(checkoutPath, ["status", "--porcelain", "--untracked-files=all"])) {
     throw new Error(
-      `GPUI Beads reference ${checkoutPath} has local changes. Refusing to package a non-reproducible Project board CLI or alter the checkout.`,
+      `GPUI Beads dependency ${checkoutPath} has local changes. Refusing to package a non-reproducible Project board CLI or alter the checkout.`,
     );
   }
 }
 
 function ensureReferenceCheckout({ name, requiredRelativePath }) {
-  const expectedPath = path.join(referencesRoot, name);
+  const expectedPath = path.join(dependenciesRoot, name);
   const expectedRequiredPath = path.join(expectedPath, requiredRelativePath);
-  if (existsSync(expectedRequiredPath)) {
+  if (!existsSync(expectedRequiredPath)) {
+    if (pathExistsWithoutFollowingFinalSymlink(expectedPath)) {
+      throw new Error(
+        `GPUI dependency ${expectedPath} exists, but ${expectedRequiredPath} is missing. Refusing to overwrite it; fix or replace that submodule checkout manually.`,
+      );
+    }
+    initializeDependencySubmodule(name);
+    if (!existsSync(expectedRequiredPath)) {
+      throw new Error(`GPUI dependency ${expectedPath} is incomplete after submodule initialization.`);
+    }
+  }
+  preparePinnedDependency(name, expectedPath);
+}
+
+function initializeDependencySubmodule(name) {
+  const relativePath = path.join(".dependencies", name);
+  run("git", [
+    "-c",
+    `safe.directory=${repoRoot}`,
+    "submodule",
+    "update",
+    "--init",
+    "--depth=1",
+    "--",
+    relativePath,
+  ], {
+    env: startEnvironment,
+    quietLabel: `${name} dependency checkout`,
+  });
+}
+
+function preparePinnedDependency(name, checkoutPath) {
+  requirePinnedDependencyRevision(name, checkoutPath);
+  const patchSpecs = dependencyPatchSpecs.get(name) ?? [];
+  if (patchSpecs.length === 0) {
     return;
   }
-
-  if (pathExistsWithoutFollowingFinalSymlink(expectedPath)) {
+  if (patchSpecs.every((spec) => dependencyPatchMatches(checkoutPath, spec))) {
+    return;
+  }
+  const status = dependencyGitOutput(checkoutPath, ["status", "--porcelain", "--untracked-files=all"]);
+  if (status) {
     throw new Error(
-      `GPUI reference ${expectedPath} exists, but ${expectedRequiredPath} is missing. Refusing to overwrite it; fix or replace that reference checkout manually.`,
+      `GPUI dependency ${checkoutPath} has changes not represented by Ghostex's checked-in patches. Refusing to overwrite them.`,
     );
   }
-
-  const sourcePath = path.join(customReferencesRoot, name);
-  const sourceRequiredPath = path.join(sourcePath, requiredRelativePath);
-  if (!existsSync(sourceRequiredPath)) {
-    throw new Error(
-      `Missing GPUI reference ${expectedPath}. Expected ${sourceRequiredPath} to exist so it could be linked into ${referencesRoot}.`,
-    );
+  for (const { patchPath } of patchSpecs) {
+    dependencyGit(checkoutPath, ["apply", "--check", patchPath]);
+    dependencyGit(checkoutPath, ["apply", patchPath]);
   }
+}
 
-  symlinkSync(sourcePath, expectedPath, "dir");
-  console.log(`Linked ${expectedPath} -> ${sourcePath}`);
+function dependencyPatchMatches(checkoutPath, { abbrev, patchPath, paths }) {
+  const actual = dependencyGitOutput(checkoutPath, ["diff", "--no-ext-diff", "--binary", `--abbrev=${abbrev}`, "--", ...paths]);
+  const expected = readFileSync(patchPath, "utf8").replaceAll("\r\n", "\n").trim();
+  return actual.replaceAll("\r\n", "\n").trim() === expected;
+}
+
+function dependencyGitOutput(checkoutPath, args) {
+  const result = spawnSync("git", ["-c", `safe.directory=${checkoutPath}`, "-C", checkoutPath, ...args], {
+    encoding: "utf8",
+    env: startEnvironment,
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr?.trim() || `git ${args.join(" ")} failed for ${checkoutPath}.`);
+  }
+  return result.stdout.trim();
+}
+
+function dependencyGit(checkoutPath, args) {
+  run("git", ["-c", `safe.directory=${checkoutPath}`, "-C", checkoutPath, ...args], {
+    env: startEnvironment,
+    quietLabel: `${path.basename(checkoutPath)} dependency preparation`,
+  });
 }
 
 function pathExistsWithoutFollowingFinalSymlink(candidatePath) {
@@ -624,13 +696,7 @@ async function closeRunningGpuiBundle(bundlePath, { action, includeBundleId }) {
   }
 
   pids = findRunningGpuiBundlePids(bundlePath, { includeBundleId });
-  for (const pid of pids) {
-    try {
-      process.kill(Number(pid), "SIGTERM");
-    } catch {
-      // Process already exited.
-    }
-  }
+  terminateGpuiPids(pids, false);
   if (await waitForGpuiBundleExit(bundlePath, { includeBundleId }, 8000)) {
     return;
   }
@@ -642,13 +708,7 @@ async function closeRunningGpuiBundle(bundlePath, { action, includeBundleId }) {
   } else {
     logStartDetail(forceMessage);
   }
-  for (const pid of pids) {
-    try {
-      process.kill(Number(pid), "SIGKILL");
-    } catch {
-      // Process already exited.
-    }
-  }
+  terminateGpuiPids(pids, true);
   if (!(await waitForGpuiBundleExit(bundlePath, { includeBundleId }, 2000))) {
     throw new Error(`${appName} did not exit, refusing to continue while ${bundlePath} is still running.`);
   }
@@ -692,33 +752,37 @@ function findRunningGpuiPidsByBundleId() {
 }
 
 function findRunningGpuiPidsByBundlePath(bundlePath) {
-  if (isWindows) {
-    const executablePaths = new Set([
-      path.join(bundlePath, "Ghostex.exe").toLowerCase(),
-      path.join(bundlePath, "ghostex-gpui-cef-helper.exe").toLowerCase(),
-    ]);
-    const script =
-      "Get-CimInstance Win32_Process -Filter " +
-      "\"Name = 'Ghostex.exe' OR Name = 'ghostex-gpui-cef-helper.exe'\" | " +
-      "ForEach-Object { \"$($_.ProcessId)`t$($_.ExecutablePath)\" }";
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", script], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      env: startEnvironment,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    if (result.status !== 0 || !result.stdout.trim()) {
-      return [];
+  if (targetsWindows) {
+    /*
+    CDXC:GPUIWindowsWslStart 2026-08-02:
+    Local Windows development can be driven entirely by the WSL bash launcher.
+    Query the two product-specific image names with tasklist instead of using a
+    PowerShell CIM pipeline; no other application ships either executable name,
+    and taskkill below closes the matching main/helper process tree before the
+    staged directory is replaced.
+    */
+    const pids = [];
+    for (const imageName of ["Ghostex.exe", "ghostex-gpui-cef-helper.exe"]) {
+      const result = spawnSync(windowsSystemExecutable("tasklist"), [
+        "/FI",
+        `IMAGENAME eq ${imageName}`,
+        "/FO",
+        "CSV",
+        "/NH",
+      ], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: startEnvironment,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      if (result.status !== 0) {
+        continue;
+      }
+      for (const match of result.stdout.matchAll(/^"[^"]+","(\d+)"/gmu)) {
+        pids.push(match[1]);
+      }
     }
-    return result.stdout
-      .split(/\r?\n/u)
-      .map((line) => line.split("\t"))
-      .filter(
-        ([pid, executablePath]) =>
-          /^\d+$/u.test(pid?.trim() ?? "") &&
-          executablePaths.has((executablePath ?? "").toLowerCase()),
-      )
-      .map(([pid]) => pid.trim());
+    return pids;
   }
   const result = spawnSync("ps", ["-axo", "pid=,args=", "-ww"], {
     cwd: repoRoot,
@@ -734,6 +798,34 @@ function findRunningGpuiPidsByBundlePath(bundlePath) {
     .map((line) => line.match(/^\s*(\d+)\s+(.+)$/))
     .filter((match) => match && commandLineBelongsToGpuiBundle(match[2], bundlePath))
     .map((match) => match[1]);
+}
+
+function terminateGpuiPids(pids, force) {
+  if (targetsWindows) {
+    for (const pid of pids) {
+      run(windowsSystemExecutable("taskkill"), [
+        "/PID",
+        pid,
+        "/T",
+        ...(force ? ["/F"] : []),
+      ], {
+        allowFailure: true,
+        stdio: "ignore",
+      });
+    }
+    return;
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(Number(pid), force ? "SIGKILL" : "SIGTERM");
+    } catch {
+      // Process already exited.
+    }
+  }
+}
+
+function windowsSystemExecutable(name) {
+  return isWsl ? `/mnt/c/Windows/System32/${name}.exe` : `${name}.exe`;
 }
 
 function commandLineBelongsToGpuiBundle(commandLine, bundlePath) {

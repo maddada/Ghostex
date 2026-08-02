@@ -748,12 +748,11 @@ resolve_beads_root() {
 		fi
 		return 1
 	fi
-	# CDXC:ProjectBoardBeads 2026-06-08-10:46: Ghostex bundles upstream Beads without forking it. Prefer an explicit BEADS_ROOT for release automation, and keep the owner's local reference checkout as the default developer source for periodic pinned Beads updates.
-	# CDXC:ProjectBoardBeads 2026-06-20-05:46: Local starts must keep packaging the pinned upstream Beads CLI when the maintainer checkout already lives under ~/dev/custom/beads instead of requiring a duplicate ~/dev/_references/beads checkout or symlink.
+	# CDXC:GPUIDependencies 2026-08-02: Ghostex bundles the pinned Beads
+	# submodule from the repository-local dependency tree.
 	for candidate in \
-		"$REPO_ROOT/beads" \
-		"$HOME/dev/_references/beads" \
-		"$HOME/dev/custom/beads"; do
+		"$REPO_ROOT/.dependencies/beads" \
+		"$REPO_ROOT/beads"; do
 		if [[ -f "$candidate/go.mod" && -d "$candidate/cmd/bd" ]]; then
 			(cd "$candidate" && pwd)
 			return 0
@@ -1856,9 +1855,8 @@ if [[ -z "$BEADS_ROOT" ]]; then
 Beads source is required to package the embedded Project board CLI.
 
 Set BEADS_ROOT or GHOSTEX_BEADS_ROOT to a Beads checkout, or place it at one of:
+  $REPO_ROOT/.dependencies/beads
   $REPO_ROOT/beads
-  $HOME/dev/_references/beads
-  $HOME/dev/custom/beads
 EOF
 		exit 1
 	fi

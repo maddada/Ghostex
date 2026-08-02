@@ -20,7 +20,7 @@ UPDATE_SPARKLE="${GHOSTEX_RELEASE_UPDATE_SPARKLE:-1}"
 MACOS_STAGE="${GHOSTEX_MACOS_RELEASE_STAGE:-all}"
 SPARKLE_ROOT="$($SCRIPT_DIR/prepare-sparkle.sh)"
 SPARKLE_FRAMEWORK="$SPARKLE_ROOT/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-BEADS_ROOT="$(cd "$REPO_ROOT/../.." && pwd)/_references/beads"
+BEADS_ROOT="$REPO_ROOT/.dependencies/beads"
 REMOTE_ROOT="$REPO_ROOT/build/remote-gxserver-linux"
 
 release_gpui_truthy() {

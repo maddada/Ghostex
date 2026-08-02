@@ -44,11 +44,16 @@ GPUI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$GPUI_DIR/.." && pwd)"
 APP_NAME="Ghostex"
 APP_DIR="$GPUI_DIR/build/linux/$APP_NAME"
+CARGO_OUTPUT_ROOT="${CARGO_TARGET_DIR:-$GPUI_DIR/target}"
+if [[ "$CARGO_OUTPUT_ROOT" != /* ]]; then
+  CARGO_OUTPUT_ROOT="$GPUI_DIR/$CARGO_OUTPUT_ROOT"
+fi
 
 # Same CEF cache location contract as build-macos-app.sh / the Windows
 # script: cef-dll-sys's build script downloads the CEF binary distribution
-# into CEF_PATH.
-export CEF_PATH="$GPUI_DIR/build/cef-cache"
+# into CEF_PATH. Honor an explicit location so WSL builds can keep the CEF
+# archive on the Linux filesystem, where unpacking can preserve timestamps.
+export CEF_PATH="${CEF_PATH:-$GPUI_DIR/build/cef-cache}"
 
 # 1) Sidebar bundle (same steps as the macOS script).
 (
@@ -89,8 +94,8 @@ fi
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 
-cp "$GPUI_DIR/target/release/ghostex-gpui" "$APP_DIR/Ghostex"
-cp "$GPUI_DIR/target/release/ghostex-gpui-cef-helper" "$APP_DIR/"
+cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui" "$APP_DIR/Ghostex"
+cp "$CARGO_OUTPUT_ROOT/release/ghostex-gpui-cef-helper" "$APP_DIR/"
 cp -R "$CEF_PAYLOAD/." "$APP_DIR/"
 # SDK build-support files are not runtime payload.
 rm -rf "$APP_DIR/CMakeLists.txt" "$APP_DIR/cmake" "$APP_DIR/include" \

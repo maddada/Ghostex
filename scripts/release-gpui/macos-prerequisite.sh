@@ -48,7 +48,7 @@ case "$COMPONENT" in
     GHOSTEX_ON_DEMAND_ASSETS=1 \
     GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
     GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
-    BEADS_ROOT="$(cd "$REPO_ROOT/../.." && pwd)/_references/beads" \
+    BEADS_ROOT="$REPO_ROOT/.dependencies/beads" \
       "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
     for required_path in \
       "gpui/runtime/macos/Web/code-server/lib/node" \

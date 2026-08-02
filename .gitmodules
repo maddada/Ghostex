@@ -20,3 +20,22 @@
 [submodule "mobile"]
 	path = mobile
 	url = https://github.com/maddada/ghostex-mobile.git
+# CDXC:GPUIDependencies 2026-08-02: Keep external GPUI build inputs inside the
+# Ghostex checkout. Gitlinks pin reviewed upstream revisions; Ghostex-owned
+# compatibility patches remain in scripts/release-gpui/patches.
+[submodule ".dependencies/zed"]
+	path = .dependencies/zed
+	url = https://github.com/zed-industries/zed.git
+	ignore = dirty
+[submodule ".dependencies/cef-rs"]
+	path = .dependencies/cef-rs
+	url = https://github.com/tauri-apps/cef-rs.git
+	ignore = dirty
+[submodule ".dependencies/gpui-component"]
+	path = .dependencies/gpui-component
+	url = https://github.com/longbridge/gpui-component.git
+	ignore = dirty
+[submodule ".dependencies/beads"]
+	path = .dependencies/beads
+	url = https://github.com/steveyegge/beads.git
+	ignore = dirty

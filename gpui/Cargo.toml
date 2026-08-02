@@ -32,12 +32,12 @@ path = "src/bin/terminal_element_demo.rs"
 
 [dependencies]
 anyhow = "1"
-cef = { path = "../../../_references/cef-rs/cef", default-features = false }
+cef = { path = "../.dependencies/cef-rs/cef", default-features = false }
 futures = "0.3"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-component = { path = "../../../_references/gpui-component/crates/ui" }
-gpui-component-assets = { path = "../../../_references/gpui-component/crates/assets" }
+gpui-component = { path = "../.dependencies/gpui-component/crates/ui" }
+gpui-component-assets = { path = "../.dependencies/gpui-component/crates/assets" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 portable-pty = "0.9"
 percent-encoding = "2"
@@ -71,11 +71,11 @@ cc = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [patch."https://github.com/zed-industries/zed"]
-gpui = { path = "../../../_references/zed/crates/gpui" }
-gpui_macros = { path = "../../../_references/zed/crates/gpui_macros" }
-gpui_platform = { path = "../../../_references/zed/crates/gpui_platform" }
-gpui_shared_string = { path = "../../../_references/zed/crates/gpui_shared_string" }
-gpui_util = { path = "../../../_references/zed/crates/gpui_util" }
+gpui = { path = "../.dependencies/zed/crates/gpui" }
+gpui_macros = { path = "../.dependencies/zed/crates/gpui_macros" }
+gpui_platform = { path = "../.dependencies/zed/crates/gpui_platform" }
+gpui_shared_string = { path = "../.dependencies/zed/crates/gpui_shared_string" }
+gpui_util = { path = "../.dependencies/zed/crates/gpui_util" }
 
 [patch.crates-io]
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
