@@ -15,6 +15,7 @@ import {
   IconSearch,
   IconTrash,
   IconUnlink,
+  IconUser,
   IconX,
 } from "@tabler/icons-react";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
@@ -3046,6 +3047,7 @@ function ProjectBoardApp() {
             onKeyDown={(event) => handleCmdEnter(event, () => void saveTicketDetail())}
           >
             <TicketMetaFields
+              assignee={detail.ticket?.assignee}
               blockedByIds={detail.blockedByIds}
               blockingIds={detail.blockingIds}
               knownLabels={knownLabels}
@@ -3433,6 +3435,7 @@ function ProjectBoardApp() {
 }
 
 function TicketMetaFields({
+  assignee,
   blockedByIds,
   blockingIds,
   knownLabels,
@@ -3449,6 +3452,7 @@ function TicketMetaFields({
   ticketOptions,
   tshirt,
 }: {
+  assignee?: string;
   blockedByIds: string[];
   blockingIds: string[];
   knownLabels: string[];
@@ -3602,6 +3606,15 @@ function TicketMetaFields({
         selectedIds={blockedByIds}
         ticketOptions={ticketOptions}
       />
+      {assignee ? (
+        <div className="project-ticket-field project-ticket-field-inline">
+          <span>Assignee</span>
+          <div className="project-ticket-assignee-value" title={assignee}>
+            <IconUser aria-hidden="true" />
+            <span className="project-ticket-assignee-name">{assignee}</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3824,7 +3837,7 @@ function ConversationSection({
   );
   return (
     <section className="project-ticket-conversations" aria-label="Linked conversations">
-      <div className="project-ticket-section-title">Conversation</div>
+      <div className="project-ticket-section-title">Start work with</div>
       <div className="project-ticket-conversation-controls">
         <Select
           disabled={agents.length === 0}
@@ -4251,6 +4264,12 @@ function TicketCard({
           ) : null}
           {blockedByCount > 0 ? <span>{blockedByCount} blocked</span> : null}
           {blockingCount > 0 ? <span>{blockingCount} blocking</span> : null}
+          {ticket.assignee ? (
+            <span className="project-board-card-assignee" title={ticket.assignee}>
+              <IconUser />
+              <span className="project-board-card-assignee-name">{ticket.assignee}</span>
+            </span>
+          ) : null}
           <span className="project-board-comments">
             <IconMessageCircle />
             {ticket.comment_count ?? ticket.comments?.length ?? 0}
@@ -7190,6 +7209,27 @@ styleElement.textContent = `
     font-weight: 680;
   }
 
+  .project-board-card-assignee {
+    align-items: center;
+    color: rgba(244, 244, 245, 0.72);
+    display: inline-flex;
+    gap: 4px;
+    max-width: 50%;
+    min-width: 0;
+  }
+
+  .project-board-card-assignee svg {
+    flex: none;
+    height: 13px;
+    width: 13px;
+  }
+
+  .project-board-card-assignee-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .project-board-comments {
     align-items: center;
     display: inline-flex;
@@ -7495,6 +7535,27 @@ styleElement.textContent = `
 
   .project-ticket-field-inline {
     gap: 6px;
+  }
+
+  .project-ticket-assignee-value {
+    align-items: center;
+    color: rgba(250, 250, 250, 0.92);
+    display: flex;
+    font-weight: 500;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .project-ticket-assignee-value svg {
+    flex: none;
+    height: 14px;
+    width: 14px;
+  }
+
+  .project-ticket-assignee-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .project-ticket-field textarea,

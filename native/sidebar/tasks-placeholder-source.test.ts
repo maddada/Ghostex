@@ -152,6 +152,34 @@ describe("Project Board form event handling", () => {
     expect(contextMenuSource).toContain('"Delete"');
   });
 
+  test("shows the Beads assignee on Kanban cards and in Edit ticket", () => {
+    /*
+     * CDXC:ProjectBoardAssignee 2026-08-07-06:07:
+     * Kanban cards and Edit ticket should surface the Beads assignee so it is not confused with the
+     * agent dropdown, which is now titled Start work with. Unassigned tickets must render as before,
+     * so both the card chip and the Edit ticket field stay conditional on an assignee value.
+     */
+    const ticketCardSource = sourceBetween("function TicketCard(", "function ProjectBoardTicketContextMenu(");
+    const metaFieldsSource = sourceBetween("function TicketMetaFields(", "function DependencyPicker(");
+    const conversationSectionSource = sourceBetween("function ConversationSection(", "function conversationLinkLabel(");
+    const assigneeStyleSource = sourceBetween(".project-board-card-assignee {", ".project-board-comments {");
+
+    expect(ticketCardSource).toContain("{ticket.assignee ? (");
+    expect(ticketCardSource).toContain('className="project-board-card-assignee"');
+    expect(ticketCardSource).toContain("{ticket.assignee}</span>");
+    expect(metaFieldsSource).toContain("{assignee ? (");
+    expect(metaFieldsSource).toContain("<span>Assignee</span>");
+    expect(metaFieldsSource).toContain('className="project-ticket-assignee-value"');
+    expect(conversationSectionSource).toContain(
+      '<div className="project-ticket-section-title">Start work with</div>',
+    );
+    expect(conversationSectionSource).not.toContain(
+      '<div className="project-ticket-section-title">Conversation</div>',
+    );
+    expect(assigneeStyleSource).toContain("text-overflow: ellipsis;");
+    expect(tasksPlaceholderSource).toContain("assignee={detail.ticket?.assignee}");
+  });
+
   test("reports sanitized focus-owner events for native Kanban focus arbitration", () => {
     /*
      * CDXC:ProjectBoardFocus 2026-06-12-08:44:
