@@ -6859,7 +6859,7 @@ mod tests {
         let (temp, db) = open_test_database();
         let repository = DomainRepository::new(&db, "test-server");
         let agent_session_id = "codex-zmx-status-title";
-        let (lifecycle, _session) = create_codex_agent_session(&repository, agent_session_id);
+        let (lifecycle, _session) = create_codex_agent_session(&repository, agent_session_id, temp.path());
         let codex_dir = temp.path().join(".codex");
         std::fs::create_dir_all(&codex_dir).expect("create codex dir");
         std::fs::write(
