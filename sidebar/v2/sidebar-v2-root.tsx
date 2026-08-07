@@ -1563,8 +1563,19 @@ export function SidebarV2Root({
                   ) : null
                 }
                 index={groupIndex}
-                isActive={groupsById[group.groupId]?.isActive === true}
+                isActive={group.memberGroupIds.some(
+                  (memberGroupId) => groupsById[memberGroupId]?.isActive === true,
+                )}
                 isCollapsed={isCollapsed}
+                containsActiveSession={
+                  activeSessionId !== undefined &&
+                  [
+                    ...group.browserSessions,
+                    ...group.partition.active,
+                    ...group.partition.settled,
+                    ...group.partition.snoozed,
+                  ].some((session) => session.sessionId === activeSessionId)
+                }
                 /*
                  * The Quick collection has no persisted project order to write,
                  * and a sidebar that is not manually sorted must not offer
@@ -1610,8 +1621,7 @@ export function SidebarV2Root({
                     : undefined
                 }
               >
-                {isCollapsed ? null : (
-                  <ul className="sidebar-v2-list" role="list">
+                <ul className="sidebar-v2-list" role="list">
                     {/*
                      * CDXC:ProjectBrowserTabs 2026-05-16-12:59 (V1 parity):
                      * Browser rows stay above the agent/terminal rows inside a
@@ -1623,8 +1633,7 @@ export function SidebarV2Root({
                       renderRow(session, { variant: "card" }),
                     )}
                     {renderProjectShelf(group)}
-                  </ul>
-                )}
+                </ul>
               </SidebarV2ProjectGroupSection>
             );
           })}

@@ -167,6 +167,13 @@ import { openAppModal, postAppModalHostMessage } from "../../sidebar/app-modal-h
 import type { WebviewApi } from "../../sidebar/webview-api";
 import { createGpuiSidebarActiveProjectContextPayloadFromGroups } from "./active-project-context";
 import { runGpuiSidebarBulkSleepPaced } from "./bulk-sleep-pacing";
+import {
+  createRemoteProjectId,
+  createRemoteTerminalSessionId,
+  parseRemoteProjectId,
+  parseRemoteTerminalSessionId,
+  resolveActiveTerminalSelection,
+} from "../../shared/remote-terminal-selection";
 
 export type GpuiGxserverBootstrap = {
   authToken?: string;
@@ -626,6 +633,23 @@ const GPUI_T3_BROWSER_ACCESS_MODES = new Set([
 const GPUI_SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.workspaceTerminalRenameCommand";
+
+function gpuiWorkspaceTerminalTitleCommandForAgent(
+  agentId: string,
+): "name" | "rename" | "title" {
+  const normalizedAgentId = agentId.trim().toLowerCase();
+  if (normalizedAgentId === "pi" || normalizedAgentId === "π") {
+    return "name";
+  }
+  if (
+    normalizedAgentId === "hermes" ||
+    normalizedAgentId === "hermes agent" ||
+    normalizedAgentId === "hermes-agent"
+  ) {
+    return "title";
+  }
+  return "rename";
+}
 const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.workspaceTerminalLifecycleRequest";
@@ -1112,6 +1136,9 @@ class GpuiSidebarRuntime {
   private remoteLastSeenPresentations = new Map<string, GxserverPresentationSnapshot>();
   private remoteLastSeenPersistTimeoutId: number | undefined;
   private remotePresentationRecoveryTimeouts = new Map<string, number>();
+  private remoteStartupReconnectAttempts = new Map<string, number>();
+  private remoteStartupReconnectTimeouts = new Map<string, number>();
+  private startupRemoteMachineIds = new Set<string>();
   private remoteRecentProjectsByMachineId = new Map<string, GxserverRecentProjectDomainState[]>();
   private remoteGroupOrderByMachineId = new Map<string, string[]>();
   private revision = 0;
@@ -1177,7 +1204,10 @@ class GpuiSidebarRuntime {
     message-source listener so cached last-seen rows become live again and the
     header receives the normal connecting/connected status sequence. Reuse the
     explicit reconnect bridge; renderer code still sends only the saved id and
-    never receives SSH details or tokens.
+    never receives SSH details or tokens. A retryable native failure arms one
+    per-machine retry after ten seconds, capped at three retries for this app
+    launch. Connecting successfully, exhausting the retry budget, or removing
+    the machine from Settings ends that launch's retry cycle.
     */
     if (
       this.didConnectSavedRemoteMachinesOnStartup ||
@@ -1188,7 +1218,23 @@ class GpuiSidebarRuntime {
     this.didConnectSavedRemoteMachinesOnStartup = true;
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
     for (const machine of settings.remoteMachines) {
+      this.startupRemoteMachineIds.add(machine.id);
       this.reconnectRemoteMachine(machine.id, false);
+    }
+  }
+
+  private reconcileStartupRemoteMachineRetryTargets(): void {
+    if (!this.didConnectSavedRemoteMachinesOnStartup) {
+      return;
+    }
+    const savedRemoteMachineIds = new Set(
+      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id),
+    );
+    for (const machineId of this.startupRemoteMachineIds) {
+      if (savedRemoteMachineIds.has(machineId)) {
+        continue;
+      }
+      this.finishRemoteStartupReconnects(machineId);
     }
   }
 
@@ -1525,6 +1571,7 @@ class GpuiSidebarRuntime {
       const didChange = !hasSameGpuiRuntimeSettings(this.runtimeSettings, runtimeSettings);
       this.runtimeSettings = runtimeSettings;
       this.connectSavedRemoteMachinesOnStartup();
+      this.reconcileStartupRemoteMachineRetryTargets();
       if (!didChange) {
         return;
       }
@@ -2211,9 +2258,9 @@ class GpuiSidebarRuntime {
         this.activeProjectId === boardProject.projectId ? this.focusedSessionId : undefined,
       agents: this.createGpuiProjectBoardAgentOptions(),
       debuggingMode: this.runtimeSettings?.debuggingMode === true,
-      // The board page gates its appendDebugLog breadcrumbs on the
-      // native.project.board scenario from this normalized settings object;
-      // Rust owns the actual gpui-project-board-debug.log writer.
+      // The board page gates appendDebugLog breadcrumbs on the
+      // native.project.board scenario; Rust owns the actual writer and also
+      // enforces the global Show debug UI controls gate.
       diagnosticLogging: normalizeghostexSettings(this.runtimeSettings?.settings).diagnosticLogging,
       defaultAgentId: this.resolveDefaultPromptAgentId(),
       focusedTerminalSessionId: sessionOptions.find((session) => session.isFocused)?.sessionId,
@@ -3254,6 +3301,13 @@ class GpuiSidebarRuntime {
     if (remoteEvent.type === "remoteMachineStatus") {
       this.messageSource.postMessage(remoteEvent);
       if (remoteEvent.state === "connected") {
+        this.finishRemoteStartupReconnects(remoteEvent.machineId);
+      } else if (GPUI_REMOTE_MACHINE_STARTUP_RETRY_STATES.has(remoteEvent.state)) {
+        this.scheduleRemoteStartupReconnect(remoteEvent.machineId);
+      } else {
+        this.clearRemoteStartupReconnectTimeout(remoteEvent.machineId);
+      }
+      if (remoteEvent.state === "connected") {
         this.clearRemotePresentationRecoveryTimeout(remoteEvent.machineId);
       }
       if (remoteEvent.state === "presentationStreamFailed") {
@@ -3667,10 +3721,10 @@ class GpuiSidebarRuntime {
     GPUI `renameCommand` is accepted when TypeScript resolves gxserver's raw sessionTarget to the local workspace session and posts one fixed fire-and-forget Rust bridge payload. Keep the result and errors id-only, and pass the normalized title only through `postWorkspaceTerminalRenameCommand` so logs/results do not expose user title text, command text, paths, URLs, tokens, or terminal output.
 
     CDXC:GPUISidebarRename 2026-07-28:
-    Pi names its session with `/name <title>` instead of `/rename <title>`, so
-    the payload carries a fixed command selector ("rename" | "name") resolved
-    from the session's own agent identity. Rust still owns turning that
-    selector into the actual terminal input.
+    Pi names its session with `/name <title>` and Hermes Agent uses
+    `/title <title>` instead of `/rename <title>`, so the payload carries a
+    fixed command selector resolved from the session's own agent identity.
+    Rust still owns turning that selector into the actual terminal input.
     */
     const postRename = window.ghostexGpui?.postWorkspaceTerminalRenameCommand;
     if (typeof postRename !== "function") {
@@ -3695,7 +3749,7 @@ class GpuiSidebarRuntime {
         projectId,
         sessionId,
         title,
-        command: agent === "pi" ? "name" : "rename",
+        command: gpuiWorkspaceTerminalTitleCommandForAgent(agent),
       }),
     );
     if (!bridgeSent) {
@@ -4810,9 +4864,10 @@ class GpuiSidebarRuntime {
     yanked the workspace back to the last local project on every routine
     remote presentation patch. Publish the machine-scoped remote project id —
     the same key the active-project context bridge uses — whenever the remote
-    machine owns focus. Tab sessions describe only local workspace tabs and
-    must stay omitted for that scoped id, or an empty reconcile list would
-    clear the remote workspace's attach tabs.
+    machine owns focus. Tab sessions use the same already-projected SidebarApp
+    group for local and remote workspaces. Remote rows retain their
+    machine-scoped project identity so Rust can reconcile restored attach tabs
+    without confusing them with local gxserver sessions.
     */
     const activeGroupRemoteReference = (() => {
       if (!this.activeGroupId) {
@@ -4826,9 +4881,7 @@ class GpuiSidebarRuntime {
       return subgroup ? parseGpuiRemotePresentationProjectId(subgroup.projectId) : undefined;
     })();
     const activeRemoteReference = focusedRemoteSession ?? activeGroupRemoteReference;
-    const activeTabSessions = activeRemoteReference
-      ? undefined
-      : this.activeWorkspaceTabSessionsFromLatestGroups();
+    const activeTabSessions = this.activeWorkspaceTabSessionsFromLatestGroups();
     const activeProjectId = activeRemoteReference
       ? createGpuiRemotePresentationProjectId(
           activeRemoteReference.machineId,
@@ -4837,7 +4890,7 @@ class GpuiSidebarRuntime {
       : this.activeProjectId;
     const payload = JSON.stringify({
       activeProjectId,
-      ...(activeTabSessions ? { tabSessions: activeTabSessions } : {}),
+      tabSessions: activeTabSessions,
       focusedSessionId: this.focusedSessionId,
       type: GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_TYPE,
       version: GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION,
@@ -4859,8 +4912,10 @@ class GpuiSidebarRuntime {
     The native GPUI Agents tab strip mirrors the already-projected active
     SidebarApp group. Hidden, companion, carrier, and subgroup filtering stays
     upstream in createSidebarGroups; this bridge only serializes the active
-    local gxserver rows in their rendered order with the same visible title
-    chain used by macOS pane tabs.
+    gxserver rows in their rendered order with the same visible title chain
+    used by the SidebarApp cards and macOS pane tabs. Remote rows carry their
+    machine-scoped project id plus the owning daemon's raw session id; titles
+    are never reconstructed from remote attach metadata.
     */
     const activeGroup =
       this.latestGroups.find((group) => group.groupId === this.activeGroupId) ??
@@ -4871,21 +4926,28 @@ class GpuiSidebarRuntime {
     const seen = new Set<string>();
     const sessions: GpuiActiveWorkspaceTabSessionPayload[] = [];
     for (const session of activeGroup.sessions) {
-      const reference = parseGxserverPresentationProjectSessionId(session.sessionId);
-      if (!reference) {
+      const localReference = parseGxserverPresentationProjectSessionId(session.sessionId);
+      const remoteReference = parseGpuiRemotePresentationSessionId(session.sessionId);
+      if (!localReference && !remoteReference) {
         continue;
       }
-      if (reference.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
+      if (localReference?.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
         continue;
       }
       const kind = session.sessionKind;
       if (kind !== "terminal" && kind !== "t3") {
         continue;
       }
-      const key = createGxserverPresentationProjectSessionId(
-        reference.projectId,
-        reference.sessionId,
-      );
+      const projectId = remoteReference
+        ? createGpuiRemotePresentationProjectId(
+            remoteReference.machineId,
+            remoteReference.projectId,
+          )
+        : localReference!.projectId;
+      const sessionId = remoteReference?.sessionId ?? localReference!.sessionId;
+      const key = remoteReference
+        ? session.sessionId
+        : createGxserverPresentationProjectSessionId(projectId, sessionId);
       if (seen.has(key)) {
         continue;
       }
@@ -4900,8 +4962,8 @@ class GpuiSidebarRuntime {
         isSleeping: session.isSleeping === true,
         kind,
         ...(session.lifecycleState ? { lifecycleState: session.lifecycleState } : {}),
-        projectId: reference.projectId,
-        sessionId: reference.sessionId,
+        projectId,
+        sessionId,
         title: boundedGpuiActiveWorkspaceTabSessionTitle(
           session.displayTitle?.trim() ||
             session.primaryTitle?.trim() ||
@@ -5954,6 +6016,9 @@ class GpuiSidebarRuntime {
         return;
       case "updateSettingsPatch":
         this.saveSidebarSettingsPatch(message);
+        return;
+      case "openExternalUrl":
+        this.openExternalUrl(message);
         return;
       case "openSettings":
         this.openAppModal("settings");
@@ -8375,6 +8440,10 @@ class GpuiSidebarRuntime {
   private async applyWorkspaceTerminalLifecycleRequest(
     request: GpuiWorkspaceTerminalLifecycleRequest,
   ): Promise<boolean> {
+    const remoteProject = parseGpuiRemotePresentationProjectId(request.projectId);
+    if (remoteProject) {
+      return this.applyRemoteWorkspaceTerminalLifecycleRequest(request, remoteProject);
+    }
     const fallbackReplacementSessionId =
       request.replacementSessionId === undefined && !request.skipReplacementFallback
         ? this.resolveLocalProjectListTransitionFocusTarget(request.projectId, request.sessionId)
@@ -8429,6 +8498,82 @@ class GpuiSidebarRuntime {
     if (replacementSessionId) {
       this.focusLocalWorkspaceSession(replacementProjectId, replacementSessionId);
       this.publishPresentation("patch");
+    }
+    return true;
+  }
+
+  private async applyRemoteWorkspaceTerminalLifecycleRequest(
+    request: GpuiWorkspaceTerminalLifecycleRequest,
+    remoteProject: GpuiRemoteProjectReference,
+  ): Promise<boolean> {
+    const scopedSessionId = createGpuiRemotePresentationSessionId(
+      remoteProject.machineId,
+      remoteProject.projectId,
+      request.sessionId,
+    );
+    const replacementProject = request.replacementProjectId
+      ? parseGpuiRemotePresentationProjectId(request.replacementProjectId)
+      : undefined;
+    const focusReplacement = (): void => {
+      if (
+        replacementProject &&
+        request.replacementSessionId &&
+        replacementProject.machineId === remoteProject.machineId
+      ) {
+        this.setRemotePresentationSessionFocus({
+          machineId: replacementProject.machineId,
+          projectId: replacementProject.projectId,
+          sessionId: request.replacementSessionId,
+        });
+      }
+    };
+
+    if (request.action === "close") {
+      const presentation = this.remotePresentations.get(remoteProject.machineId);
+      if (presentation) {
+        this.remotePresentations.set(remoteProject.machineId, {
+          ...presentation,
+          sessions: presentation.sessions.filter(
+            (session) =>
+              session.projectId !== remoteProject.projectId ||
+              session.sessionId !== request.sessionId,
+          ),
+        });
+      }
+      if (this.focusedSessionId === scopedSessionId) {
+        this.focusedSessionId = undefined;
+        this.visibleSessionIds.delete(scopedSessionId);
+      }
+      focusReplacement();
+      this.publishRemotePresentationPatch();
+      void this.requestRemoteGxserver(remoteProject.machineId, "/api/killSession", {
+        projectId: remoteProject.projectId,
+        reason: "closeTerminal",
+        sessionId: request.sessionId,
+      })
+        .then(() => this.refreshRemotePresentationFromGxserver(remoteProject.machineId))
+        .catch(() => undefined);
+      return true;
+    }
+
+    await this.requestRemoteGxserver(
+      remoteProject.machineId,
+      request.action === "wake" ? "/api/wakeSession" : "/api/sleepSession",
+      {
+        projectId: remoteProject.projectId,
+        reason: "gpui-sidebar",
+        sessionId: request.sessionId,
+      },
+    );
+    await this.refreshRemotePresentationFromGxserver(remoteProject.machineId);
+    if (request.action === "wake") {
+      this.setRemotePresentationSessionFocus({
+        machineId: remoteProject.machineId,
+        projectId: remoteProject.projectId,
+        sessionId: request.sessionId,
+      });
+    } else {
+      focusReplacement();
     }
     return true;
   }
@@ -8734,8 +8879,8 @@ class GpuiSidebarRuntime {
     CDXC:GPUISidebarRename 2026-07-28:
     gxserver keeps agent-session renames pending until the Agent CLI itself is
     renamed, and it answers `shouldSendAgentRenameCommand` so the client stages
-    `/rename <title>` (or Pi's `/name`) into the mapped terminal — the same
-    contract macOS follows.
+    `/rename <title>` (Pi uses `/name`; Hermes Agent uses `/title`) into the
+    mapped terminal — the same contract macOS follows.
     */
     if (result.shouldSendAgentRenameCommand) {
       this.postLocalWorkspaceTerminalRenameCommand(
@@ -12758,6 +12903,7 @@ class GpuiSidebarRuntime {
   }
 
   private reconnectRemoteMachine(remoteMachineId: string, installApproved: boolean): void {
+    this.clearRemoteStartupReconnectTimeout(remoteMachineId);
     try {
       postAppModalHostMessage(
         {
@@ -12773,10 +12919,55 @@ class GpuiSidebarRuntime {
         type: "remoteMachineStatus",
       });
     } catch {
+      this.scheduleRemoteStartupReconnect(remoteMachineId);
       this.postRemoteToast("warning", "Remote connect unavailable", {
         description: "GPUI could not reach the native remote-machine bridge.",
       });
     }
+  }
+
+  private scheduleRemoteStartupReconnect(remoteMachineId: string): void {
+    const normalizedMachineId = normalizeNonEmptyString(remoteMachineId);
+    if (
+      !normalizedMachineId ||
+      !this.startupRemoteMachineIds.has(normalizedMachineId) ||
+      this.remoteStartupReconnectTimeouts.has(normalizedMachineId)
+    ) {
+      return;
+    }
+    const retryAttempts = this.remoteStartupReconnectAttempts.get(normalizedMachineId) ?? 0;
+    if (retryAttempts >= GPUI_REMOTE_MACHINE_STARTUP_MAX_RETRIES) {
+      this.finishRemoteStartupReconnects(normalizedMachineId);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      this.remoteStartupReconnectTimeouts.delete(normalizedMachineId);
+      const isStillSaved = createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.some(
+        (machine) => machine.id === normalizedMachineId,
+      );
+      if (!isStillSaved) {
+        this.finishRemoteStartupReconnects(normalizedMachineId);
+        return;
+      }
+      this.remoteStartupReconnectAttempts.set(normalizedMachineId, retryAttempts + 1);
+      this.reconnectRemoteMachine(normalizedMachineId, false);
+    }, GPUI_REMOTE_MACHINE_STARTUP_RECONNECT_DELAY_MS);
+    this.remoteStartupReconnectTimeouts.set(normalizedMachineId, timeout);
+  }
+
+  private clearRemoteStartupReconnectTimeout(remoteMachineId: string): void {
+    const timeout = this.remoteStartupReconnectTimeouts.get(remoteMachineId);
+    if (timeout === undefined) {
+      return;
+    }
+    window.clearTimeout(timeout);
+    this.remoteStartupReconnectTimeouts.delete(remoteMachineId);
+  }
+
+  private finishRemoteStartupReconnects(remoteMachineId: string): void {
+    this.clearRemoteStartupReconnectTimeout(remoteMachineId);
+    this.remoteStartupReconnectAttempts.delete(remoteMachineId);
+    this.startupRemoteMachineIds.delete(remoteMachineId);
   }
 
   private scheduleRemoteGxserverPresentationRecovery(remoteMachineId: string): void {
@@ -13218,11 +13409,11 @@ class GpuiSidebarRuntime {
     CDXC:GPUIGitAgentWorkflows 2026-07-11-06:14:
     Match macOS `runSidebarGitPromptAction` + `stageNativeAgentPrompt`: create
     Git helpers as fresh neutral agent sessions, start the provider, then submit
-    `/rename Git: …`, wait for that command to settle, and only then submit the
-    workflow prompt. Persisting `Git: Release` or `Git: Multiple Commits` before
-    startup makes the missing-provider attach path treat a brand-new row as a
-    trusted resume title; a failed lookup then leaves the workflow prompt in a
-    plain shell.
+    the provider-specific title command, wait for that command to settle, and
+    only then submit the workflow prompt. Persisting `Git: Release` or
+    `Git: Multiple Commits` before startup makes the missing-provider attach
+    path treat a brand-new row as a trusted resume title; a failed lookup then
+    leaves the workflow prompt in a plain shell.
     */
     const created = await this.createAgentSessionRecordForProject(project, agent, prompt, {
       renameTitleAfterStart: renameTitle,
@@ -13270,7 +13461,7 @@ class GpuiSidebarRuntime {
     const renameTitle = normalizeNonEmptyString(options.renameTitleAfterStart);
     if (normalizeNonEmptyString(prompt) || renameTitle) {
       const renameCommand = renameTitle
-        ? `${agent.agentId.trim().toLowerCase() === "pi" ? "/name" : "/rename"} ${renameTitle}`
+        ? `/${gpuiWorkspaceTerminalTitleCommandForAgent(agent.agentId)} ${renameTitle}`
         : undefined;
       await this.startLocalAgentSessionAndSendPrompt(
         project.projectId,
@@ -14757,6 +14948,28 @@ class GpuiSidebarRuntime {
     }
   }
 
+  private openExternalUrl(
+    message: Extract<SidebarToExtensionMessage, { type: "openExternalUrl" }>,
+  ): void {
+    /*
+    CDXC:SidebarDiscord 2026-08-07:
+    The shared sidebar's external links must enter the same native command
+    route as Settings and first-launch links. The GPUI sidebar adapter used to
+    drop openExternalUrl as unsupported after the React click had already
+    closed the menu, so Join Discord appeared inert. Forward the typed command
+    through the existing app-modal host bridge; Rust remains responsible for
+    validating and opening the http/https URL.
+    */
+    try {
+      postAppModalHostMessage(
+        { message, type: "sidebarCommand" },
+        "GPUISidebarActions:openExternalUrl",
+      );
+    } catch {
+      this.handleUnsupportedSidebarMessage(message);
+    }
+  }
+
   private openAppModal(modal: "firstLaunchSetup" | "settings" | "watchGhostexVideo"): void {
     /*
     CDXC:GPUISidebarAppModalBridge 2026-06-24-11:40:
@@ -15151,11 +15364,15 @@ function activeGroupIdForGpuiGxserverBootstrapPresentationState({
   initialActiveProjectId,
 }: Pick<GpuiValidatedGxserverBootstrap, "focusedSessionId" | "initialActiveProjectId">):
   string | undefined {
-  const remoteSession = focusedSessionId
-    ? parseGpuiRemotePresentationSessionId(focusedSessionId)
-    : undefined;
-  if (remoteSession) {
-    return createGpuiRemotePresentationGroupId(remoteSession.machineId, remoteSession.projectId);
+  const activeTerminal = resolveActiveTerminalSelection({
+    activeProjectId: initialActiveProjectId,
+    focusedSessionId,
+  });
+  if (activeTerminal?.remote) {
+    return createGpuiRemotePresentationGroupId(
+      activeTerminal.machineId,
+      activeTerminal.projectId,
+    );
   }
   const remoteProject = initialActiveProjectId
     ? parseGpuiRemotePresentationProjectId(initialActiveProjectId)
@@ -17234,7 +17451,7 @@ function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
     !projectId ||
     !sessionId ||
     (record.skipReplacementFallback !== true && record.skipReplacementFallback !== false) ||
-    !gpuiLocalWorkspaceLifecycleProjectIdAllowed(projectId) ||
+    !gpuiWorkspaceLifecycleProjectIdAllowed(projectId) ||
     !gpuiLocalWorkspaceLifecycleSessionIdAllowed(sessionId)
   ) {
     return undefined;
@@ -17251,7 +17468,7 @@ function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
   if (
     replacementProjectId &&
     replacementSessionId &&
-    (!gpuiLocalWorkspaceLifecycleProjectIdAllowed(replacementProjectId) ||
+    (!gpuiWorkspaceLifecycleProjectIdAllowed(replacementProjectId) ||
       !gpuiLocalWorkspaceLifecycleSessionIdAllowed(replacementSessionId))
   ) {
     return undefined;
@@ -17318,7 +17535,7 @@ function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   if (
     !projectId ||
     !sessionId ||
-    !gpuiLocalWorkspaceLifecycleProjectIdAllowed(projectId) ||
+    !gpuiWorkspaceLifecycleProjectIdAllowed(projectId) ||
     !gpuiLocalWorkspaceLifecycleSessionIdAllowed(sessionId)
   ) {
     return undefined;
@@ -17338,7 +17555,7 @@ function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   if (
     replacementProjectId &&
     replacementSessionId &&
-    (!gpuiLocalWorkspaceLifecycleProjectIdAllowed(replacementProjectId) ||
+    (!gpuiWorkspaceLifecycleProjectIdAllowed(replacementProjectId) ||
       !gpuiLocalWorkspaceLifecycleSessionIdAllowed(replacementSessionId))
   ) {
     return undefined;
@@ -17404,6 +17621,13 @@ function readGpuiTransitionKillSucceeded(
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function gpuiWorkspaceLifecycleProjectIdAllowed(value: string): boolean {
+  return (
+    gpuiLocalWorkspaceLifecycleProjectIdAllowed(value) ||
+    parseGpuiRemotePresentationProjectId(value) !== undefined
+  );
 }
 
 function gpuiLocalWorkspaceLifecycleProjectIdAllowed(value: string): boolean {
@@ -18978,17 +19202,13 @@ function parseGpuiRemotePresentationGroupId(
 }
 
 function createGpuiRemotePresentationProjectId(machineId: string, projectId: string): string {
-  return `remote:${machineId}:project:${projectId}`;
+  return createRemoteProjectId({ machineId, projectId });
 }
 
 function parseGpuiRemotePresentationProjectId(
   projectId: string,
 ): { machineId: string; projectId: string } | undefined {
-  const match = /^remote:([^:]+):project:(.+)$/u.exec(projectId);
-  if (!match) {
-    return undefined;
-  }
-  return { machineId: match[1]!, projectId: match[2]! };
+  return parseRemoteProjectId(projectId);
 }
 
 function createGpuiRemotePresentationSessionId(
@@ -18996,17 +19216,13 @@ function createGpuiRemotePresentationSessionId(
   projectId: string,
   sessionId: string,
 ): string {
-  return `remote:${machineId}:session:${projectId}:${sessionId}`;
+  return createRemoteTerminalSessionId({ machineId, projectId, sessionId });
 }
 
 function parseGpuiRemotePresentationSessionId(
   sessionId: string,
 ): { machineId: string; projectId: string; sessionId: string } | undefined {
-  const match = /^remote:([^:]+):session:([^:]+):(.+)$/u.exec(sessionId);
-  if (!match) {
-    return undefined;
-  }
-  return { machineId: match[1]!, projectId: match[2]!, sessionId: match[3]! };
+  return parseRemoteTerminalSessionId(sessionId);
 }
 
 function createGpuiRemotePresentationSessionRoutingId(
@@ -19812,6 +20028,20 @@ function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemoteEvent
 }
 
 const GPUI_REMOTE_MACHINE_STATUS_MESSAGE_MAX_CHARS = 300;
+const GPUI_REMOTE_MACHINE_STARTUP_RECONNECT_DELAY_MS = 10_000;
+const GPUI_REMOTE_MACHINE_STARTUP_MAX_RETRIES = 3;
+
+const GPUI_REMOTE_MACHINE_STARTUP_RETRY_STATES = new Set<
+  SidebarRemoteMachineStatusMessage["state"]
+>([
+  "disconnected",
+  "failed",
+  "keychainFailed",
+  "presentationSubscribeFailed",
+  "sshFailed",
+  "tokenUnavailable",
+  "tunnelFailed",
+]);
 
 const GPUI_REMOTE_MACHINE_STATUS_STATES = new Set([
   "connecting",

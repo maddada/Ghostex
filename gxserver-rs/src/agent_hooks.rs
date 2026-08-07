@@ -381,14 +381,28 @@ struct HookPaths {
     home_dir: PathBuf,
     hook_state_directory: PathBuf,
     notify_hook_path: PathBuf,
+    respect_config_environment: bool,
 }
 
 impl HookPaths {
     fn from_paths(paths: &GxserverPaths) -> Self {
+        /*
+        CDXC:AgentHookIsolation 2026-08-06-21:35:
+        GHOSTEX_HOME and explicit daemon homes are isolated profiles. Their
+        hook discovery and writes must stay inside that profile instead of
+        following the process HOME or absolute provider-config environment
+        variables back into the real user's Claude, Codex, or other agent
+        configuration. Production paths continue to honor provider-specific
+        environment variables.
+        */
+        let isolated_home_dir = paths.isolated_agent_home_dir.as_ref();
         Self {
-            home_dir: paths.home_dir.clone(),
+            home_dir: isolated_home_dir
+                .cloned()
+                .unwrap_or_else(|| paths.home_dir.clone()),
             hook_state_directory: paths.app_state_dir.join("agent-hooks"),
             notify_hook_path: paths.app_data_dir.join("hooks/agent-shell-notify.sh"),
+            respect_config_environment: isolated_home_dir.is_none(),
         }
     }
 
@@ -400,6 +414,7 @@ impl HookPaths {
                 .join("hooks")
                 .join("agent-shell-notify.sh"),
             home_dir,
+            respect_config_environment: false,
         }
     }
 }
@@ -1224,11 +1239,14 @@ fn hook_detail(
 fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec<PathBuf> {
     match agent_id {
         "codex" => {
-            let mut paths =
-                vec![
-                    resolve_config_directory(&hook_paths.home_dir, "CODEX_HOME", ".codex", None)
-                        .join("hooks.json"),
-                ];
+            let mut paths = vec![resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "CODEX_HOME",
+                ".codex",
+                None,
+            )
+            .join("hooks.json")];
             paths.extend(list_profile_hook_paths(
                 &hook_paths.home_dir,
                 ".codex-profiles",
@@ -1250,6 +1268,7 @@ fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec<PathBuf> {
         "opencode" => {
             let config_dir = resolve_config_directory(
                 &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
                 "OPENCODE_CONFIG_DIR",
                 ".config/opencode",
                 None,
@@ -1265,15 +1284,22 @@ fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec<PathBuf> {
             .join("amp")
             .join("plugins")
             .join("ghostex-session.ts")],
-        "pi" => pi_extension_paths(&hook_paths.home_dir),
-        "omp" => vec![resolve_omp_agent_directory(&hook_paths.home_dir)
-            .join("extensions")
-            .join("ghostex-omp-session.ts")],
+        "pi" => pi_extension_paths(&hook_paths.home_dir, hook_paths.respect_config_environment),
+        "omp" => vec![resolve_omp_agent_directory(
+            &hook_paths.home_dir,
+            hook_paths.respect_config_environment,
+        )
+        .join("extensions")
+        .join("ghostex-omp-session.ts")],
         "grok" => {
-            vec![
-                resolve_config_directory(&hook_paths.home_dir, "GROK_HOME", ".grok/hooks", None)
-                    .join("ghostex-session.json"),
-            ]
+            vec![resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "GROK_HOME",
+                ".grok/hooks",
+                None,
+            )
+            .join("ghostex-session.json")]
         }
         "antigravity" => vec![hook_paths
             .home_dir
@@ -1282,37 +1308,51 @@ fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec<PathBuf> {
             .join("hooks.json")],
         "kiro" => vec![resolve_config_directory(
             &hook_paths.home_dir,
+            hook_paths.respect_config_environment,
             "KIRO_HOME",
             ".kiro/agents",
             Some("agents"),
         )
         .join("ghostex.json")],
         "copilot" => {
-            vec![
-                resolve_config_directory(&hook_paths.home_dir, "COPILOT_HOME", ".copilot", None)
-                    .join("config.json"),
-            ]
+            vec![resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "COPILOT_HOME",
+                ".copilot",
+                None,
+            )
+            .join("config.json")]
         }
         "droid" => vec![hook_paths.home_dir.join(".factory").join("settings.json")],
         "rovodev" => vec![hook_paths.home_dir.join(".rovodev").join("config.yml")],
         "hermes-agent" => {
-            vec![
-                resolve_config_directory(&hook_paths.home_dir, "HERMES_HOME", ".hermes", None)
-                    .join("config.yaml"),
-            ]
+            vec![resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "HERMES_HOME",
+                ".hermes",
+                None,
+            )
+            .join("config.yaml")]
         }
         "codebuddy" => vec![resolve_config_directory(
             &hook_paths.home_dir,
+            hook_paths.respect_config_environment,
             "CODEBUDDY_CONFIG_DIR",
             ".codebuddy",
             None,
         )
         .join("settings.json")],
         "qoder" => {
-            vec![
-                resolve_config_directory(&hook_paths.home_dir, "QODER_CONFIG_DIR", ".qoder", None)
-                    .join("settings.json"),
-            ]
+            vec![resolve_config_directory(
+                &hook_paths.home_dir,
+                hook_paths.respect_config_environment,
+                "QODER_CONFIG_DIR",
+                ".qoder",
+                None,
+            )
+            .join("settings.json")]
         }
         _ => Vec::new(),
     }
@@ -3206,11 +3246,15 @@ fn normalize_requested_agent_id(value: &Value) -> Option<String> {
 
 fn resolve_config_directory(
     home_dir: &Path,
+    respect_environment: bool,
     env_key: &str,
     fallback_relative_path: &str,
     env_subpath: Option<&str>,
 ) -> PathBuf {
-    match normalize_environment_path(std::env::var(env_key).ok().as_deref(), home_dir) {
+    let configured_path = respect_environment
+        .then(|| std::env::var(env_key).ok())
+        .flatten();
+    match normalize_environment_path(configured_path.as_deref(), home_dir) {
         Some(path) => env_subpath
             .map(|subpath| path.join(subpath))
             .unwrap_or(path),
@@ -3218,20 +3262,22 @@ fn resolve_config_directory(
     }
 }
 
-fn resolve_omp_agent_directory(home_dir: &Path) -> PathBuf {
-    if let Some(pi_agent_root) = normalize_environment_path(
-        std::env::var("PI_CODING_AGENT_DIR").ok().as_deref(),
-        home_dir,
-    ) {
+fn resolve_omp_agent_directory(home_dir: &Path, respect_environment: bool) -> PathBuf {
+    let pi_agent_root = respect_environment
+        .then(|| std::env::var("PI_CODING_AGENT_DIR").ok())
+        .flatten();
+    if let Some(pi_agent_root) = normalize_environment_path(pi_agent_root.as_deref(), home_dir) {
         return pi_agent_root;
     }
-    let config_dir =
-        normalize_environment_path(std::env::var("PI_CONFIG_DIR").ok().as_deref(), home_dir)
-            .unwrap_or_else(|| home_dir.join(".omp"));
+    let configured_path = respect_environment
+        .then(|| std::env::var("PI_CONFIG_DIR").ok())
+        .flatten();
+    let config_dir = normalize_environment_path(configured_path.as_deref(), home_dir)
+        .unwrap_or_else(|| home_dir.join(".omp"));
     config_dir.join("agent")
 }
 
-fn pi_extension_paths(home_dir: &Path) -> Vec<PathBuf> {
+fn pi_extension_paths(home_dir: &Path, respect_environment: bool) -> Vec<PathBuf> {
     /*
     CDXC:AgentHooks 2026-06-23-05:09:
     Pi's active extension loader uses the Pi root extensions directory, while
@@ -3240,7 +3286,13 @@ fn pi_extension_paths(home_dir: &Path) -> Vec<PathBuf> {
     new installs, but keep inspecting the previous agent-scoped locations so
     existing current hooks do not warn and stale hooks report updateRequired.
     */
-    let agent_dir = resolve_config_directory(home_dir, "PI_CODING_AGENT_DIR", ".pi/agent", None);
+    let agent_dir = resolve_config_directory(
+        home_dir,
+        respect_environment,
+        "PI_CODING_AGENT_DIR",
+        ".pi/agent",
+        None,
+    );
     let root_dir = agent_dir
         .parent()
         .map(Path::to_path_buf)

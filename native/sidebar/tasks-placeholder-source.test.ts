@@ -152,6 +152,61 @@ describe("Project Board form event handling", () => {
     expect(contextMenuSource).toContain('"Delete"');
   });
 
+  test("shows the Beads assignee on Kanban cards and in Edit ticket", () => {
+    /*
+     * CDXC:ProjectBoardAssignee 2026-08-07-06:07:
+     * Kanban cards and Edit ticket should surface the Beads assignee so it is not confused with the
+     * agent dropdown, which is now titled Start work with. Unassigned tickets must render as before,
+     * so both the card chip and the Edit ticket field stay conditional on an assignee value.
+     */
+    const ticketCardSource = sourceBetween("function TicketCard(", "function ProjectBoardTicketContextMenu(");
+    const metaFieldsSource = sourceBetween("function TicketMetaFields(", "function DependencyPicker(");
+    const conversationSectionSource = sourceBetween("function ConversationSection(", "function conversationLinkLabel(");
+    const assigneeStyleSource = sourceBetween(".project-board-card-assignee {", ".project-board-comments {");
+
+    expect(ticketCardSource).toContain("{ticket.assignee ? (");
+    expect(ticketCardSource).toContain('className="project-board-card-assignee"');
+    expect(ticketCardSource).toContain("{ticket.assignee}</span>");
+    expect(metaFieldsSource).toContain("{assignee ? (");
+    expect(metaFieldsSource).toContain("<span>Assignee</span>");
+    expect(metaFieldsSource).toContain('className="project-ticket-assignee-value"');
+    expect(conversationSectionSource).toContain(
+      '<div className="project-ticket-section-title">Start work with</div>',
+    );
+    expect(conversationSectionSource).not.toContain(
+      '<div className="project-ticket-section-title">Conversation</div>',
+    );
+    expect(assigneeStyleSource).toContain("text-overflow: ellipsis;");
+    expect(tasksPlaceholderSource).toContain("assignee={detail.ticket?.assignee}");
+  });
+
+  test("shows the Beads creator distinctly from the assignee", () => {
+    /*
+     * CDXC:ProjectBoardCreator 2026-08-07-07:52:
+     * Cards and Edit ticket show who created a bead next to who works it, so the two must read
+     * differently: the creator is muted "by <name>" text with no person icon, the assignee keeps its
+     * icon chip. Both resolve the creator through ticketCreatorName so it disappears when it is unset
+     * or the same person as the assignee, and the assignee chip spells its role out in the tooltip.
+     */
+    const ticketCardSource = sourceBetween("function TicketCard(", "function ProjectBoardTicketContextMenu(");
+    const metaFieldsSource = sourceBetween("function TicketMetaFields(", "function DependencyPicker(");
+    const creatorStyleSource = sourceBetween(
+      ".project-board-card-creator {",
+      ".project-board-card-assignee {",
+    );
+
+    expect(ticketCardSource).toContain("ticketCreatorName(ticket.created_by, ticket.assignee)");
+    expect(ticketCardSource).toContain('className="project-board-card-creator"');
+    expect(ticketCardSource).toContain("by {creator}");
+    expect(ticketCardSource).toContain("title={`Assigned to ${ticket.assignee}`}");
+    expect(metaFieldsSource).toContain("ticketCreatorName(createdBy, assignee)");
+    expect(metaFieldsSource).toContain("{creator ? (");
+    expect(metaFieldsSource).toContain("<span>Created by</span>");
+    expect(metaFieldsSource).toContain('className="project-ticket-creator-value"');
+    expect(creatorStyleSource).toContain("text-overflow: ellipsis;");
+    expect(tasksPlaceholderSource).toContain("createdBy={detail.ticket?.created_by}");
+  });
+
   test("reports sanitized focus-owner events for native Kanban focus arbitration", () => {
     /*
      * CDXC:ProjectBoardFocus 2026-06-12-08:44:
@@ -318,7 +373,7 @@ describe("Project Board form event handling", () => {
     );
     expect(projectBoardSource).toContain("useState<BoardSortOption>(storedViewPreferences.sortOption);");
     expect(projectBoardSource).toContain(
-      "window.localStorage.setItem(\n      PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n      JSON.stringify({ estimateFilter, priorityFilter, sortOption }),\n    );",
+      "try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption }),\n      );\n    } catch {",
     );
     expect(projectBoardSource).toContain("}, [estimateFilter, priorityFilter, sortOption]);");
     expect(projectBoardSource).not.toContain("JSON.stringify({ estimateFilter, priorityFilter, searchQuery");

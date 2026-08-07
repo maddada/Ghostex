@@ -1,5 +1,17 @@
 # Changelog
 
+## 7.3.0 - 2026-08-07
+
+- Major
+  - Quick Access now brings the Command Pane, Recent Projects, and Recent Sessions into one fast, tabbed workflow with consistent search and keyboard shortcuts.
+  - Remote projects can open Source and Prompt Editor through their connected machine, while Docs can browse and manage files on that remote workspace.
+- Minor
+  - Remote machines can be reordered directly in the sidebar, sidebar sections collapse more smoothly, and active sessions stay clearly visible through collapsed groups.
+  - Previous-session search preserves exact word and phrase matches, and choosing an already-running conversation focuses its existing terminal instead of opening a duplicate agent.
+  - Windows browser keyboard input and popup focus are more reliable, while menus, tooltips, and scrollbars have cleaner sizing and placement across the desktop app.
+  - Terminal selection, agent waits, prompt delivery, support logs, and live session tracking are more dependable during longer-running work.
+  - The Android app shows useful working, attention, and awake counts when machine and project sections are collapsed.
+
 ## 7.2.0 - 2026-08-06
 
 - Major

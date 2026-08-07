@@ -1,7 +1,7 @@
-import { IconCheck, IconFilter2 } from "@tabler/icons-react";
-import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Button } from "@/components/ui/button";
+import { IconCheck, IconFilter2 } from '@tabler/icons-react';
+import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   filterPreviousSessions,
   filterPreviousSessionsModalItems,
@@ -9,24 +9,18 @@ import {
   groupPreviousSessionsByDay,
   removePreviousSessionByHistoryId,
   sortPreviousSessionsByClosedAt,
-} from "./previous-session-search";
-import { SessionHistoryCard } from "./session-history-card";
-import { useSidebarStore } from "./sidebar-store";
-import {
-  applyTextEditingKey,
-  isEditableKeyboardTarget,
-  isTextEditingKey,
-} from "./text-input-keyboard";
-import { TOOLTIP_DELAY_MS } from "./tooltip-delay";
-import { TooltipProvider } from "./app-tooltip";
-import { SidebarSessionSearchField } from "./sidebar-session-search-overlay";
-import {
-  SessionTagIcon,
-  type SidebarSessionTag,
-} from "./session-tag-ui";
-import type { WebviewApi } from "./webview-api";
-import type { ExtensionToSidebarMessage, SidebarPreviousSessionItem } from "../shared/session-grid-contract";
-import { getEnabledVisibleSidebarSessionTagSections } from "../shared/session-tags";
+} from './previous-session-search';
+import { SessionHistoryCard } from './session-history-card';
+import { useSidebarStore } from './sidebar-store';
+import { applyTextEditingKey, isEditableKeyboardTarget, isTextEditingKey } from './text-input-keyboard';
+import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { TooltipProvider } from './app-tooltip';
+import { QuickAccessSearchInput } from './quick-access-search-input';
+import { QuickAccessHeader } from './quick-access-tabs';
+import { SessionTagIcon, type SidebarSessionTag } from './session-tag-ui';
+import type { WebviewApi } from './webview-api';
+import type { ExtensionToSidebarMessage, SidebarPreviousSessionItem } from '../shared/session-grid-contract';
+import { getEnabledVisibleSidebarSessionTagSections } from '../shared/session-tags';
 
 const PREVIOUS_SESSIONS_INITIAL_LOAD_TIMEOUT_MS = 2_000;
 const PREVIOUS_SESSIONS_PAGE_SIZE = 80;
@@ -35,7 +29,7 @@ const PREVIOUS_SESSIONS_SCROLL_LOAD_MORE_THRESHOLD_PX = 96;
 const PREVIOUS_SESSIONS_TAG_FILTER_MENU_GAP_PX = 6;
 const PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX = 12;
 
-type PreviousSessionsRequestMode = "append" | "replace";
+type PreviousSessionsRequestMode = 'append' | 'replace';
 
 export type PreviousSessionsModalProps = {
   isOpen: boolean;
@@ -44,9 +38,7 @@ export type PreviousSessionsModalProps = {
   vscode: WebviewApi;
 };
 
-function getPreviousSessionsTagFilterMenuStyle(
-  buttonElement: HTMLButtonElement | null,
-): CSSProperties {
+function getPreviousSessionsTagFilterMenuStyle(buttonElement: HTMLButtonElement | null): CSSProperties {
   const bounds = buttonElement?.getBoundingClientRect();
   if (!bounds) {
     return {};
@@ -58,19 +50,16 @@ function getPreviousSessionsTagFilterMenuStyle(
   right edge aligned to the button. Anchor with `right` instead of a fixed-width
   `left` calculation because the grouped menu can grow wider than its minimum.
   */
-  const right = Math.max(
-    PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX,
-    window.innerWidth - bounds.right,
-  );
+  const right = Math.max(PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX, window.innerWidth - bounds.right);
   const top = Math.min(
     bounds.bottom + PREVIOUS_SESSIONS_TAG_FILTER_MENU_GAP_PX,
-    window.innerHeight - PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX,
+    window.innerHeight - PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX
   );
 
   return {
     maxHeight: `calc(100vh - ${top + PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX}px)`,
     maxWidth: `calc(100vw - ${PREVIOUS_SESSIONS_TAG_FILTER_MENU_MARGIN_PX * 2}px)`,
-    overflowY: "auto",
+    overflowY: 'auto',
     right: `${right}px`,
     top: `${top}px`,
   };
@@ -78,7 +67,7 @@ function getPreviousSessionsTagFilterMenuStyle(
 
 function mergePreviousSessionPages(
   current: readonly SidebarPreviousSessionItem[],
-  next: readonly SidebarPreviousSessionItem[],
+  next: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   const seenHistoryIds = new Set(current.map((session) => session.historyId));
   const merged = [...current];
@@ -92,40 +81,33 @@ function mergePreviousSessionPages(
   return merged;
 }
 
-export function PreviousSessionsModal({
-  isOpen,
-  onClose,
-  onInitialLoadReady,
-  vscode,
-}: PreviousSessionsModalProps) {
+function getPreviousSessionsQueryKey(query: string, sessionTags: readonly SidebarSessionTag[]): string {
+  return JSON.stringify([query.trim(), [...sessionTags].sort()]);
+}
+
+export function PreviousSessionsModal({ isOpen, onClose, onInitialLoadReady, vscode }: PreviousSessionsModalProps) {
   const previousSessions = useSidebarStore((state) => state.previousSessions);
   const showDebugSessionNumbers = useSidebarStore((state) => state.hud.debuggingMode);
-  const sidebarSessionTagListItems = useSidebarStore(
-    (state) => state.hud.settings?.sidebarSessionTagListItems,
-  );
+  const sidebarSessionTagListItems = useSidebarStore((state) => state.hud.settings?.sidebarSessionTagListItems);
   const previousSessionTagFilterSections = useMemo(
     () => getEnabledVisibleSidebarSessionTagSections(sidebarSessionTagListItems),
-    [sidebarSessionTagListItems],
+    [sidebarSessionTagListItems]
   );
   const enabledPreviousSessionTagFilterSet = useMemo(
-    () =>
-      new Set(
-        previousSessionTagFilterSections.flatMap((section) =>
-          section.options.map((option) => option.value),
-        ),
-      ),
-    [previousSessionTagFilterSections],
+    () => new Set(previousSessionTagFilterSections.flatMap((section) => section.options.map((option) => option.value))),
+    [previousSessionTagFilterSections]
   );
-  const [selectedSessionTagFilters, setSelectedSessionTagFilters] = useState<
-    SidebarSessionTag[]
-  >([]);
+  const [selectedSessionTagFilters, setSelectedSessionTagFilters] = useState<SidebarSessionTag[]>([]);
   const [isTagFilterMenuOpen, setIsTagFilterMenuOpen] = useState(false);
-  const [remotePreviousSessions, setRemotePreviousSessions] = useState<SidebarPreviousSessionItem[] | undefined>(undefined);
+  const [remotePreviousSessions, setRemotePreviousSessions] = useState<SidebarPreviousSessionItem[] | undefined>(
+    undefined
+  );
   const [remotePreviousSessionsCursor, setRemotePreviousSessionsCursor] = useState<string | undefined>(undefined);
   const [isLoadingMorePreviousSessions, setIsLoadingMorePreviousSessions] = useState(false);
   const [hasInitialLoadResolved, setHasInitialLoadResolved] = useState(false);
   const [hasInitialLoadTimedOut, setHasInitialLoadTimedOut] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [resolvedPreviousSessionsQueryKey, setResolvedPreviousSessionsQueryKey] = useState<string>();
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | undefined>(undefined);
   const previousSessionsBodyRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -134,45 +116,49 @@ export function PreviousSessionsModal({
   const hasRequestedInitialLoadRef = useRef(false);
   const isLoadingMorePreviousSessionsRef = useRef(false);
   const latestRequestRef = useRef<
-    { mode: PreviousSessionsRequestMode; requestId: string } | undefined
+    { mode: PreviousSessionsRequestMode; queryKey: string; requestId: string } | undefined
   >(undefined);
   const pendingSelectionRef = useRef<{ end: number; start: number } | undefined>(undefined);
   const selectedHistoryIdRef = useRef<string | undefined>(undefined);
   const modalPreviousSessions = useMemo(
     () => filterPreviousSessionsModalItems(remotePreviousSessions ?? previousSessions),
-    [previousSessions, remotePreviousSessions],
+    [previousSessions, remotePreviousSessions]
   );
   const filteredSessions = useMemo(
     () =>
       filterPreviousSessions(modalPreviousSessions, searchQuery, {
         sessionTags: selectedSessionTagFilters,
       }),
-    [modalPreviousSessions, searchQuery, selectedSessionTagFilters],
+    [modalPreviousSessions, searchQuery, selectedSessionTagFilters]
   );
-  const visibleSessions = useMemo(
-    () => sortPreviousSessionsByClosedAt(filteredSessions),
-    [filteredSessions],
-  );
-  const groupedSessions = useMemo(
-    () => groupPreviousSessionsByDay(visibleSessions),
-    [visibleSessions],
-  );
+  const visibleSessions = useMemo(() => sortPreviousSessionsByClosedAt(filteredSessions), [filteredSessions]);
+  const groupedSessions = useMemo(() => groupPreviousSessionsByDay(visibleSessions), [visibleSessions]);
   const canShowModal = isOpen && (hasInitialLoadResolved || hasInitialLoadTimedOut);
   const hasTagFilters = selectedSessionTagFilters.length > 0;
+  const currentPreviousSessionsQueryKey = useMemo(
+    () => getPreviousSessionsQueryKey(searchQuery, selectedSessionTagFilters),
+    [searchQuery, selectedSessionTagFilters]
+  );
+  const hasResolvedCurrentPreviousSessionsQuery =
+    hasInitialLoadResolved && resolvedPreviousSessionsQueryKey === currentPreviousSessionsQueryKey;
 
   const requestPreviousSessionsPage = useCallback(
     (input: { cursor?: string; mode: PreviousSessionsRequestMode }) => {
-      if (input.mode === "append" && !input.cursor) {
+      if (input.mode === 'append' && !input.cursor) {
         return;
       }
-      if (input.mode === "append" && isLoadingMorePreviousSessionsRef.current) {
+      if (input.mode === 'append' && isLoadingMorePreviousSessionsRef.current) {
         return;
       }
 
       const requestId = `previous-sessions-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       hasRequestedInitialLoadRef.current = true;
-      latestRequestRef.current = { mode: input.mode, requestId };
-      if (input.mode === "append") {
+      latestRequestRef.current = {
+        mode: input.mode,
+        queryKey: currentPreviousSessionsQueryKey,
+        requestId,
+      };
+      if (input.mode === 'append') {
         isLoadingMorePreviousSessionsRef.current = true;
         setIsLoadingMorePreviousSessions(true);
       } else {
@@ -192,10 +178,10 @@ export function PreviousSessionsModal({
         query: searchQuery.trim() || undefined,
         requestId,
         sessionTags: selectedSessionTagFilters,
-        type: "requestPreviousSessions",
+        type: 'requestPreviousSessions',
       });
     },
-    [searchQuery, selectedSessionTagFilters, vscode],
+    [currentPreviousSessionsQueryKey, searchQuery, selectedSessionTagFilters, vscode]
   );
 
   const requestMorePreviousSessionsIfNeeded = useCallback(() => {
@@ -212,13 +198,9 @@ export function PreviousSessionsModal({
     }
     requestPreviousSessionsPage({
       cursor: remotePreviousSessionsCursor,
-      mode: "append",
+      mode: 'append',
     });
-  }, [
-    isLoadingMorePreviousSessions,
-    remotePreviousSessionsCursor,
-    requestPreviousSessionsPage,
-  ]);
+  }, [isLoadingMorePreviousSessions, remotePreviousSessionsCursor, requestPreviousSessionsPage]);
 
   const selectPreviousSessionByKeyboard = (direction: -1 | 1) => {
     const nextHistoryId = getNextPreviousSessionsModalSelection({
@@ -250,9 +232,7 @@ export function PreviousSessionsModal({
       return;
     }
     setSelectedSessionTagFilters((current) =>
-      current.includes(sessionTag)
-        ? current.filter((tag) => tag !== sessionTag)
-        : [...current, sessionTag],
+      current.includes(sessionTag) ? current.filter((tag) => tag !== sessionTag) : [...current, sessionTag]
     );
     searchInputRef.current?.focus({ preventScroll: true });
   };
@@ -276,7 +256,7 @@ export function PreviousSessionsModal({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         if (isTagFilterMenuOpen) {
           event.preventDefault();
           event.stopPropagation();
@@ -295,13 +275,13 @@ export function PreviousSessionsModal({
         !event.ctrlKey &&
         !event.metaKey &&
         (isSearchInputTarget || !isEditableKeyboardTarget(event.target)) &&
-        (event.key === "ArrowDown" || event.key === "ArrowUp")
+        (event.key === 'ArrowDown' || event.key === 'ArrowUp')
       ) {
         /*
         CDXC:PreviousSessions 2026-06-15-11:26:
         The modal search field remains the focused text owner while Up/Down walks the visible previous-session rows. Keep selection in React state instead of focusing row buttons so held arrows repeat normally and the next typed character still lands in search.
         */
-        if (!selectPreviousSessionByKeyboard(event.key === "ArrowUp" ? -1 : 1)) {
+        if (!selectPreviousSessionByKeyboard(event.key === 'ArrowUp' ? -1 : 1)) {
           return;
         }
 
@@ -310,12 +290,7 @@ export function PreviousSessionsModal({
         return;
       }
 
-      if (
-        !searchInput ||
-        isSearchInputTarget ||
-        isEditableKeyboardTarget(event.target) ||
-        !isTextEditingKey(event)
-      ) {
+      if (!searchInput || isSearchInputTarget || isEditableKeyboardTarget(event.target) || !isTextEditingKey(event)) {
         return;
       }
 
@@ -326,7 +301,7 @@ export function PreviousSessionsModal({
           value: searchInput.value,
         },
         event.key,
-        event,
+        event
       );
       if (!nextSearchState) {
         return;
@@ -341,9 +316,9 @@ export function PreviousSessionsModal({
       setSearchQuery(nextSearchState.value);
     };
 
-    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [visibleSessions, isOpen, isTagFilterMenuOpen, onClose]);
 
@@ -374,18 +349,15 @@ export function PreviousSessionsModal({
       if (!(target instanceof Node)) {
         return;
       }
-      if (
-        tagFilterButtonRef.current?.contains(target) ||
-        tagFilterMenuRef.current?.contains(target)
-      ) {
+      if (tagFilterButtonRef.current?.contains(target) || tagFilterMenuRef.current?.contains(target)) {
         return;
       }
       setIsTagFilterMenuOpen(false);
     };
 
-    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
     };
   }, [isTagFilterMenuOpen]);
 
@@ -393,13 +365,14 @@ export function PreviousSessionsModal({
     if (!isOpen) {
       setSelectedSessionTagFilters([]);
       setIsTagFilterMenuOpen(false);
-      setSearchQuery("");
+      setSearchQuery('');
       setRemotePreviousSessions(undefined);
       setRemotePreviousSessionsCursor(undefined);
       isLoadingMorePreviousSessionsRef.current = false;
       setIsLoadingMorePreviousSessions(false);
       setHasInitialLoadResolved(false);
       setHasInitialLoadTimedOut(false);
+      setResolvedPreviousSessionsQueryKey(undefined);
       hasRequestedInitialLoadRef.current = false;
       latestRequestRef.current = undefined;
       pendingSelectionRef.current = undefined;
@@ -432,20 +405,22 @@ export function PreviousSessionsModal({
       return;
     }
     const handleMessage = (event: MessageEvent<ExtensionToSidebarMessage>) => {
-      if (event.data.type !== "previousSessionsResult") {
+      if (event.data.type !== 'previousSessionsResult') {
         return;
       }
       const resultMessage = event.data;
       if (resultMessage.requestId !== latestRequestRef.current?.requestId) {
         return;
       }
-      const requestMode = latestRequestRef.current.mode;
-      if (requestMode === "append") {
+      const latestRequest = latestRequestRef.current;
+      const requestMode = latestRequest.mode;
+      if (requestMode === 'append') {
         setRemotePreviousSessions((current) =>
-          mergePreviousSessionPages(current ?? [], resultMessage.previousSessions),
+          mergePreviousSessionPages(current ?? [], resultMessage.previousSessions)
         );
       } else {
         setRemotePreviousSessions(resultMessage.previousSessions);
+        setResolvedPreviousSessionsQueryKey(latestRequest.queryKey);
       }
       setRemotePreviousSessionsCursor(resultMessage.cursor);
       isLoadingMorePreviousSessionsRef.current = false;
@@ -453,9 +428,9 @@ export function PreviousSessionsModal({
       setHasInitialLoadResolved(true);
       onInitialLoadReady?.();
     };
-    window.addEventListener("message", handleMessage);
+    window.addEventListener('message', handleMessage);
     return () => {
-      window.removeEventListener("message", handleMessage);
+      window.removeEventListener('message', handleMessage);
     };
   }, [isOpen, onInitialLoadReady]);
 
@@ -463,15 +438,13 @@ export function PreviousSessionsModal({
     if (!isOpen) {
       return;
     }
-    const requestDelay = hasRequestedInitialLoadRef.current
-      ? PREVIOUS_SESSIONS_QUERY_DEBOUNCE_MS
-      : 0;
+    const requestDelay = hasRequestedInitialLoadRef.current ? PREVIOUS_SESSIONS_QUERY_DEBOUNCE_MS : 0;
     const timeoutId = window.setTimeout(() => {
       /*
       CDXC:GxserverPresentationSearch 2026-06-01-15:08:
       Previous Sessions no longer depends on a startup-hydrated history array. Request recent/history metadata from gxserver on open and debounce typed search at 200ms so the modal remains bounded by current query results.
       */
-      requestPreviousSessionsPage({ mode: "replace" });
+      requestPreviousSessionsPage({ mode: 'replace' });
     }, requestDelay);
     return () => {
       window.clearTimeout(timeoutId);
@@ -534,11 +507,9 @@ export function PreviousSessionsModal({
 
     const animationFrame = window.requestAnimationFrame(() => {
       const selectedElement = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          ".previous-sessions-modal [data-sidebar-history-id]",
-        ),
+        document.querySelectorAll<HTMLElement>('.previous-sessions-modal [data-sidebar-history-id]')
       ).find((element) => element.dataset.sidebarHistoryId === selectedHistoryId);
-      selectedElement?.scrollIntoView({ block: "nearest" });
+      selectedElement?.scrollIntoView({ block: 'nearest' });
       searchInputRef.current?.focus({ preventScroll: true });
     });
 
@@ -547,36 +518,29 @@ export function PreviousSessionsModal({
     };
   }, [canShowModal, selectedHistoryId]);
 
-  if (!canShowModal) {
+  if (!isOpen) {
     return null;
   }
 
   return createPortal(
     <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
-      <div className="confirm-modal-root scroll-mask-y" role="presentation">
-        <button className="confirm-modal-backdrop" onClick={onClose} type="button" />
+      <div className='confirm-modal-root scroll-mask-y' role='presentation'>
+        <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
         <div
-          aria-labelledby="previous-sessions-modal-title"
-          aria-modal="true"
-          className="confirm-modal previous-sessions-modal scroll-mask-y"
-          role="dialog"
+          aria-label='Ghostex Quick Access'
+          aria-modal='true'
+          className='confirm-modal ghostex-settings-shadcn previous-sessions-modal quick-access-surface scroll-mask-y'
+          role='dialog'
         >
-          <div className="confirm-modal-header">
-            <div className="confirm-modal-title" id="previous-sessions-modal-title">
-              Reopen a Session
-            </div>
-          </div>
-          <div className="previous-sessions-toolbar">
-            <SidebarSessionSearchField
-              ariaLabel="Search sessions to reopen"
-              clearLabel="Clear Reopen a Session search"
-              inputClassName="previous-sessions-search-input"
+          <QuickAccessHeader activeTab='recentSessions' />
+          <div className='previous-sessions-toolbar'>
+            <QuickAccessSearchInput
+              ariaLabel='Search sessions to reopen'
+              clearLabel='Clear Reopen a Session search'
               inputRef={searchInputRef}
-              placeholder="Search sessions..."
+              placeholder='Search sessions...'
               query={searchQuery}
               setQuery={setSearchQuery}
-              shellClassName="previous-sessions-search-shell"
-              toolbarClassName="previous-sessions-search-control"
               trailingControl={
                 /*
                  * CDXC:PreviousSessions 2026-06-13-15:59:
@@ -584,13 +548,13 @@ export function PreviousSessionsModal({
                  */
                 <button
                   aria-expanded={isTagFilterMenuOpen}
-                  aria-haspopup="menu"
+                  aria-haspopup='menu'
                   aria-label={
                     hasTagFilters
                       ? `Filter sessions to reopen by ${selectedSessionTagFilters.length} tags`
-                      : "Filter sessions to reopen by tag"
+                      : 'Filter sessions to reopen by tag'
                   }
-                  className="previous-sessions-favorites-toggle previous-sessions-tag-filter-toggle"
+                  className='previous-sessions-favorites-toggle previous-sessions-tag-filter-toggle'
                   data-selected={String(hasTagFilters)}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -604,98 +568,100 @@ export function PreviousSessionsModal({
                     event.preventDefault();
                   }}
                   ref={tagFilterButtonRef}
-                  type="button"
+                  type='button'
                 >
-                  <IconFilter2 aria-hidden="true" className="toolbar-tabler-icon" stroke={1.8} />
+                  <IconFilter2 aria-hidden='true' className='toolbar-tabler-icon' stroke={1.8} />
                 </button>
               }
             />
-              {isTagFilterMenuOpen
-                ? createPortal(
-                <div
-                  aria-label="Reopen a Session tag filters"
-                  className="session-context-menu previous-sessions-tag-filter-menu"
-                  ref={tagFilterMenuRef}
-                  role="menu"
-                  style={getPreviousSessionsTagFilterMenuStyle(tagFilterButtonRef.current)}
-                >
-                  {/*
-                   * CDXC:SessionTags 2026-06-05-12:30:
-                   * Previous Sessions supports selecting one or more session
-                   * tags, matching the active sidebar filter semantics. Empty
-                   * selection means all tags and untagged sessions are shown.
-                   *
-                   * CDXC:SessionTagFilters 2026-06-16-00:05:
-                   * Shared tag context menus omit Priority, Progress, and Type
-                   * heading rows while preserving section order and dividers.
-                   */}
-                  {previousSessionTagFilterSections.map((section) => (
-                    <div className="session-tag-menu-section" key={section.label}>
-                      {section.options.map((option) => {
-                        const isSelected = selectedSessionTagFilters.includes(option.value);
-                        return (
-                          <button
-                            aria-checked={isSelected}
-                            className="session-context-menu-item previous-sessions-tag-filter-item"
-                            data-selected={String(isSelected)}
-                            key={option.value}
-                            onClick={() => toggleSessionTagFilter(option.value)}
-                            role="menuitemcheckbox"
-                            type="button"
-                          >
-                            <SessionTagIcon
-                              className="session-context-menu-icon session-tag-colored-icon"
-                              fillFavorite
-                              size={14}
-                              stroke={1.8}
-                              tag={option.value}
-                            />
-                            {option.label}
-                            <IconCheck
-                              aria-hidden="true"
-                              className="session-context-menu-trailing-icon previous-sessions-tag-filter-check"
-                              data-visible={String(isSelected)}
-                              size={14}
-                              stroke={2}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>,
-                  document.body,
+            {isTagFilterMenuOpen
+              ? createPortal(
+                  <div
+                    aria-label='Reopen a Session tag filters'
+                    className='session-context-menu previous-sessions-tag-filter-menu'
+                    ref={tagFilterMenuRef}
+                    role='menu'
+                    style={getPreviousSessionsTagFilterMenuStyle(tagFilterButtonRef.current)}
+                  >
+                    {/*
+                     * CDXC:SessionTags 2026-06-05-12:30:
+                     * Previous Sessions supports selecting one or more session
+                     * tags, matching the active sidebar filter semantics. Empty
+                     * selection means all tags and untagged sessions are shown.
+                     *
+                     * CDXC:SessionTagFilters 2026-06-16-00:05:
+                     * Shared tag context menus omit Priority, Progress, and Type
+                     * heading rows while preserving section order and dividers.
+                     */}
+                    {previousSessionTagFilterSections.map((section) => (
+                      <div className='session-tag-menu-section' key={section.label}>
+                        {section.options.map((option) => {
+                          const isSelected = selectedSessionTagFilters.includes(option.value);
+                          return (
+                            <button
+                              aria-checked={isSelected}
+                              className='session-context-menu-item previous-sessions-tag-filter-item'
+                              data-selected={String(isSelected)}
+                              key={option.value}
+                              onClick={() => toggleSessionTagFilter(option.value)}
+                              role='menuitemcheckbox'
+                              type='button'
+                            >
+                              <SessionTagIcon
+                                className='session-context-menu-icon session-tag-colored-icon'
+                                fillFavorite
+                                size={14}
+                                stroke={1.8}
+                                tag={option.value}
+                              />
+                              {option.label}
+                              <IconCheck
+                                aria-hidden='true'
+                                className='session-context-menu-trailing-icon previous-sessions-tag-filter-check'
+                                data-visible={String(isSelected)}
+                                size={14}
+                                stroke={2}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>,
+                  document.body
                 )
-                : null}
+              : null}
           </div>
           <div
-            className="previous-sessions-modal-body scroll-mask-y"
+            className='previous-sessions-modal-body scroll-mask-y'
             onScroll={requestMorePreviousSessionsIfNeeded}
             ref={previousSessionsBodyRef}
           >
-            {groupedSessions.length > 0 ? (
+            {!hasInitialLoadResolved ? (
+              <div className='group-empty-state previous-sessions-empty-state'>Loading recent sessions…</div>
+            ) : groupedSessions.length > 0 ? (
               groupedSessions.map((group) => (
-                <section className="previous-sessions-day-group" key={group.dayLabel}>
-                  <div className="previous-sessions-day-label">{group.dayLabel}</div>
-                  <div className="group-sessions">
+                <section className='previous-sessions-day-group' key={group.dayLabel}>
+                  <div className='previous-sessions-day-label'>{group.dayLabel}</div>
+                  <div className='group-sessions'>
                     {group.sessions.map((session) => (
                       <SessionHistoryCard
                         isSearchSelected={selectedHistoryId === session.historyId}
                         key={session.historyId}
                         onDelete={() => {
                           setRemotePreviousSessions((current) =>
-                            removePreviousSessionByHistoryId(current ?? modalPreviousSessions, session.historyId),
+                            removePreviousSessionByHistoryId(current ?? modalPreviousSessions, session.historyId)
                           );
                           searchInputRef.current?.focus({ preventScroll: true });
                           vscode.postMessage({
                             historyId: session.historyId,
-                            type: "deletePreviousSession",
+                            type: 'deletePreviousSession',
                           });
                         }}
                         onRestore={() => {
                           vscode.postMessage({
                             historyId: session.historyId,
-                            type: "restorePreviousSession",
+                            type: 'restorePreviousSession',
                           });
                           onClose();
                         }}
@@ -706,22 +672,24 @@ export function PreviousSessionsModal({
                   </div>
                 </section>
               ))
+            ) : !hasResolvedCurrentPreviousSessionsQuery ? (
+              <div className='group-empty-state previous-sessions-empty-state'>Loading recent sessions…</div>
             ) : (
-              <div className="group-empty-state previous-sessions-empty-state">
+              <div className='group-empty-state previous-sessions-empty-state'>
                 {searchQuery.trim()
                   ? hasTagFilters
-                    ? "No tagged sessions to reopen match that search."
-                    : "No sessions to reopen match that search."
+                    ? 'No tagged sessions to reopen match that search.'
+                    : 'No sessions to reopen match that search.'
                   : hasTagFilters
-                    ? "No sessions to reopen match those tags."
-                    : "No sessions to reopen yet."}
+                    ? 'No sessions to reopen match those tags.'
+                    : 'No sessions to reopen yet.'}
               </div>
             )}
             {isLoadingMorePreviousSessions ? (
               <div
-                aria-label="Loading more sessions to reopen"
-                className="previous-sessions-loading-more"
-                role="status"
+                aria-label='Loading more sessions to reopen'
+                className='previous-sessions-loading-more'
+                role='status'
               />
             ) : null}
           </div>
@@ -732,6 +700,6 @@ export function PreviousSessionsModal({
         </div>
       </div>
     </TooltipProvider>,
-    document.body,
+    document.body
   );
 }

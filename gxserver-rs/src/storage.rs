@@ -383,6 +383,11 @@ fn create_recent_projects_backfill_marker(
 }
 
 pub fn ensure_gxserver_storage_layout(paths: &GxserverPaths) -> Result<()> {
+    let config_dir = paths
+        .config_file
+        .parent()
+        .context("resolve gxserver config directory")?;
+    fs::create_dir_all(config_dir).with_context(|| "create gxserver config directory")?;
     fs::create_dir_all(&paths.auth_dir).with_context(|| "create auth directory")?;
     set_dir_mode_0700(&paths.auth_dir)?;
     fs::create_dir_all(&paths.logs_dir).with_context(|| "create logs directory")?;

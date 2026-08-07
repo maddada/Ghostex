@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Implementation roadmap for Ghostex chat improvements.">
+  <title>Roadmap · Ghostex Chat Improvement Map</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="index.html"><span class="wordmark-mark" aria-hidden="true"></span>Chat Improvement Map</a>
+      <nav class="nav" aria-label="Report pages">
+        <a href="index.html">Overview</a><a href="foundation.html">Foundation</a><a href="models.html">Models</a><a href="rendering.html">Rendering</a><a href="experience.html">Experience</a><a href="roadmap.html" aria-current="page">Roadmap</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="kicker">PLN · Delivery sequence</p>
+        <h1>Polish now. Build the spine next.</h1>
+        <p class="lede">Deliver a visible rendering package first, while designing the semantic event and provider capability foundations that prevent future agents from creating more one-off logic.</p>
+      </div>
+      <aside class="hero-note"><strong>Recommended first decision</strong><p>Approve <span class="code">PLN-01</span> as the visual package and <span class="code">PLN-02</span> as the architecture package. They can be scoped separately.</p></aside>
+    </section>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#stages">Delivery stages</a>
+      <a href="#dependency-map">Dependencies</a>
+      <a href="#packages">Plan packages</a>
+      <a href="#guardrails">Guardrails</a>
+      <a href="#code-index">Code index</a>
+    </nav>
+
+    <section class="section" id="stages">
+      <div class="section-heading"><span class="index">PLN-01 — PLN-04</span><div><h2>Four delivery stages</h2><p>Each stage has an independent product outcome and a defined dependency boundary.</p></div></div>
+      <div class="item-list">
+        <div class="item" id="pln-01"><span class="code">PLN-01</span><div><h3>Visible quality package</h3><p><span class="code">EXP-01</span> draft-safe sending, <span class="code">RND-01</span> rich Markdown, <span class="code">RND-02</span> real patches, <span class="code">RND-03</span> terminal cards, <span class="code">RND-06</span> quote actions, and the first part of <span class="code">EXP-03</span> search.</p><div class="meta"><span class="tag now">Product value now</span><span class="tag low">Mostly low–medium risk</span></div></div><span class="status">Stage 1</span></div>
+        <div class="item" id="pln-02"><span class="code">PLN-02</span><div><h3>Semantic chat spine</h3><p><span class="code">FND-01</span> event contract, <span class="code">FND-02</span> timeline projection, <span class="code">FND-03</span> streaming, and <span class="code">RND-04</span> semantic activity rows.</p><div class="meta"><span class="tag high">Architectural</span><span class="tag high">High migration risk</span></div></div><span class="status">Stage 2</span></div>
+        <div class="item" id="pln-03"><span class="code">PLN-03</span><div><h3>Models and provider expansion</h3><p><span class="code">FND-04</span> provider registry, <span class="code">MDL-01</span> discovery service, <span class="code">MDL-02</span> execution picker, then <span class="code">MDL-04</span> ACP and provider profiles <span class="code">MDL-05</span> through <span class="code">MDL-08</span>.</p><div class="meta"><span class="tag medium">Broadens chat coverage</span><span class="tag">Depends on stable contracts</span></div></div><span class="status">Stage 3</span></div>
+        <div class="item" id="pln-04"><span class="code">PLN-04</span><div><h3>Advanced workflows</h3><p><span class="code">EXP-02</span> queue and steer, <span class="code">EXP-04</span> side conversations, <span class="code">EXP-05</span> fork and handoff, <span class="code">EXP-08</span> extension slots, <span class="code">EXP-09</span> multi-thread work, and <span class="code">RND-08</span> safe visual results.</p><div class="meta"><span class="tag">Build after event identity is proven</span></div></div><span class="status">Stage 4</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="dependency-map">
+      <div class="section-heading"><span class="index">PLN / Dependencies</span><div><h2>What unlocks what</h2><p>The main dependency paths to keep implementation packages honest.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">DEP-01</span><h3>Semantic rendering path</h3><p><span class="code">FND-01</span> → <span class="code">FND-02</span> → <span class="code">RND-04</span> → <span class="code">RND-05</span></p></div>
+        <div class="card wide"><span class="code">DEP-02</span><h3>Provider expansion path</h3><p><span class="code">FND-04</span> + <span class="code">MDL-01</span> → <span class="code">MDL-02</span> → <span class="code">MDL-04</span> → provider profiles</p></div>
+        <div class="card wide"><span class="code">DEP-03</span><h3>Streaming path</h3><p><span class="code">FND-01</span> stable turn IDs → <span class="code">FND-03</span> deltas → live activity rendering</p></div>
+        <div class="card wide"><span class="code">DEP-04</span><h3>Thread workflow path</h3><p>Stable session and message anchors → <span class="code">EXP-04</span> → <span class="code">EXP-05</span> → <span class="code">EXP-09</span></p></div>
+        <div class="card wide"><span class="code">DEP-05</span><h3>Queue path</h3><p>Authoritative gxserver order → <span class="code">EXP-02A</span> → edit and send-now → drag order and grouping</p></div>
+        <div class="card wide"><span class="code">DEP-06</span><h3>Permission path</h3><p>Provider detection → read-only state → verified policy mapping → <span class="code">MDL-10</span> selectable controls</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="packages">
+      <div class="section-heading"><span class="index">PLN / Packages</span><div><h2>Suggested implementation-plan boundaries</h2><p>These packages are small enough to discuss and approve independently.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Plan code</th><th>Scope</th><th>Primary codes</th><th>Risk</th></tr></thead>
+          <tbody>
+            <tr><td><span class="code">PKG-A</span></td><td>Chat rendering polish</td><td>RND-01, RND-02, RND-03, RND-06, RND-09</td><td>Low–medium</td></tr>
+            <tr><td><span class="code">PKG-B</span></td><td>Event schema and compatibility</td><td>FND-01, FND-03</td><td>High</td></tr>
+            <tr><td><span class="code">PKG-C</span></td><td>Timeline view model and activity cards</td><td>FND-02, RND-04, RND-05</td><td>Medium–high</td></tr>
+            <tr><td><span class="code">PKG-D</span></td><td>Model discovery and execution picker</td><td>FND-04, MDL-01, MDL-02, MDL-09, MDL-10</td><td>Medium</td></tr>
+            <tr><td><span class="code">PKG-E</span></td><td>Generic ACP runtime</td><td>MDL-04, MDL-05, MDL-06, MDL-07, MDL-08</td><td>High</td></tr>
+            <tr><td><span class="code">PKG-F</span></td><td>Long-thread tools</td><td>EXP-03, EXP-07</td><td>Low–medium</td></tr>
+            <tr><td><span class="code">PKG-G</span></td><td>Queue and branch workflows</td><td>EXP-02, EXP-04, EXP-05</td><td>High</td></tr>
+            <tr><td><span class="code">PKG-H</span></td><td>Composer context and extensions</td><td>RND-07, EXP-06, EXP-08</td><td>Medium–high</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="guardrails">
+      <div class="section-heading"><span class="index">PLN / Guardrails</span><div><h2>Rules that prevent false progress</h2><p>These constraints follow directly from the code audit and Ghostex’s repository policies.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">GRD-01</span><h3>No cosmetic-only rewrite</h3><p>Visual polish may ship early, but semantic activity UI must be backed by structured event data.</p></div>
+        <div class="card"><span class="code">GRD-02</span><h3>No fake capabilities</h3><p>Do not show model, fork, permission, or steering actions that the selected provider cannot honor.</p></div>
+        <div class="card"><span class="code">GRD-03</span><h3>No static catalog as truth</h3><p>Use live discovery and verification state; curated entries are presentation metadata.</p></div>
+        <div class="card"><span class="code">GRD-04</span><h3>No transcript fallback maze</h3><p>Where a structured protocol exists, start in the correct protocol mode instead of trying a weaker path first.</p></div>
+        <div class="card"><span class="code">GRD-05</span><h3>No overlapping input surfaces</h3><p>Use normal layout, existing panes, or native child surfaces for secondary chat and menus.</p></div>
+        <div class="card"><span class="code">GRD-06</span><h3>Preserve shared hosts</h3><p>Desktop and web should continue sharing chat components through explicit host capabilities.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="code-index">
+      <div class="section-heading"><span class="index">PLN / Code index</span><div><h2>Discussion shorthand</h2><p>Use the prefix to identify the area, followed by the proposal number.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Prefix</th><th>Area</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><span class="code">FND</span></td><td>Architecture and shared contracts</td><td><span class="code">FND-01</span> event contract</td></tr>
+            <tr><td><span class="code">MDL</span></td><td>Providers, models, execution, permissions</td><td><span class="code">MDL-04</span> ACP adapter</td></tr>
+            <tr><td><span class="code">RND</span></td><td>Message and activity rendering</td><td><span class="code">RND-02</span> file patches</td></tr>
+            <tr><td><span class="code">EXP</span></td><td>Composer and conversation workflows</td><td><span class="code">EXP-02</span> queue and steer</td></tr>
+            <tr><td><span class="code">PLN</span></td><td>Delivery stages</td><td><span class="code">PLN-01</span> visible quality</td></tr>
+            <tr><td><span class="code">PKG</span></td><td>Potential implementation plans</td><td><span class="code">PKG-A</span> rendering polish</td></tr>
+            <tr><td><span class="code">KEEP</span></td><td>Existing strengths to preserve</td><td><span class="code">KEEP-01</span> transport resilience</td></tr>
+            <tr><td><span class="code">GRD</span></td><td>Implementation guardrails</td><td><span class="code">GRD-02</span> no fake capabilities</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer"><a class="next-link" href="experience.html">← Experience</a><a class="next-link" href="index.html">Return to overview →</a></footer>
+  </main>
+</body>
+</html>

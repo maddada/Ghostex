@@ -73,7 +73,7 @@ pub fn usage() -> String {
         ),
         format_help_command("resume | r [selector]", "Alias for attach"),
         format_help_command(
-            "attach | a --session-id <id> [--project-id id] [--prompt-editor monaco]",
+            "attach | a --session-id <id> [--project-id id] [--prompt-editor monaco|code-server]",
             "Flag form used by mobile and desktop remote session attach",
         ),
         format_help_command(
@@ -89,8 +89,8 @@ pub fn usage() -> String {
             "Wake one session or every listed session",
         ),
         format_help_command(
-            "focus <selector> [--json]",
-            "Unsupported in gxserver cutover until renderer focus events land",
+            "focus <selector> [--json] | focus --agent-session-id <id> --agent <agent> --if-running",
+            "Focus a live Ghostex session, including one owning an agent conversation",
         ),
         format_help_command(
             "(sleep|wake|kill) --session-id <id> [--json]",
@@ -295,6 +295,10 @@ pub fn usage() -> String {
         format_help_command(
             "fable-5.6-orchestration --help",
             "Show Ghostex Fable 5.6 Orchestration skill setup",
+        ),
+        format_help_command(
+            "find-prev-session --help",
+            "Show Ghostex Find Previous Session skill setup",
         ),
         format_help_command(
             "generate-title --help",
@@ -755,6 +759,28 @@ What the skill teaches:
 Boundary:
   Use Ghostex CLI commands instead of raw zmx/tmux control when coordinating
   panes inside Ghostex.
+"
+    .to_string()
+}
+
+pub fn find_prev_session_usage() -> String {
+    "Ghostex Find Previous Session - install the agent skill for Zehn history search
+
+Usage:
+  gx find-prev-session --help
+  gx find-prev-session install-skill [--json]
+
+Agent skill:
+  Use $ghostex-find-prev-session when a user wants to find, inspect, resume, or
+  fork a previous agent session with Ghostex's bundled Zehn search.
+
+Supported agents:
+  Claude Code, Codex, Pi, OpenCode, Cursor Agent, and Grok.
+
+What the skill teaches:
+  Read ghostex find --help, narrow by a distinctive prompt phrase and optional
+  --agent filter, then use Zehn's interactive picker to inspect, resume, copy,
+  or fork the selected session without guessing session ids.
 "
     .to_string()
 }

@@ -20,6 +20,7 @@ import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   removeDescriptionImageReference,
   sortBoardTickets,
+  ticketCreatorName,
   type BoardTicket,
 } from "./project-board-shared";
 
@@ -93,6 +94,16 @@ describe("project board priority labels", () => {
   test("normalizes legacy P4 values into the visible Low tier", () => {
     expect(priorityLabel(4)).toBe("Low");
     expect(prioritySelectValue(4)).toBe("3");
+  });
+});
+
+describe("project board creator", () => {
+  test("shows the creator only when it differs from the assignee", () => {
+    expect(ticketCreatorName("harry", "dobby")).toBe("harry");
+    expect(ticketCreatorName("harry", "harry")).toBeUndefined();
+    expect(ticketCreatorName("harry", undefined)).toBe("harry");
+    expect(ticketCreatorName(undefined, "dobby")).toBeUndefined();
+    expect(ticketCreatorName("", "dobby")).toBeUndefined();
   });
 });
 
@@ -565,4 +576,3 @@ describe("project board issue prefix", () => {
     ]);
   });
 });
-

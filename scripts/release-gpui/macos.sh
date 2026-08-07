@@ -20,8 +20,10 @@ UPDATE_SPARKLE="${GHOSTEX_RELEASE_UPDATE_SPARKLE:-1}"
 MACOS_STAGE="${GHOSTEX_MACOS_RELEASE_STAGE:-all}"
 SPARKLE_ROOT="$($SCRIPT_DIR/prepare-sparkle.sh)"
 SPARKLE_FRAMEWORK="$SPARKLE_ROOT/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-BEADS_ROOT="$REPO_ROOT/.dependencies/beads"
 REMOTE_ROOT="$REPO_ROOT/build/remote-gxserver-linux"
+CODE_SERVER_COMPONENT_VERSION=""
+CODE_SERVER_LINUX_X64_ARCHIVE=""
+CODE_SERVER_LINUX_ARM64_ARCHIVE=""
 
 release_gpui_truthy() {
   case "$(printf '%s' "${1:-0}" | tr '[:upper:]' '[:lower:]')" in
@@ -39,6 +41,13 @@ release_gpui_truthy "${GHOSTEX_MACOS_SKIP_PREPARE_REFERENCES:-0}" && SKIP_PREPAR
 
 if [[ "$SKIP_PREPARE_REFERENCES" != "1" ]]; then
   "$SCRIPT_DIR/prepare-references.sh"
+fi
+if [[ "$USE_PREPARED_RUNTIME" != "1" ]]; then
+  CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+  CODE_SERVER_LINUX_X64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-x64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-x64.tar.gz}"
+  CODE_SERVER_LINUX_ARM64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-arm64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-arm64.tar.gz}"
+  [[ -f "$CODE_SERVER_LINUX_X64_ARCHIVE" ]] || { echo "macOS release requires Linux x64 code-server archive: $CODE_SERVER_LINUX_X64_ARCHIVE" >&2; exit 1; }
+  [[ -f "$CODE_SERVER_LINUX_ARM64_ARCHIVE" ]] || { echo "macOS release requires Linux arm64 code-server archive: $CODE_SERVER_LINUX_ARM64_ARCHIVE" >&2; exit 1; }
 fi
 if [[ ! -x "$REMOTE_ROOT/x64/package/bin/gxserver" || ! -x "$REMOTE_ROOT/arm64/package/bin/gxserver" ]]; then
   "$REPO_ROOT/scripts/build-remote-gxserver-linux-release.sh" --arch all
@@ -86,6 +95,8 @@ if [[ "$USE_PREPARED_RUNTIME" == "1" ]]; then
     "$REPO_ROOT/build/on-demand-assets/$VERSION/bd-darwin-arm64.tar.gz"; do
     [[ -e "$required_path" ]] || { echo "Prepared macOS runtime is missing $required_path" >&2; exit 1; }
   done
+  node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
+    --manifest "$PREPARED_WEB/on-demand-resources.json"
   echo "Using checksum-bound prepared macOS runtime for $VERSION."
 else
   GHOSTEX_MACOS_ARCH=arm64 \
@@ -93,10 +104,13 @@ else
   GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1 \
   GHOSTEX_REMOTE_GXSERVER_LINUX_X64_PACKAGE="$REMOTE_ROOT/x64/package" \
   GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE="$REMOTE_ROOT/arm64/package" \
+  GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE="$CODE_SERVER_LINUX_X64_ARCHIVE" \
+  GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE="$CODE_SERVER_LINUX_ARM64_ARCHIVE" \
+  GHOSTEX_CODE_SERVER_COMPONENT_VERSION="$CODE_SERVER_COMPONENT_VERSION" \
   GHOSTEX_ON_DEMAND_ASSETS=1 \
+  GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
   GHOSTEX_CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
   GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
-  BEADS_ROOT="$BEADS_ROOT" \
     "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
 fi
 
@@ -125,11 +139,17 @@ const version = (manifest.components ?? manifest)[process.env.COMPONENT]?.compon
 if (!version) process.exit(1);
 process.stdout.write(version);
 ' "$COMPONENT_MANIFEST")"
-  node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
+  PUBLISH_ARGS=(
+    node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs"
     --component "$component" \
     --version "$component_version" \
     --asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
     --output "$COMPONENT_MANIFEST"
+  )
+  if [[ "$component" == "code-server" ]]; then
+    PUBLISH_ARGS+=(--require-platforms darwin-arm64,linux-x64,linux-arm64 --require-sha256-sidecars)
+  fi
+  "${PUBLISH_ARGS[@]}"
 done
 
 APP_PATH="$REPO_ROOT/gpui/build/macos/Ghostex.app"
@@ -171,9 +191,14 @@ if [[ "$MACOS_STAGE" == "build-sign" ]]; then
   exit 0
 fi
 
-xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
-xcrun stapler staple "$DMG"
-xcrun stapler validate "$DMG"
+NOTARY_SUBMISSION="$(mktemp "$REPO_ROOT/build/release-gpui/notary-submission-XXXXXX.json")"
+SUBMISSION_ID="$(
+  GHOSTEX_NOTARY_PROFILE="$NOTARY_PROFILE" \
+    "$SCRIPT_DIR/macos-notary.sh" submit "$VERSION" "$DMG" "$NOTARY_SUBMISSION" | tail -n 1
+)"
+GHOSTEX_NOTARY_PROFILE="$NOTARY_PROFILE" \
+  "$SCRIPT_DIR/macos-notary.sh" poll "$VERSION" "$DMG" "$SUBMISSION_ID"
+rm -f "$NOTARY_SUBMISSION"
 
 if [[ "$UPDATE_SPARKLE" == "1" ]]; then
   APPCAST_WORK="$(mktemp -d "$REPO_ROOT/build/release-gpui/appcast-stage-XXXXXX")"

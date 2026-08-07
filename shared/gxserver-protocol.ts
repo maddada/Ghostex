@@ -2383,7 +2383,7 @@ export interface GxserverSessionRenameRequestResult {
 }
 
 export interface GxserverAttachSessionMetadataParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "monaco";
+  promptEditor?: "code-server" | "monaco";
   startupText?: string;
 }
 
@@ -2542,7 +2542,7 @@ export type GxserverTerminalWsControlMessage =
   | GxserverTerminalWsServerControlMessage;
 
 export interface GxserverStartSessionProviderParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "monaco";
+  promptEditor?: "code-server" | "monaco";
   startupText?: string;
 }
 

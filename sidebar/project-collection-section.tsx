@@ -25,6 +25,7 @@ import {
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { createProjectCollectionDragData } from "./sidebar-dnd";
 import { SidebarFixedTooltipButton } from "./sidebar-fixed-tooltip-button";
+import { useSidebarCollapsiblePresence } from "./sidebar-collapse-animation";
 import {
   getAwakeTerminalAndBrowserCount,
   getGroupSessionSummary,
@@ -54,6 +55,7 @@ type ProjectCollectionSectionProps = {
    */
   dropIndicatorPosition?: "before" | "after";
   index: number;
+  containsActiveSession?: boolean;
   /*
    * CDXC:CollectionDragPreview 2026-07-22:
    * With feedback "none" dnd-kit never flips sortable.isDragging (only its
@@ -126,6 +128,7 @@ export function ProjectCollectionSection({
   autoEdit,
   children,
   collection,
+  containsActiveSession = false,
   draggingDisabled,
   dropIndicatorPosition,
   index,
@@ -200,6 +203,11 @@ export function ProjectCollectionSection({
     bulkProjectActionLabel === "Collapse All"
       ? IconArrowsDiagonalMinimize
       : IconArrowsDiagonal2;
+  const {
+    isPresent: shouldRenderProjects,
+    isVisuallyCollapsed: areProjectsVisuallyCollapsed,
+    setCollapsibleElement: setProjectsElement,
+  } = useSidebarCollapsiblePresence(collection.collapsed);
 
   useEffect(() => {
     if (!autoEdit) {
@@ -276,6 +284,7 @@ export function ProjectCollectionSection({
       className="project-collection"
       data-collapsed={String(collection.collapsed)}
       data-collection-drop-position={dropIndicatorPosition}
+      data-contains-active-session={String(containsActiveSession)}
       data-dragging={String(Boolean(sortable.isDragging || isDragPreviewSource))}
       data-drop-target={String(Boolean(sortable.isDropTarget))}
       data-sidebar-project-collection-id={collection.collectionId}
@@ -400,7 +409,17 @@ export function ProjectCollectionSection({
           </SidebarFixedTooltipButton>
         ) : null}
       </div>
-      {!collection.collapsed ? <div className="project-collection-projects">{children}</div> : null}
+      {shouldRenderProjects ? (
+        <div
+          aria-hidden={areProjectsVisuallyCollapsed}
+          className="project-collection-projects sidebar-animated-collapse-body"
+          data-collapsed={String(areProjectsVisuallyCollapsed)}
+          inert={areProjectsVisuallyCollapsed ? true : undefined}
+          ref={setProjectsElement}
+        >
+          {children}
+        </div>
+      ) : null}
       {menuView ? (
         <SidebarContextMenuPortal
           menuRef={menuRef}

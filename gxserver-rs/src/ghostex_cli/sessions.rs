@@ -1157,19 +1157,19 @@ fn start_missing_provider_for_cli_attach(
 fn prompt_editor_attach_mode_from_flags(flags: &Flags) -> Option<&'static str> {
     /*
      * CDXC:PromptEditor 2026-06-11-18:24:
-     * `ghostex attach --prompt-editor monaco` is the SSH-safe desktop
-     * capability advertisement; every other attach omits it so gxserver
-     * returns zmx attach commands without Monaco capability.
+     * `ghostex attach --prompt-editor monaco` advertises the local desktop
+     * daemon, while `code-server` advertises an editor that owns files on the
+     * attached machine. Every other attach omits editor capability.
      */
     let value = flags
         .text("promptEditor")
         .unwrap_or_default()
         .trim()
         .to_lowercase();
-    if value == "monaco" {
-        Some("monaco")
-    } else {
-        None
+    match value.as_str() {
+        "monaco" => Some("monaco"),
+        "code-server" => Some("code-server"),
+        _ => None,
     }
 }
 

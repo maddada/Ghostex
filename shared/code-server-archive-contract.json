@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "requiredEntries": [
+    "lib/node",
+    "out/node/entry.js",
+    "out/node/routes/health.js",
+    "lib/vscode/out/server-main.js",
+    "lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json",
+    "lib/vscode/node_modules/@vscode/ripgrep/bin/rg"
+  ],
+  "requiredEntriesByPlatform": {
+    "darwin-arm64": [
+      "lib/vscode/node_modules/node-pty/prebuilds/darwin-arm64/pty.node",
+      "lib/vscode/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper"
+    ],
+    "linux-arm64": ["lib/vscode/node_modules/node-pty/build/Release/pty.node"],
+    "linux-x64": ["lib/vscode/node_modules/node-pty/build/Release/pty.node"]
+  },
+  "executableEntries": ["lib/node", "lib/vscode/node_modules/@vscode/ripgrep/bin/rg"],
+  "executableEntriesByPlatform": {
+    "darwin-arm64": ["lib/vscode/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper"],
+    "linux-arm64": [],
+    "linux-x64": []
+  },
+  "readinessEntry": "out/node/routes/health.js",
+  "readinessSignal": "promptEditorIpcReady"
+}

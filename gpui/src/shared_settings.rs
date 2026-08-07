@@ -111,7 +111,7 @@ const GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES: &[&str] = &[
     "",
     "unfocused-split-opacity = 1",
     "split-divider-color = #8f8f8f",
-    "mouse-shift-capture = always",
+    "mouse-shift-capture = false",
     "keybind = super+e=toggle_command_palette",
     "macos-option-as-alt = true",
     "shell-integration-features = ssh-env,ssh-terminfo",
@@ -1132,7 +1132,7 @@ impl SharedGhosttyTerminalConfigValues {
             ),
             (
                 "mouse-shift-capture",
-                "mouse-shift-capture = always".to_string(),
+                "mouse-shift-capture = false".to_string(),
             ),
             (
                 "keybind",

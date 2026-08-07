@@ -42,11 +42,12 @@ use cef::{
     WrapFindHandler, WrapFocusHandler, WrapLifeSpanHandler, WrapLoadHandler, WrapPermissionHandler,
     WrapRenderProcessHandler, WrapRequestHandler, WrapResourceRequestHandler,
     WrapSetCookieCallback, WrapTask, WrapV8Handler, ZoomCommand, post_task,
-    stream_reader_create_for_file, string_multimap_alloc, string_multimap_append, wrap_app,
-    wrap_browser_process_handler, wrap_client, wrap_context_menu_handler, wrap_display_handler,
-    wrap_find_handler, wrap_focus_handler, wrap_life_span_handler, wrap_load_handler,
-    wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
-    wrap_resource_request_handler, wrap_set_cookie_callback, wrap_task, wrap_v8_handler,
+    stream_reader_create_for_data, stream_reader_create_for_file, string_multimap_alloc,
+    string_multimap_append, wrap_app, wrap_browser_process_handler, wrap_client,
+    wrap_context_menu_handler, wrap_display_handler, wrap_find_handler, wrap_focus_handler,
+    wrap_life_span_handler, wrap_load_handler, wrap_permission_handler,
+    wrap_render_process_handler, wrap_request_handler, wrap_resource_request_handler,
+    wrap_set_cookie_callback, wrap_task, wrap_v8_handler,
 };
 use gpui::{Bounds, Pixels};
 use percent_encoding::percent_decode_str;
@@ -1217,17 +1218,37 @@ never receive this request handler or the project path.
 */
 const MANAGE_DOCS_RESOURCE_BASE_URL: &str = "https://ghostex-docs.invalid/";
 
-#[derive(Clone, Debug)]
+type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
+
+#[derive(Clone)]
+enum ManageDocsResourceSource {
+    Local {
+        project_root: PathBuf,
+        allowed_relative_roots: Vec<String>,
+    },
+    Remote {
+        loader: ManageDocsRemoteResourceLoader,
+    },
+}
+
+#[derive(Clone)]
 pub struct ManageDocsResourceScope {
-    project_root: PathBuf,
-    allowed_relative_roots: Vec<String>,
+    source: ManageDocsResourceSource,
 }
 
 impl ManageDocsResourceScope {
     pub fn new(project_root: PathBuf, allowed_relative_roots: Vec<String>) -> Self {
         Self {
-            project_root,
-            allowed_relative_roots,
+            source: ManageDocsResourceSource::Local {
+                project_root,
+                allowed_relative_roots,
+            },
+        }
+    }
+
+    pub fn new_remote(loader: ManageDocsRemoteResourceLoader) -> Self {
+        Self {
+            source: ManageDocsResourceSource::Remote { loader },
         }
     }
 
@@ -1240,8 +1261,7 @@ impl ManageDocsResourceScope {
         if let Ok(mut manager) = resource_manager.lock() {
             manager.add_provider(
                 Box::new(GhostexManageDocsResourceProvider {
-                    allowed_relative_roots: self.allowed_relative_roots.clone(),
-                    project_root: self.project_root.clone(),
+                    source: self.source.clone(),
                 }),
                 0,
                 "ghostex-manage-docs",
@@ -1252,13 +1272,12 @@ impl ManageDocsResourceScope {
 }
 
 struct GhostexManageDocsResourceProvider {
-    project_root: PathBuf,
-    allowed_relative_roots: Vec<String>,
+    source: ManageDocsResourceSource,
 }
 
 impl ResourceManagerProvider for GhostexManageDocsResourceProvider {
     fn on_request(&self, request: Arc<Mutex<ResourceManagerRequest>>) -> bool {
-        let candidate = {
+        let relative_path = {
             let Ok(request) = request.lock() else {
                 return false;
             };
@@ -1283,19 +1302,11 @@ impl ResourceManagerProvider for GhostexManageDocsResourceProvider {
             {
                 return false;
             }
-            components
-                .iter()
-                .fold(self.project_root.clone(), |path, component| {
-                    path.join(component)
-                })
+            relative_path.to_string()
         };
 
-        let mut task = GhostexOpenManageDocsResource::new(
-            request,
-            self.project_root.clone(),
-            self.allowed_relative_roots.clone(),
-            candidate,
-        );
+        let mut task =
+            GhostexOpenManageDocsResource::new(request, self.source.clone(), relative_path);
         post_task(ThreadId::FILE_USER_BLOCKING, Some(&mut task));
         true
     }
@@ -1304,31 +1315,45 @@ impl ResourceManagerProvider for GhostexManageDocsResourceProvider {
 wrap_task! {
     struct GhostexOpenManageDocsResource {
         request: Arc<Mutex<ResourceManagerRequest>>,
-        project_root: PathBuf,
-        allowed_relative_roots: Vec<String>,
-        candidate: PathBuf,
+        source: ManageDocsResourceSource,
+        relative_path: String,
     }
 
     impl Task {
         fn execute(&self) {
             let handler = (|| {
-                let project_root = std::fs::canonicalize(&self.project_root).ok()?;
-                let candidate = std::fs::canonicalize(&self.candidate).ok()?;
-                if !candidate.is_file() || !candidate.starts_with(&project_root) {
-                    return None;
-                }
-                let allowed = self.allowed_relative_roots.iter().any(|relative_root| {
-                    let root = project_root.join(relative_root);
-                    std::fs::canonicalize(root)
-                        .ok()
-                        .is_some_and(|root| root.starts_with(&project_root) && candidate.starts_with(root))
-                });
-                if !allowed {
-                    return None;
-                }
-
-                let file_name = candidate.to_string_lossy();
-                let stream = stream_reader_create_for_file(Some(&CefString::from(file_name.as_ref())))?;
+                let stream = match &self.source {
+                    ManageDocsResourceSource::Local {
+                        project_root,
+                        allowed_relative_roots,
+                    } => {
+                        let project_root = std::fs::canonicalize(project_root).ok()?;
+                        let candidate = std::fs::canonicalize(
+                            self.relative_path
+                                .split('/')
+                                .fold(project_root.clone(), |path, component| path.join(component)),
+                        )
+                        .ok()?;
+                        if !candidate.is_file() || !candidate.starts_with(&project_root) {
+                            return None;
+                        }
+                        let allowed = allowed_relative_roots.iter().any(|relative_root| {
+                            let root = project_root.join(relative_root);
+                            std::fs::canonicalize(root).ok().is_some_and(|root| {
+                                root.starts_with(&project_root) && candidate.starts_with(root)
+                            })
+                        });
+                        if !allowed {
+                            return None;
+                        }
+                        let file_name = candidate.to_string_lossy();
+                        stream_reader_create_for_file(Some(&CefString::from(file_name.as_ref())))?
+                    }
+                    ManageDocsResourceSource::Remote { loader } => {
+                        let mut data = loader(&self.relative_path)?;
+                        stream_reader_create_for_data(data.as_mut_ptr(), data.len())?
+                    }
+                };
                 let mime_type = {
                     let request = self.request.lock().ok()?;
                     (request.mime_type_resolver())(request.url())

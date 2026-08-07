@@ -9,6 +9,7 @@ import {
   IconCopy,
   IconFolder,
   IconFolderOpen,
+  IconEyeOff,
   IconGitBranch,
   IconGitPullRequest,
   IconMessageCircle,
@@ -82,6 +83,7 @@ import {
 } from "./sortable-session-card";
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { useCollapsibleHeight } from "./use-collapsible-height";
+import { useSidebarCollapsiblePresence } from "./sidebar-collapse-animation";
 import type { WebviewApi } from "./webview-api";
 import { openAppModal } from "./app-modal-host-bridge";
 import {
@@ -522,12 +524,14 @@ export type SessionGroupSectionProps = {
   index: number;
   isGroupDragPreviewSource?: boolean;
   isCollapsed: boolean;
+  isHidden?: boolean;
   onAutoEditHandled: () => void;
   onCollapsedChange: (groupId: string, collapsed: boolean) => void;
   onCreateSessionRequested?: (groupId: string) => void;
   onFocusRequested?: (groupId: string, sessionId: string) => void;
   onCreateProjectCollection?: (projectId: string) => void;
   onMoveProjectToCollection?: (projectId: string, collectionId: string | undefined) => void;
+  onHideGroup?: () => void;
   onSessionSelectionChange?: (request: SidebarSessionSelectionChangeRequest) => void;
   orderedSessionIds?: readonly string[];
   selectedSearchSessionId?: string;
@@ -663,12 +667,14 @@ export function SessionGroupSection({
   index,
   isGroupDragPreviewSource = false,
   isCollapsed,
+  isHidden = false,
   onAutoEditHandled,
   onCollapsedChange,
   onCreateSessionRequested,
   onFocusRequested,
   onCreateProjectCollection,
   onMoveProjectToCollection,
+  onHideGroup,
   onSessionSelectionChange,
   orderedSessionIds: orderedSessionIdsProp,
   selectedSearchSessionId,
@@ -691,6 +697,9 @@ export function SessionGroupSection({
   const group = useSidebarStore((state) => state.groupsById[groupId]);
   const storedSessionIds = useSidebarStore((state) => state.sessionIdsByGroup[groupId] ?? []);
   const sessionsById = useSidebarStore((state) => state.sessionsById);
+  const containsActiveSession =
+    group?.isActive === true &&
+    storedSessionIds.some((sessionId) => sessionsById[sessionId]?.isFocused === true);
   const projectWorktreeCount = useSidebarStore((state) => {
     const projectId = state.groupsById[groupId]?.projectContext?.editor.projectId;
     if (!projectId) {
@@ -1213,7 +1222,18 @@ export function SessionGroupSection({
    * session rows, row dnd hooks, row observers, or sticky-body scroll
    * measurement while the user has collapsed a project.
    */
-  const shouldRenderGroupSessionsBody = !isCollapsed;
+  const {
+    isPresent: shouldRenderGroupSessionsBody,
+    isVisuallyCollapsed: isGroupSessionsBodyVisuallyCollapsed,
+    setCollapsibleElement: setGroupSessionsBodyElement,
+  } = useSidebarCollapsiblePresence(isCollapsed);
+  const setSessionsShellElement = useCallback(
+    (element: HTMLDivElement | null) => {
+      sessionsShellRef.current = element;
+      setGroupSessionsBodyElement(element);
+    },
+    [setGroupSessionsBodyElement],
+  );
   const groupTitleActionLabel =
     canToggleCollapsed ? `${isCollapsed ? "Expand" : "Collapse"} ${group.title}` : group.title;
   /**
@@ -1945,6 +1965,7 @@ export function SessionGroupSection({
         className="group"
         data-active={String(group.isActive)}
         data-collapsed={String(isCollapsed)}
+        data-contains-active-session={String(containsActiveSession)}
         data-dragging={String(Boolean(sortable.isDragging || isGroupDragPreviewSource))}
         data-group-drop-position={groupDropPosition}
         data-drop-target={String(isGroupDropTarget)}
@@ -2089,6 +2110,7 @@ export function SessionGroupSection({
                         type="button"
                       >
                         <span className="group-title section-titlebar-label">{group.title}</span>
+                        {isHidden ? <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} /> : null}
                       </button>
                     </AppTooltip>
                   ) : (
@@ -2108,6 +2130,7 @@ export function SessionGroupSection({
                         type="button"
                       >
                         <span className="group-title section-titlebar-label">{group.title}</span>
+                        {isHidden ? <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} /> : null}
                       </button>
                     </AppTooltip>
                   )}
@@ -2470,13 +2493,14 @@ export function SessionGroupSection({
         ) : null}
         {shouldRenderGroupSessionsBody ? (
           <div
-            aria-hidden={isCollapsed}
+            aria-hidden={isGroupSessionsBodyVisuallyCollapsed}
             className="group-sessions-shell sidebar-collapse-shell"
-            data-collapsed={String(isCollapsed)}
+            data-collapsed={String(isGroupSessionsBodyVisuallyCollapsed)}
+            inert={isGroupSessionsBodyVisuallyCollapsed ? true : undefined}
             data-project-session-list-clipped={String(shouldClipProjectSessionList)}
             data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}
             onWheel={handleSessionsShellWheel}
-            ref={sessionsShellRef}
+            ref={setSessionsShellElement}
             style={sessionsShellStyle}
           >
             <div
@@ -2985,6 +3009,20 @@ export function SessionGroupSection({
                         />
                       </button>
                     ) : null}
+                    {onHideGroup ? (
+                      <button
+                        className="session-context-menu-item"
+                        onClick={() => {
+                          setContextMenuPosition(undefined);
+                          onHideGroup();
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <IconEyeOff aria-hidden="true" className="session-context-menu-icon" size={14} />
+                        {isHidden ? "Unhide" : "Hide"}
+                      </button>
+                    ) : null}
                     <div className="session-context-menu-divider" role="separator" />
                     <div aria-hidden="true" className="session-context-menu-spacer" />
                     <button
@@ -3096,6 +3134,20 @@ export function SessionGroupSection({
                           size={14}
                         />
                         New Group
+                      </button>
+                    ) : null}
+                    {onHideGroup ? (
+                      <button
+                        className="session-context-menu-item"
+                        onClick={() => {
+                          setContextMenuPosition(undefined);
+                          onHideGroup();
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <IconEyeOff aria-hidden="true" className="session-context-menu-icon" size={14} />
+                        {isHidden ? "Unhide" : "Hide"}
                       </button>
                     ) : null}
                     <button

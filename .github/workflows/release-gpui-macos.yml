@@ -7,8 +7,7 @@ on:
         required: true
         type: string
       runtime_artifacts_ready:
-        required: false
-        default: false
+        required: true
         type: boolean
       update_sparkle:
         required: false
@@ -61,6 +60,9 @@ jobs:
         run: |
           git submodule update --init --depth=1 -- code-server t3code
           git -C code-server submodule update --init --depth=1 -- lib/vscode
+      - name: Resolve immutable code-server component identity
+        id: code_server_identity
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -76,6 +78,35 @@ jobs:
         with:
           name: release-gxserver-linux-arm64
           path: build/runtime-artifacts/arm64
+      - uses: actions/download-artifact@v8
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
+          path: build/runtime-artifacts/code-server-x64
+      - uses: actions/download-artifact@v8
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: release-code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64
+          path: build/runtime-artifacts/code-server-arm64
+      - name: Validate required remote runtime archives
+        run: |
+          for archive in \
+            build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz \
+            build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz \
+            build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }} \
+            build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz; do
+            [[ -f "$archive" ]] || { echo "Missing required macOS release archive: $archive" >&2; exit 1; }
+            tar -tzf "$archive" >/dev/null
+          done
+          for tuple in \
+            "x64 build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}" \
+            "arm64 build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz"; do
+            set -- $tuple
+            node scripts/release-gpui/verify-code-server-archive.mjs \
+              --archive "$2" \
+              --version "${{ steps.code_server_identity.outputs.component_version }}" \
+              --platform "linux-$1"
+          done
       - name: Restore remote runtime packages
         if: ${{ inputs.runtime_artifacts_ready }}
         run: |
@@ -184,6 +215,9 @@ jobs:
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ inputs.update_sparkle && '1' || '0' }}
           GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz
           GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: scripts/release-gpui/macos.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@v7

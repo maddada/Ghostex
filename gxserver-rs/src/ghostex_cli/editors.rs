@@ -339,6 +339,9 @@ pub fn prompt_editor_command(args: &[String]) -> CliResult<()> {
         });
         return floating_monaco_editor_command_with_trace(args, &trace);
     }
+    if selection.kind == "code-server" {
+        return run_code_server_prompt_editor(&selection.command_args, &cwd);
+    }
     run_editor_inline(&selection.command_args, &cwd)
 }
 
@@ -367,7 +370,7 @@ fn zmx_prompt_editor_capability() -> Option<String> {
     }
     let capability = run_zmx_capability_probe(&zmx_command);
     match capability.as_deref() {
-        Some("monaco") | Some("editor") | Some("gte") => capability,
+        Some("monaco") | Some("code-server") | Some("editor") | Some("gte") => capability,
         _ => Some("editor".to_string()),
     }
 }
@@ -447,6 +450,13 @@ fn select_prompt_editor_command_with(
     ghostex_editor_available: &dyn Fn() -> bool,
     warn: &mut dyn FnMut(&str),
 ) -> PromptEditorSelection {
+    let capability = client_capability.filter(|value| !value.is_empty());
+    if capability == Some("code-server") {
+        return PromptEditorSelection {
+            command_args: code_server_prompt_editor_command(file_path),
+            kind: "code-server",
+        };
+    }
     if backend == "custom" {
         let custom_command = env("GHOSTEX_CUSTOM_PROMPT_EDITOR_COMMAND")
             .map(|value| value.trim().to_string())
@@ -463,7 +473,6 @@ fn select_prompt_editor_command_with(
             kind: "custom",
         };
     }
-    let capability = client_capability.filter(|value| !value.is_empty());
     if (backend == "monaco" || capability == Some("monaco"))
         && is_macos_app_prompt_editor_client_with(capability, env)
     {
@@ -490,6 +499,58 @@ fn select_prompt_editor_command_with(
         ],
         kind: "editor",
     }
+}
+
+fn code_server_prompt_editor_command(file_path: &str) -> Vec<String> {
+    let code_root = rpc::ghostex_data_home().join("code-server");
+    let package = code_root.join("package");
+    let user_data = code_root.join("runtime/user-data");
+    vec![
+        package.join("lib/node").to_string_lossy().into_owned(),
+        package
+            .join("out/node/entry.js")
+            .to_string_lossy()
+            .into_owned(),
+        "--user-data-dir".to_string(),
+        user_data.to_string_lossy().into_owned(),
+        "--session-socket".to_string(),
+        user_data
+            .join("code-server-ipc.sock")
+            .to_string_lossy()
+            .into_owned(),
+        "--reuse-window".to_string(),
+        "--wait".to_string(),
+        file_path.to_string(),
+    ]
+}
+
+fn run_code_server_prompt_editor(command_args: &[String], cwd: &Path) -> CliResult<()> {
+    let node = command_args.first().map(Path::new);
+    let entrypoint = command_args.get(1).map(Path::new);
+    let session_socket = command_args.get(5).map(Path::new);
+    if !node.is_some_and(|path| path.to_str().is_some_and(is_executable_file))
+        || !entrypoint.is_some_and(|path| path.is_file())
+        || !cwd.is_dir()
+    {
+        return Err(CliError::Other(
+            "Remote Ghostex Code editor is unavailable for this session.".to_string(),
+        ));
+    }
+    let Some(session_socket) = session_socket else {
+        return Err(CliError::Other(
+            "Remote Ghostex Code editor target is invalid.".to_string(),
+        ));
+    };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !session_socket.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if !session_socket.exists() {
+        return Err(CliError::Other(
+            "Remote Ghostex Code editor did not become ready for this session.".to_string(),
+        ));
+    }
+    run_editor_inline(command_args, cwd)
 }
 
 fn machine_prompt_editor_command_from_environment() -> String {
@@ -2190,6 +2251,28 @@ mod tests {
         let (selection, warnings) = select("inherit", Some("monaco"), &env_map(&[]), false);
         assert_eq!(selection.kind, "editor");
         assert_eq!(warnings, vec![ghostex_editor_unavailable_message(None)]);
+    }
+
+    #[test]
+    fn select_remote_code_server_never_falls_through_to_monaco_or_machine_editor() {
+        let env = env_map(&[("EDITOR", "nvim")]);
+        let (selection, warnings) = select("monaco", Some("code-server"), &env, true);
+        assert_eq!(selection.kind, "code-server");
+        assert!(selection
+            .command_args
+            .iter()
+            .any(|arg| arg == "--reuse-window"));
+        assert!(selection.command_args.iter().any(|arg| arg == "--wait"));
+        assert_eq!(
+            selection.command_args.last().map(String::as_str),
+            Some("/tmp/prompt.md")
+        );
+        assert!(!selection
+            .command_args
+            .iter()
+            .any(|arg| arg.contains("GhostexEditor")));
+        assert!(!selection.command_args.iter().any(|arg| arg == "nvim"));
+        assert!(warnings.is_empty());
     }
 
     #[test]

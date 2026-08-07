@@ -78,7 +78,7 @@ struct DebuggingModeCache {
 
 /*
 CDXC:GxserverLogs 2026-06-14-20:37:
-Persistent Rust logs must be safe for support bundles. Persist only warn/error unless Debugging Mode is enabled, rotate before append at the TypeScript size/count, and sanitize at the JSONL writer boundary so future call sites cannot leak paths, URLs, command text, stdout/stderr, tokens, or user-owned names.
+Persistent Rust logs must be safe for support bundles. Persist explicit warn/error entries and failure-like structured diagnostics unconditionally; require Debugging Mode for every routine entry. Rotate before append at the TypeScript size/count, and sanitize at the JSONL writer boundary so future call sites cannot leak paths, URLs, command text, stdout/stderr, tokens, or user-owned names.
 
 CDXC:GxserverLogs 2026-06-19-14:45:
 Rust logger startup must match TypeScript support-bundle retention: schedule a one-minute delayed cleanup, keep only the active or newest gxserver JSONL split file, delete older rotations, and trim the retained file to 25,000 lines without logging cleanup failures back into the same file.
@@ -106,7 +106,7 @@ impl GxserverLogger {
     }
 
     pub fn log(&self, entry: GxserverLogInput) -> Result<()> {
-        if !self.should_persist(entry.level) {
+        if !self.should_persist(&entry) {
             return Ok(());
         }
         fs::create_dir_all(&self.paths.logs_dir)
@@ -115,8 +115,18 @@ impl GxserverLogger {
         write_gxserver_log_line(&self.paths, &line)
     }
 
-    fn should_persist(&self, level: LogLevel) -> bool {
-        matches!(level, LogLevel::Warn | LogLevel::Error) || self.debugging_mode_enabled()
+    fn should_persist(&self, entry: &GxserverLogInput) -> bool {
+        matches!(entry.level, LogLevel::Warn | LogLevel::Error)
+            || entry
+                .error
+                .as_deref()
+                .is_some_and(|error| !error.trim().is_empty())
+            || text_is_important_diagnostic(&entry.event)
+            || entry
+                .details
+                .as_ref()
+                .is_some_and(value_contains_important_diagnostic)
+            || self.debugging_mode_enabled()
     }
 
     fn debugging_mode_enabled(&self) -> bool {
@@ -130,6 +140,53 @@ impl GxserverLogger {
         cache.checked_at = Instant::now();
         cache.enabled = read_debugging_mode_settings_file(&self.paths);
         cache.enabled
+    }
+}
+
+fn text_is_important_diagnostic(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    [
+        "error", "fail", "warning", "crash", "abort", "fatal", "panic",
+    ]
+    .iter()
+    .any(|marker| value.contains(marker))
+}
+
+fn value_contains_important_diagnostic(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => object.iter().any(|(key, value)| {
+            let key = key.to_ascii_lowercase();
+            let diagnostic_key = [
+                "error", "fail", "warning", "crash", "abort", "fatal", "panic",
+            ]
+            .iter()
+            .any(|marker| key.contains(marker));
+            let diagnostic_level = matches!(key.as_str(), "level" | "severity" | "status")
+                && value.as_str().is_some_and(text_is_important_diagnostic);
+            (diagnostic_key && diagnostic_value_present(value))
+                || diagnostic_level
+                || value_contains_important_diagnostic(value)
+        }),
+        Value::Array(values) => values.iter().any(value_contains_important_diagnostic),
+        _ => false,
+    }
+}
+
+fn diagnostic_value_present(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(value) => value.as_f64().is_some_and(|value| value != 0.0),
+        Value::String(value) => {
+            let value = value.trim();
+            !value.is_empty()
+                && !matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "0" | "false" | "none" | "ok" | "passed" | "success"
+                )
+        }
+        Value::Array(values) => !values.is_empty(),
+        Value::Object(values) => !values.is_empty(),
     }
 }
 
@@ -567,7 +624,7 @@ fn summarize_url(value: &str) -> Value {
     }
 }
 
-fn read_debugging_mode_settings_file(paths: &GxserverPaths) -> bool {
+pub(crate) fn read_debugging_mode_settings_file(paths: &GxserverPaths) -> bool {
     let settings_path = paths.app_config_dir.join("native-sidebar-settings.json");
     let Ok(text) = fs::read_to_string(settings_path) else {
         return false;
@@ -1397,7 +1454,34 @@ mod tests {
                 details: None,
             })
             .expect("debug log");
+        disabled_logger
+            .log(GxserverLogInput {
+                level: LogLevel::Info,
+                event: "routine.health".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: None,
+                details: Some(json!({ "errorCount": 0, "status": "ok" })),
+            })
+            .expect("zero-error routine log");
         assert!(!disabled_paths.log_file.exists());
+        disabled_logger
+            .log(GxserverLogInput {
+                level: LogLevel::Info,
+                event: "important.failure".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: Some("important failure".to_string()),
+                details: None,
+            })
+            .expect("important log");
+        let important_text =
+            fs::read_to_string(&disabled_paths.log_file).expect("read important log");
+        assert!(important_text.contains("important.failure"));
 
         let enabled_temp = tempfile::tempdir().expect("enabled tempdir");
         let enabled_paths = get_gxserver_paths(Some(enabled_temp.path().to_path_buf()));

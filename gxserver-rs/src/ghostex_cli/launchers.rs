@@ -534,12 +534,17 @@ pub fn zehn_search_command(args: &[String]) -> CliResult<()> {
     let zehn_args = resolve_zehn_search_args(args);
     let mut full_args = launch.args.clone();
     full_args.extend(zehn_args);
-    run_interactive_process(
-        &launch.command,
-        &full_args,
-        launch.cwd.as_deref(),
-        &launch.env,
-    )?;
+    /*
+    CDXC:AgentHistoryFocus 2026-08-07-09:18:
+    `ghostex find` must give bundled Zehn the exact Ghostex CLI executable that launched it. Zehn can then request agent-session focus through the authenticated gxserver control path without PATH discovery or coupling itself to Ghostex storage/protocol internals.
+    */
+    let mut env = launch.env.clone();
+    env.retain(|(key, _)| key != "GHOSTEX_CLI_EXECUTABLE");
+    env.push((
+        "GHOSTEX_CLI_EXECUTABLE".to_string(),
+        current_cli_executable().to_string_lossy().to_string(),
+    ));
+    run_interactive_process(&launch.command, &full_args, launch.cwd.as_deref(), &env)?;
     Ok(())
 }
 

@@ -202,7 +202,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       arch: x64
-      include_windows_source_runtime: ${{ inputs.windows_x64 }}
+      include_windows_source_runtime: ${{ inputs.windows_x64 || inputs.macos }}
 
   gxserver_linux_arm64:
     if: ${{ inputs.gxserver_linux_arm64 }}
@@ -211,7 +211,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       arch: arm64
-      include_windows_source_runtime: ${{ inputs.windows_arm64 }}
+      include_windows_source_runtime: ${{ inputs.windows_arm64 || inputs.macos }}
 
   gxserver_wsl_windows_x64:
     if: ${{ inputs.gxserver_wsl_windows_x64 }}
@@ -238,6 +238,9 @@ jobs:
       arch: x64
       sign: ${{ inputs.sign_windows }}
       runtime_artifacts_ready: true
+      code_server_component_version: ${{ needs.gxserver_linux_x64.outputs.code_server_component_version }}
+      code_server_archive_name: ${{ needs.gxserver_linux_x64.outputs.code_server_archive_name }}
+      code_server_artifact_name: ${{ needs.gxserver_linux_x64.outputs.code_server_artifact_name }}
     secrets: inherit
 
   windows_arm64:
@@ -249,6 +252,9 @@ jobs:
       arch: arm64
       sign: ${{ inputs.sign_windows }}
       runtime_artifacts_ready: true
+      code_server_component_version: ${{ needs.gxserver_linux_arm64.outputs.code_server_component_version }}
+      code_server_archive_name: ${{ needs.gxserver_linux_arm64.outputs.code_server_archive_name }}
+      code_server_artifact_name: ${{ needs.gxserver_linux_arm64.outputs.code_server_artifact_name }}
     secrets: inherit
 
   android:

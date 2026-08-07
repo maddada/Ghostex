@@ -13,8 +13,8 @@ permissions: { actions: write, contents: write }
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with: { ref: "${{ inputs.source_sha }}", fetch-depth: 0, submodules: false }
@@ -32,7 +32,18 @@ jobs:
       - name: Install pinned build toolchains
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake=3.28.3-1build7 ninja-build=1.11.1-2 pkg-config=1.8.1-2build1
+          sudo apt-get install -y \
+            binutils \
+            build-essential \
+            cmake=3.28.3-1build7 \
+            jq \
+            libkrb5-dev \
+            libx11-dev \
+            libxkbfile-dev \
+            ninja-build=1.11.1-2 \
+            pkg-config=1.8.1-2build1 \
+            python3 \
+            rsync
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
           curl -fsSL https://mise.run | MISE_VERSION=2026.7.7 sh
@@ -42,22 +53,73 @@ jobs:
       - name: Prepare source dependencies
         env: { GHOSTEX_RELEASE_REPO_ROOT: "${{ github.workspace }}" }
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 .release-automation/scripts/release-gpui/prepare-references.sh
+      - name: Resolve immutable code-server component identity
+        id: code_server_identity
+        run: node .release-automation/scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-arm64 --github-output >> "$GITHUB_OUTPUT"
       - name: Build gxserver Linux ARM64
         env:
           GHOSTEX_RELEASE_AUTOMATION_ROOT: ${{ github.workspace }}/.release-automation
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
+          GHOSTEX_REQUIRE_BEADS_SMOKE: "1"
         run: |
-          BEADS_ROOT="$(cd ../.. && pwd)/_references/beads" .release-automation/scripts/build-remote-gxserver-linux-release.sh --arch arm64
+          .release-automation/scripts/build-remote-gxserver-linux-release.sh --arch arm64
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-arm64"
           mkdir -p "$OUTPUT"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C build/remote-gxserver-linux/arm64/package -czf "$OUTPUT/gxserver-linux-arm64.tar.gz" .
           source .release-automation/scripts/release-gpui/common.sh
           release_gpui_write_manifest "$OUTPUT" gxserver-linux-arm64 "${{ inputs.version }}" "$OUTPUT/gxserver-linux-arm64.tar.gz"
+      - name: Apply Ghostex code-server build patches
+        run: |
+          PATCH="$PWD/.release-automation/scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch"
+          git -C code-server apply --check "$PATCH"
+          git -C code-server apply "$PATCH"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: code-server/.node-version
+          cache: npm
+          cache-dependency-path: |
+            code-server/package-lock.json
+            code-server/lib/vscode/package-lock.json
+      - name: Build code-server Linux ARM64 prerequisite
+        run: |
+          npm --prefix code-server ci
+          (
+            cd code-server
+            npm run build
+            OS=linux ARCH=arm64 VSCODE_TARGET=linux-arm64 VERSION="$(node -p 'require("./package.json").version')" npm run build:vscode
+            KEEP_MODULES=1 OS=linux ARCH=arm64 VSCODE_TARGET=linux-arm64 npm run release
+          )
+          for required_entry in \
+            lib/node \
+            out/node/entry.js \
+            out/node/routes/health.js \
+            lib/vscode/out/server-main.js \
+            lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json \
+            lib/vscode/node_modules/@vscode/ripgrep/bin/rg \
+            lib/vscode/node_modules/node-pty/build/Release/pty.node; do
+            [[ -f "code-server/release/$required_entry" ]] || { echo "Linux ARM64 code-server runtime is missing $required_entry" >&2; exit 1; }
+          done
+          test -x code-server/release/lib/node
+          test -x code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
+          grep -F promptEditorIpcReady code-server/release/out/node/routes/health.js >/dev/null
+          code-server/release/lib/node code-server/release/out/node/entry.js --version >/dev/null
+          OUTPUT="build/release-gpui/${{ inputs.version }}/code-server-linux-arm64"
+          ARCHIVE="$OUTPUT/${{ steps.code_server_identity.outputs.archive_name }}"
+          mkdir -p "$OUTPUT"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C code-server/release -czf "$ARCHIVE" .
+          archive_sha256="$(sha256sum "$ARCHIVE" | awk '{ print $1 }')"
+          printf '%s  %s\n' "$archive_sha256" "$(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.version }}-${{ inputs.source_sha }}-gxserver-linux-arm64
           path: build/release-gpui/${{ inputs.version }}/gxserver-linux-arm64/
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
+          path: build/release-gpui/${{ inputs.version }}/code-server-linux-arm64/
           if-no-files-found: error
           retention-days: 90
   stage:

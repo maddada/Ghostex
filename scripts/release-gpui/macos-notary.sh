@@ -15,8 +15,10 @@ if [[ -n "${GHOSTEX_NOTARY_KEY_PATH:-}" && -n "${GHOSTEX_NOTARY_KEY_ID:-}" && -n
   notary_args+=(--key "$GHOSTEX_NOTARY_KEY_PATH" --key-id "$GHOSTEX_NOTARY_KEY_ID" --issuer "$GHOSTEX_NOTARY_ISSUER_ID")
 elif [[ -n "${GHOSTEX_NOTARY_APPLE_ID:-}" && -n "${GHOSTEX_NOTARY_TEAM_ID:-}" && -n "${GHOSTEX_NOTARY_APP_PASSWORD:-}" ]]; then
   notary_args+=(--apple-id "$GHOSTEX_NOTARY_APPLE_ID" --team-id "$GHOSTEX_NOTARY_TEAM_ID" --password "$GHOSTEX_NOTARY_APP_PASSWORD")
+elif [[ -n "${GHOSTEX_NOTARY_PROFILE:-}" ]]; then
+  notary_args+=(--keychain-profile "$GHOSTEX_NOTARY_PROFILE")
 else
-  echo "Direct App Store Connect API-key or Apple ID notarization credentials are required" >&2
+  echo "Direct App Store Connect API-key, Apple ID, or keychain-profile notarization credentials are required" >&2
   exit 1
 fi
 
@@ -48,14 +50,24 @@ JS
     [[ -n "$SUBMISSION_ID" ]] || { echo "Existing submission ID is required" >&2; exit 2; }
     mkdir -p "$REPO_ROOT/build/release-gpui"
     attempts=0
+    consecutive_poll_failures=0
     while (( attempts < 120 )); do
       attempts=$((attempts + 1))
       INFO_FILE="$(mktemp "$REPO_ROOT/build/release-gpui/notary-info-XXXXXX.json")"
       if ! xcrun notarytool info "$SUBMISSION_ID" "${notary_args[@]}" --output-format json > "$INFO_FILE"; then
         rm -f "$INFO_FILE"
-        echo "Could not poll Apple submission $SUBMISSION_ID; rerun this stage with the same submission ID" >&2
-        exit 1
+        consecutive_poll_failures=$((consecutive_poll_failures + 1))
+        if (( consecutive_poll_failures >= 10 )); then
+          echo "Could not poll Apple submission $SUBMISSION_ID after $consecutive_poll_failures consecutive attempts" >&2
+          exit 1
+        fi
+        poll_retry_delay=$((consecutive_poll_failures * 5))
+        (( poll_retry_delay > 30 )) && poll_retry_delay=30
+        echo "Apple notarization poll failed; retrying submission $SUBMISSION_ID in ${poll_retry_delay}s ($consecutive_poll_failures/10)" >&2
+        sleep "$poll_retry_delay"
+        continue
       fi
+      consecutive_poll_failures=0
       STATUS="$(plutil -extract status raw -o - "$INFO_FILE")"
       rm -f "$INFO_FILE"
       case "$STATUS" in

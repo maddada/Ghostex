@@ -51,7 +51,7 @@ pub fn run() -> i32 {
 
 /// Commands whose own `-h/--help` handling must not be swallowed by the
 /// global help gate.
-const HELP_GATE_EXCLUDED: [&str; 18] = [
+const HELP_GATE_EXCLUDED: &[&str] = &[
     "agent-orchestration",
     "bd",
     "beads",
@@ -62,6 +62,7 @@ const HELP_GATE_EXCLUDED: [&str; 18] = [
     "f",
     "fable-5.6-orchestration",
     "find",
+    "find-prev-session",
     "generate-title",
     "h",
     "history",
@@ -125,7 +126,7 @@ fn exit_code() -> i32 {
 }
 
 fn is_known_command(name: &str) -> bool {
-    const NAMES: [&str; 120] = [
+    const NAMES: &[&str] = &[
         "sessions",
         "2",
         "s",
@@ -232,6 +233,8 @@ fn is_known_command(name: &str) -> bool {
         "install-agent-orchestration-skill",
         "fable-5.6-orchestration",
         "install-fable-5.6-orchestration-skill",
+        "find-prev-session",
+        "install-find-prev-session-skill",
         "generate-title",
         "install-generate-title-skill",
         "manage-beads",
@@ -498,6 +501,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "install-fable-5.6-orchestration-skill" => {
             skills::install_fable56_orchestration_skill_command(args)
         }
+        "find-prev-session" => skills::find_prev_session_command(args),
+        "install-find-prev-session-skill" => skills::install_find_prev_session_skill_command(args),
         "generate-title" => skills::generate_title_command(args),
         "install-generate-title-skill" => skills::install_generate_title_skill_command(args),
         "manage-beads" => skills::manage_beads_command(args),

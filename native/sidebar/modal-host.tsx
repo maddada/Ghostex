@@ -219,7 +219,6 @@ type AppModalHostMessage =
       agentDraft?: AgentConfigDraft;
       agentIcon?: SidebarAgentIcon;
       access?: T3BrowserAccessMessage;
-      collapsedGroupsById?: Record<string, true>;
       closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
@@ -631,20 +630,6 @@ function isSettingsModalTab(value: unknown): value is SettingsModalTab {
   );
 }
 
-function normalizeCommandPaletteCollapsedGroupsById(candidate: unknown): Record<string, true> {
-  const normalized: Record<string, true> = {};
-  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
-    return normalized;
-  }
-
-  for (const [groupId, isCollapsed] of Object.entries(candidate)) {
-    if (groupId.trim().length > 0 && isCollapsed === true) {
-      normalized[groupId] = true;
-    }
-  }
-  return normalized;
-}
-
 function readPromptAgentModalOverride(modal: PromptAgentModalKey): string | undefined {
   const value = localStorage.getItem(PROMPT_AGENT_MODAL_STORAGE_KEYS[modal])?.trim();
   return value || undefined;
@@ -960,7 +945,6 @@ function AppModalHost() {
     gitFileDiff,
     worktreeDelete,
     missingProjectFolder,
-    commandPaletteCollapsedGroupsById,
     commandPaletteInitialQuery,
     commandPaletteOpenRequestSequence,
     isCommandPalettePrewarm,
@@ -1717,10 +1701,10 @@ function AppModalHost() {
        * window.
       */}
       <CommandPalette
-        collapsedGroupsById={commandPaletteCollapsedGroupsById}
         commands={commands}
         hotkeys={settings?.hotkeys}
         initialQuery={commandPaletteInitialQuery}
+        isInitialLoadResolved={hasNativeSettingsHydrated}
         isOpen={activeModal === "commandPalette"}
         isPrewarm={isCommandPalettePrewarm}
         onOpenChange={(isOpen) => {
@@ -2032,6 +2016,10 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: "installFable56OrchestrationSkill" });
         }}
+        onInstallFindPrevSessionSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: "installFindPrevSessionSkill" });
+        }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: "installGenerateTitleSkill" });
@@ -2172,6 +2160,10 @@ function AppModalHost() {
         onInstallFable56OrchestrationSkill={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: "installFable56OrchestrationSkill" });
+        }}
+        onInstallFindPrevSessionSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: "installFindPrevSessionSkill" });
         }}
         onInstallGenerateTitleSkill={() => {
           setGhostexCliStatusLoading(true);
@@ -2410,9 +2402,6 @@ function useModalStateFromNative() {
   const [portlessSetup, setPortlessSetup] = useState<PortlessSetupModalState>();
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
   const [agentHookStatus, setAgentHookStatus] = useState<AgentHookStatusMessage>();
-  const [commandPaletteCollapsedGroupsById, setCommandPaletteCollapsedGroupsById] = useState<
-    Record<string, true>
-  >({});
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState("");
   const [commandPaletteOpenRequestSequence, setCommandPaletteOpenRequestSequence] = useState(0);
   const [isCommandPalettePrewarm, setIsCommandPalettePrewarm] = useState(false);
@@ -2457,7 +2446,6 @@ function useModalStateFromNative() {
     setAppIconState(undefined);
     setAgentsHubCatalog(undefined);
     setAgentsHubFileContent(undefined);
-    setCommandPaletteCollapsedGroupsById({});
     setCommandPaletteInitialQuery("");
     setCommandPaletteOpenRequestSequence(0);
     setIsCommandPalettePrewarm(false);
@@ -2971,33 +2959,20 @@ function useModalStateFromNative() {
           if (message.modal === "commandPalette") {
             /*
              * CDXC:CommandPalette 2026-06-13-22:18:
-             * One modal kind owns both session search and command fuzzy finding.
-             * Preserve the caller's initial input so Cmd+Shift+P can prefill
-             * `>` while Cmd+P opens the same window with an empty query.
-             *
-             * CDXC:CommandPalette 2026-06-13-22:48:
-             * The command palette lives in the native modal host, but project
-             * collapse is sidebar-local UI state. Normalize the caller's map at
-             * the host boundary so Collapsed Projects can be rendered without
-             * querying DOM state from the separate modal window.
+             * The Commands tab owns only command fuzzy finding. Preserve an
+             * optional caller query as normal search text; Recent Sessions is
+             * selected through its own modal id instead of a query prefix.
              *
              * CDXC:CommandPalette 2026-06-15-10:27:
-             * Duplicate command-palette opens are normally no-ops, but Cmd+P
-             * and Cmd+Shift+P must still switch an already-visible palette
-             * between session and command modes. Increment a request sequence
-             * for every open message so React can distinguish a repeat hotkey
-             * from a normal prop re-render.
+             * Increment a request sequence for every Commands open so React can
+             * refocus and apply the requested command query on repeat opens.
              */
-            setCommandPaletteCollapsedGroupsById(
-              normalizeCommandPaletteCollapsedGroupsById(message.collapsedGroupsById),
-            );
             setCommandPaletteInitialQuery(
               typeof message.initialQuery === "string" ? message.initialQuery : "",
             );
             setCommandPaletteOpenRequestSequence((sequence) => sequence + 1);
             setIsCommandPalettePrewarm(message.prewarm === true);
           } else {
-            setCommandPaletteCollapsedGroupsById({});
             setCommandPaletteInitialQuery("");
             setCommandPaletteOpenRequestSequence(0);
             setIsCommandPalettePrewarm(false);
@@ -3205,7 +3180,6 @@ function useModalStateFromNative() {
     gitFileDiff,
     worktreeDelete,
     missingProjectFolder,
-    commandPaletteCollapsedGroupsById,
     commandPaletteInitialQuery,
     commandPaletteOpenRequestSequence,
     isCommandPalettePrewarm,

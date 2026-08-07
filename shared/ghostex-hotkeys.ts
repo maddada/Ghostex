@@ -142,28 +142,26 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * and sidebar DOM dispatch both open the same shadcn command surface.
      *
      * CDXC:CommandPalette 2026-06-13-22:18:
-     * Cmd+Shift+P opens command-finding mode by pre-filling the shared palette
-     * input with `>` and placing the caret immediately after it. Commands are
-     * only searched while that leading prefix remains present.
+     * Cmd+Shift+P opens Ghostex Quick Access directly on its Commands tab.
      */
     defaultKey: "cmd+shift+p",
-    description: "Open the Ghostex command palette in command mode.",
+    description: "Open Ghostex Quick Access on Commands.",
     id: "openCommandPalette",
     retiredDefaultKeys: ["cmd+k"],
-    title: "Open Command Palette: Commands",
+    title: "Open Quick Access: Commands",
   },
   {
     action: { id: "openSessionSearchPalette", kind: "openSessionSearchPalette" },
     /**
      * CDXC:CommandPalette 2026-06-13-22:18:
-     * Cmd+P opens the same command-palette window in session-search mode with
-     * no leading `>` prefix. Users can rebind this separately from command mode
-     * because session switching and command fuzzy-finding are distinct habits.
+     * Cmd+P opens Ghostex Quick Access directly on Recent Sessions. Users can
+     * rebind it separately because session recovery and command finding are
+     * distinct habits.
      */
     defaultKey: "cmd+p",
-    description: "Open the Ghostex command palette in session search mode.",
+    description: "Open Ghostex Quick Access on Recent Sessions.",
     id: "openSessionSearchPalette",
-    title: "Open Command Palette: Sessions",
+    title: "Open Quick Access: Recent Sessions",
   },
   {
     action: { id: "openCommandsPanel", kind: "openCommandsPanel" },

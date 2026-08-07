@@ -45,10 +45,14 @@ export function domainSessionToWorkspaceSession(
   statusMessage?: string,
 ): WorkspaceSession {
   const reference = { machineId, projectId: session.projectId, sessionId: session.sessionId };
+  const agentSessionId = typeof session.runtimeSettings.agentSessionId === "string"
+    ? session.runtimeSettings.agentSessionId.trim()
+    : "";
   return {
     ...reference,
     activity: "idle",
     ...(session.agentId ? { agentIcon: session.agentId, agentId: session.agentId } : {}),
+    ...(agentSessionId ? { agentSessionId } : {}),
     presentationState,
     ...(statusMessage ? { statusMessage } : {}),
     title: session.title || "Terminal",

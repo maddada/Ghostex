@@ -2100,3 +2100,8 @@ section.project-collection.project-collection-drag-ghost {
       var(--reference-sidebar-scroll-row-bleed-right, 0px)
   );
 }
+.sidebar-hidden-item-icon {
+  flex: 0 0 auto;
+  margin-left: 4px;
+  opacity: 0.65;
+}

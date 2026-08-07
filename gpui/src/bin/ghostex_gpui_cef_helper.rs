@@ -139,10 +139,28 @@ fn verify_external_cef_runtime_dir() {
         "verified helper CEF runtime is missing {}",
         library.display()
     );
-    eprintln!(
-        "Ghostex CEF helper runtime: verified component {}",
-        runtime_dir.display()
-    );
+    if debug_ui_controls_enabled() {
+        eprintln!(
+            "Ghostex CEF helper runtime: verified component {}",
+            runtime_dir.display()
+        );
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn debug_ui_controls_enabled() -> bool {
+    let settings_path = ghostex_paths::GhostexPaths::resolve().sidebar_settings_file();
+    let Ok(settings_json) = std::fs::read_to_string(settings_path) else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(&settings_json)
+        .ok()
+        .and_then(|settings| {
+            settings
+                .get("debuggingMode")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(target_os = "macos")]

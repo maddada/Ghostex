@@ -17,6 +17,18 @@ on:
         required: false
         default: false
         type: boolean
+      code_server_component_version:
+        required: false
+        default: ''
+        type: string
+      code_server_archive_name:
+        required: false
+        default: ''
+        type: string
+      code_server_artifact_name:
+        required: false
+        default: ''
+        type: string
     secrets:
       WINDOWS_CODE_SIGN_PFX_BASE64:
         required: false
@@ -50,6 +62,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
+      - name: Restore code-server source identity input
+        if: ${{ !inputs.runtime_artifacts_ready }}
+        run: git submodule update --init --depth=1 -- code-server
+      - name: Resolve immutable code-server component identity
+        if: ${{ !inputs.runtime_artifacts_ready }}
+        id: code_server_identity
+        shell: bash
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
@@ -58,7 +78,7 @@ jobs:
       - uses: actions/download-artifact@v8
         if: ${{ inputs.runtime_artifacts_ready }}
         with:
-          name: release-code-server-linux-${{ inputs.arch }}
+          name: ${{ inputs.code_server_artifact_name }}
           path: build/runtime-artifacts/${{ inputs.arch }}
       - name: Install pinned Zig
         shell: pwsh
@@ -89,7 +109,8 @@ jobs:
           GHOSTEX_WINDOWS_REQUIRE_SIGNING: ${{ inputs.sign && '1' || '0' }}
           GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: ${{ inputs.runtime_artifacts_ready && '1' || '0' }}
           GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
-          GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\code-server-linux-${{ inputs.arch }}.tar.gz
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ inputs.code_server_component_version || steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\${{ inputs.code_server_archive_name || steps.code_server_identity.outputs.archive_name }}
         run: scripts/release-gpui/windows.ps1 -Version "${{ inputs.version }}" -Arch "${{ inputs.arch }}"
       - uses: actions/upload-artifact@v7
         with:

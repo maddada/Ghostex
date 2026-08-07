@@ -486,6 +486,18 @@ stage_wsl_archive() {
   windows_sha256 "$source_archive" >"$staged_archive.sha256"
 }
 
+stage_verified_code_server_archive() {
+  local source_archive="$1"
+  local source_sidecar="$source_archive.sha256"
+  local staged_dir="$APP_DIR/resources/wsl"
+  mkdir -p "$staged_dir"
+  windows_robocopy \
+    "$(dirname "$source_archive")" \
+    "$staged_dir" \
+    "$(basename "$source_archive")" \
+    "$(basename "$source_sidecar")"
+}
+
 stage_current_wsl_runtime_archive() {
   local source_archive="$1"
   local staged_name="$2"
@@ -527,6 +539,30 @@ stage_current_wsl_runtime_archive() {
 
 WSL_GXSERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE:-}"
 WSL_CODE_SERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE:-}"
+CODE_SERVER_VERSION="$(node "$REPO_ROOT/scripts/release-gpui/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+if [[ -z "$CODE_SERVER_VERSION" ]]; then
+  echo "Could not resolve the code-server component payload identity." >&2
+  exit 1
+fi
+if [[ -n "${GHOSTEX_CODE_SERVER_COMPONENT_VERSION:-}" && "$GHOSTEX_CODE_SERVER_COMPONENT_VERSION" != "$CODE_SERVER_VERSION" ]]; then
+  echo "Configured code-server component version does not match its Node payload identity." >&2
+  exit 1
+fi
+CODE_SERVER_PLATFORM="linux-$RELEASE_ARCH"
+CODE_SERVER_ARCHIVE_NAME="code-server-$CODE_SERVER_VERSION-$CODE_SERVER_PLATFORM.tar.gz"
+if [[ -n "$WSL_CODE_SERVER_ARCHIVE" && -f "$WSL_CODE_SERVER_ARCHIVE" ]]; then
+  if [[ "$(basename "$WSL_CODE_SERVER_ARCHIVE")" != "$CODE_SERVER_ARCHIVE_NAME" ]]; then
+    echo "WSL code-server archive identity mismatch: expected $CODE_SERVER_ARCHIVE_NAME." >&2
+    exit 1
+  fi
+  node "$REPO_ROOT/scripts/release-gpui/verify-code-server-archive.mjs" \
+    --archive "$WSL_CODE_SERVER_ARCHIVE" \
+    --version "$CODE_SERVER_VERSION" \
+    --platform "$CODE_SERVER_PLATFORM"
+elif [[ "$ON_DEMAND_COMPONENTS" == "1" || "${GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME:-1}" != "0" ]]; then
+  echo "Required WSL Source archive is missing: $WSL_CODE_SERVER_ARCHIVE" >&2
+  exit 1
+fi
 report_build_phase "Packaging the bundled WSL runtime archives..."
 stage_current_wsl_runtime_archive "$WSL_GXSERVER_ARCHIVE" "gxserver-linux-$RELEASE_ARCH.tar.gz"
 # CDXC:T3CodeDisabled ghostex-mzp9: Keep the archive checks ready for a future
@@ -538,22 +574,20 @@ stage_current_wsl_runtime_archive "$WSL_GXSERVER_ARCHIVE" "gxserver-linux-$RELEA
 # fi
 stage_wsl_archive "$WSL_GXSERVER_ARCHIVE" "gxserver-linux-$RELEASE_ARCH.tar.gz"
 if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
-  if [[ -z "$WSL_CODE_SERVER_ARCHIVE" || ! -f "$WSL_CODE_SERVER_ARCHIVE" ]]; then
-    echo "Required WSL Source archive is missing: $WSL_CODE_SERVER_ARCHIVE" >&2
-    exit 1
-  fi
-  CODE_SERVER_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD:code-server)"
-  CODE_SERVER_VERSION="$CODE_SERVER_COMMIT-p1"
   CODE_SERVER_STAGE="$(mktemp -d "$GPUI_DIR/build/code-server-windows-component-XXXXXX")"
   CODE_SERVER_ASSET="$COMPONENT_ASSET_DIR/code-server-$CODE_SERVER_VERSION-windows-$RELEASE_ARCH.tar.gz"
-  cp "$WSL_CODE_SERVER_ARCHIVE" "$CODE_SERVER_STAGE/code-server-linux-$RELEASE_ARCH.tar.gz"
+  cp "$WSL_CODE_SERVER_ARCHIVE" "$CODE_SERVER_STAGE/$CODE_SERVER_ARCHIVE_NAME"
+  cp "$WSL_CODE_SERVER_ARCHIVE.sha256" "$CODE_SERVER_STAGE/$CODE_SERVER_ARCHIVE_NAME.sha256"
   "$REPO_ROOT/scripts/release-gpui/create-deterministic-tar.sh" "$CODE_SERVER_STAGE" "$CODE_SERVER_ASSET"
   rm -rf "$CODE_SERVER_STAGE"
+  CODE_SERVER_ASSET_SHA256="$(sha256sum "$CODE_SERVER_ASSET" | awk '{print $1}')"
+  printf '%s  %s\n' "$CODE_SERVER_ASSET_SHA256" "$(basename "$CODE_SERVER_ASSET")" >"$CODE_SERVER_ASSET.sha256"
   node "$REPO_ROOT/scripts/release-gpui/publish-component.mjs" \
     --metadata-only \
     --component code-server \
     --version "$CODE_SERVER_VERSION" \
     --asset-dir "$COMPONENT_ASSET_DIR" \
+    --require-sha256-sidecars \
     --output "$COMPONENT_MANIFEST"
   ON_DEMAND_BUILD_MANIFEST="$COMPONENT_ROOT/windows-$RELEASE_ARCH-assets.json"
   node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
@@ -565,7 +599,7 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
     --output "$APP_DIR/resources/on-demand-resources.json" \
     --repo maddada/Ghostex
 else
-  stage_wsl_archive "$WSL_CODE_SERVER_ARCHIVE" "code-server-linux-$RELEASE_ARCH.tar.gz"
+  stage_verified_code_server_archive "$WSL_CODE_SERVER_ARCHIVE"
 fi
 
 echo "Staged $APP_DIR"

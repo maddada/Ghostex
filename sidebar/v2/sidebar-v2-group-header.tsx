@@ -6,6 +6,7 @@ import { createGroupDropData } from "../sidebar-dnd";
 import { groupSensors } from "../session-group-section";
 import { AppTooltip } from "../app-tooltip";
 import { SidebarV2ProjectIcon } from "./sidebar-v2-icons";
+import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
 import type { SidebarV2GroupModel } from "./sidebar-v2-view-model";
 
 /*
@@ -61,6 +62,8 @@ export type SidebarV2ProjectGroupSectionProps = {
   isCollapsed: boolean;
   /** True while the user's own project is the one this row represents. */
   isActive?: boolean;
+  /** True when this collapsed project owns the currently active session. */
+  containsActiveSession?: boolean;
   /**
    * True while SidebarApp is painting the cursor ghost for THIS row, so the
    * source keeps V1's faint-placeholder treatment for the whole drag even after
@@ -87,6 +90,7 @@ export function SidebarV2ProjectGroupSection({
   headerActions,
   index,
   isActive = false,
+  containsActiveSession = false,
   isCollapsed,
   isDragPreviewSource = false,
   isDragDisabled = false,
@@ -115,6 +119,11 @@ export function SidebarV2ProjectGroupSection({
     type: "group",
   });
   const collapseLabel = `${isCollapsed ? "Expand" : "Collapse"} ${group.title}`;
+  const {
+    isPresent: shouldRenderBody,
+    isVisuallyCollapsed: isBodyVisuallyCollapsed,
+    setCollapsibleElement: setBodyElement,
+  } = useSidebarCollapsiblePresence(isCollapsed);
   const toggleCollapsed = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
       event.preventDefault();
@@ -129,6 +138,7 @@ export function SidebarV2ProjectGroupSection({
       className="group sidebar-v2-group"
       data-active={String(isActive)}
       data-collapsed={String(isCollapsed)}
+      data-contains-active-session={String(containsActiveSession)}
       data-dragging={String(Boolean(sortable.isDragging || isDragPreviewSource))}
       data-group-drop-position={dropPosition}
       /*
@@ -227,7 +237,17 @@ export function SidebarV2ProjectGroupSection({
           </div>
         </div>
       </div>
-      {children}
+      {shouldRenderBody ? (
+        <div
+          aria-hidden={isBodyVisuallyCollapsed}
+          className="sidebar-v2-group-body sidebar-animated-collapse-body"
+          data-collapsed={String(isBodyVisuallyCollapsed)}
+          inert={isBodyVisuallyCollapsed ? true : undefined}
+          ref={setBodyElement}
+        >
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

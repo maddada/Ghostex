@@ -362,20 +362,75 @@ body {
  input, without inherited square button chrome around the icon.
 */
 .ghostex-command-palette-dialog {
-  height: min(620px, calc(100vh - 2rem));
-  max-height: min(620px, calc(100vh - 2rem));
+  height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
   max-width: min(654px, calc(100vw - 1rem));
   top: 50% !important;
   translate: -50% -50% !important;
   width: min(654px, calc(100vw - 1rem));
 }
 
+.quick-access-surface {
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  color: var(--popover-foreground, var(--app-foreground));
+}
+
+.quick-access-tabs {
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+}
+
+.quick-access-tab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border, var(--border)) 88%, transparent);
+  border-radius: 0;
+  color: color-mix(in srgb, var(--app-muted, var(--muted-foreground)) 82%, var(--app-foreground, var(--foreground)) 18%);
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  height: 38px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.quick-access-tab + .quick-access-tab {
+  border-left: 1px solid color-mix(in srgb, var(--app-border, var(--border)) 88%, transparent);
+}
+
+.quick-access-tab:hover,
+.quick-access-tab:focus-visible {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 7%, transparent);
+  color: var(--app-foreground, var(--foreground));
+  outline: none;
+}
+
+.quick-access-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
+  border-bottom-color: var(--app-foreground, var(--foreground));
+  color: var(--app-foreground, var(--foreground));
+}
+
+.quick-access-tab kbd {
+  color: inherit;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .ghostex-command-palette-dialog [data-slot="command"] {
   padding: 0 0 4px;
 }
 
-.ghostex-command-palette-dialog [data-slot="command-input-wrapper"] {
-  padding: 3px 3px 0;
+.quick-access-surface [data-slot="command-input-wrapper"] {
+  padding: 8px 3px 0;
 }
 
 [data-slot="command-input-clear"] {
@@ -397,28 +452,71 @@ body {
   padding-right: 3px;
 }
 
+/*
+ * Every Quick Access tab uses Command Pane's typography and color system.
+ * Previous Sessions keeps its richer session markup for restore/delete and
+ * metadata behavior, but its visible row is deliberately the same 14px,
+ * 36px-high command item when rendered in this modal.
+ */
+.quick-access-surface.previous-sessions-modal .group-sessions {
+  gap: 0;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-frame {
+  --reference-session-title-inset: 36px;
+  --reference-session-trailing-inset: 12px;
+  min-height: 36px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card {
+  color: var(--foreground, var(--app-foreground));
+  height: 36px;
+  min-height: 36px;
+  padding-left: var(--reference-session-title-inset);
+  padding-right: var(--reference-session-trailing-inset);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card::after {
+  background: var(--muted, #202020);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card .session-head {
+  height: 20px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card .session-alias-heading {
+  color: var(--foreground, var(--app-foreground));
+  font-size: 14px;
+  font-weight: 400 !important;
+  line-height: 20px;
+}
+
+.quick-access-surface.previous-sessions-modal
+  .session-history-card:is([data-visible="true"], [data-focused="true"])
+  .session-alias-heading {
+  color: var(--foreground, var(--app-foreground));
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-project-label,
+.quick-access-surface.previous-sessions-modal .session-history-card .session-last-interaction-time {
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 12px;
+  font-weight: 400 !important;
+  line-height: 20px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-frame .session-floating-agent-icon,
+.quick-access-surface.previous-sessions-modal
+  .session-history-frame
+  .session-floating-agent-tabler-icon {
+  left: 12px;
+  opacity: 0.5;
+}
+
 .ghostex-command-palette-list {
   flex: 1 1 auto;
   max-height: none;
   min-height: 0;
-}
-
-.ghostex-command-palette-loading {
-  align-items: center;
-  color: var(--muted-foreground);
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.ghostex-command-palette-loading-icon {
-  animation: ghostex-command-palette-loading-spin 1s linear infinite;
-}
-
-@keyframes ghostex-command-palette-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .ghostex-command-palette-copy {
@@ -441,46 +539,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/*
- CDXC:CommandPalette 2026-06-13-22:18:
- Session-search mode reuses Previous Sessions row chrome inside shadcn Command
- items. Remove command-row padding and the invisible check slot so current and
- previous session cards align like the Previous Sessions modal while keeping
- cmdk keyboard selection on the outer item.
-
- CDXC:CommandPalette 2026-06-13-22:22:
- The command palette must show only one highlighted session row: the item
- selected by cmdk through mouse hover or Arrow-key navigation. Suppress the
- reused session card's own hover/focus/visible surface so it cannot paint a
- second highlighted row while data-selected belongs to another CommandItem.
-*/
-.ghostex-command-palette-session-item[data-slot="command-item"] {
-  padding: 0;
-}
-
-.ghostex-command-palette-session-item[data-slot="command-item"] > svg:last-child {
-  display: none;
-}
-
-.ghostex-command-palette-session-frame {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.ghostex-command-palette-session-row {
-  border-color: transparent;
-  box-shadow: none;
-  outline-color: transparent;
-  width: 100%;
-}
-
-.ghostex-command-palette-session-item[data-slot="command-item"]
-  .ghostex-command-palette-session-row::before,
-.ghostex-command-palette-session-item[data-slot="command-item"]
-  .ghostex-command-palette-session-row::after {
-  opacity: 0;
 }
 
 /*

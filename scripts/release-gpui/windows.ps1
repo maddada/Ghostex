@@ -47,7 +47,6 @@ if (Test-Path (Join-Path $AppDir "libcef.dll")) {
 }
 $WslArchive = Join-Path $AppDir "resources/wsl/gxserver-linux-$Arch.tar.gz"
 $WslArchiveSha = "$WslArchive.sha256"
-$WslCodeServerArchive = Join-Path $AppDir "resources/wsl/code-server-linux-$Arch.tar.gz"
 $OnDemandManifestPath = Join-Path $AppDir "resources/on-demand-resources.json"
 if (-not (Test-Path $OnDemandManifestPath)) {
     throw "Windows staged app is missing its sealed component manifest"
@@ -70,12 +69,13 @@ if ($env:GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME -ne "0") {
     if ($ExpectedWslSha -cnotmatch '^[0-9a-f]{64}$' -or $ExpectedWslSha -cne $ActualWslSha) {
         throw "Windows staged WSL gxserver checksum does not match its runtime archive"
     }
-    if (Test-Path $WslCodeServerArchive) {
+    $BundledWslSourceArchives = @(Get-ChildItem (Join-Path $AppDir "resources/wsl") -File -Filter "code-server-*-linux-$Arch.tar.gz" -ErrorAction SilentlyContinue)
+    if ($BundledWslSourceArchives.Count -ne 0) {
         throw "Windows staged app still bundles its optional WSL Source runtime"
     }
     $CodeServerComponent = $OnDemandManifest.components.'code-server'
     $CodeServerAsset = $CodeServerComponent.platforms."windows-$Arch"
-    if (-not $CodeServerComponent.componentVersion -or $CodeServerAsset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+    if (-not $CodeServerComponent.componentVersion -or $CodeServerComponent.downloadTag -ne "code-server-$($CodeServerComponent.componentVersion)" -or $CodeServerAsset.sha256 -cnotmatch '^[0-9a-f]{64}$') {
         throw "Windows staged app has an invalid code-server component entry"
     }
 }
@@ -90,11 +90,21 @@ if ($CodeServerComponentVersion) {
     $ComponentPublishes += @{ Name = "code-server"; Version = $CodeServerComponentVersion }
 }
 foreach ($ComponentPublish in $ComponentPublishes) {
-    & node (Join-Path $RepoRoot "scripts/release-gpui/publish-component.mjs") `
-        --component $ComponentPublish.Name `
-        --version $ComponentPublish.Version `
-        --asset-dir (Join-Path $RepoRoot "build/on-demand-components/assets") `
-        --output $ComponentManifestPath
+    $PublishArgs = @(
+        (Join-Path $RepoRoot "scripts/release-gpui/publish-component.mjs")
+        "--component"
+        $ComponentPublish.Name
+        "--version"
+        $ComponentPublish.Version
+        "--asset-dir"
+        (Join-Path $RepoRoot "build/on-demand-components/assets")
+        "--output"
+        $ComponentManifestPath
+    )
+    if ($ComponentPublish.Name -eq "code-server") {
+        $PublishArgs += "--require-sha256-sidecars"
+    }
+    & node @PublishArgs
     if ($LASTEXITCODE -ne 0) { throw "Publishing the Windows $($ComponentPublish.Name) component failed" }
 }
 

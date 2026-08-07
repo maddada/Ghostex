@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateOnDemandManifestV2 } from "./on-demand-manifest.mjs";
+import {
+  authenticateComponentChecksumSidecar,
+  validateOnDemandManifestV2,
+} from "./on-demand-manifest.mjs";
 
 const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -32,6 +35,30 @@ export function componentAssetsFromDirectory({ assetDir, component, componentVer
     throw new Error(`No ${prefix}<platform>.tar.gz assets found in ${assetDir}`);
   }
   return assets;
+}
+
+export function componentChecksumSidecars(assets) {
+  return assets.map((asset) => {
+    const filePath = `${asset.filePath}.sha256`;
+    if (!existsSync(filePath)) {
+      throw new Error(`Missing filename-bound checksum sidecar for ${asset.assetName}`);
+    }
+    const contents = readFileSync(filePath, "utf8");
+    try {
+      authenticateComponentChecksumSidecar(contents, asset.assetName, asset.sha256);
+    } catch (error) {
+      throw new Error(
+        `Invalid filename-bound checksum sidecar for ${asset.assetName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return {
+      assetName: `${asset.assetName}.sha256`,
+      filePath,
+      platform: asset.platform,
+      sha256: sha256File(filePath),
+      sizeBytes: statSync(filePath).size,
+    };
+  });
 }
 
 export function normalizedRemoteDigest(asset) {
@@ -69,6 +96,11 @@ export function verifyPublishedComponent({ component, release }) {
         `Component tag ${tag} has mismatched size/digest for ${sealed.assetName}: ` +
           `${remote.size ?? "unknown"}/${remoteDigest || "unavailable"}; sealed manifest expects ` +
           `${sealed.sizeBytes}/${sealed.sha256}. Fix: publish a newly versioned component, then run: ${fix}`,
+      );
+    }
+    if (sealed.sha256SidecarName && !remoteByName.has(sealed.sha256SidecarName)) {
+      throw new Error(
+        `Component tag ${tag} is missing ${sealed.sha256SidecarName} for ${platform}. Fix: ${fix}`,
       );
     }
   }
@@ -161,6 +193,10 @@ function parseArguments(argv) {
       options.metadataOnly = true;
       continue;
     }
+    if (argument === "--require-sha256-sidecars") {
+      options.requireSha256Sidecars = true;
+      continue;
+    }
     if (!argument.startsWith("--")) throw new Error(`Unexpected argument: ${argument}`);
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
@@ -170,7 +206,8 @@ function parseArguments(argv) {
   return options;
 }
 
-export function componentManifestRecord({ assets, component, componentVersion, downloadTag }) {
+export function componentManifestRecord({ assets, checksumSidecars = [], component, componentVersion, downloadTag }) {
+  const sidecarByPlatform = new Map(checksumSidecars.map((sidecar) => [sidecar.platform, sidecar]));
   return {
     name: component,
     componentVersion,
@@ -178,7 +215,14 @@ export function componentManifestRecord({ assets, component, componentVersion, d
     platforms: Object.fromEntries(
       assets.map((asset) => [
         asset.platform,
-        { assetName: asset.assetName, sha256: asset.sha256, sizeBytes: asset.sizeBytes },
+        {
+          assetName: asset.assetName,
+          ...(sidecarByPlatform.has(asset.platform)
+            ? { sha256SidecarName: sidecarByPlatform.get(asset.platform).assetName }
+            : {}),
+          sha256: asset.sha256,
+          sizeBytes: asset.sizeBytes,
+        },
       ]),
     ),
   };
@@ -207,6 +251,19 @@ async function main() {
   requireIdentifier(tag, "tag");
   if (!options["asset-dir"]) throw new Error("--asset-dir is required");
   const assets = componentAssetsFromDirectory({ assetDir: options["asset-dir"], component, componentVersion });
+  const checksumSidecars = options.requireSha256Sidecars ? componentChecksumSidecars(assets) : [];
+  const publishedAssets = options.requireSha256Sidecars
+    ? [...assets, ...checksumSidecars].sort((left, right) => left.assetName.localeCompare(right.assetName))
+    : assets;
+  if (options["require-platforms"]) {
+    const availablePlatforms = new Set(assets.map((asset) => asset.platform));
+    for (const platform of options["require-platforms"].split(",")) {
+      requireIdentifier(platform, "required platform");
+      if (!availablePlatforms.has(platform)) {
+        throw new Error(`Missing required ${component} component asset for ${platform}`);
+      }
+    }
+  }
   if (options["release-state"] && !options.dryRun) throw new Error("--release-state is test-only and requires --dry-run");
   const release = options.metadataOnly
     ? { exists: false, assets: [] }
@@ -215,7 +272,7 @@ async function main() {
       : inspectRelease({ repo, tag });
   const plan = options.metadataOnly
     ? { createRelease: false, uploads: [], noops: [] }
-    : planComponentRelease({ assets, release });
+    : planComponentRelease({ assets: publishedAssets, release });
 
   if (plan.createRelease) {
     process.stdout.write(`${options.dryRun ? "DRY-RUN " : ""}CREATE ${repo} release ${tag}\n`);
@@ -229,7 +286,13 @@ async function main() {
   }
   for (const asset of plan.noops) process.stdout.write(`NO-OP ${asset.assetName} sha256=${asset.sha256}\n`);
 
-  const record = componentManifestRecord({ assets, component, componentVersion, downloadTag: tag });
+  const record = componentManifestRecord({
+    assets,
+    checksumSidecars,
+    component,
+    componentVersion,
+    downloadTag: tag,
+  });
   const outputPath = options.output
     ? path.resolve(options.output)
     : options.dryRun

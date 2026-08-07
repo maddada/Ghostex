@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Rendering proposals for Ghostex chat.">
+  <title>Rendering · Ghostex Chat Improvement Map</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="index.html"><span class="wordmark-mark" aria-hidden="true"></span>Chat Improvement Map</a>
+      <nav class="nav" aria-label="Report pages">
+        <a href="index.html">Overview</a><a href="foundation.html">Foundation</a><a href="models.html">Models</a><a href="rendering.html" aria-current="page">Rendering</a><a href="experience.html">Experience</a><a href="roadmap.html">Roadmap</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="kicker">RND · Rendering</p>
+        <h1>Make the work legible.</h1>
+        <p class="lede">The current chat renderer handles prose, links, images, reasoning, tool runs, and a basic edit view. The next layer should make code review, command inspection, and long agent runs feel native rather than generic.</p>
+      </div>
+      <aside class="hero-note"><strong>Best near-term package</strong><p><span class="code">RND-01</span> + <span class="code">RND-02</span> + <span class="code">RND-03</span> deliver the clearest visible improvement without waiting for the full event migration.</p></aside>
+    </section>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#comparison">Comparison</a>
+      <a href="#rnd-01">Markdown</a>
+      <a href="#rnd-02">Patches</a>
+      <a href="#rnd-03">Terminal cards</a>
+      <a href="#rnd-04">Activity timeline</a>
+      <a href="#rnd-06">Message actions</a>
+      <a href="#rnd-07">Attachments and access</a>
+    </nav>
+
+    <section class="section" id="comparison">
+      <div class="section-heading"><span class="index">RND / Comparison</span><div><h2>Current state and target state</h2><p>A direct map of the rendering gaps identified in the audit.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Code</th><th>Current Ghostex</th><th>Target</th><th>Priority</th></tr></thead>
+          <tbody>
+            <tr><td><span class="code">RND-01</span></td><td>GFM, routed links, plain code</td><td>Highlighted code, controls, math, diagrams, wide tables</td><td><span class="priority p0">P0</span></td></tr>
+            <tr><td><span class="code">RND-02</span></td><td>Removed lines, then added lines</td><td>Real unified patches with hunks and line numbers</td><td><span class="priority p0">P0</span></td></tr>
+            <tr><td><span class="code">RND-03</span></td><td>Generic clipped tool output</td><td>ANSI-aware command card with status and exit code</td><td><span class="priority p0">P0</span></td></tr>
+            <tr><td><span class="code">RND-04</span></td><td>Folded generic tool runs</td><td>Semantic command, file, research, and delegation rows</td><td><span class="priority p1">P1</span></td></tr>
+            <tr><td><span class="code">RND-05</span></td><td>Manual expand or collapse</td><td>State-aware progressive disclosure</td><td><span class="priority p1">P1</span></td></tr>
+            <tr><td><span class="code">RND-06</span></td><td>Copy whole message</td><td>Quote, add to chat, fork, handoff, selection actions</td><td><span class="priority p0">P0</span></td></tr>
+            <tr><td><span class="code">RND-07</span></td><td>Paths serialized into Markdown text</td><td>Structured attachment objects and galleries</td><td><span class="priority p1">P1</span></td></tr>
+            <tr><td><span class="code">RND-08</span></td><td>No interactive result surface</td><td>Schema-validated, isolated visual result frame</td><td><span class="priority p2">P2</span></td></tr>
+            <tr><td><span class="code">RND-09</span></td><td>Mixed keyboard coverage</td><td>Native controls and complete focus semantics</td><td><span class="priority p0">P0</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="rnd-01">
+      <div class="section-heading"><span class="index">RND-01 · P0</span><div><h2>Rich Markdown and code blocks</h2><p>Evolve the current shared renderer rather than creating a second Markdown path.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">RND-01A</span><h3>Code presentation</h3><p>Language label, syntax color, per-block copy, wrap toggle, and bounded work for very large blocks.</p></div>
+        <div class="card"><span class="code">RND-01B</span><h3>Rich technical content</h3><p>KaTeX math, Mermaid diagrams, contained wide tables, and optional soft-break preservation.</p></div>
+        <div class="card"><span class="code">RND-01C</span><h3>Safe routing</h3><p>Keep local-file and external-link actions host-controlled. Sanitize any raw HTML before math or diagram enhancement.</p></div>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">LEVERAGE</span><p>Ghostex already includes syntax and math-related packages, making the first version lower effort than a new renderer from scratch.</p></div>
+      <p class="evidence">Ghostex: sidebar/chat/session-chat-markdown.tsx · package.json</p>
+    </section>
+
+    <section class="section" id="rnd-02">
+      <div class="section-heading"><span class="index">RND-02 · P0</span><div><h2>Review-grade file patches</h2><p>Render exact provider patches where available; do not silently invent context when it is missing.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">RND-02A</span><h3>Unified patch model</h3><p>Normalize file path, old and new ranges, context lines, additions, deletions, rename state, and binary status.</p></div>
+        <div class="card wide"><span class="code">RND-02B</span><h3>Diff card</h3><p>Sticky file header, line numbers, theme-aware rows, collapsed unchanged ranges, and direct open-file action.</p></div>
+      </div>
+      <p class="evidence">Current limitation: sidebar/chat/session-chat-diff.ts reconstructs all deletions before all additions.</p>
+    </section>
+
+    <section class="section" id="rnd-03">
+      <div class="section-heading"><span class="index">RND-03 · P0</span><div><h2>ANSI-aware terminal cards</h2><p>Commands are a first-class work type, not generic tool text.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">RND-03A</span><h3>Command header</h3><p>Show executable text, working directory, running state, elapsed time, and exit code.</p></div>
+        <div class="card"><span class="code">RND-03B</span><h3>Streamed output</h3><p>Preserve ANSI meaning, keep the active output edge visible, and allow user-controlled expansion.</p></div>
+        <div class="card"><span class="code">RND-03C</span><h3>Large output</h3><p>Avoid the current fixed 4,000-character loss. Keep a bounded preview with explicit access to the full stored result.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="rnd-04">
+      <div class="section-heading"><span class="index">RND-04 · P1</span><div><h2>Semantic activity timeline</h2><p>Replace the count-plus-label tool fold with a readable hierarchy of turns, work steps, groups, and detail rows.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">WORK-CMD</span><h3>Commands</h3><p>Process execution, output, status, and exit data.</p></div>
+        <div class="card"><span class="code">WORK-FILE</span><h3>File work</h3><p>Reads, searches, writes, patches, and affected paths.</p></div>
+        <div class="card"><span class="code">WORK-WEB</span><h3>Research</h3><p>Searches, fetches, citations, and source state.</p></div>
+        <div class="card"><span class="code">WORK-DEL</span><h3>Delegation</h3><p>Child-agent assignment, progress, completion, and handback.</p></div>
+        <div class="card"><span class="code">WORK-ASK</span><h3>Interactions</h3><p>Questions, approvals, selected answers, and denied requests.</p></div>
+        <div class="card"><span class="code">WORK-FLOW</span><h3>Workflows</h3><p>Goals, plans, tasks, background commands, and compaction.</p></div>
+      </div>
+      <div class="meta"><span class="tag high">Requires FND-01</span><span class="tag">Uses FND-02</span><span class="tag high">Effort L</span></div>
+    </section>
+
+    <section class="section" id="rnd-05">
+      <div class="section-heading"><span class="index">RND-05 · P1</span><div><h2>Progressive disclosure rules</h2><p>Use execution state to decide what deserves attention.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>State</th><th>Default presentation</th><th>Reason</th></tr></thead>
+          <tbody>
+            <tr><td>Active frontier</td><td>Expanded and visually prominent</td><td>Shows what the agent is doing now</td></tr>
+            <tr><td>Waiting for user</td><td>Expanded with clear action</td><td>Conversation cannot continue unaided</td></tr>
+            <tr><td>Failed or interrupted</td><td>Expanded with error context</td><td>Needs diagnosis or retry</td></tr>
+            <tr><td>Completed single action</td><td>Lightweight row</td><td>No summary wrapper needed</td></tr>
+            <tr><td>Completed work group</td><td>Concise summary, expandable</td><td>Reduces noise without hiding evidence</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="rnd-06">
+      <div class="section-heading"><span class="index">RND-06 · P0</span><div><h2>Message and selection actions</h2><p>Make existing answers reusable without manual copy and paste.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">RND-06A</span><h3>Quote to composer</h3><p>Add a whole message or selected prose with a visible source anchor.</p></div>
+        <div class="card"><span class="code">RND-06B</span><h3>Branch actions</h3><p>Fork with context when native cloning exists; otherwise create an explicit handoff.</p></div>
+        <div class="card"><span class="code">RND-06C</span><h3>Responsive controls</h3><p>Use hover actions on precise pointers and an overflow menu on coarse pointers.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="rnd-07">
+      <div class="section-heading"><span class="index">RND-07 — RND-09</span><div><h2>Attachments, visual results, and access</h2><p>Polish the edges that make rich chat feel dependable.</p></div></div>
+      <div class="grid">
+        <div class="card" id="rnd-07-card"><span class="code">RND-07</span><h3>Structured attachments</h3><p>Keep files and images as draft objects with removable previews. Serialize transport text only at send time.</p><div class="meta"><span class="tag medium">Effort M</span></div></div>
+        <div class="card" id="rnd-08"><span class="code">RND-08</span><h3>Safe visual results</h3><p>Render validated local visual artifacts in an opaque-origin isolated frame with strict file routing and height limits.</p><div class="meta"><span class="tag high">Risk high</span><span class="tag">Later</span></div></div>
+        <div class="card" id="rnd-09"><span class="code">RND-09</span><h3>Accessibility contract</h3><p>Native action controls, visible focus, keyboard expansion, descriptive labels, and proper combobox/listbox semantics.</p><div class="meta"><span class="tag low">Risk low</span><span class="tag now">Apply throughout</span></div></div>
+      </div>
+    </section>
+
+    <footer class="footer"><a class="next-link" href="models.html">← Models</a><a class="next-link" href="experience.html">Next: Experience →</a></footer>
+  </main>
+</body>
+</html>

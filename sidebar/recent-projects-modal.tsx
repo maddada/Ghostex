@@ -1,23 +1,15 @@
-import {
-  IconCopy,
-  IconFolder,
-  IconFolderOpen,
-  IconRotateClockwise,
-  IconTrash,
-} from "@tabler/icons-react";
-import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import type {
-  ExtensionToSidebarMessage,
-  SidebarRecentProject,
-} from "../shared/session-grid-contract";
-import { resolveWorkspaceProjectIconDataUrl } from "../shared/workspace-project-appearance";
-import { AppTooltip, TooltipProvider } from "./app-tooltip";
-import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
-import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
-import { SidebarSessionSearchField } from "./sidebar-session-search-overlay";
-import { TOOLTIP_DELAY_MS } from "./tooltip-delay";
-import type { WebviewApi } from "./webview-api";
+import { IconCopy, IconFolder, IconFolderOpen, IconRotateClockwise, IconTrash } from '@tabler/icons-react';
+import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import type { ExtensionToSidebarMessage, SidebarRecentProject } from '../shared/session-grid-contract';
+import { resolveWorkspaceProjectIconDataUrl } from '../shared/workspace-project-appearance';
+import { AppTooltip, TooltipProvider } from './app-tooltip';
+import { SidebarCommandIconGlyph } from './sidebar-command-icon';
+import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
+import { QuickAccessSearchInput } from './quick-access-search-input';
+import { QuickAccessHeader } from './quick-access-tabs';
+import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import type { WebviewApi } from './webview-api';
 
 const RECENT_PROJECTS_INITIAL_LOAD_TIMEOUT_MS = 2_000;
 
@@ -56,20 +48,15 @@ function parseRecentProjectClosedAt(value: string | undefined): number {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function sortRecentProjectsByClosedAt(
-  projects: readonly SidebarRecentProject[],
-): SidebarRecentProject[] {
+function sortRecentProjectsByClosedAt(projects: readonly SidebarRecentProject[]): SidebarRecentProject[] {
   return [...projects].sort(
     (left, right) =>
-      parseRecentProjectClosedAt(right.recentClosedAt) -
-        parseRecentProjectClosedAt(left.recentClosedAt) ||
-      left.title.localeCompare(right.title),
+      parseRecentProjectClosedAt(right.recentClosedAt) - parseRecentProjectClosedAt(left.recentClosedAt) ||
+      left.title.localeCompare(right.title)
   );
 }
 
-function groupRecentProjectsByDay(
-  projects: readonly SidebarRecentProject[],
-): RecentProjectsDayGroup[] {
+function groupRecentProjectsByDay(projects: readonly SidebarRecentProject[]): RecentProjectsDayGroup[] {
   /*
    * CDXC:RecentProjects 2026-07-17-04:12:
    * Recent Projects groups by the day each project was closed, using the same
@@ -79,15 +66,15 @@ function groupRecentProjectsByDay(
    * collect in a trailing "Earlier" group instead of fabricating a date.
    */
   const formatter = new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "long",
-    weekday: "long",
-    year: "numeric",
+    day: 'numeric',
+    month: 'long',
+    weekday: 'long',
+    year: 'numeric',
   });
   const projectsByDay = new Map<string, SidebarRecentProject[]>();
   for (const project of sortRecentProjectsByClosedAt(projects)) {
     const timestamp = parseRecentProjectClosedAt(project.recentClosedAt);
-    const dayLabel = timestamp === 0 ? "Earlier" : formatter.format(new Date(timestamp));
+    const dayLabel = timestamp === 0 ? 'Earlier' : formatter.format(new Date(timestamp));
     const grouped = projectsByDay.get(dayLabel);
     if (grouped) {
       grouped.push(project);
@@ -101,19 +88,14 @@ function groupRecentProjectsByDay(
   }));
 }
 
-function filterRecentProjects(
-  projects: readonly SidebarRecentProject[],
-  query: string,
-): SidebarRecentProject[] {
+function filterRecentProjects(projects: readonly SidebarRecentProject[], query: string): SidebarRecentProject[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) {
     return [...projects];
   }
   const queryTerms = normalizedQuery.split(/\s+/u);
   return projects.filter((project) => {
-    const searchableText = [project.title, project.path]
-      .join("\n")
-      .toLocaleLowerCase();
+    const searchableText = [project.title, project.path].join('\n').toLocaleLowerCase();
     return queryTerms.every((term) => searchableText.includes(term));
   });
 }
@@ -121,52 +103,30 @@ function filterRecentProjects(
 function RecentProjectIcon({ project }: { project: SidebarRecentProject }) {
   const iconDataUrl = resolveWorkspaceProjectIconDataUrl(project);
   if (iconDataUrl) {
-    return (
-      <img
-        alt=""
-        className="recent-projects-row-icon-image"
-        draggable={false}
-        src={iconDataUrl}
-      />
-    );
+    return <img alt='' className='recent-projects-row-icon-image' draggable={false} src={iconDataUrl} />;
   }
-  if (project.icon?.kind === "tabler") {
-    return (
-      <SidebarCommandIconGlyph
-        color={project.icon.color}
-        icon={project.icon.icon}
-        size={16}
-        stroke={1.8}
-      />
-    );
+  if (project.icon?.kind === 'tabler') {
+    return <SidebarCommandIconGlyph color={project.icon.color} icon={project.icon.icon} size={16} stroke={1.8} />;
   }
-  return <IconFolder aria-hidden="true" size={16} stroke={1.8} />;
+  return <IconFolder aria-hidden='true' size={16} stroke={1.8} />;
 }
 
-export function RecentProjectRow({
-  isContextMenuOpen,
-  onContextMenu,
-  onRestore,
-  project,
-}: RecentProjectRowProps) {
+export function RecentProjectRow({ isContextMenuOpen, onContextMenu, onRestore, project }: RecentProjectRowProps) {
   return (
     <AppTooltip content={project.path}>
       <button
         aria-label={`Restore recent ${project.title}`}
-        className="recent-projects-row"
+        className='recent-projects-row'
         data-context-menu-open={String(isContextMenuOpen)}
         onClick={() => onRestore(project.projectId)}
         onContextMenu={(event) => onContextMenu(event, project.projectId)}
-        type="button"
+        type='button'
       >
-        <span aria-hidden="true" className="recent-projects-row-icon">
+        <span aria-hidden='true' className='recent-projects-row-icon'>
           <RecentProjectIcon project={project} />
         </span>
-        <span className="recent-projects-row-title">{project.title}</span>
-        <span
-          aria-label={`${project.sessionCount} preserved sessions`}
-          className="recent-projects-session-count"
-        >
+        <span className='recent-projects-row-title'>{project.title}</span>
+        <span aria-label={`${project.sessionCount} preserved sessions`} className='recent-projects-session-count'>
           {project.sessionCount}
         </span>
       </button>
@@ -177,7 +137,6 @@ export function RecentProjectRow({
 export function RecentProjectsModal({
   isOpen,
   machineId,
-  machineName,
   onClose,
   onInitialLoadReady,
   vscode,
@@ -185,32 +144,27 @@ export function RecentProjectsModal({
   const [recentProjects, setRecentProjects] = useState<SidebarRecentProject[]>();
   const [hasInitialLoadResolved, setHasInitialLoadResolved] = useState(false);
   const [hasInitialLoadTimedOut, setHasInitialLoadTimedOut] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [contextMenuPosition, setContextMenuPosition] =
-    useState<RecentProjectContextMenuPosition>();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenuPosition, setContextMenuPosition] = useState<RecentProjectContextMenuPosition>();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const canShowModal = isOpen && (hasInitialLoadResolved || hasInitialLoadTimedOut);
   const filteredProjects = useMemo(
     () => filterRecentProjects(recentProjects ?? [], searchQuery),
-    [recentProjects, searchQuery],
+    [recentProjects, searchQuery]
   );
-  const groupedProjects = useMemo(
-    () => groupRecentProjectsByDay(filteredProjects),
-    [filteredProjects],
-  );
-  const title = machineName ? `Recent Projects — ${machineName}` : "Recent Projects";
+  const groupedProjects = useMemo(() => groupRecentProjectsByDay(filteredProjects), [filteredProjects]);
 
   const requestRecentProjects = useCallback(() => {
-    vscode.postMessage({ machineId, type: "requestRecentProjects" });
+    vscode.postMessage({ machineId, type: 'requestRecentProjects' });
   }, [machineId, vscode]);
 
   const restoreRecentProject = useCallback(
     (projectId: string) => {
       setContextMenuPosition(undefined);
-      vscode.postMessage({ projectId, type: "restoreRecentProject" });
+      vscode.postMessage({ projectId, type: 'restoreRecentProject' });
       onClose();
     },
-    [onClose, vscode],
+    [onClose, vscode]
   );
 
   useEffect(() => {
@@ -218,7 +172,7 @@ export function RecentProjectsModal({
       setRecentProjects(undefined);
       setHasInitialLoadResolved(false);
       setHasInitialLoadTimedOut(false);
-      setSearchQuery("");
+      setSearchQuery('');
       setContextMenuPosition(undefined);
     }
   }, [isOpen]);
@@ -239,18 +193,15 @@ export function RecentProjectsModal({
       return;
     }
     const handleMessage = (event: MessageEvent<ExtensionToSidebarMessage>) => {
-      if (
-        event.data.type !== "recentProjectsResult" ||
-        event.data.machineId !== machineId
-      ) {
+      if (event.data.type !== 'recentProjectsResult' || event.data.machineId !== machineId) {
         return;
       }
       setRecentProjects(event.data.recentProjects);
       setHasInitialLoadResolved(true);
       onInitialLoadReady?.();
     };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
   }, [isOpen, machineId, onInitialLoadReady]);
 
   useEffect(() => {
@@ -265,7 +216,7 @@ export function RecentProjectsModal({
       return;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      if (event.key !== 'Escape') {
         return;
       }
       if (contextMenuPosition) {
@@ -276,8 +227,8 @@ export function RecentProjectsModal({
       }
       onClose();
     };
-    document.addEventListener("keydown", handleKeyDown, true);
-    return () => document.removeEventListener("keydown", handleKeyDown, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [contextMenuPosition, isOpen, onClose]);
 
   useEffect(() => {
@@ -288,44 +239,39 @@ export function RecentProjectsModal({
     return () => window.clearTimeout(timeoutId);
   }, [canShowModal]);
 
-  if (!canShowModal) {
+  if (!isOpen) {
     return null;
   }
 
   return createPortal(
     <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
-      <div className="confirm-modal-root scroll-mask-y" role="presentation">
-        <button className="confirm-modal-backdrop" onClick={onClose} type="button" />
+      <div className='confirm-modal-root scroll-mask-y' role='presentation'>
+        <button className='confirm-modal-backdrop' onClick={onClose} type='button' />
         <div
-          aria-labelledby="recent-projects-modal-title"
-          aria-modal="true"
-          className="confirm-modal previous-sessions-modal recent-projects-modal scroll-mask-y"
-          role="dialog"
+          aria-label='Ghostex Quick Access'
+          aria-modal='true'
+          className='confirm-modal ghostex-settings-shadcn previous-sessions-modal quick-access-surface recent-projects-modal scroll-mask-y'
+          role='dialog'
         >
-          <div className="confirm-modal-header">
-            <div className="confirm-modal-title" id="recent-projects-modal-title">
-              {title}
-            </div>
-          </div>
-          <div className="previous-sessions-toolbar">
-            <SidebarSessionSearchField
-              ariaLabel="Search recent projects"
-              clearLabel="Clear Recent Projects search"
-              inputClassName="previous-sessions-search-input"
+          <QuickAccessHeader activeTab='recentProjects' />
+          <div className='previous-sessions-toolbar'>
+            <QuickAccessSearchInput
+              ariaLabel='Search recent projects'
+              clearLabel='Clear Recent Projects search'
               inputRef={searchInputRef}
-              placeholder="Search projects..."
+              placeholder='Search projects...'
               query={searchQuery}
               setQuery={setSearchQuery}
-              shellClassName="previous-sessions-search-shell"
-              toolbarClassName="previous-sessions-search-control"
             />
           </div>
-          <div className="previous-sessions-modal-body recent-projects-modal-body scroll-mask-y">
-            {filteredProjects.length > 0 ? (
+          <div className='previous-sessions-modal-body recent-projects-modal-body scroll-mask-y'>
+            {!hasInitialLoadResolved ? (
+              <div className='group-empty-state previous-sessions-empty-state'>Loading recent projects…</div>
+            ) : filteredProjects.length > 0 ? (
               groupedProjects.map((group) => (
-                <section className="previous-sessions-day-group" key={group.dayLabel}>
-                  <div className="previous-sessions-day-label">{group.dayLabel}</div>
-                  <div className="recent-projects-modal-list">
+                <section className='previous-sessions-day-group' key={group.dayLabel}>
+                  <div className='previous-sessions-day-label'>{group.dayLabel}</div>
+                  <div className='recent-projects-modal-list'>
                     {group.projects.map((project) => (
                       <RecentProjectRow
                         isContextMenuOpen={contextMenuPosition?.projectId === project.projectId}
@@ -347,10 +293,8 @@ export function RecentProjectsModal({
                 </section>
               ))
             ) : (
-              <div className="group-empty-state previous-sessions-empty-state">
-                {searchQuery.trim()
-                  ? "No recent projects match that search."
-                  : "No recent projects yet."}
+              <div className='group-empty-state previous-sessions-empty-state'>
+                {searchQuery.trim() ? 'No recent projects match that search.' : 'No recent projects yet.'}
               </div>
             )}
           </div>
@@ -361,67 +305,59 @@ export function RecentProjectsModal({
               vscode={vscode}
             >
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() => restoreRecentProject(contextMenuPosition.projectId)}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconRotateClockwise
-                  aria-hidden="true"
-                  className="session-context-menu-icon"
-                  size={14}
-                />
+                <IconRotateClockwise aria-hidden='true' className='session-context-menu-icon' size={14} />
                 Restore
               </button>
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() => {
                   vscode.postMessage({
                     projectId: contextMenuPosition.projectId,
-                    type: "copyRecentProjectPath",
+                    type: 'copyRecentProjectPath',
                   });
                   setContextMenuPosition(undefined);
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} />
+                <IconCopy aria-hidden='true' className='session-context-menu-icon' size={14} />
                 Copy Path
               </button>
               <button
-                className="session-context-menu-item"
+                className='session-context-menu-item'
                 onClick={() => {
                   vscode.postMessage({
                     projectId: contextMenuPosition.projectId,
-                    type: "openRecentProjectInFinder",
+                    type: 'openRecentProjectInFinder',
                   });
                   setContextMenuPosition(undefined);
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconFolderOpen
-                  aria-hidden="true"
-                  className="session-context-menu-icon"
-                  size={14}
-                />
+                <IconFolderOpen aria-hidden='true' className='session-context-menu-icon' size={14} />
                 Open in Finder
               </button>
-              <div className="session-context-menu-divider" role="separator" />
+              <div className='session-context-menu-divider' role='separator' />
               <button
-                className="session-context-menu-item session-context-menu-item-danger"
+                className='session-context-menu-item session-context-menu-item-danger'
                 onClick={() => {
                   vscode.postMessage({
                     projectId: contextMenuPosition.projectId,
-                    type: "removeRecentProject",
+                    type: 'removeRecentProject',
                   });
                   setContextMenuPosition(undefined);
                   requestRecentProjects();
                 }}
-                role="menuitem"
-                type="button"
+                role='menuitem'
+                type='button'
               >
-                <IconTrash aria-hidden="true" className="session-context-menu-icon" size={14} />
+                <IconTrash aria-hidden='true' className='session-context-menu-icon' size={14} />
                 Remove
               </button>
             </SidebarContextMenuPortal>
@@ -429,6 +365,6 @@ export function RecentProjectsModal({
         </div>
       </div>
     </TooltipProvider>,
-    document.body,
+    document.body
   );
 }

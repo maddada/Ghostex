@@ -96,78 +96,18 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AppTooltip, TooltipProvider } from "../../sidebar/app-tooltip";
 import { SidebarContextMenuPortal } from "../../sidebar/sidebar-context-menu-portal";
+import {
+  requestProjectDocsFromHost,
+  type ProjectDocsFileEntry as ManageFileEntry,
+  type ProjectDocsFilePreview as ManageFilePreview,
+  type ProjectDocsGitBaseline as ManageGitBaseline,
+  type ProjectDocsGitBaselineReason as ManageGitBaselineReason,
+  type ProjectDocsRequest as ManageFilesBridgeRequest,
+  type ProjectDocsResponse as ManageFilesBridgeResponse,
+} from "../../shared/project-docs";
 import { createEditor as createMeoEditor } from "./meo/editor";
 import { applyThemeSettings as applyMeoThemeSettings } from "./meo/helpers/theme";
 import "./meo/styles.css";
-
-type ManageFileEntry = {
-  depth: number;
-  kind: "directory" | "file";
-  modifiedAt?: string;
-  name: string;
-  path: string;
-  size?: number;
-};
-
-type ManageGitBaselineReason =
-  | "binary"
-  | "error"
-  | "git-unavailable"
-  | "ignored"
-  | "not-file"
-  | "not-repo"
-  | "too-large";
-
-type ManageGitBaseline = {
-  available: boolean;
-  baseText?: string | null;
-  headOid?: string | null;
-  maxBytesExceeded?: boolean;
-  reason?: ManageGitBaselineReason;
-  tracked: boolean;
-};
-
-type ManageFilePreview = {
-  content?: string;
-  error?: string;
-  gitBaseline?: ManageGitBaseline;
-  kind: "text" | "unsupported";
-  modifiedAt?: string;
-  name: string;
-  path: string;
-  size?: number;
-};
-
-type ManageFilesBridgeRequest = {
-  action:
-    | "addToSessionContext"
-    | "list"
-    | "read"
-    | "stat"
-    | "save"
-    | "rename"
-    | "delete"
-    | "duplicate"
-    | "createFolder"
-    | "move"
-    | "revealInFinder"
-    | "openDocsFoldersSettings";
-  content?: string;
-  newPath?: string;
-  path?: string;
-  projectEditorId: string;
-  projectId: string;
-  requestId: string;
-};
-
-type ManageFilesBridgeResponse = {
-  action: ManageFilesBridgeRequest["action"];
-  entries?: ManageFileEntry[];
-  error?: string;
-  file?: ManageFilePreview;
-  requestId: string;
-  rootName?: string;
-};
 
 type ManageAnnotationType = "comment" | "redline";
 
@@ -2368,6 +2308,7 @@ function ManageApp() {
           hasExternalChanges={hasExternalChanges}
           onAnnotationsChange={updateAnnotationsForSelectedFile}
           onDraftContentChange={setDraftContent}
+          onOpenDocument={(path) => void readFile(path)}
           onReload={() => {
             if (selectedPath) {
               void readFile(selectedPath);
@@ -3056,6 +2997,7 @@ function ManagePreview({
   isDirty,
   onAnnotationsChange,
   onDraftContentChange,
+  onOpenDocument,
   onReload,
   preview,
   previewState,
@@ -3070,6 +3012,7 @@ function ManagePreview({
   isDirty: boolean;
   onAnnotationsChange: (updater: (annotations: ManageAnnotation[]) => ManageAnnotation[]) => void;
   onDraftContentChange: (content: string) => void;
+  onOpenDocument: (path: string) => void;
   onReload: () => void;
   preview?: ManageFilePreview;
   previewState: "idle" | "loading" | "ready" | "error";
@@ -3602,6 +3545,7 @@ function ManagePreview({
           annotationsEnabled={htmlAnnotationEnabled}
           content={draftContent}
           documentKey={preview.path}
+          onOpenDocument={onOpenDocument}
         />
       ) : isMarkdown ? (
         <>
@@ -3659,18 +3603,21 @@ function ManageHtmlRenderViewer({
   annotationsEnabled,
   content,
   documentKey,
+  onOpenDocument,
 }: {
   annotationsEnabled: boolean;
   content: string;
   documentKey: string;
+  onOpenDocument: (path: string) => void;
 }) {
+  const resourceBaseUrl = manageHtmlResourceBaseUrl(documentKey);
   const renderedHtml = useMemo(
     () =>
       buildManageHtmlDocument(content, {
         injectAgentation: annotationsEnabled,
-        resourceBaseUrl: manageHtmlResourceBaseUrl(documentKey),
+        resourceBaseUrl,
       }),
-    [annotationsEnabled, content, documentKey],
+    [annotationsEnabled, content, resourceBaseUrl],
   );
 
   return (
@@ -3679,6 +3626,62 @@ function ManageHtmlRenderViewer({
       aria-label="Rendered HTML document"
       className="manage-html-render-view"
       data-document-key={documentKey}
+      onLoad={(event) => {
+        /*
+         * CDXC:ManageHtmlDocumentNavigation 2026-08-06:
+         * The synthetic folder base that makes sibling assets work also changes
+         * fragment-link resolution inside srcdoc. Keep fragments owned by the
+         * rendered document, and hand sibling HTML files back to Docs so its
+         * selected path, header, and preview remain synchronized.
+         */
+        const renderedDocument = event.currentTarget.contentDocument;
+        if (!renderedDocument) {
+          return;
+        }
+        renderedDocument.addEventListener("click", (clickEvent) => {
+          const mouseEvent = clickEvent as MouseEvent;
+          if (
+            clickEvent.defaultPrevented ||
+            mouseEvent.button !== 0 ||
+            mouseEvent.altKey ||
+            mouseEvent.ctrlKey ||
+            mouseEvent.metaKey ||
+            mouseEvent.shiftKey
+          ) {
+            return;
+          }
+          const eventTarget = clickEvent.target as {
+            closest?: (selector: string) => Element | null;
+          } | null;
+          const anchor = eventTarget?.closest?.("a[href]") as HTMLAnchorElement | null;
+          const href = anchor?.getAttribute("href")?.trim();
+          if (
+            !anchor ||
+            !href ||
+            anchor.hasAttribute("download") ||
+            (anchor.target && anchor.target !== "_self")
+          ) {
+            return;
+          }
+          if (href.startsWith("#")) {
+            const targetId = decodeManageHtmlFragment(href);
+            const target = targetId
+              ? renderedDocument.getElementById(targetId)
+              : renderedDocument.documentElement;
+            if (target) {
+              clickEvent.preventDefault();
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            return;
+          }
+          const linkedDocumentPath = manageHtmlLinkedDocumentPath(href, resourceBaseUrl);
+          if (!linkedDocumentPath || linkedDocumentPath === documentKey) {
+            return;
+          }
+          clickEvent.preventDefault();
+          onOpenDocument(linkedDocumentPath);
+        }, true);
+      }}
       sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts"
       srcDoc={renderedHtml}
       title={documentKey}
@@ -5113,27 +5116,11 @@ function requestManageFiles(
   if (!bridge) {
     return Promise.reject(new Error("Docs is unavailable in this host."));
   }
-  const requestId = `manage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const message: ManageFilesBridgeRequest = {
-    ...request,
-    requestId,
-  };
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-      reject(new Error("Docs request timed out."));
-    }, MANAGE_BRIDGE_TIMEOUT_MS);
-    function handleResponse(event: Event) {
-      const response = (event as CustomEvent<ManageFilesBridgeResponse>).detail;
-      if (response?.requestId !== requestId) {
-        return;
-      }
-      window.clearTimeout(timeout);
-      window.removeEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-      resolve(response);
-    }
-    window.addEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-    bridge.postMessage(message);
+  return requestProjectDocsFromHost(request, {
+    eventName: MANAGE_FILES_RESPONSE_EVENT,
+    eventTarget: window,
+    postMessage: (message) => bridge.postMessage(message),
+    timeoutMs: MANAGE_BRIDGE_TIMEOUT_MS,
   });
 }
 
@@ -6554,6 +6541,54 @@ function manageHtmlResourceBaseUrl(documentPath: string): string | undefined {
   }
   const parentPath = components.slice(0, -1).map(encodeURIComponent).join("/");
   return new URL(`${parentPath}/`, baseUrl).toString();
+}
+
+function decodeManageHtmlFragment(href: string): string | undefined {
+  try {
+    return decodeURIComponent(href.slice(1));
+  } catch {
+    return undefined;
+  }
+}
+
+function manageHtmlLinkedDocumentPath(
+  href: string,
+  resourceBaseUrl: string | undefined,
+): string | undefined {
+  if (!resourceBaseUrl) {
+    return undefined;
+  }
+  let baseUrl: URL;
+  let linkedUrl: URL;
+  try {
+    baseUrl = new URL(resourceBaseUrl);
+    linkedUrl = new URL(href, baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (linkedUrl.origin !== baseUrl.origin) {
+    return undefined;
+  }
+  const encodedComponents = linkedUrl.pathname.split("/").filter(Boolean);
+  if (encodedComponents.length === 0) {
+    return undefined;
+  }
+  let components: string[];
+  try {
+    components = encodedComponents.map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
+  if (
+    components.some(
+      (component) =>
+        !component || component === "." || component === ".." || component.includes("\\"),
+    )
+  ) {
+    return undefined;
+  }
+  const path = components.join("/");
+  return isHtmlPath(path) ? path : undefined;
 }
 
 function injectManageHtmlResourceBase(

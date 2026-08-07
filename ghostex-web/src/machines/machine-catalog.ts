@@ -10,6 +10,7 @@ import {
   upsertMachineConnection,
 } from "../connections/connection-registry";
 import type { GhostexWebMachine } from "../connections/types";
+import { applyRemoteMachineOrder } from "./machine-order";
 
 export const MACHINES_STORAGE_KEY = "ghostexWeb.machines.v1";
 
@@ -91,6 +92,16 @@ export function removeMachine(machineId: string): void {
   updateState({ machines });
   persistAddedMachines(machines);
   removeMachineConnection(machineId);
+}
+
+export function reorderRemoteMachines(orderedRemoteMachineIds: readonly string[]): boolean {
+  const machines = applyRemoteMachineOrder(state.machines, orderedRemoteMachineIds);
+  if (machines === state.machines) {
+    return false;
+  }
+  updateState({ machines });
+  persistAddedMachines(machines);
+  return true;
 }
 
 async function initializeMachineCatalogOnce(): Promise<void> {

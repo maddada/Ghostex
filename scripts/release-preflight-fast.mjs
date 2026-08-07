@@ -329,6 +329,12 @@ async function checkRemoteLinuxPackages() {
     if (!workflow.includes(`build-remote-gxserver-linux-release.sh --arch ${arch}`)) {
       problems.push(`${arch}: workflow does not build its pinned architecture`);
     }
+    if (!workflow.includes('GHOSTEX_REQUIRE_BEADS_SMOKE: "1"')) {
+      problems.push(`${arch}: workflow does not require the packaged Beads embedded-Dolt smoke test`);
+    }
+    if (arch === "arm64" && !workflow.includes("runs-on: ubuntu-24.04-arm")) {
+      problems.push("arm64: workflow does not use a native ARM64 runner for the packaged Beads smoke test");
+    }
     if (!workflow.includes("stage-package-and-advance")) {
       problems.push(`${arch}: workflow does not stage and advance durable release state`);
     }

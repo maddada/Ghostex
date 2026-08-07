@@ -36,6 +36,7 @@ path = "src/bin/terminal_element_demo.rs"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 cef = { path = "../.dependencies/cef-rs/cef", default-features = false }
 flate2 = "1"
 futures = "0.3"

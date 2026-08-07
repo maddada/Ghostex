@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="User-experience proposals for Ghostex chat.">
+  <title>Experience · Ghostex Chat Improvement Map</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="index.html"><span class="wordmark-mark" aria-hidden="true"></span>Chat Improvement Map</a>
+      <nav class="nav" aria-label="Report pages">
+        <a href="index.html">Overview</a><a href="foundation.html">Foundation</a><a href="models.html">Models</a><a href="rendering.html">Rendering</a><a href="experience.html" aria-current="page">Experience</a><a href="roadmap.html">Roadmap</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="kicker">EXP · Chat experience</p>
+        <h1>Turn messages into workflows.</h1>
+        <p class="lede">Ghostex’s composer already handles keyboard submission, command completion, history, pasted images, uploaded files, and native file selection. Improve the workflows around it rather than replacing its core immediately.</p>
+      </div>
+      <aside class="hero-note"><strong>Design direction</strong><p>Keep plaintext transport exact. Add structured draft objects, mentions, and actions around it, then serialize only at submission.</p></aside>
+    </section>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#exp-01">Draft safety</a>
+      <a href="#exp-02">Queue and steer</a>
+      <a href="#exp-03">Search</a>
+      <a href="#branches">Branches</a>
+      <a href="#exp-06">Mentions</a>
+      <a href="#later">Later work</a>
+    </nav>
+
+    <section class="section" id="exp-01">
+      <div class="section-heading"><span class="index">EXP-01 · P0</span><div><h2>Draft-safe sending</h2><p>Do not clear the composer before the transport confirms acceptance.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">EXP-01A</span><h3>Accepted-send boundary</h3><p>Keep the submitted text and structured attachments until gxserver accepts delivery. Then move it into history.</p><div class="meta"><span class="tag now">Effort S</span><span class="tag low">Risk low</span></div></div>
+        <div class="card wide"><span class="code">EXP-01B</span><h3>Visible retry</h3><p>Show delivery errors beside the composer and allow retry without creating a duplicate after an accepted send.</p></div>
+      </div>
+      <p class="evidence">Current path clears local draft state immediately after invoking send: sidebar/chat/session-chat-composer.tsx.</p>
+    </section>
+
+    <section class="section" id="exp-02">
+      <div class="section-heading"><span class="index">EXP-02 · P1</span><div><h2>Durable queue and explicit steer</h2><p>Sending while an agent is active should have clear semantics instead of feeling like opaque terminal input.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">EXP-02A</span><h3>Queued follow-ups</h3><p>Store pending messages on the server with authoritative ordering.</p></div>
+        <div class="card"><span class="code">EXP-02B</span><h3>Queue workspace</h3><p>Edit, delete, reorder, group, or send a queued item now.</p></div>
+        <div class="card"><span class="code">EXP-02C</span><h3>Steer current turn</h3><p>Target the expected active turn ID and reject stale steering rather than modifying the wrong run.</p></div>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">DEPENDENCY</span><p>Queue order must be authoritative in gxserver before advanced drag ordering or grouped execution is added.</p></div>
+    </section>
+
+    <section class="section" id="exp-03">
+      <div class="section-heading"><span class="index">EXP-03 · P1</span><div><h2>Search and long-thread navigation</h2><p>Let users navigate by exchange, file, command, error, or decision instead of relying on the scroll position.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">EXP-03A</span><h3>Conversation search</h3><p>Find text with next and previous navigation plus user, assistant, tool, and error filters.</p></div>
+        <div class="card"><span class="code">EXP-03B</span><h3>Deep reveal</h3><p>Load older pages until a target is present, expand its containing work group, scroll, and highlight.</p></div>
+        <div class="card"><span class="code">EXP-03C</span><h3>Unread and outline</h3><p>Add an unread boundary and a compact rail derived from user and assistant turns.</p></div>
+      </div>
+      <div class="meta"><span class="tag">Preserve current paging</span><span class="tag low">Risk low–medium</span><span class="tag medium">Effort M</span></div>
+    </section>
+
+    <section class="section" id="branches">
+      <div class="section-heading"><span class="index">EXP-04 — EXP-05</span><div><h2>Side conversations, forks, and handoff</h2><p>These actions look similar in the interface but must state different context guarantees.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Code</th><th>Action</th><th>Guarantee</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><span class="code">EXP-04</span></td><td>Anchored side conversation</td><td>Child session carries a source-thread and source-message anchor</td><td>Explore a tangent, then send useful results to the main thread</td></tr>
+            <tr><td><span class="code">EXP-05A</span></td><td>Native fork</td><td>Provider session context is genuinely cloned</td><td>Branch while preserving exact provider history</td></tr>
+            <tr><td><span class="code">EXP-05B</span></td><td>Cross-agent handoff</td><td>New session receives an explicit source-session attachment or mention</td><td>Continue with another provider without claiming a native clone</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">LAYOUT</span><p>Use an existing secondary pane or a normal native child surface. Do not introduce overlapping input regions or broad hit-test routing.</p></div>
+    </section>
+
+    <section class="section" id="exp-06">
+      <div class="section-heading"><span class="index">EXP-06 · P1</span><div><h2>Structured mentions and provider commands</h2><p>Turn the composer’s current slash completion into a wider discovery surface while preserving exact prompt text.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">EXP-06A</span><h3>File mentions</h3><p>Search workspace paths and insert a visible range backed by a stable path object.</p></div>
+        <div class="card"><span class="code">EXP-06B</span><h3>Thread mentions</h3><p>Attach another session as context with an explicit source identity.</p></div>
+        <div class="card"><span class="code">EXP-06C</span><h3>Live command catalog</h3><p>Group agent commands, skills, project commands, saved prompts, and extension commands.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="later">
+      <div class="section-heading"><span class="index">EXP-07 — EXP-09</span><div><h2>Context, extension points, and multi-thread work</h2><p>High-value additions after the shared event and provider layers are stable.</p></div></div>
+      <div class="grid">
+        <div class="card" id="exp-07"><span class="code">EXP-07</span><h3>Context meter</h3><p>Show context usage, warning thresholds, compaction state, and model fallback when providers report them.</p><div class="meta"><span class="tag">Requires FND-01</span></div></div>
+        <div class="card" id="exp-08"><span class="code">EXP-08</span><h3>Declarative extension slots</h3><p>Begin with host-rendered message actions and result schemas. Add trusted executable UI extensions only if truly needed.</p><div class="meta"><span class="tag high">Risk high</span></div></div>
+        <div class="card" id="exp-09"><span class="code">EXP-09</span><h3>Multi-thread workspace</h3><p>Use Ghostex panes to keep several chats visible while preserving scroll and active-session state independently.</p><div class="meta"><span class="tag">Later</span></div></div>
+      </div>
+    </section>
+
+    <footer class="footer"><a class="next-link" href="rendering.html">← Rendering</a><a class="next-link" href="roadmap.html">Next: Roadmap →</a></footer>
+  </main>
+</body>
+</html>

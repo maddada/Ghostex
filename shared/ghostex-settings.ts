@@ -64,6 +64,21 @@ export type SessionPersistenceProvider = "off" | "tmux" | "zmx" | "zellij";
 export type SessionStatusIndicatorSize = "small" | "medium" | "large" | "x-large";
 export type SidebarSide = "left" | "right";
 export type SidebarProjectGroupStyle = "quiet" | "header" | "branched";
+export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
+export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
+export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
+export const DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
+
+export function clampSidebarCollapseAnimationDurationMs(value: number): number {
+  const clamped = Math.min(
+    MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
+    Math.max(MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, value),
+  );
+  return (
+    Math.round(clamped / SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS) *
+    SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS
+  );
+}
 /**
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 ("Inbox") is an opt-in presentation layer beside the classic
@@ -1036,6 +1051,8 @@ export type ghostexSettings = {
    */
   newSessionsDefaultEnvMode: SidebarNewSessionEnvMode;
   sidebarSide: SidebarSide;
+  /** Duration for sidebar section, group, and project disclosure animations. */
+  sidebarCollapseAnimationDurationMs: number;
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * The sidebar default width is the reset target for a double-click on the
@@ -1747,6 +1764,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * should remain an explicit setting or user-assigned command.
    */
   sidebarSide: "left",
+  sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * First-run reset target remains 235px, but users can change this Settings
@@ -1755,7 +1773,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sidebarDefaultWidthPx: DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-  sidebarProjectGroupStyle: "quiet",
+  sidebarProjectGroupStyle: "branched",
   sidebarGroupsOpacityPercent: 0,
   sidebarProjectsOpacityPercent: 0,
   expandCollapsedProjectsOnJump: true,
@@ -2837,6 +2855,13 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sidebarSide: normalizeSidebarSide(
       readString(source, "sidebarSide", DEFAULT_ghostex_SETTINGS.sidebarSide),
     ),
+    sidebarCollapseAnimationDurationMs: clampSidebarCollapseAnimationDurationMs(
+      readNumber(
+        source,
+        "sidebarCollapseAnimationDurationMs",
+        DEFAULT_ghostex_SETTINGS.sidebarCollapseAnimationDurationMs,
+      ),
+    ),
     sidebarDefaultWidthPx: clampSidebarDefaultWidthPx(
       readNumber(
         source,
@@ -3446,15 +3471,18 @@ export function getSessionTitleGenerationCommandPreview(
       Settings must preview the same internal Codex title-generation command gxserver runs. Include `--ephemeral` so users see that generated titles do not create restorable Codex sessions.
       */
       return createSessionTitleGenerationHereDocPreview(
-        `${command} exec --ephemeral --skip-git-repo-check -m gpt-5.4-mini -c 'model_reasoning_effort="low"'`,
+        `${command} exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort="low"'`,
         prompt,
       );
     case "cursor":
-      return `${command} --print --yolo --trust --output-format text '${prompt}'`;
+      return `${command} --print --yolo --trust --model cursor-grok-4.5-low --output-format text '${prompt}'`;
     case "claude":
-      return createSessionTitleGenerationHereDocPreview(`${command} -p --model haiku`, prompt);
+      return createSessionTitleGenerationHereDocPreview(
+        `${command} -p --model haiku --effort low`,
+        prompt,
+      );
     case "grok":
-      return `${command} -p --model grok-composer-2.5-fast --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 '${prompt}'`;
+      return `${command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '${prompt}'`;
     case "custom":
       return createSessionTitleGenerationHereDocPreview(command, prompt);
   }

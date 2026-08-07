@@ -17,6 +17,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+  BEADS_VERSION,
+  stageBeadsRelease,
+} from "../scripts/beads-release.mjs";
+import { smokeTestPackagedBeads } from "../scripts/smoke-test-packaged-beads.mjs";
 import { execFile, spawn } from "node:child_process";
 
 const execFileAsync = promisify(execFile);
@@ -28,19 +33,18 @@ const repoRoot = path.resolve(gxserverRoot, "..");
  * CDXC:RemoteMinimalDeps 2026-07-13:
  * Remote hosts must not need a specific glibc/libstdc++ floor, so the Rust
  * binaries (gxserver, ghostex, ghostex-tui) build against musl and link
- * statically, matching the already-static zmx/zehn (Zig musl) and bd
- * (CGO-free Go). Nothing in the package needs a system libc anymore.
+ * statically, matching the already-static zmx/zehn (Zig musl). bd is the
+ * checksum-verified official Beads release binary: embedded Dolt requires its
+ * CGO-enabled glibc build, so remote Ubuntu hosts must provide glibc 2.34+.
  */
 const archConfigs = {
   x64: {
     elfMachine: 0x3e,
-    goArch: "amd64",
     rustTarget: "x86_64-unknown-linux-musl",
     zigTarget: "x86_64-linux-musl",
   },
   arm64: {
     elfMachine: 0xb7,
-    goArch: "arm64",
     rustTarget: "aarch64-unknown-linux-musl",
     zigTarget: "aarch64-linux-musl",
   },
@@ -59,8 +63,6 @@ Run this on Ubuntu or in Linux CI. The default output is:
 Inputs can be overridden with:
   --zmx-root <dir>       default: zmx
   --zehn-root <dir>      default: zehn
-  --beads-root <dir>     default: BEADS_ROOT/GHOSTEX_BEADS_ROOT or common checkouts
-  --bd-bin <path>        use a prebuilt Linux bd binary instead of building Beads
   --out-root <dir>       default for --arch all: build/remote-gxserver-linux
   --rust-target <triple> default: arch-specific Linux musl target (static)
   --tui-root <dir>       default: tui2
@@ -106,7 +108,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
   }
   if (process.platform !== "linux" && !options.allowCross) {
     throw new Error(
-      "Remote gxserver Linux packages must be built on Ubuntu/Linux CI, or pass --allow-cross after configuring Rust, Zig, Go, and C toolchains for Linux.",
+      "Remote gxserver Linux packages must be built on Ubuntu/Linux CI, or pass --allow-cross after configuring Rust, Zig, and C toolchains for Linux.",
     );
   }
 
@@ -146,8 +148,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
     const config = {
       ...archConfig,
       arch,
-      bdBin: options.bdBin ? path.resolve(repoRoot, options.bdBin) : "",
-      beadsRoot: await resolveBeadsRoot(options.beadsRoot),
+      beadsVersion: BEADS_VERSION,
       packageVersion: options.packageVersion || await gxserverPackageVersion(),
       rustTarget: options.rustTarget || archConfig.rustTarget,
       sourceDirty: await gitSourceDirty(repoRoot),
@@ -165,7 +166,8 @@ async function buildLinuxPackageForArch({ arch, options }) {
     /*
      * CDXC:RemoteMachines 2026-06-23-10:07:
      * Ubuntu install must be a first-run package, not an on-host source build.
-     * Build gxserver-rs, zmx, zehn, bd, and ghostex-tui into one package
+     * Build gxserver-rs, zmx, zehn, and ghostex-tui and stage the pinned
+     * official bd release artifact into one package
      * directory so the macOS app
      * can upload it over SSH and start the same Rust control plane without PATH
      * fallbacks.
@@ -259,7 +261,12 @@ async function buildPackage({ config, outputDir, workRoot }) {
     workRoot,
     zigBin: config.zehnZigBin,
   });
-  const bdBin = config.bdBin || await buildBeads(config, workRoot);
+  const bdBin = path.join(workRoot, "bd");
+  await stageBeadsRelease({
+    arch: config.arch,
+    outputPath: bdBin,
+    platform: "linux",
+  });
   const tuiBin = config.tuiBin || await buildGhostexTui(config);
 
   await copyExecutable(gxserverBin, path.join(binsDir, "gxserver"), "gxserver");
@@ -345,50 +352,6 @@ async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
   return path.join(prefix, "bin", binName);
 }
 
-async function buildBeads(config, workRoot) {
-  if (!config.beadsRoot) {
-    throw new Error(
-      "Beads root is required to build the Linux bd binary. Set BEADS_ROOT, GHOSTEX_BEADS_ROOT, or pass --bd-bin <linux-bd>.",
-    );
-  }
-  const outputPath = path.join(workRoot, "bd");
-  const commit = await gitOutput(config.beadsRoot, ["rev-parse", "HEAD"], "dev");
-  const branch = await gitOutput(config.beadsRoot, ["rev-parse", "--abbrev-ref", "HEAD"], "unknown");
-  const shortCommit = commit.slice(0, 12) || "dev";
-  await run("go", [
-    "build",
-    "-buildvcs=false",
-    "-tags",
-    "gms_pure_go",
-    "-trimpath",
-    "-ldflags",
-    `-s -w -X main.Build=${shortCommit} -X main.Commit=${commit} -X main.Branch=${branch}`,
-    "-o",
-    outputPath,
-    "./cmd/bd",
-  ], {
-    cwd: config.beadsRoot,
-    env: {
-      CGO_ENABLED: "0",
-      // GitHub's Go module proxy has repeatedly reset HTTP/2 streams while
-      // fetching bd dependencies on the ARM64 cross-build. Keep every other
-      // caller-supplied Go debug option, but force the module client onto the
-      // reliable HTTP/1.1 transport for this network-dependent build.
-      GODEBUG: [
-        ...(process.env.GODEBUG || "")
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter((entry) => entry && !entry.startsWith("http2client=")),
-        "http2client=0",
-      ].join(","),
-      GOARCH: config.goArch,
-      GOOS: "linux",
-    },
-  });
-  return outputPath;
-}
-
-
 async function validateLinuxPackage(packageDir, config) {
   const requiredFiles = [
     "bin/gxserver",
@@ -424,6 +387,17 @@ async function validateLinuxPackage(packageDir, config) {
   if (!zmxBytes.includes(Buffer.from("--require-existing"))) {
     throw new Error("Linux remote package zmx does not support the required --require-existing attach contract.");
   }
+
+  const hostCanRunBd =
+    process.platform === "linux" && normalizeArch(process.arch) === config.arch;
+  if (hostCanRunBd) {
+    await smokeTestPackagedBeads(path.join(packageDir, "bin", "bd"));
+  } else if (process.env.GHOSTEX_REQUIRE_BEADS_SMOKE === "1") {
+    throw new Error(
+      `GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native ${config.arch} Linux runner; ` +
+        `current host is ${process.platform}/${process.arch}.`,
+    );
+  }
 }
 
 async function writeBuildIdentity(packageDir, version, config = {}) {
@@ -435,6 +409,7 @@ async function writeBuildIdentity(packageDir, version, config = {}) {
     `${JSON.stringify({
       buildIdentity: `gxserver:${version}:${fingerprint}`,
       fingerprint,
+      beadsVersion: config.beadsVersion || BEADS_VERSION,
       packageVersion: version,
       sourceDirty: Boolean(config.sourceDirty),
       sourceRevision: config.sourceRevision || "unknown",
@@ -487,25 +462,6 @@ async function gxserverPackageVersion() {
   return rootPackage.version;
 }
 
-
-async function resolveBeadsRoot(explicitRoot) {
-  const candidates = [
-    explicitRoot,
-    process.env.BEADS_ROOT,
-    process.env.GHOSTEX_BEADS_ROOT,
-    path.join(repoRoot, ".dependencies", "beads"),
-    path.join(repoRoot, "beads"),
-    path.join(os.homedir(), "dev", "_active", "beads"),
-    path.join(os.homedir(), "dev", "_references", "beads"),
-    path.join(os.homedir(), "dev", "custom", "beads"),
-  ].filter(Boolean).map((candidate) => path.resolve(repoRoot, candidate));
-  for (const candidate of candidates) {
-    if (await fileExists(path.join(candidate, "go.mod")) && await fileExists(path.join(candidate, "cmd", "bd"))) {
-      return candidate;
-    }
-  }
-  return "";
-}
 
 async function resolveZigBinary({ candidates, label, versionMatches }) {
   const tried = [];

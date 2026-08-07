@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Model and provider proposals for Ghostex chat.">
+  <title>Models · Ghostex Chat Improvement Map</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="index.html"><span class="wordmark-mark" aria-hidden="true"></span>Chat Improvement Map</a>
+      <nav class="nav" aria-label="Report pages">
+        <a href="index.html">Overview</a><a href="foundation.html">Foundation</a><a href="models.html" aria-current="page">Models</a><a href="rendering.html">Rendering</a><a href="experience.html">Experience</a><a href="roadmap.html">Roadmap</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="kicker">MDL · Providers and models</p>
+        <h1>Discover, do not guess.</h1>
+        <p class="lede">Treat the coding agent as a provider and the models beneath it as a live catalog. This prevents Ghostex releases from becoming tied to every model launch, retirement, or account-level entitlement change.</p>
+      </div>
+      <aside class="hero-note"><strong>Current baseline</strong><p>Chat already normalizes Claude, OpenClaude, Codex, Grok, Pi, and OMP. Only Claude-family and Codex currently have static option catalogs.</p></aside>
+    </section>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#mdl-01">Discovery</a>
+      <a href="#mdl-02">Execution picker</a>
+      <a href="#catalogs">Expansion map</a>
+      <a href="#mdl-09">Persistence</a>
+      <a href="#mdl-10">Permissions</a>
+    </nav>
+
+    <section class="section" id="mdl-01">
+      <div class="section-heading"><span class="index">MDL-01 · P0</span><div><h2>Dynamic model discovery service</h2><p>Add a gxserver endpoint that returns normalized models, supported reasoning levels, input modes, default state, and catalog verification status.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">MDL-01A</span><h3>Per-host cache</h3><p>Cache by machine, provider, installation, and account context. Refresh with bounded time and clear state.</p></div>
+        <div class="card"><span class="code">MDL-01B</span><h3>Verified state</h3><p>Distinguish loaded, stale, unavailable, unauthenticated, and failed catalogs.</p></div>
+        <div class="card"><span class="code">MDL-01C</span><h3>Selection safety</h3><p>Keep a stored model visible until successful discovery proves that it is unavailable.</p></div>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">RULE</span><p>Static catalog rows may supply friendly names and descriptions, but they must not be the sole truth about availability.</p></div>
+    </section>
+
+    <section class="section" id="mdl-02">
+      <div class="section-heading"><span class="index">MDL-02 · P0</span><div><h2>Unified execution picker</h2><p>Replace scattered model and effort pills with one compact control that understands provider, model, reasoning, service tier, permissions, and load state.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>Behavior</th><th>Data source</th></tr></thead>
+          <tbody>
+            <tr><td>Agent provider</td><td>Select the runtime or keep the current session provider</td><td><span class="code">FND-04</span></td></tr>
+            <tr><td>Model</td><td>Search primary and extended catalogs</td><td><span class="code">MDL-01</span></td></tr>
+            <tr><td>Reasoning</td><td>Show only levels supported by the selected model</td><td>Model capability</td></tr>
+            <tr><td>Fast tier</td><td>Appear only when the provider and model support it</td><td>Provider capability</td></tr>
+            <tr><td>Permission</td><td>Separate detected state from verified selectable policy</td><td><span class="code">MDL-10</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="catalogs">
+      <div class="section-heading"><span class="index">MDL-03 — MDL-08</span><div><h2>Provider expansion map</h2><p>The concrete integrations and model surfaces worth bringing into Ghostex.</p></div></div>
+      <div class="grid">
+        <div class="card wide" id="mdl-03"><span class="code">MDL-03</span><h3>Pi as the broad model gateway</h3><p>Expose Pi’s authenticated <code>&lt;vendor&gt;/&lt;model&gt;</code> catalog, including Anthropic, OpenAI, OpenAI Codex, Bedrock, Google, Gemini CLI, Vertex, OpenRouter, Vercel AI Gateway, xAI, and Mistral.</p><div class="meta"><span class="tag">Existing agent</span><span class="tag medium">Effort M</span></div></div>
+        <div class="card wide" id="mdl-04"><span class="code">MDL-04</span><h3>Generic ACP adapter</h3><p>Support executable, arguments, environment, working directory, model discovery, model selection, reasoning controls, and permission mappings through one adapter.</p><div class="meta"><span class="tag high">Effort L</span><span class="tag high">Risk high</span></div></div>
+        <div class="card" id="mdl-05"><span class="code">MDL-05</span><h3>Cursor via ACP</h3><p>Dynamically surface current families such as Auto, Grok 4.5, GPT-5.6 Sol, Claude Opus 5 Thinking, Claude Fable 5 Thinking, and Composer 2.5.</p><div class="meta"><span class="tag">New chat provider</span></div></div>
+        <div class="card" id="mdl-06"><span class="code">MDL-06</span><h3>OpenCode via ACP</h3><p>Detect the installed agent and use its live model list. Do not claim exact models before discovery.</p><div class="meta"><span class="tag">New chat provider</span></div></div>
+        <div class="card" id="mdl-07"><span class="code">MDL-07</span><h3>Structured Grok path</h3><p>Keep existing Grok transcript support, but use ACP when available for richer events, reasoning state, and model controls such as Grok 4.5 and Composer 2.5 Fast.</p><div class="meta"><span class="tag">Upgrade existing support</span></div></div>
+        <div class="card" id="mdl-08"><span class="code">MDL-08</span><h3>Hermes via ACP</h3><p>Add the already launchable Hermes agent to chat with discovered models and native reasoning controls.</p><div class="meta"><span class="tag">New chat provider</span></div></div>
+        <div class="card"><span class="code">CAT-CODEX</span><h3>Codex catalog</h3><p>Query the installed app-server model list and use the reasoning levels declared per model.</p></div>
+        <div class="card"><span class="code">CAT-CLAUDE</span><h3>Claude catalog</h3><p>Use account-scoped discovery. Current curated entries include Fable 5, Opus 5 1M, Opus 4.8 1M, Opus 4.7 1M, and Sonnet 5.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="mdl-09">
+      <div class="section-heading"><span class="index">MDL-09 · P1</span><div><h2>Persist execution choices at the right scopes</h2><p>Prevent repeated setup without silently carrying an invalid selection between machines or accounts.</p></div></div>
+      <div class="grid">
+        <div class="card"><span class="code">MDL-09A</span><h3>Composer preference</h3><p>Remember last-used provider, model, reasoning, tier, and permission for new sessions.</p></div>
+        <div class="card"><span class="code">MDL-09B</span><h3>Project default</h3><p>Allow a project to define preferred execution settings while respecting host availability.</p></div>
+        <div class="card"><span class="code">MDL-09C</span><h3>Session truth</h3><p>Persist effective settings and retain the selected model even if it later moves to a selected-only catalog.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="mdl-10">
+      <div class="section-heading"><span class="index">MDL-10 · P1</span><div><h2>Permission policy with host ceilings</h2><p>Show what the agent may do only where gxserver can detect or enforce it. Unsupported choices should be absent, not simulated.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">MDL-10A</span><h3>Detected first</h3><p>Start with read-only permission state for each provider. This immediately makes opaque TUI state understandable.</p></div>
+        <div class="card wide"><span class="code">MDL-10B</span><h3>Selectable when enforceable</h3><p>Expose edits, automatic workspace action, or unrestricted modes only when they map to real provider behavior and remain below the machine ceiling.</p></div>
+      </div>
+    </section>
+
+    <footer class="footer"><a class="next-link" href="foundation.html">← Foundation</a><a class="next-link" href="rendering.html">Next: Rendering →</a></footer>
+  </main>
+</body>
+</html>

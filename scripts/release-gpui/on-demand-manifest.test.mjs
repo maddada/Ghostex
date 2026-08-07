@@ -3,9 +3,15 @@ import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { buildOnDemandManifestV2, validateOnDemandManifestV2 } from "./on-demand-manifest.mjs";
+import {
+  authenticateComponentChecksumSidecar,
+  buildOnDemandManifestV2,
+  validateMacosReleaseOnDemandManifest,
+  validateOnDemandManifestV2,
+} from "./on-demand-manifest.mjs";
 import {
   componentAssetsFromDirectory,
+  componentChecksumSidecars,
   planComponentRelease,
   sha256File,
   verifyPublishedComponent,
@@ -55,6 +61,67 @@ describe("on-demand manifest v2", () => {
       /assetName must equal cef-138\.0\.1-darwin-arm64\.tar\.gz/,
     );
   });
+
+  test("requires both Linux code-server architectures for macOS releases", () => {
+    const releaseManifest = manifest();
+    releaseManifest.components["code-server"] = {
+      name: "code-server",
+      componentVersion: "4.99.0",
+      downloadTag: "code-server-4.99.0",
+      platforms: Object.fromEntries(
+        ["darwin-arm64", "linux-x64", "linux-arm64"].map((platform) => [
+          platform,
+          {
+            assetName: `code-server-4.99.0-${platform}.tar.gz`,
+            sha256SidecarName: `code-server-4.99.0-${platform}.tar.gz.sha256`,
+            sha256: digest,
+            sizeBytes: 789,
+          },
+        ]),
+      ),
+    };
+    expect(validateMacosReleaseOnDemandManifest(releaseManifest)).toBe(releaseManifest);
+
+    delete releaseManifest.components["code-server"].platforms["linux-arm64"];
+    expect(() => validateMacosReleaseOnDemandManifest(releaseManifest)).toThrow(
+      /macOS releases require components\.code-server\.platforms\.linux-arm64/,
+    );
+  });
+
+  test('requires the exact code-server outer checksum sidecar name in the sealed manifest', () => {
+    const releaseManifest = manifest();
+    const assetName = 'code-server-version-windows-x64.tar.gz';
+    releaseManifest.components['code-server'] = {
+      name: 'code-server',
+      componentVersion: 'version',
+      downloadTag: 'code-server-version',
+      platforms: {
+        'windows-x64': { assetName, sha256: digest, sizeBytes: 789 },
+      },
+    };
+    expect(() => validateOnDemandManifestV2(releaseManifest)).toThrow(/sha256SidecarName/);
+
+    releaseManifest.components['code-server'].platforms['windows-x64'].sha256SidecarName =
+      'wrong.tar.gz.sha256';
+    expect(() => validateOnDemandManifestV2(releaseManifest)).toThrow(
+      /sha256SidecarName must equal code-server-version-windows-x64\.tar\.gz\.sha256/,
+    );
+  });
+
+  test.each([
+    ['missing', undefined, /must be UTF-8 text/],
+    ['malformed', `${digest}\n`, /one filename-bound/],
+    ['wrong name', `${digest}  wrong.tar.gz\n`, /filename must equal/],
+    ['digest mismatch', `${'b'.repeat(64)}  code-server-version-windows-x64.tar.gz\n`, /sealed digest/],
+  ])('rejects a %s downloaded outer checksum sidecar', (_label, contents, expectedError) => {
+    expect(() =>
+      authenticateComponentChecksumSidecar(
+        contents,
+        'code-server-version-windows-x64.tar.gz',
+        digest,
+      ),
+    ).toThrow(expectedError);
+  });
 });
 
 describe("component-tag publisher idempotency", () => {
@@ -97,6 +164,49 @@ describe("component-tag publisher idempotency", () => {
         release: { exists: true, assets: [{ name: assets[0].assetName, size: assets[0].sizeBytes, digest: `sha256:${"b".repeat(64)}` }] },
       }),
     ).toThrow(/Refusing to replace/);
+  });
+
+  test("publishes exact filename-bound checksum sidecars with component archives", async () => {
+    const assetDir = await mkdtemp(path.join(tmpdir(), "ghostex-component-sidecar-"));
+    const archiveName = "code-server-version-darwin-arm64.tar.gz";
+    const archivePath = path.join(assetDir, archiveName);
+    await writeFile(archivePath, "darwin-code-server");
+    const assets = componentAssetsFromDirectory({ assetDir, component: "code-server", componentVersion: "version" });
+    await writeFile(`${archivePath}.sha256`, `${assets[0].sha256}  ${archiveName}\n`);
+
+    const sidecars = componentChecksumSidecars(assets);
+    expect(sidecars).toMatchObject([
+      { assetName: `${archiveName}.sha256`, filePath: `${archivePath}.sha256` },
+    ]);
+    expect(
+      planComponentRelease({ assets: [...assets, ...sidecars], release: { exists: false, assets: [] } }).uploads.map(
+        (asset) => asset.assetName,
+      ),
+    ).toEqual([archiveName, `${archiveName}.sha256`]);
+    const releaseState = path.join(assetDir, "release-state.json");
+    await writeFile(releaseState, JSON.stringify({ exists: false, assets: [] }));
+    const publisherOutput = execFileSync(
+      process.execPath,
+      [
+        path.resolve("scripts/release-gpui/publish-component.mjs"),
+        "--component",
+        "code-server",
+        "--version",
+        "version",
+        "--asset-dir",
+        assetDir,
+        "--require-sha256-sidecars",
+        "--release-state",
+        releaseState,
+        "--dry-run",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(publisherOutput).toContain(`UPLOAD ${archiveName} `);
+    expect(publisherOutput).toContain(`UPLOAD ${archiveName}.sha256 `);
+    expect(publisherOutput).toContain(`"sha256SidecarName": "${archiveName}.sha256"`);
+    await writeFile(`${archivePath}.sha256`, `${assets[0].sha256}  wrong-name.tar.gz\n`);
+    expect(() => componentChecksumSidecars(assets)).toThrow(/filename/);
   });
 
   test("reports missing and mismatched component tags with the publisher fix command", () => {

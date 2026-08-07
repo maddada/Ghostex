@@ -73,12 +73,17 @@ jobs:
         env:
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
         run: .release-automation/scripts/release-gpui/prepare-references.sh
+      - name: Resolve immutable code-server component identity
+        id: code_server_identity
+        run: node .release-automation/scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with: { bun-version: 1.3.6 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22.22.1, cache: npm, cache-dependency-path: code-server/package-lock.json }
-      - name: Download and verify staged gxserver prerequisites
+      - name: Verify staged remote runtime prerequisites
         env:
+          GXSERVER_ARM64_RUN_ID: ${{ inputs.gxserver_arm64_run_id }}
+          GXSERVER_X64_RUN_ID: ${{ inputs.gxserver_x64_run_id }}
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.version }}
@@ -86,16 +91,51 @@ jobs:
           node --input-type=module - <<'JS'
           import { validateStagedRelease } from "./.release-automation/scripts/release-state-lib.mjs";
           const result = validateStagedRelease(process.env.VERSION, { sourceSha: process.env.SOURCE_SHA });
-          for (const name of ["gxserver-linux-x64", "gxserver-linux-arm64"]) {
+          for (const [name, runId] of [
+            ["gxserver-linux-x64", process.env.GXSERVER_X64_RUN_ID],
+            ["gxserver-linux-arm64", process.env.GXSERVER_ARM64_RUN_ID],
+          ]) {
             if (!result.completed[name]) throw new Error(`Missing verified prerequisite ${name}`);
+            if (!runId || String(result.completed[name].run_id) !== runId) {
+              throw new Error(`${name} artifact run ${runId || "<missing>"} does not match verified release state run ${result.completed[name].run_id}`);
+            }
           }
           JS
           mkdir -p build/runtime-artifacts/x64 build/runtime-artifacts/arm64
           gh release download "v${{ inputs.version }}" --repo maddada/Ghostex --pattern gxserver-linux-x64.tar.gz --dir build/runtime-artifacts/x64
           gh release download "v${{ inputs.version }}" --repo maddada/Ghostex --pattern gxserver-linux-arm64.tar.gz --dir build/runtime-artifacts/arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
+          path: build/runtime-artifacts/code-server-x64
+          github-token: ${{ github.token }}
+          repository: maddada/Ghostex
+          run-id: ${{ inputs.gxserver_x64_run_id }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64
+          path: build/runtime-artifacts/code-server-arm64
+          github-token: ${{ github.token }}
+          repository: maddada/Ghostex
+          run-id: ${{ inputs.gxserver_arm64_run_id }}
+      - name: Validate remote runtime archives
+        run: |
+          for tuple in \
+            "x64 build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}" \
+            "arm64 build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz"; do
+            set -- $tuple
+            archive="$2"
+            [[ -f "$archive" ]] || { echo "Missing required Linux $1 code-server archive: $archive" >&2; exit 1; }
+            node .release-automation/scripts/release-gpui/verify-code-server-archive.mjs \
+              --archive "$archive" \
+              --version "${{ steps.code_server_identity.outputs.component_version }}" \
+              --platform "linux-$1"
+          done
           mkdir -p build/remote-gxserver-linux/x64/package build/remote-gxserver-linux/arm64/package
           tar -xzf build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
           tar -xzf build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz -C build/remote-gxserver-linux/arm64/package
+          test -x build/remote-gxserver-linux/x64/package/bin/gxserver
+          test -x build/remote-gxserver-linux/arm64/package/bin/gxserver
       - name: Install pinned runtime toolchains
         run: |
           brew install rsync
@@ -163,6 +203,9 @@ jobs:
           GHOSTEX_CODE_SIGN_IDENTITY: "Developer ID Application: Mohamad Youssef (KTKP595G3B)"
           GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz
           GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
           GHOSTEX_RELEASE_VERSION: ${{ inputs.version }}

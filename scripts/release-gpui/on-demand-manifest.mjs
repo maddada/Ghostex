@@ -45,6 +45,19 @@ function requireSize(value, label) {
   return value;
 }
 
+export function authenticateComponentChecksumSidecar(contents, expectedAssetName, expectedSha256) {
+  if (typeof contents !== "string") fail("component checksum sidecar must be UTF-8 text");
+  const match = /^([0-9a-f]{64})  ([^\r\n]+)\r?\n?$/.exec(contents);
+  if (!match) fail("component checksum sidecar must contain one filename-bound SHA-256 record");
+  if (match[2] !== expectedAssetName) {
+    fail(`component checksum sidecar filename must equal ${expectedAssetName}`);
+  }
+  if (match[1] !== expectedSha256) {
+    fail(`component checksum sidecar digest must equal the sealed digest for ${expectedAssetName}`);
+  }
+  return match[1];
+}
+
 export function validateOnDemandManifestV2(input) {
   const manifest = requireObject(input, "root");
   if (manifest.schemaVersion !== 2) fail("schemaVersion must equal 2");
@@ -86,8 +99,34 @@ export function validateOnDemandManifestV2(input) {
       if (assetName !== expectedAssetName) {
         fail(`components.${key}.platforms.${platformKey}.assetName must equal ${expectedAssetName}`);
       }
+      const expectedSidecarName = `${assetName}.sha256`;
+      if (name === "code-server" || platformAsset.sha256SidecarName !== undefined) {
+        const sidecarName = requireAssetName(
+          platformAsset.sha256SidecarName,
+          `components.${key}.platforms.${platformKey}.sha256SidecarName`,
+        );
+        if (sidecarName !== expectedSidecarName) {
+          fail(
+            `components.${key}.platforms.${platformKey}.sha256SidecarName must equal ${expectedSidecarName}`,
+          );
+        }
+      }
       requireSha256(platformAsset.sha256, `components.${key}.platforms.${platformKey}.sha256`);
       requireSize(platformAsset.sizeBytes, `components.${key}.platforms.${platformKey}.sizeBytes`);
+    }
+  }
+  return manifest;
+}
+
+export function validateMacosReleaseOnDemandManifest(input) {
+  const manifest = validateOnDemandManifestV2(input);
+  const codeServer = manifest.components["code-server"];
+  if (!codeServer) {
+    fail("macOS releases require the code-server component");
+  }
+  for (const platform of ["darwin-arm64", "linux-x64", "linux-arm64"]) {
+    if (!codeServer.platforms[platform]) {
+      fail(`macOS releases require components.code-server.platforms.${platform}`);
     }
   }
   return manifest;
@@ -156,6 +195,12 @@ async function main() {
     process.stdout.write(`Validated on-demand manifest v2: ${options.manifest}\n`);
     return;
   }
+  if (command === "validate-macos") {
+    const options = parseCliArgs(argv);
+    validateMacosReleaseOnDemandManifest(JSON.parse(await readFile(options.manifest, "utf8")));
+    process.stdout.write(`Validated macOS on-demand manifest v2: ${options.manifest}\n`);
+    return;
+  }
   if (command === "seal") {
     const options = parseCliArgs(argv);
     const manifest = await sealOnDemandManifest({
@@ -169,7 +214,7 @@ async function main() {
     );
     return;
   }
-  throw new Error("Usage: on-demand-manifest.mjs validate --manifest PATH | seal --build-manifest PATH --output PATH [--component-manifest PATH] [--repo OWNER/REPO]");
+  throw new Error("Usage: on-demand-manifest.mjs validate --manifest PATH | validate-macos --manifest PATH | seal --build-manifest PATH --output PATH [--component-manifest PATH] [--repo OWNER/REPO]");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
