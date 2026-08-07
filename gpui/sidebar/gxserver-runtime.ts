@@ -3445,6 +3445,18 @@ class GpuiSidebarRuntime {
       onError: () => {
         this.recoverPresentationStream(clientId);
       },
+      /*
+      CDXC:GlobalActions 2026-08-07:
+      Global Action writes reach this surface only as this announcement. They
+      are not project writes, so they produce no projectUpdated delta, and the
+      Settings window that made the write is a different surface whose response
+      never lands here. Refetch the HUD the same way a project Action edit
+      already does, so a Global Action flagged for the project row appears and
+      disappears with the toggle instead of on the next unrelated delta.
+      */
+      onGlobalSidebarCommands: () => {
+        this.refreshSidebarHudFromClient();
+      },
       onRendererCommand: (command) => this.handleGxserverRendererCommand(command),
       onSidebarProjectCollections: (state) => {
         this.forwardSidebarProjectCollectionsFromGxserver(state);
@@ -15031,6 +15043,7 @@ class GpuiGxserverClient {
     onClose,
     onDelta,
     onError,
+    onGlobalSidebarCommands,
     onRendererCommand,
     onSessionChatEvent,
     onSidebarProjectCollections,
@@ -15041,6 +15054,7 @@ class GpuiGxserverClient {
     onClose: () => void;
     onDelta: (delta: GxserverPresentationDelta, revision: number) => void;
     onError: () => void;
+    onGlobalSidebarCommands?: () => void;
     onRendererCommand?: GpuiRendererCommandHandler;
     onSessionChatEvent?: (event: GxserverSessionChatEvent) => void;
     onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
@@ -15094,6 +15108,16 @@ class GpuiGxserverClient {
         isSidebarProjectCollectionsState(message.sidebarProjectCollections)
       ) {
         onSidebarProjectCollections(message.sidebarProjectCollections);
+        return;
+      }
+      /*
+      CDXC:GlobalActions 2026-08-07:
+      The Global Actions announcement carries no list — the handler refetches
+      the HUD, which is the one projection of it — so there is no payload to
+      shape-validate before forwarding it.
+      */
+      if (message.type === "globalSidebarCommandsChanged" && onGlobalSidebarCommands) {
+        onGlobalSidebarCommands();
         return;
       }
       /*

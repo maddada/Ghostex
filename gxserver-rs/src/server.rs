@@ -2339,6 +2339,7 @@ async fn route_http(
                     mutation.global_command_update,
                     Some(GlobalSidebarCommandUpdate::Order { .. })
                 );
+                let global_command_written = mutation.global_command_update.is_some();
                 let mut updated_projects = Vec::new();
                 for update in mutation.updates {
                     let project = repository.update_project(&update.params)?;
@@ -2354,9 +2355,20 @@ async fn route_http(
                 /*
                 CDXC:GlobalActions 2026-08-01-16:00:
                 A Global Action write touches no project row, so it schedules no
-                projectUpdated presentation delta. Clients pick the new list up
-                from the refreshed HUD this call returns and from their next HUD
-                poll, the same way they already do for action edits.
+                projectUpdated presentation delta.
+
+                CDXC:GlobalActions 2026-08-07:
+                It announces itself with its own event instead. Only the caller
+                sees the refreshed HUD this response carries; every other live
+                surface learns about HUD changes from a broadcast, and none of
+                them polls the HUD on a timer. The GPUI sidebar refetches it
+                when a projectUpdated delta arrives, which is why a project
+                Action edit reaches the row at once and a Global Action edit did
+                not — the row kept the stale list until some unrelated project
+                delta happened to fire. The event carries no list, because
+                /api/readSidebarHud stays the single projection of it, and it
+                bumps the presentation revision so snapshot pollers converge as
+                well, exactly like the sidebar-collection writes below.
                 */
                 match mutation.global_command_update {
                     Some(GlobalSidebarCommandUpdate::Save {
@@ -2370,6 +2382,16 @@ async fn route_http(
                         repository.order_global_sidebar_commands(&command_ids)?
                     }
                     None => {}
+                }
+                if global_command_written {
+                    let _event_sequence = lock_presentation_event_sequence(&state)?;
+                    let revision = increment_presentation_revision(db)?;
+                    state.event_hub.broadcast(json!({
+                        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                        "revision": revision,
+                        "serverId": state.metadata.server_id.clone(),
+                        "type": "globalSidebarCommandsChanged",
+                    }));
                 }
                 let projects = repository.list_projects()?;
                 let mut hud = read_sidebar_hud(&projects, hud_active_project_id.as_deref());
@@ -13486,6 +13508,75 @@ mod tests {
         let body = response_json(missing.response).await;
         assert_eq!(body["error"], json!("notFound"));
         assert_eq!(body["message"], json!("Project P9zzz does not exist."));
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-07:
+    Only the caller reads this response. The sidebar row that renders Global
+    Actions lives in another surface that refetches the HUD when the daemon
+    announces a change and never polls it, so a Global Action write has to
+    broadcast the way a project Action write already does through its
+    projectUpdated delta. Without the announcement the row kept the stale list
+    until an unrelated project delta happened to fire.
+    */
+    #[tokio::test]
+    async fn global_sidebar_command_write_broadcasts_a_hud_change_event() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        /*
+        `ensure_gxserver_storage_layout` creates the state directories but not
+        the config directory, so a temp home has nowhere to write the default
+        config. A real install always has one.
+        */
+        std::fs::create_dir_all(paths.config_file.parent().expect("config directory"))
+            .expect("create config directory");
+        let state = test_app_state(paths);
+        let token = state.auth_token.clone();
+        let mut events = state.event_hub.subscribe();
+
+        let saved = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/mutateSidebarHudSettings",
+                &token,
+                json!({
+                    "params": {
+                        "actionType": "terminal",
+                        "command": "echo global",
+                        "commandId": "custom-global-action",
+                        "name": "Global Action",
+                        "operation": "save",
+                        "showOnProjectRow": true,
+                        "target": "globalCommand"
+                    }
+                }),
+            ),
+            "request-save-global-sidebar-command".to_string(),
+        )
+        .await;
+        assert_eq!(saved.response.status(), StatusCode::OK);
+        let body = response_json(saved.response).await;
+        assert_eq!(
+            body["result"]["hud"]["globalCommands"][0]["commandId"],
+            json!("custom-global-action")
+        );
+        assert_eq!(
+            body["result"]["hud"]["globalCommands"][0]["showOnProjectRow"],
+            json!(true)
+        );
+
+        let mut broadcast_types = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            if let Some(event_type) = event["type"].as_str() {
+                broadcast_types.push(event_type.to_string());
+            }
+        }
+        assert!(
+            broadcast_types
+                .iter()
+                .any(|event_type| event_type == "globalSidebarCommandsChanged"),
+            "expected a globalSidebarCommandsChanged broadcast, saw {broadcast_types:?}"
+        );
     }
 
     #[tokio::test]

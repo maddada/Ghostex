@@ -2628,6 +2628,20 @@ export type GxserverEvent =
       sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
       type: "sidebarProjectCollectionsChanged";
     }
+  /*
+   * CDXC:GlobalActions 2026-08-07:
+   * A Global Action write is not a project write, so it produces no
+   * presentation delta and live surfaces would otherwise keep a stale list.
+   * The event announces the change and bumps the presentation revision; it
+   * carries no commands, because `/api/readSidebarHud` stays the single
+   * projection of the Global Actions list.
+   */
+  | {
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      type: "globalSidebarCommandsChanged";
+    }
   | GxserverSessionChatSnapshotEvent
   | GxserverSessionChatAppendedEvent
   | GxserverSessionChatReplacedEvent
