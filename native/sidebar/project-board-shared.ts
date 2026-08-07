@@ -37,6 +37,7 @@ export type BeadsIssue = {
   comment_count?: number;
   comments?: BeadsComment[];
   created_at?: string;
+  created_by?: string;
   dependencies?: BeadsDependency[];
   dependency_count?: number;
   dependent_count?: number;
@@ -274,6 +275,19 @@ export function toBoardTickets(
       boardStatus: beadsStatusToBoardStatus(issue.status),
       displayId: formatTicketDisplayId(issue, displayKey, serialByIssueId),
     }));
+}
+
+/*
+  CDXC:ProjectBoardCreator 2026-08-07-07:52:
+  Cards and Edit ticket show who created a bead next to who is assigned to it. The creator is
+  redundant noise when it is the same person as the assignee, so display surfaces resolve the
+  creator through here instead of each deciding when to hide it.
+*/
+export function ticketCreatorName(
+  createdBy: string | undefined,
+  assignee: string | undefined,
+): string | undefined {
+  return createdBy && createdBy !== assignee ? createdBy : undefined;
 }
 
 export function estimateToTshirt(estimate: number | null | undefined): TshirtSize | undefined {

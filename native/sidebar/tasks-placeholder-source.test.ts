@@ -180,6 +180,33 @@ describe("Project Board form event handling", () => {
     expect(tasksPlaceholderSource).toContain("assignee={detail.ticket?.assignee}");
   });
 
+  test("shows the Beads creator distinctly from the assignee", () => {
+    /*
+     * CDXC:ProjectBoardCreator 2026-08-07-07:52:
+     * Cards and Edit ticket show who created a bead next to who works it, so the two must read
+     * differently: the creator is muted "by <name>" text with no person icon, the assignee keeps its
+     * icon chip. Both resolve the creator through ticketCreatorName so it disappears when it is unset
+     * or the same person as the assignee, and the assignee chip spells its role out in the tooltip.
+     */
+    const ticketCardSource = sourceBetween("function TicketCard(", "function ProjectBoardTicketContextMenu(");
+    const metaFieldsSource = sourceBetween("function TicketMetaFields(", "function DependencyPicker(");
+    const creatorStyleSource = sourceBetween(
+      ".project-board-card-creator {",
+      ".project-board-card-assignee {",
+    );
+
+    expect(ticketCardSource).toContain("ticketCreatorName(ticket.created_by, ticket.assignee)");
+    expect(ticketCardSource).toContain('className="project-board-card-creator"');
+    expect(ticketCardSource).toContain("by {creator}");
+    expect(ticketCardSource).toContain("title={`Assigned to ${ticket.assignee}`}");
+    expect(metaFieldsSource).toContain("ticketCreatorName(createdBy, assignee)");
+    expect(metaFieldsSource).toContain("{creator ? (");
+    expect(metaFieldsSource).toContain("<span>Created by</span>");
+    expect(metaFieldsSource).toContain('className="project-ticket-creator-value"');
+    expect(creatorStyleSource).toContain("text-overflow: ellipsis;");
+    expect(tasksPlaceholderSource).toContain("createdBy={detail.ticket?.created_by}");
+  });
+
   test("reports sanitized focus-owner events for native Kanban focus arbitration", () => {
     /*
      * CDXC:ProjectBoardFocus 2026-06-12-08:44:
