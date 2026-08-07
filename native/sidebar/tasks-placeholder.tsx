@@ -5907,20 +5907,16 @@ styleElement.textContent = `
     outline: none;
   }
 
-  .project-ticket-dialog-body,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"] {
     scrollbar-color: transparent transparent;
     scrollbar-width: none;
   }
 
-  .project-ticket-dialog-body:hover,
-  .project-ticket-dialog-body:focus-within,
   .project-ticket-comment-list:hover [data-slot="scroll-area-viewport"],
   .project-ticket-comment-list:focus-within [data-slot="scroll-area-viewport"] {
     scrollbar-color: var(--project-board-scrollbar) transparent;
   }
 
-  .project-ticket-dialog-body::-webkit-scrollbar,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
     height: 2px;
     width: 2px;
@@ -5936,14 +5932,24 @@ styleElement.textContent = `
    * scrollers stay out of the hidden-scrollbar rules above. The 8px box is the
    * mouse target and the thumb's transparent borders keep the painted rail at
    * the board's 2px width.
+   *
+   * CDXC:DialogScrollbar 2026-08-07:
+   * The ticket dialog body sat in the hidden-scrollbar rules above, and
+   * measuring it in Chromium showed the same wheel-only failure the board had:
+   * a 0px gutter, and no scroll from a track click or a thumb drag at any x
+   * offset along its right edge. It joins the real-scrollbar rules here. The
+   * comment list stays hidden above because its Radix ScrollArea paints its own
+   * interactable bar.
    */
   .project-board-lanes,
-  .project-board-lane-scroll {
+  .project-board-lane-scroll,
+  .project-ticket-dialog-body {
     scrollbar-width: auto;
   }
 
   .project-board-lanes::-webkit-scrollbar,
-  .project-board-lane-scroll::-webkit-scrollbar {
+  .project-board-lane-scroll::-webkit-scrollbar,
+  .project-ticket-dialog-body::-webkit-scrollbar {
     background: transparent;
     display: block;
     height: 8px;
@@ -5964,8 +5970,6 @@ styleElement.textContent = `
     background: transparent;
   }
 
-  .project-ticket-dialog-body:hover::-webkit-scrollbar-thumb,
-  .project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb,
   .project-ticket-comment-list:hover [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb,
   .project-ticket-comment-list:focus-within [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb {
     background: var(--project-board-scrollbar);
@@ -5977,7 +5981,8 @@ styleElement.textContent = `
     border-top: 3px solid transparent;
   }
 
-  .project-board-lane-scroll::-webkit-scrollbar-thumb {
+  .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body::-webkit-scrollbar-thumb {
     background-clip: content-box;
     border-left: 3px solid transparent;
     border-right: 3px solid transparent;
@@ -5986,7 +5991,9 @@ styleElement.textContent = `
   .project-board-lanes:hover::-webkit-scrollbar-thumb,
   .project-board-lanes:focus-within::-webkit-scrollbar-thumb,
   .project-board-lane:hover .project-board-lane-scroll::-webkit-scrollbar-thumb,
-  .project-board-lane:focus-within .project-board-lane-scroll::-webkit-scrollbar-thumb {
+  .project-board-lane:focus-within .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body:hover::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb {
     background-color: var(--project-board-scrollbar);
   }
 

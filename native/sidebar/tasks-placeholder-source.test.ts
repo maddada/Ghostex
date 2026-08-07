@@ -70,7 +70,7 @@ describe("Project Board form event handling", () => {
      * pointer-events: none overlay is not a scrollbar and must not come back.
      */
     const boardScrollbarSource = sourceBetween(
-      ".project-board-lanes,\n  .project-board-lane-scroll {",
+      ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
       ".project-board-toolbar {",
     );
 
@@ -79,6 +79,39 @@ describe("Project Board form event handling", () => {
     expect(boardScrollbarSource).toContain("height: 8px;");
     expect(boardScrollbarSource).toContain("width: 8px;");
     expect(tasksPlaceholderSource).not.toContain("project-board-lane-scrollbar");
+  });
+
+  test("keeps the ticket dialog body scrollbar grabbable with the mouse", () => {
+    /*
+     * CDXC:DialogScrollbar 2026-08-07:
+     * The ticket dialog body shared the comment list's hidden-scrollbar rules,
+     * so Chromium measured a 0px scroll gutter on it and neither a track click
+     * nor a thumb drag anywhere along its right edge moved it — wheel-only. It
+     * must stay on the board's real-scrollbar rules. The comment list must stay
+     * hidden here because its Radix ScrollArea paints its own grabbable bar, and
+     * the dialog thumb's hover reveal must set background-color rather than the
+     * background shorthand, which would reset the content-box clip that keeps
+     * the painted rail at 2px.
+     */
+    const hiddenScrollbarSource = sourceBetween(
+      '.project-ticket-comment-list [data-slot="scroll-area-viewport"] {',
+      ".project-board-lanes,",
+    );
+    const dialogScrollbarSource = sourceBetween(
+      ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
+      ".project-board-toolbar {",
+    );
+    const dialogThumbHoverSource = sourceBetween(
+      ".project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb {",
+      '.project-ticket-comment-list [data-slot="scroll-area-scrollbar"] {',
+    );
+
+    expect(hiddenScrollbarSource).not.toContain("project-ticket-dialog-body");
+    expect(hiddenScrollbarSource).toContain("scrollbar-width: none;");
+    expect(hiddenScrollbarSource).toContain("width: 2px;");
+    expect(dialogScrollbarSource).toContain(".project-ticket-dialog-body::-webkit-scrollbar {");
+    expect(dialogScrollbarSource).toContain(".project-ticket-dialog-body::-webkit-scrollbar-thumb {");
+    expect(dialogThumbHoverSource).toContain("background-color: var(--project-board-scrollbar);");
   });
 
   test("shows the first-open Kanban loading overlay until initial load finishes", () => {
