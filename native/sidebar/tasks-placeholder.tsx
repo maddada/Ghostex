@@ -2663,6 +2663,11 @@ function ProjectBoardApp() {
                 scrollers. Apply the shared Codex-style masks to the scroll
                 containers themselves so lane headers and custom scrollbars stay
                 crisp while overflowing cards fade at the edges.
+
+                CDXC:BoardScrollbars 2026-08-07:
+                Both bars are now the browser's own scrollbars on those same
+                masked scrollers, so their ends fade with the content instead of
+                staying crisp.
               */}
               <section className="project-board-lanes horizontal-scroll-fade-mask" aria-label="Project issue board">
                 {BOARD_COLUMNS.map((column) => (
@@ -4050,62 +4055,6 @@ function BoardLane({
   });
   const visibleTickets = tickets.slice(0, PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN);
   const hiddenTicketCount = tickets.length - visibleTickets.length;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollThumb, setScrollThumb] = useState({ height: 0, top: 0, visible: false });
-  const updateScrollThumb = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    const maxScrollTop = element.scrollHeight - element.clientHeight;
-    if (maxScrollTop <= 1) {
-      setScrollThumb((current) =>
-        current.visible || current.height !== 0 || current.top !== 0
-          ? { height: 0, top: 0, visible: false }
-          : current,
-      );
-      return;
-    }
-    const height = Math.max(24, (element.clientHeight / element.scrollHeight) * element.clientHeight);
-    const top = (element.scrollTop / maxScrollTop) * (element.clientHeight - height);
-    setScrollThumb((current) => {
-      const next = {
-        height: Math.round(height),
-        top: Math.round(top),
-        visible: true,
-      };
-      return current.height === next.height && current.top === next.top && current.visible === next.visible
-        ? current
-        : next;
-    });
-  }, []);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    updateScrollThumb();
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? undefined
-        : new ResizeObserver(() => updateScrollThumb());
-    if (resizeObserver) {
-      resizeObserver.observe(element);
-      if (element.firstElementChild) {
-        resizeObserver.observe(element.firstElementChild);
-      }
-    } else {
-      window.addEventListener("resize", updateScrollThumb);
-    }
-    return () => {
-      resizeObserver?.disconnect();
-      if (!resizeObserver) {
-        window.removeEventListener("resize", updateScrollThumb);
-      }
-    };
-  }, [hiddenTicketCount, updateScrollThumb, visibleTickets.length]);
-
   return (
     <section
       className="project-board-lane"
@@ -4132,11 +4081,7 @@ function BoardLane({
           </Button>
         </div>
       </header>
-      <div
-        className="project-board-lane-scroll vertical-scroll-fade-mask"
-        onScroll={updateScrollThumb}
-        ref={scrollRef}
-      >
+      <div className="project-board-lane-scroll vertical-scroll-fade-mask">
         <div className="project-board-card-stack">
           {visibleTickets.map((ticket) => (
             <TicketCard
@@ -4155,19 +4100,6 @@ function BoardLane({
             </div>
           ) : null}
         </div>
-      </div>
-      <div
-        aria-hidden="true"
-        className="project-board-lane-scrollbar"
-        data-visible={String(scrollThumb.visible)}
-      >
-        <div
-          className="project-board-lane-scrollbar-thumb"
-          style={{
-            height: `${scrollThumb.height}px`,
-            transform: `translateY(${scrollThumb.top}px)`,
-          }}
-        />
       </div>
     </section>
   );
@@ -5975,8 +5907,6 @@ styleElement.textContent = `
     outline: none;
   }
 
-  .project-board-lanes,
-  .project-board-lane-scroll,
   .project-ticket-dialog-body,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"] {
     scrollbar-color: transparent transparent;
@@ -5990,18 +5920,34 @@ styleElement.textContent = `
     scrollbar-color: var(--project-board-scrollbar) transparent;
   }
 
-  .project-board-lanes::-webkit-scrollbar,
-  .project-board-lane-scroll::-webkit-scrollbar,
-  .project-ticket-dialog-body::-webkit-scrollbar,
-  .project-ticket-comment-list [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
-    height: 0;
-    width: 0;
-  }
-
   .project-ticket-dialog-body::-webkit-scrollbar,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
     height: 2px;
     width: 2px;
+  }
+
+  /*
+   * CDXC:BoardScrollbars 2026-08-07:
+   * The board strip and every lane body keep the browser's own scrollbar so the
+   * bar stays clickable and draggable instead of wheel-only. Chromium paints
+   * ::-webkit-scrollbar geometry only while the scroller keeps scrollbar-width
+   * at auto and leaves scrollbar-color unset; either one hands rendering to the
+   * standard scrollbar and collapses the gutter to 0px, which is why these two
+   * scrollers stay out of the hidden-scrollbar rules above. The 8px box is the
+   * mouse target and the thumb's transparent borders keep the painted rail at
+   * the board's 2px width.
+   */
+  .project-board-lanes,
+  .project-board-lane-scroll {
+    scrollbar-width: auto;
+  }
+
+  .project-board-lanes::-webkit-scrollbar,
+  .project-board-lane-scroll::-webkit-scrollbar {
+    background: transparent;
+    display: block;
+    height: 8px;
+    width: 8px;
   }
 
   .project-board-lanes::-webkit-scrollbar-track,
@@ -6023,6 +5969,25 @@ styleElement.textContent = `
   .project-ticket-comment-list:hover [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb,
   .project-ticket-comment-list:focus-within [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb {
     background: var(--project-board-scrollbar);
+  }
+
+  .project-board-lanes::-webkit-scrollbar-thumb {
+    background-clip: content-box;
+    border-bottom: 3px solid transparent;
+    border-top: 3px solid transparent;
+  }
+
+  .project-board-lane-scroll::-webkit-scrollbar-thumb {
+    background-clip: content-box;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+  }
+
+  .project-board-lanes:hover::-webkit-scrollbar-thumb,
+  .project-board-lanes:focus-within::-webkit-scrollbar-thumb,
+  .project-board-lane:hover .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-board-lane:focus-within .project-board-lane-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--project-board-scrollbar);
   }
 
   .project-ticket-comment-list [data-slot="scroll-area-scrollbar"] {
@@ -6941,6 +6906,11 @@ styleElement.textContent = `
      * sidebar scroll surface. The board strip owns the horizontal fade while
      * each lane body owns its vertical fade, leaving lane headers and custom
      * scrollbars unmasked.
+     *
+     * CDXC:BoardScrollbars 2026-08-07:
+     * The lane bar is the scroller's own scrollbar now, so it lives inside the
+     * mask and fades at the very ends of its travel like the ticket dialog's
+     * scrollbar already does.
      */
     --edge-fade-distance: 18px;
     gap: 0;
@@ -7059,28 +7029,6 @@ styleElement.textContent = `
     overflow-x: hidden;
     overflow-y: auto;
     padding-right: 0;
-  }
-
-  .project-board-lane-scrollbar {
-    bottom: 0;
-    opacity: 0;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    top: 44px;
-    transition: opacity 120ms ease;
-    width: 2px;
-    z-index: 4;
-  }
-
-  .project-board-lane:hover .project-board-lane-scrollbar[data-visible="true"],
-  .project-board-lane:focus-within .project-board-lane-scrollbar[data-visible="true"] {
-    opacity: 1;
-  }
-
-  .project-board-lane-scrollbar-thumb {
-    background: var(--project-board-scrollbar);
-    width: 2px;
   }
 
   .project-board-card-stack {

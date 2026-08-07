@@ -60,6 +60,27 @@ describe("Project Board form event handling", () => {
     expect(laneLayoutSource).toContain("border-left-width: 0;");
   });
 
+  test("keeps the Kanban board scrollbars grabbable with the mouse", () => {
+    /*
+     * CDXC:BoardScrollbars 2026-08-07:
+     * The board strip and the lane bodies must keep a real scrollbar box, or the
+     * board is wheel-only: Chromium measured a 0px scroll gutter (nothing to
+     * click or drag) whenever the scroller carried scrollbar-width: none, a
+     * scrollbar-color, or a zero-sized ::-webkit-scrollbar. A decorative
+     * pointer-events: none overlay is not a scrollbar and must not come back.
+     */
+    const boardScrollbarSource = sourceBetween(
+      ".project-board-lanes,\n  .project-board-lane-scroll {",
+      ".project-board-toolbar {",
+    );
+
+    expect(boardScrollbarSource).toContain("scrollbar-width: auto;");
+    expect(boardScrollbarSource).not.toContain("scrollbar-color");
+    expect(boardScrollbarSource).toContain("height: 8px;");
+    expect(boardScrollbarSource).toContain("width: 8px;");
+    expect(tasksPlaceholderSource).not.toContain("project-board-lane-scrollbar");
+  });
+
   test("shows the first-open Kanban loading overlay until initial load finishes", () => {
     /*
      * CDXC:ProjectBoardLoading 2026-06-20-18:21:
