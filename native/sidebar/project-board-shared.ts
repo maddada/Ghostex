@@ -712,6 +712,31 @@ function normalizeCommentMetadataValue(value: string | undefined): string | unde
   return normalized || undefined;
 }
 
+/*
+ * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+ * A bead's assignee names who should do the work, so opening a ticket must
+ * preselect the configured agent that assignee refers to instead of always
+ * showing the board default agent.
+ * Compare the assignee case-insensitively against each configured agent's label
+ * and agent id so both a custom agent named "Dobby" and a built-in agent id like
+ * "claude" resolve, and return nothing when no agent matches so unassigned and
+ * human-assigned beads keep the existing default.
+ */
+export function resolveAssignedAgentId(
+  assignee: string | undefined,
+  agents: readonly { agentId: string; label: string }[],
+): string | undefined {
+  const normalizedAssignee = assignee?.trim().toLowerCase();
+  if (!normalizedAssignee) {
+    return undefined;
+  }
+  return agents.find(
+    (agent) =>
+      agent.label.trim().toLowerCase() === normalizedAssignee ||
+      agent.agentId.trim().toLowerCase() === normalizedAssignee,
+  )?.agentId;
+}
+
 export function getBlockedByIds(issue: BeadsIssue): string[] {
   return (issue.dependencies ?? []).map((dependency) => dependency.depends_on_id).filter(Boolean);
 }

@@ -15,6 +15,7 @@ import {
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
   removeDescriptionImageReference,
+  resolveAssignedAgentId,
   type BoardTicket,
 } from "./project-board-shared";
 
@@ -288,6 +289,46 @@ describe("project board issue prefix", () => {
       { action: "configGetIssuePrefix", value: undefined },
       { action: "renamePrefix", value: "email-cl-" },
     ]);
+  });
+});
+
+describe("project board assigned agent resolution", () => {
+  /*
+   * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+   * Start work should open with the agent the bead is assigned to, matched by the
+   * configured agent label or agent id, and fall back to the board default when
+   * the assignee is empty or names someone who is not a configured agent.
+   */
+  const agents = [
+    { agentId: "claude", label: "Claude Code" },
+    { agentId: "custom-mf1k2j-9ab3de", label: "Dobby" },
+  ];
+
+  test("matches a custom agent by its configured name", () => {
+    expect(resolveAssignedAgentId("dobby", agents)).toBe("custom-mf1k2j-9ab3de");
+  });
+
+  test("matches a built-in agent by its agent id", () => {
+    expect(resolveAssignedAgentId("CLAUDE", agents)).toBe("claude");
+  });
+
+  test("ignores surrounding whitespace on the assignee", () => {
+    expect(resolveAssignedAgentId("  Dobby  ", agents)).toBe("custom-mf1k2j-9ab3de");
+  });
+
+  test("keeps the existing default for empty or unknown assignees", () => {
+    expect(resolveAssignedAgentId(undefined, agents)).toBeUndefined();
+    expect(resolveAssignedAgentId("   ", agents)).toBeUndefined();
+    expect(resolveAssignedAgentId("madda", agents)).toBeUndefined();
+  });
+
+  test("returns the first configured agent that matches", () => {
+    expect(
+      resolveAssignedAgentId("codex", [
+        { agentId: "codex", label: "Codex" },
+        { agentId: "custom-mf1k2j-77c1aa", label: "codex" },
+      ]),
+    ).toBe("codex");
   });
 });
 

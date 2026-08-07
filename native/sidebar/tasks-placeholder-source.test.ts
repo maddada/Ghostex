@@ -263,6 +263,31 @@ describe("Project Board form event handling", () => {
     expect(saveSource).not.toContain('await loadTickets({ mode: "mutation" })');
   });
 
+  test("starts ticket work with the agent the bead is assigned to", () => {
+    /*
+     * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+     * Opening a ticket assigned to a configured agent should show that agent in the
+     * Start work select and start that agent from the card context menu too, while
+     * an agent the user picked for that ticket this session stays selected.
+     */
+    const projectBoardSource = sourceBetween("function ProjectBoardApp()", "function TicketMetaFields(");
+    const startWorkSource = sourceBetween("const startTicketWork = async", "const selectTicketAgent =");
+
+    expect(projectBoardSource).toContain(
+      "const pickedAgentIdByBeadIdRef = useRef(new Map<string, string>());",
+    );
+    expect(projectBoardSource).toContain(
+      "pickedAgentIdByBeadIdRef.current.get(ticket.id) ??\n    resolveAssignedAgentId(ticket.assignee, conversationState.agents)",
+    );
+    expect(projectBoardSource).toContain("const nextAgentId = assignedAgentIdForTicket(ticket);");
+    expect(projectBoardSource).toContain("pickedAgentIdByBeadIdRef.current.set(detail.ticket.id, agentId);");
+    expect(projectBoardSource).toContain("onSelectedAgentChange={selectTicketAgent}");
+    expect(startWorkSource).toContain(
+      "assignedAgentIdForTicket(ticket) || selectedAgentId || conversationState.defaultAgentId",
+    );
+    expect(startWorkSource).toContain("agentId: startAgentId,");
+  });
+
   test("snapshots form values before functional state updaters", () => {
     /*
      * CDXC:ProjectBoardForms 2026-06-09-15:36:
