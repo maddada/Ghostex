@@ -51,7 +51,7 @@ import {
 } from "../shared/session-grid-contract";
 import type { SidebarProjectDiffStats } from "../shared/project-diff-stats";
 import type { SidebarAgentButton } from "../shared/sidebar-agents";
-import type { SidebarCommandButton } from "../shared/sidebar-commands";
+import type { SidebarCommandButton, SidebarCommandScope } from "../shared/sidebar-commands";
 import { DEFAULT_SIDEBAR_COMMAND_ICON } from "../shared/sidebar-command-icons";
 import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
 import {
@@ -716,9 +716,27 @@ export function SessionGroupSection({
     }
     return state.hud.commandsByProject?.[projectId];
   });
+  /*
+   * CDXC:GlobalActions 2026-08-07:
+   * Global Actions live in their own daemon-owned list, never in
+   * commandsByProject, so reading only the per-project block made the row
+   * toggle dead for them. Merge the two lists here and keep each button's
+   * scope beside it: the scopes are separate id spaces, so the click needs to
+   * say which list its id came from, and React needs a key that cannot
+   * collide when both lists happen to hold the same id.
+   *
+   * Globals render first, matching Settings > Actions, which also lists Global
+   * Actions above the project's own. That order also keeps a global button at
+   * the same spot on every row, since only the project part varies per row.
+   */
+  const globalCommands = useSidebarStore((state) => state.hud.globalCommands);
   const projectRowCommands = useMemo(
-    () => (projectCommands ?? []).filter((command) => command.showOnProjectRow),
-    [projectCommands],
+    () =>
+      [
+        ...(globalCommands ?? []).map((command) => ({ command, scope: "global" }) as const),
+        ...(projectCommands ?? []).map((command) => ({ command, scope: "project" }) as const),
+      ].filter((entry) => entry.command.showOnProjectRow),
+    [globalCommands, projectCommands],
   );
   const orderedSessionIds = orderedSessionIdsProp ?? storedSessionIds;
   const [contextMenuPosition, setContextMenuPosition] = useState<GroupContextMenuPosition>();
@@ -1569,7 +1587,10 @@ export function SessionGroupSection({
     });
   };
 
-  const requestRunProjectRowCommand = (command: SidebarCommandButton) => {
+  const requestRunProjectRowCommand = (
+    command: SidebarCommandButton,
+    scope: SidebarCommandScope,
+  ) => {
     if (!projectContext) {
       return;
     }
@@ -1578,10 +1599,16 @@ export function SessionGroupSection({
      * Row Action clicks stay selector-shaped like the Command Palette: command
      * id plus the row's group id. The host resolves launch metadata from its
      * trusted per-project HUD state and activates the project before running.
+     *
+     * CDXC:GlobalActions 2026-08-07:
+     * The scope names the list to resolve the id against; the group id keeps
+     * meaning the project to run in, so a Global Action clicked on a row runs
+     * in that row's project exactly like a project one.
      */
     vscode.postMessage({
       commandId: command.commandId,
       groupId: group.groupId,
+      scope,
       type: "runSidebarCommand",
     });
   };
@@ -2353,17 +2380,17 @@ export function SessionGroupSection({
                           />
                         </ProjectHeaderActionButton>
                         {projectHeaderActions === "all"
-                          ? projectRowCommands.map((command) => {
+                          ? projectRowCommands.map(({ command, scope }) => {
                               const commandLabel = command.name.trim() || "Run Action";
                               return (
                                 <ProjectHeaderActionButton
                                   aria-label={`Run ${commandLabel} in ${group.title}`}
                                   className="group-add-button group-project-row-command-button"
-                                  key={command.commandId}
+                                  key={`${scope}:${command.commandId}`}
                                   onClick={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
-                                    requestRunProjectRowCommand(command);
+                                    requestRunProjectRowCommand(command, scope);
                                   }}
                                   tooltip={commandLabel}
                                   type="button"

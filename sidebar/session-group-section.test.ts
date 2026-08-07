@@ -296,6 +296,64 @@ describe("shouldShowProjectEditorDiffStats", () => {
   });
 });
 
+describe("project row Actions", () => {
+  test("renders Global Actions flagged for the project row, not only project ones", () => {
+    /*
+     * CDXC:GlobalActions 2026-08-07:
+     * Global Actions live in their own HUD list, so a row that reads only
+     * commandsByProject leaves the "Show on the project's sidebar row" toggle
+     * dead for every global. Merge both lists, globals first like Settings.
+     */
+    const rowCommandsStart = sessionGroupSectionSource.indexOf(
+      "const projectRowCommands = useMemo(",
+    );
+    const rowCommandsSource = sessionGroupSectionSource.slice(
+      rowCommandsStart,
+      rowCommandsStart + 600,
+    );
+
+    expect(rowCommandsStart).toBeGreaterThan(-1);
+    expect(sessionGroupSectionSource).toContain(
+      "const globalCommands = useSidebarStore((state) => state.hud.globalCommands);",
+    );
+    expect(rowCommandsSource).toContain(
+      '...(globalCommands ?? []).map((command) => ({ command, scope: "global" }) as const)',
+    );
+    expect(rowCommandsSource).toContain(
+      '...(projectCommands ?? []).map((command) => ({ command, scope: "project" }) as const)',
+    );
+    expect(rowCommandsSource).toContain(".filter((entry) => entry.command.showOnProjectRow)");
+    expect(rowCommandsSource.indexOf("globalCommands ?? []")).toBeLessThan(
+      rowCommandsSource.indexOf("projectCommands ?? []"),
+    );
+  });
+
+  test("keys and runs row Actions by scope so the two id spaces cannot collide", () => {
+    /*
+     * CDXC:GlobalActions 2026-08-07:
+     * Global and project Action ids are separate spaces, so the click must name
+     * the list to resolve against and the React key must stay unique when both
+     * lists hold the same id. The group id keeps naming the project to run in.
+     */
+    const runStart = sessionGroupSectionSource.indexOf(
+      "const requestRunProjectRowCommand = (",
+    );
+    const runSource = sessionGroupSectionSource.slice(runStart, runStart + 900);
+    const buttonStart = sessionGroupSectionSource.indexOf(
+      "projectRowCommands.map(({ command, scope }) => {",
+    );
+    const buttonSource = sessionGroupSectionSource.slice(buttonStart, buttonStart + 900);
+
+    expect(runStart).toBeGreaterThan(-1);
+    expect(buttonStart).toBeGreaterThan(-1);
+    expect(runSource).toContain("scope: SidebarCommandScope,");
+    expect(runSource).toContain("groupId: group.groupId,");
+    expect(runSource).toContain("scope,");
+    expect(buttonSource).toContain("key={`${scope}:${command.commandId}`}");
+    expect(buttonSource).toContain("requestRunProjectRowCommand(command, scope);");
+  });
+});
+
 describe("project diff stats refresh triggers", () => {
   test("does not refresh project git stats from header hover", () => {
     /*

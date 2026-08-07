@@ -9,6 +9,7 @@ import type {
   SidebarCommandButton,
   SidebarCommandLink,
   SidebarCommandRunMode,
+  SidebarCommandScope,
 } from "./sidebar-commands";
 import type {
   SidebarGitAction,
@@ -2567,11 +2568,20 @@ export type SidebarToExtensionMessage =
       project, activates that project through the existing focus flow, and only
       then dispatches the trusted launch — the message never gains launch
       metadata or project paths.
+
+      CDXC:GlobalActions 2026-08-07:
+      Project rows also render Global Actions flagged showOnProjectRow, so the
+      selector must say which list its id belongs to: the two scopes are
+      separate id spaces and an id alone cannot pick one. Scope stays optional
+      and absent means project, so senders that only ever run Project Actions
+      are unchanged. A global selector may still carry the row's group id —
+      that names the project the Action runs in, not the list it came from.
       */
       type: "runSidebarCommand";
       commandId: string;
       groupId?: string;
       runMode?: SidebarCommandRunMode;
+      scope?: SidebarCommandScope;
     }
   | {
       type: "endSidebarCommandRun";
@@ -2710,6 +2720,14 @@ export type SidebarToExtensionMessage =
       links?: SidebarCommandLink[];
       name: string;
       playCompletionSound: boolean;
+      /*
+       * CDXC:GlobalActions 2026-08-07:
+       * Settings offers the project-row toggle on Global Actions too, and
+       * gxserver stores it for both lists. The field was missing here, so the
+       * host had nothing to forward and every global save wrote the flag back
+       * as false — the toggle looked saved and did nothing.
+       */
+      showOnProjectRow: boolean;
       command?: string;
       url?: string;
     }

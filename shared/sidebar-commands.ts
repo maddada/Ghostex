@@ -47,6 +47,14 @@ export function getSidebarCommandPreviewLabel(command: SidebarCommandButton): st
 
 export type DefaultSidebarCommandId = (typeof DEFAULT_SIDEBAR_COMMANDS)[number]["commandId"];
 export type SidebarActionType = "browser" | "terminal";
+/**
+ * CDXC:GlobalActions 2026-08-07:
+ * Which Actions list a run-by-id selector names. Global and project Actions are
+ * separate id spaces, so a selector carrying only an id is ambiguous once a
+ * surface can run either. Absent means project, which keeps every sender that
+ * predates Global Actions unchanged.
+ */
+export type SidebarCommandScope = "global" | "project";
 export type SidebarCommandRunMode = "default" | "debug";
 export type SidebarCommandLinkTarget = "integrated" | "external";
 
@@ -128,6 +136,10 @@ export function normalizeSidebarCommandLinks(candidate: unknown): SidebarCommand
 
 export function isSidebarCommandRunMode(value: unknown): value is SidebarCommandRunMode {
   return value === "default" || value === "debug";
+}
+
+export function isSidebarCommandScope(value: unknown): value is SidebarCommandScope {
+  return value === "global" || value === "project";
 }
 
 export function getFirstBrowserSidebarCommandUrl(

@@ -116,8 +116,10 @@ import {
   DEFAULT_BROWSER_LAUNCH_URL,
   isSidebarCommandRunMode,
   isSidebarCommandConfigured,
+  isSidebarCommandScope,
   normalizeSidebarCommandLinks,
   type SidebarCommandButton,
+  type SidebarCommandScope,
 } from "../../shared/sidebar-commands";
 import { getCompletionSoundLabel } from "../../shared/completion-sound";
 import type { CompletionSoundSetting } from "../../shared/completion-sound";
@@ -585,6 +587,7 @@ const GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS = new Set([
   "commandId",
   "groupId",
   "runMode",
+  "scope",
   "type",
 ]);
 const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION = 1;
@@ -650,8 +653,6 @@ const GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE =
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.sessionCompletionSound";
-/** Which Actions list a run-by-id selector names. Absent means project. */
-type SidebarCommandScope = "global" | "project";
 const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE = "ghostex.gpui.sidebar.globalActions";
 /*
@@ -5742,7 +5743,20 @@ class GpuiSidebarRuntime {
           this.handleUnsupportedSidebarMessage(message);
           return;
         }
-        this.runSidebarCommand(commandId, message);
+        /*
+        CDXC:GlobalActions 2026-08-07:
+        Project rows can run either list, so the renderer names the scope.
+        Validate the value like runMode rather than trusting the annotation: an
+        unrecognized scope is an unsupported no-op, never a silent fallback to
+        the project list, which would run an Action the user did not click. An
+        absent scope stays project, which is what every sender that predates
+        Global Actions sends.
+        */
+        if (message.scope !== undefined && !isSidebarCommandScope(message.scope)) {
+          this.handleUnsupportedSidebarMessage(message);
+          return;
+        }
+        this.runSidebarCommand(commandId, message, message.scope ?? "project");
         return;
       }
       case "runGhostexHotkeyAction": {
@@ -13541,6 +13555,13 @@ class GpuiSidebarRuntime {
       name,
       playCompletionSound: message.actionType === "terminal" ? message.playCompletionSound : false,
       operation: "save",
+      /*
+      CDXC:GlobalActions 2026-08-07:
+      gxserver stores showOnProjectRow for both lists, so a global save that
+      omits it writes the flag back as false and the Settings toggle never
+      sticks. Forward it exactly like the project save above.
+      */
+      showOnProjectRow: message.showOnProjectRow,
       target: "globalCommand",
       url,
     });
@@ -14552,12 +14573,20 @@ class GpuiSidebarRuntime {
     /*
      * CDXC:GlobalActions 2026-08-01:
      * A global-scoped selector names an action that belongs to no project, so
-     * it resolves against the global list and never carries a row's group id.
-     * Project selectors keep the per-project resolution above: the two scopes
-     * pick different lists rather than falling through to each other.
+     * it resolves against the global list. Project selectors keep the
+     * per-project resolution above: the two scopes pick different lists rather
+     * than falling through to each other.
+     *
+     * CDXC:GlobalActions 2026-08-07:
+     * Scope and group id answer different questions, so a global selector may
+     * carry one: the scope picks the list, the group id picks the project to
+     * activate before dispatching. That is what makes a Global Action on a
+     * project row run in the row the user clicked instead of whichever project
+     * happened to be active. The tab strip still sends no group id — its
+     * normalizer rejects the key — so it keeps running in the active project.
      */
     const groupId =
-      scope === "global" || originalMessage.type !== "runSidebarCommand"
+      originalMessage.type !== "runSidebarCommand"
         ? undefined
         : normalizeNonEmptyString(originalMessage.groupId ?? "");
     const targetProjectId = groupId
