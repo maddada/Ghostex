@@ -458,6 +458,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/runProjectSetupCommand"
         | "/api/runBeadsAction"
         | "/api/runProjectDocsAction"
+        | "/api/startBoardWork"
         | "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"
         | "/api/readRepositoryCloneJob"

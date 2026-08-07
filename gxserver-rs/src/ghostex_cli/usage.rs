@@ -122,6 +122,10 @@ pub fn usage() -> String {
             "create-agent <agentId> --project-id id [--group-id id]",
             "Create and start a configured agent session",
         ),
+        format_help_command(
+            "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
+            "Dispatch a Project Board bead: reuse its usable linked session or create the worker",
+        ),
         format_help_command("run-agent <agentId>", "Run a configured agent button"),
         format_help_command(
             "run-command <commandId>",
@@ -487,6 +491,36 @@ Behavior:
 Inspect:
   ghostex state
   ghostex state | jq '.projects[] | {{projectId, name, path, customCommands, customCommandOrder}}'
+"
+    )
+}
+
+pub fn board_usage() -> String {
+    let commands = [format_help_command(
+        "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
+        "Dispatch a Project Board bead through gxserver",
+    )]
+    .join("\n");
+
+    format!(
+        "Ghostex Project Board - dispatch bead work through gxserver
+
+Usage:
+  ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
+  gx board start-work <bead-id>
+
+Commands:
+{commands}
+
+Behavior:
+  start-work IS the dispatch: it creates and starts the visible worker session with the bead's
+  canonical work prompt and links the conversation to the card. Do not also launch a worker yourself.
+  Repeated calls are safe: an existing usable linked conversation (live, sleeping, or restorable)
+  is returned as {{ \"sessionId\": ..., \"created\": false }} instead of creating a second worker.
+  Without --agent, the bead assignee is matched case-insensitively against configured agents,
+  falling back to the default prompt agent.
+  Without --project-id, the bead is located across the registered project boards; pass --project-id
+  when the same bead id exists on more than one board.
 "
     )
 }

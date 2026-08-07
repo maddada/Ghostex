@@ -4,6 +4,7 @@ pub mod agent_transcripts;
 pub mod agents;
 pub mod auth;
 pub mod automations;
+pub mod board_start_work;
 pub mod cli;
 pub mod config;
 pub mod constants;

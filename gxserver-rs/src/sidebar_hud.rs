@@ -863,7 +863,7 @@ pub fn read_sidebar_hud_global_commands(stored_definitions: &[Value]) -> Value {
     )
 }
 
-fn sidebar_agent_buttons_from_projects(projects: &[Value]) -> Value {
+pub(crate) fn sidebar_agent_buttons_from_projects(projects: &[Value]) -> Value {
     let (stored_agents, stored_order) = sidebar_agent_state_from_projects(projects);
     sidebar_agent_buttons_from_state(&stored_agents, &stored_order)
 }

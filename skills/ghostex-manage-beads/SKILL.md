@@ -55,6 +55,34 @@ Keep comments focused on user-facing requirements delivered and high-level
 technical approach. Do not require humans to read the agent transcript to know
 what changed.
 
+## Dispatch A Bead To A Worker Session (Orchestrators)
+
+This section is for orchestrators and dispatchers deciding who works a bead,
+not for an agent that is already doing the bead's work.
+
+To dispatch a bead through Ghostex, run:
+
+```bash
+ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
+```
+
+- **The command is the dispatch.** It creates and starts the visible worker
+  session in the bead's board project, sends the canonical bead work prompt,
+  and links the conversation to the card. Call it *instead of* launching a
+  worker session yourself — it is not a preparation step before separately
+  starting another worker. Calling it and then starting your own worker puts
+  two workers on the same card.
+- **Already working the bead? Do not call it.** An agent that is itself doing
+  the bead's work must not run the command; that would create an additional
+  worker for work that is already underway.
+- **Repeated calls are safe.** If the bead already has a usable linked
+  conversation — live, sleeping, or restorable — the command returns it with
+  `{ "sessionId": ..., "created": false }` instead of creating another
+  worker, so automation can call it idempotently.
+- Without `--agent`, the bead's assignee is matched case-insensitively against
+  the configured agents' ids and names; an assignee that matches no configured
+  agent falls back to the default prompt agent.
+
 ## Create A Review Bead
 
 Use a review bead when the implementation is ready for another pass:
