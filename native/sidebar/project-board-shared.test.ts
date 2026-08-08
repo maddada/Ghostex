@@ -322,6 +322,28 @@ describe("project board assigned agent resolution", () => {
     expect(resolveAssignedAgentId("madda", agents)).toBeUndefined();
   });
 
+  test("matches a tool-suffixed assignee against the bare agent id", () => {
+    expect(resolveAssignedAgentId("claude-code", agents)).toBe("claude");
+    expect(resolveAssignedAgentId("Gemini-CLI", [{ agentId: "gemini", label: "Gemini" }])).toBe(
+      "gemini",
+    );
+  });
+
+  test("prefers an exactly named agent over the tool-suffix fallback", () => {
+    expect(
+      resolveAssignedAgentId("claude-code", [
+        { agentId: "claude", label: "Claude Code" },
+        { agentId: "custom-tsr7hq-4c1f80", label: "claude-code" },
+      ]),
+    ).toBe("custom-tsr7hq-4c1f80");
+  });
+
+  test("does not invent a match when the stripped name is not configured", () => {
+    expect(resolveAssignedAgentId("harry-cli", agents)).toBeUndefined();
+    expect(resolveAssignedAgentId("-cli", agents)).toBeUndefined();
+    expect(resolveAssignedAgentId("-code", agents)).toBeUndefined();
+  });
+
   test("returns the first configured agent that matches", () => {
     expect(
       resolveAssignedAgentId("codex", [
