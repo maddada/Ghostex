@@ -63,7 +63,7 @@ not for an agent that is already doing the bead's work.
 To dispatch a bead through Ghostex, run:
 
 ```bash
-ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
+gx board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
 ```
 
 - **The command is the dispatch.** It creates and starts the visible worker
@@ -77,7 +77,7 @@ ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--js
   worker for work that is already underway.
 - **Repeated calls are safe.** If the bead already has a usable linked
   conversation — live, sleeping, or restorable — the command returns it with
-  `{ "sessionId": ..., "created": false }` instead of creating another
+  `{ "projectId": ..., "sessionId": ..., "created": false }` instead of creating another
   worker, so automation can call it idempotently.
 - Without `--agent`, the bead's assignee is matched case-insensitively against
   the configured agents' ids and names; an assignee that matches no configured

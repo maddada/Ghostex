@@ -12,8 +12,9 @@ so external orchestrators dispatch a Project Board card through the daemon
 instead of launching a worker session themselves. The daemon owns bead
 resolution, the idempotent reuse guard, the canonical work prompt, and the
 conversation link; the CLI only ships the parameters and prints the JSON
-result (`{ sessionId, created }`).
+result (`{ projectId, sessionId, created }`).
 */
+/// Dispatch a Ghostex Project Board CLI subcommand.
 pub fn board_command(args: &[String]) -> CliResult<()> {
     match args.first().map(String::as_str) {
         Some("start-work") => start_work_command(&args[1..]),
@@ -72,11 +73,9 @@ fn start_work_command(args: &[String]) -> CliResult<()> {
         &Value::Object(payload),
         &parsed.flags,
     )?;
-    if is_failed_cli_result(&result) {
-        print_json(&result);
-        crate::ghostex_cli::set_exit_code(1);
-        return Ok(());
-    }
     print_json(&result);
+    if is_failed_cli_result(&result) {
+        crate::ghostex_cli::set_exit_code(1);
+    }
     Ok(())
 }

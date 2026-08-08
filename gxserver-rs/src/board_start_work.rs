@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -24,15 +27,19 @@ serializes calls behind a process-wide gate so two concurrent requests for the
 same bead cannot both observe "no link" and create two workers.
 */
 
+/// Result of resolving and dispatching one Project Board bead.
 #[derive(Debug)]
 pub struct StartBoardWorkOutcome {
+    /// Whether this request created a new worker session.
     pub created: bool,
     /// `(projectId, sessionId)` of a newly created session so the caller can
     /// schedule the presentation delta and start the zmx provider.
     pub created_session: Option<(String, String)>,
+    /// RPC payload returned to the caller.
     pub result: Value,
 }
 
+/// Resolve a board bead and reuse or create its linked worker session.
 pub fn start_board_work(
     repository: &DomainRepository<'_>,
     db: &rusqlite::Connection,
@@ -51,13 +58,17 @@ pub fn start_board_work(
 
     // Redline 2: any usable linked conversation — live, sleeping, or
     // restorable — is an idempotent success, never a second worker.
-    if let Some(existing_session_id) =
+    if let Some((existing_project_id, existing_session_id)) =
         find_usable_linked_session(repository, db, server_id, &store_projects, &bead_id)?
     {
         return Ok(StartBoardWorkOutcome {
             created: false,
             created_session: None,
-            result: json!({ "created": false, "sessionId": existing_session_id }),
+            result: json!({
+                "created": false,
+                "projectId": existing_project_id,
+                "sessionId": existing_session_id,
+            }),
         });
     }
 
@@ -75,6 +86,11 @@ pub fn start_board_work(
         &agent_buttons,
         &default_agent_id,
     );
+    if agent_id.is_empty() {
+        return Err(DomainStateError::bad_request(
+            "No agent was resolved for this bead. Pass --agent or set a default prompt agent.",
+        ));
+    }
     let agent_button = agent_buttons.iter().find(|button| {
         button.get("agentId").and_then(Value::as_str) == Some(agent_id.as_str())
     });
@@ -123,7 +139,6 @@ pub fn start_board_work(
 
     write_bead_conversation_link(
         repository,
-        &store_projects,
         &board_project_id,
         &canonical_bead_id,
         &session,
@@ -135,8 +150,12 @@ pub fn start_board_work(
 
     Ok(StartBoardWorkOutcome {
         created: true,
-        created_session: Some((session_project_id, session_id.clone())),
-        result: json!({ "created": true, "sessionId": session_id }),
+        created_session: Some((session_project_id.clone(), session_id.clone())),
+        result: json!({
+            "created": true,
+            "projectId": session_project_id,
+            "sessionId": session_id,
+        }),
     })
 }
 
@@ -210,19 +229,75 @@ fn run_bd_show(
     cwd: &str,
     bead_id: &str,
 ) -> Result<Option<Value>, DomainStateError> {
-    let output = Command::new(bd_executable_path)
+    const BD_SHOW_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let mut command = Command::new(bd_executable_path);
+    command
         .args(["show", bead_id, "--json"])
         .current_dir(cwd)
-        .output()
-        .map_err(|error| DomainStateError {
-            code: "internalError",
-            message: format!("Could not run bd show: {error}"),
-        })?;
-    if !output.status.success() {
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = command.spawn().map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not run bd show: {error}"),
+    })?;
+    let mut stdout_reader = child.stdout.take().map(|mut stdout| {
+        thread::spawn(move || {
+            let mut output = Vec::new();
+            stdout.read_to_end(&mut output).map(|_| output)
+        })
+    });
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= BD_SHOW_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Some(reader) = stdout_reader.take() {
+                    let _ = reader.join();
+                }
+                return Err(DomainStateError {
+                    code: "internalError",
+                    message: format!(
+                        "bd show timed out after {} seconds.",
+                        BD_SHOW_TIMEOUT.as_secs()
+                    ),
+                });
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Some(reader) = stdout_reader.take() {
+                    let _ = reader.join();
+                }
+                return Err(DomainStateError {
+                    code: "internalError",
+                    message: format!("Could not wait for bd show: {error}"),
+                });
+            }
+        }
+    };
+    let output = match stdout_reader {
+        Some(reader) => reader
+            .join()
+            .map_err(|_| DomainStateError {
+                code: "internalError",
+                message: "bd show output reader panicked.".to_string(),
+            })?
+            .map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("Could not read bd show output: {error}"),
+            })?,
+        None => Vec::new(),
+    };
+    if !status.success() {
         // bd exits nonzero for an unknown issue id; that is "not on this board".
         return Ok(None);
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&output);
     let parsed: Value = match serde_json::from_str(stdout.trim()) {
         Ok(value) => value,
         Err(_) => return Ok(None),
@@ -248,6 +323,7 @@ honored only when it matches a configured board agent's id or name
 case-insensitively (a role-name assignee that matches nothing falls through);
 otherwise the saved default prompt agent runs the card.
 */
+/// Choose the explicit, assignee-matched, or configured default agent.
 pub(crate) fn resolve_start_work_agent(
     explicit_agent: Option<String>,
     assignee: Option<&str>,
@@ -293,6 +369,7 @@ the canonical bead work prompt. The endpoint owns this copy for the CLI path;
 stay line-identical so the Rust and TypeScript prompts cannot drift apart
 silently.
 */
+/// Render the canonical Project Board worker prompt.
 pub(crate) fn build_board_bead_work_prompt(
     bead_id: &str,
     display_id: &str,
@@ -499,13 +576,13 @@ fn find_usable_linked_session(
     server_id: &str,
     store_projects: &[Value],
     bead_id: &str,
-) -> Result<Option<String>, DomainStateError> {
+) -> Result<Option<(String, String)>, DomainStateError> {
     for reference in read_active_bead_links(store_projects, bead_id) {
         if repository
             .get_session(&reference.project_id, &reference.session_id)?
             .is_some()
         {
-            return Ok(Some(reference.session_id));
+            return Ok(Some((reference.project_id, reference.session_id)));
         }
         let mut previous_params = Map::new();
         previous_params.insert(
@@ -528,7 +605,7 @@ fn find_usable_linked_session(
                 })
             });
         if restorable {
-            return Ok(Some(reference.session_id));
+            return Ok(Some((reference.project_id, reference.session_id)));
         }
     }
     Ok(None)
@@ -537,7 +614,6 @@ fn find_usable_linked_session(
 #[allow(clippy::too_many_arguments)]
 fn write_bead_conversation_link(
     repository: &DomainRepository<'_>,
-    store_projects: &[Value],
     board_project_id: &str,
     bead_id: &str,
     session: &Value,
@@ -547,12 +623,9 @@ fn write_bead_conversation_link(
     agent_id: &str,
 ) -> Result<(), DomainStateError> {
     // Writes stay on the board's own row (shared-mount reads span the rows).
-    let link_project = store_projects
-        .iter()
-        .find(|project| {
-            project.get("projectId").and_then(Value::as_str) == Some(board_project_id)
-        })
-        .cloned()
+    // Re-read the row so a concurrent projectBoardConfig write is not lost.
+    let link_project = repository
+        .get_project(board_project_id)?
         .ok_or_else(|| DomainStateError::corrupt_state("Board project missing from store."))?;
     let ghostex_session_id = if session_project_id == board_project_id {
         session_id.to_string()
@@ -781,6 +854,30 @@ mod tests {
         params
     }
 
+    fn add_board_project(board: &TestBoard, name: &str) -> String {
+        let board_dir = board._temp.path().join(format!("{name}-board"));
+        fs::create_dir_all(board_dir.join(".beads")).expect("second board dir");
+        let repo_dir = board._temp.path().join(format!("{name}-repo"));
+        fs::create_dir_all(&repo_dir).expect("second repo dir");
+        let db = open_gxserver_database(&board.paths).expect("open db");
+        let repository = DomainRepository::new(&db, TEST_SERVER_ID);
+        repository
+            .create_project(
+                json!({
+                    "name": name,
+                    "path": repo_dir.to_string_lossy(),
+                    "projectBoardConfig": { "beadsDirectory": board_dir.to_string_lossy() },
+                })
+                .as_object()
+                .expect("project params"),
+            )
+            .expect("second project created")
+            .get("projectId")
+            .and_then(Value::as_str)
+            .expect("second projectId")
+            .to_string()
+    }
+
     fn read_board_links(board: &TestBoard) -> Vec<Value> {
         let db = open_gxserver_database(&board.paths).expect("open db");
         let repository = DomainRepository::new(&db, TEST_SERVER_ID);
@@ -810,6 +907,10 @@ mod tests {
             .expect("sessionId")
             .to_string();
         assert_eq!(outcome.result.get("created"), Some(&json!(true)));
+        assert_eq!(
+            outcome.result.get("projectId"),
+            Some(&json!(board.project_id))
+        );
 
         let db = open_gxserver_database(&board.paths).expect("open db");
         let repository = DomainRepository::new(&db, TEST_SERVER_ID);
@@ -856,7 +957,34 @@ mod tests {
             second.result.get("sessionId"),
             Some(&json!(first_session_id))
         );
+        assert_eq!(
+            second.result.get("projectId"),
+            Some(&json!(board.project_id))
+        );
         assert_eq!(read_board_links(&board).len(), 1);
+    }
+
+    #[test]
+    fn start_board_work_uses_explicit_project_when_bead_exists_on_multiple_boards() {
+        let board = create_test_board(None);
+        let second_project_id = add_board_project(&board, "Second");
+        let mut params = bead_params();
+        params.insert("projectId".to_string(), json!(second_project_id));
+
+        let outcome = run_start_board_work(&board, &params).expect("explicit board start");
+
+        assert_eq!(outcome.result.get("projectId"), Some(&json!(second_project_id)));
+    }
+
+    #[test]
+    fn start_board_work_rejects_ambiguous_unqualified_bead() {
+        let board = create_test_board(None);
+        add_board_project(&board, "Second");
+
+        let error = run_start_board_work(&board, &bead_params()).expect_err("ambiguous bead");
+
+        assert_eq!(error.code, "badRequest");
+        assert!(error.message.contains("exists on multiple project boards"));
     }
 
     #[test]

@@ -458,6 +458,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/runProjectSetupCommand"
         | "/api/runBeadsAction"
         | "/api/runProjectDocsAction"
+        /*
+        CDXC:BoardStartWorkRemote 2026-08-08:
+        Remote board dispatch is allowed because it creates and starts the
+        worker on the selected daemon. beadId, projectId, and agent are opaque
+        selectors only; none is interpreted as a path or command.
+        */
         | "/api/startBoardWork"
         | "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"

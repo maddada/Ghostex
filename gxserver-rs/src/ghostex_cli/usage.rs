@@ -495,6 +495,7 @@ Inspect:
     )
 }
 
+/// Render CLI help for Project Board worker dispatch.
 pub fn board_usage() -> String {
     let commands = [format_help_command(
         "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
@@ -516,7 +517,7 @@ Behavior:
   start-work IS the dispatch: it creates and starts the visible worker session with the bead's
   canonical work prompt and links the conversation to the card. Do not also launch a worker yourself.
   Repeated calls are safe: an existing usable linked conversation (live, sleeping, or restorable)
-  is returned as {{ \"sessionId\": ..., \"created\": false }} instead of creating a second worker.
+  is returned as {{ \"projectId\": ..., \"sessionId\": ..., \"created\": false }} instead of creating a second worker.
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent.
   Without --project-id, the bead is located across the registered project boards; pass --project-id
