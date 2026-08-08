@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rusqlite::{Transaction, TransactionBehavior};
 use serde_json::{json, Map, Value};
 
 use crate::agents::{
@@ -130,15 +131,27 @@ pub fn start_board_work(
         json!({ "firstUserMessage": prompt }),
     );
     let normalized = create_agent_session_params_for_project(db, &board_project, &create_params)?;
-    let created_session = repository.create_session(&normalized, false)?;
-    let session = apply_created_session_identity(repository, &created_session, &normalized)?;
+    // Session identity and its board link are one durable operation. If link
+    // persistence fails, rolling back the transaction prevents an unlinked
+    // worker from being left behind for the next retry to duplicate.
+    let transaction =
+        Transaction::new_unchecked(db, TransactionBehavior::Immediate).map_err(|error| {
+            DomainStateError {
+                code: "internalError",
+                message: format!("Could not start board-work transaction: {error}"),
+            }
+        })?;
+    let transaction_repository = DomainRepository::new(&transaction, server_id);
+    let created_session = transaction_repository.create_session(&normalized, false)?;
+    let session =
+        apply_created_session_identity(&transaction_repository, &created_session, &normalized)?;
     let session_project_id = read_trimmed_value(&session, "projectId")
         .ok_or_else(|| DomainStateError::corrupt_state("Session missing projectId."))?;
     let session_id = read_trimmed_value(&session, "sessionId")
         .ok_or_else(|| DomainStateError::corrupt_state("Session missing sessionId."))?;
 
     write_bead_conversation_link(
-        repository,
+        &transaction_repository,
         &board_project_id,
         &canonical_bead_id,
         &session,
@@ -147,6 +160,11 @@ pub fn start_board_work(
         agent_button,
         &agent_id,
     )?;
+    drop(transaction_repository);
+    transaction.commit().map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Could not commit board-work transaction: {error}"),
+    })?;
 
     Ok(StartBoardWorkOutcome {
         created: true,
@@ -936,6 +954,39 @@ mod tests {
         assert_eq!(link.get("ghostexSessionId"), Some(&json!(session_id)));
         assert_eq!(link.get("sessionProjectId"), Some(&json!(board.project_id)));
         assert_eq!(link.get("status"), Some(&json!("active")));
+    }
+
+    #[test]
+    fn start_board_work_rolls_back_session_when_link_persistence_fails() {
+        let board = create_test_board(None);
+        let db = open_gxserver_database(&board.paths).expect("open db");
+        db.execute_batch(
+            r#"
+            CREATE TEMP TRIGGER fail_board_link_update
+            BEFORE UPDATE OF projectBoardConfigJson ON projects
+            BEGIN
+              SELECT RAISE(ABORT, 'forced board-link persistence failure');
+            END;
+            "#,
+        )
+        .expect("install failure trigger");
+        let repository = DomainRepository::new(&db, TEST_SERVER_ID);
+
+        let error = start_board_work(
+            &repository,
+            &db,
+            TEST_SERVER_ID,
+            &bead_params(),
+            &board.bd_path,
+        )
+        .expect_err("link persistence must fail");
+
+        assert_eq!(error.code, "internalError");
+        assert!(repository
+            .list_sessions(Some(&board.project_id))
+            .expect("sessions")
+            .is_empty());
+        assert!(read_board_links(&board).is_empty());
     }
 
     #[test]
