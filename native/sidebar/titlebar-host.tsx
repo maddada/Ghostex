@@ -62,6 +62,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { cn } from "@/lib/utils";
 import { AppTooltip, TooltipProvider } from "../../sidebar/app-tooltip";
+import { openQuickAccess } from "../../sidebar/app-modal-host-bridge";
 import type { SidebarProjectDiffStats } from "../../shared/project-diff-stats";
 import { createDefaultSidebarProjectDiffStats } from "../../shared/project-diff-stats";
 import {
@@ -731,7 +732,7 @@ const TITLEBAR_TIPS: TitlebarTip[] = [
     body: "Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.",
     icon: "command",
     id: "command-palette-all-actions",
-    title: "Press Cmd Shift P anywhere to open the Command Palette",
+    title: "Press Cmd Shift P anywhere to open Ghostex Quick Access",
   },
   {
     body: "Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.",
@@ -3598,11 +3599,7 @@ function App() {
 
   const openTitlebarSettingsMenuCommands = () => {
     closeAppModalFromTitlebarNavigation("SettingsDismissal:titlebarCommandsMenu");
-    window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialQuery: ">",
-      modal: "commandPalette",
-      type: "open",
-    });
+    openQuickAccess("commands");
   };
 
   const openTitlebarSettingsMenuHotkeys = () => {

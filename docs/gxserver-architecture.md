@@ -124,7 +124,7 @@ gxserver status --json
 curl -fsS http://127.0.0.1:58744/api/health
 ```
 
-Remote/headless hosts still need system Node 22 LTS or newer. Project board features require bundled `bin/bd`; shell-installed `bd` is intentionally ignored so all Ghostex and agent workflows share the same pinned Beads binary.
+Remote/headless hosts still need system Node 22 LTS or newer. Project board features require bundled `bin/bd`; shell-installed `bd` is intentionally ignored so all Ghostex and agent workflows share the same checksum-pinned official Beads v1.1.2 binary. The official Linux artifact uses glibc 2.34 or newer so its CGO-enabled embedded Dolt backend works without an external server.
 
 When installing the tarball directly instead of using the Homebrew helper, run `npm ci --omit=dev --no-audit --no-fund` in the extracted package before invoking `bin/gxserver`. Homebrew performs that production dependency install with its declared `node@22` dependency.
 

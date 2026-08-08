@@ -2,10 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
-const groupPanelsCssSource = readFileSync(
-  new URL("./styles/group-panels.css", import.meta.url),
-  "utf8",
-);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -16,20 +12,12 @@ function sourceBetween(source: string, start: string, end: string): string {
 }
 
 describe("sidebar search source", () => {
-  test("keeps top Search as an inline nav-row input when active", () => {
+  test("opens Quick Access Search from a stable nav-row button", () => {
     /*
      * CDXC:SidebarSearch 2026-06-19-13:52:
-     * The top Search button should become an in-place text input using the
-     * Search label as the placeholder instead of swapping to the boxed shared
-     * session search field.
-     *
-     * CDXC:SidebarSearch 2026-06-19-13:59:
-     * The inline placeholder fades down after activation, while closing empty
-     * search restores the plain Search row without a re-entry animation.
-     *
-     * CDXC:SidebarSearch 2026-06-29-21:32:
-     * The top Search row is text-only in inactive and active states so its text
-     * aligns with rows below without a leading magnifying-glass icon.
+     * The top Search entry remains a stable nav-row button and opens the shared
+     * Quick Access search surface. Search input ownership belongs to that
+     * surface instead of being duplicated inside the sidebar row.
      */
     const searchItemSource = sourceBetween(
       sidebarAppSource,
@@ -37,17 +25,14 @@ describe("sidebar search source", () => {
       "function SidebarReferenceNavButton({",
     );
 
-    expect(searchItemSource).toContain("reference-sidebar-inline-search-row");
-    expect(searchItemSource).toContain("reference-sidebar-inline-search-input");
+    expect(searchItemSource).toContain('className="reference-sidebar-search-slot"');
+    expect(searchItemSource).toContain('className="reference-sidebar-nav-button"');
+    expect(searchItemSource).toContain("onClick={onSearch}");
     expect(searchItemSource).toContain('<span className="reference-sidebar-nav-label">Search</span>');
-    expect(searchItemSource).toContain('placeholder="Search"');
-    expect(searchItemSource).not.toContain("<IconSearch");
-    expect(searchItemSource).not.toContain("icon={IconSearch}");
+    expect(searchItemSource).toContain("<IconSearch");
+    expect(searchItemSource).toContain("reference-sidebar-search-icon");
+    expect(searchItemSource).toContain("reference-sidebar-nav-shortcut");
+    expect(searchItemSource).not.toContain("reference-sidebar-inline-search-input");
     expect(searchItemSource).not.toContain("<SidebarSessionSearchField");
-    expect(groupPanelsCssSource).toContain(".reference-sidebar-inline-search-input");
-    expect(groupPanelsCssSource).toContain("background: transparent;");
-    expect(groupPanelsCssSource).toContain("reference-sidebar-inline-search-placeholder-fade");
-    expect(groupPanelsCssSource).not.toContain("reference-sidebar-search-button-enter");
-    expect(groupPanelsCssSource).not.toContain(".reference-sidebar-search-field");
   });
 });

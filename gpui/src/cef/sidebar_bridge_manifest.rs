@@ -170,6 +170,19 @@ const PROJECT_WORKAREA_PROJECT_BOARD_IMAGE_REQUEST_JS_FUNCTION: &str =
     "postProjectBoardImageRequest";
 const PROJECT_WORKAREA_MANAGE_FILES_REQUEST_JS_FUNCTION: &str = "postManageFilesRequest";
 pub(crate) const PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS: usize = 3 * 1024 * 1024;
+/*
+CDXC:RemoteProjectDocs 2026-08-07:
+The Manage Docs synthetic resource origin and its JS field live in this shared
+manifest so the browser process (cef/shell.rs) and the helper renderer install
+the same `manageDocsResourceBaseUrl`. When the helper drifted and dropped the
+install-message argument, the field stayed unset and every relative image,
+stylesheet, and script in the Docs HTML viewer resolved against the bundled
+manage.html file URL instead of the docs folder.
+*/
+pub(crate) const PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL: &str =
+    "https://ghostex-docs.invalid/";
+pub(crate) const PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD: &str =
+    "manageDocsResourceBaseUrl";
 pub(crate) const APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.appModalHost.message";
 pub(crate) const APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS: usize = 1024 * 1024;

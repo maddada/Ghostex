@@ -225,8 +225,8 @@ for (const arch of ["x64", "arm64"]) {
       entry === "libcef.dll" ||
       entry.endsWith("/libcef.dll") ||
       entry.includes("t3code-server") ||
-      entry === `${velopackPayloadRoot}/resources/wsl/code-server-linux-${arch}.tar.gz` ||
-      entry === `${velopackPayloadRoot}/resources/wsl/code-server-linux-${arch}.tar.gz.sha256`,
+      (entry.startsWith(`${velopackPayloadRoot}/resources/wsl/code-server-`) &&
+        (entry.endsWith(`-linux-${arch}.tar.gz`) || entry.endsWith(`-linux-${arch}.tar.gz.sha256`))),
     );
     if (forbidden) throw new Error(`${path.basename(portable)} still embeds release-excluded payload ${forbidden}`);
     const componentManifestEntry = `${velopackPayloadRoot}/resources/on-demand-resources.json`;

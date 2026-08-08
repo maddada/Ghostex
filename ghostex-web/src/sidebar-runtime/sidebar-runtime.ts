@@ -29,9 +29,10 @@ import {
 } from "@/shared/sidebar-agents";
 import { T3CODE_ENABLED } from "@/shared/feature-flags";
 import {
-  DEFAULT_ghostex_SETTINGS,
   type RemoteMachineSettings,
+  type ghostexSettings,
 } from "@/shared/ghostex-settings";
+import { readWebSettings } from "../app/web-settings";
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
@@ -44,6 +45,11 @@ import {
   subscribeConnectionStates,
 } from "../connections/connection-registry";
 import type { MachineConnectionState } from "../connections/types";
+import {
+  getMachineCatalogState,
+  reorderRemoteMachines,
+} from "../machines/machine-catalog";
+import { orderMachineConnectionStates } from "../machines/machine-order";
 import {
   createSidebarGroupId,
   createSidebarProjectId,
@@ -94,6 +100,7 @@ export type WebSidebarRuntime = {
   messageSource: SidebarMessageSource;
   start(): void;
   stop(): void;
+  updateSettings(settings: ghostexSettings): void;
   vscode: {
     postMessage(message: SidebarToExtensionMessage): void;
   };
@@ -110,6 +117,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   let unsubscribeConnections: (() => void) | undefined;
   let hudRequestKey = "";
   let remoteHud: GxserverSidebarHudResponse | undefined;
+  let settings = readWebSettings();
   const projectMetadataByMachineId = new Map<string, MachineProjectMetadata>();
   const projectMetadataRequestSignatures = new Map<string, string>();
   const recentProjectsByMachineId = new Map<string, MachineRecentProjects>();
@@ -120,7 +128,10 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!running) {
       return;
     }
-    const states = getConnectionStates();
+    const states = orderMachineConnectionStates(
+      getConnectionStates(),
+      getMachineCatalogState().machines,
+    );
     if (
       pendingActiveSessionContext
       && presentationHasSession(states, pendingActiveSessionContext)
@@ -154,6 +165,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       remoteHud,
       states,
       recentProjectsByMachineId,
+      settings,
     );
     const message: ExtensionToSidebarMessage = {
       groups,
@@ -492,6 +504,20 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       case "syncSessionOrder":
         await syncSessionOrder(message.groupId, message.sessionIds);
         return;
+      case "updateSettingsPatch": {
+        if (
+          message.source === "sidebar:remoteMachineOrder"
+          && message.patch.remoteMachines
+        ) {
+          const changed = reorderRemoteMachines(
+            message.patch.remoteMachines.map((machine) => machine.id),
+          );
+          if (changed) {
+            publish();
+          }
+        }
+        return;
+      }
       case "runSidebarAgent":
         if (message.groupId === GXSERVER_PRESENTATION_CHATS_GROUP_ID) {
           await createQuickSession("agent", message.agentId);
@@ -747,6 +773,10 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       unsubscribeConnections = undefined;
       window.removeEventListener("ghostex-web:activeSessionContext", onActiveSessionContext);
     },
+    updateSettings(nextSettings) {
+      settings = nextSettings;
+      publish();
+    },
     vscode: { postMessage },
   };
 }
@@ -878,6 +908,7 @@ function createWebSidebarHud(
   remoteHud: GxserverSidebarHudResponse | undefined,
   states: readonly MachineConnectionState[],
   recentProjectsByMachineId: ReadonlyMap<string, MachineRecentProjects>,
+  settings: ghostexSettings,
 ): SidebarHudState {
   const hud = createSidebarHudState(createDefaultSessionGridSnapshot(), "plain-dark");
   const visibleSessions = groups.flatMap((group) => group.sessions.filter((session) => session.isVisible));
@@ -908,7 +939,7 @@ function createWebSidebarHud(
       (state) => recentProjectsByMachineId.get(state.machine.machineId)?.projects ?? [],
     ),
     settings: {
-      ...DEFAULT_ghostex_SETTINGS,
+      ...settings,
       remoteMachines: createRemoteMachineSettings(states),
     },
     visibleSlotLabels: visibleSessions.map((session) => session.shortcutLabel),

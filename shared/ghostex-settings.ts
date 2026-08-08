@@ -64,6 +64,21 @@ export type SessionPersistenceProvider = "off" | "tmux" | "zmx" | "zellij";
 export type SessionStatusIndicatorSize = "small" | "medium" | "large" | "x-large";
 export type SidebarSide = "left" | "right";
 export type SidebarProjectGroupStyle = "quiet" | "header" | "branched";
+export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
+export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
+export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
+export const DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
+
+export function clampSidebarCollapseAnimationDurationMs(value: number): number {
+  const clamped = Math.min(
+    MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
+    Math.max(MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, value),
+  );
+  return (
+    Math.round(clamped / SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS) *
+    SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS
+  );
+}
 /**
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 ("Inbox") is an opt-in presentation layer beside the classic
@@ -143,7 +158,7 @@ export type DiagnosticLoggingSettings = {
   scenarios: Partial<Record<DiagnosticLoggingScenarioId, DiagnosticLoggingScenarioState>>;
   version: 1;
 };
-export type DiagnosticLoggingScenarioGroup = "macOS" | "GPUI";
+export type DiagnosticLoggingScenarioGroup = "macOS" | "GPUI" | "gxserver";
 export type DiagnosticLoggingScenarioDefinition = {
   description: string;
   group: DiagnosticLoggingScenarioGroup;
@@ -328,45 +343,46 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     label: "GPUI app modals and Settings",
     logFiles: ["gpui-app-modal-debug.jsonl"],
   },
+  {
+    description: "gxserver process startup, shutdown, and daemon lifecycle breadcrumbs.",
+    group: "gxserver",
+    id: "gxserver.lifecycle",
+    label: "Daemon lifecycle",
+    logFiles: ["gxserver.jsonl"],
+  },
+  {
+    description: "gxserver API request timing and status breadcrumbs.",
+    group: "gxserver",
+    id: "gxserver.requests",
+    label: "API requests",
+    logFiles: ["gxserver.jsonl"],
+  },
+  {
+    description: "gxserver typed-operation routing and result breadcrumbs.",
+    group: "gxserver",
+    id: "gxserver.typedOperations",
+    label: "Typed operations",
+    logFiles: ["gxserver.jsonl"],
+  },
+  {
+    description: "gxserver repository clone lifecycle breadcrumbs.",
+    group: "gxserver",
+    id: "gxserver.repositoryClone",
+    label: "Repository cloning",
+    logFiles: ["gxserver.jsonl"],
+  },
+  {
+    description: "gxserver Portless state and background synchronization breadcrumbs.",
+    group: "gxserver",
+    id: "gxserver.portless",
+    label: "Portless",
+    logFiles: ["gxserver.jsonl"],
+  },
 ] as const satisfies readonly DiagnosticLoggingScenarioDefinition[];
 
-const DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS: DiagnosticLoggingSettings["scenarios"] = {
-  /*
-   * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
-   * Temporarily keep app-modal diagnostics enabled for the setup slow-open
-   * repro so existing local settings cannot silently gate off the timing logs
-   * needed in the resolved Ghostex app-modal debug log.
-   *
-   * CDXC:RemoteMachines 2026-06-30-03:05:
-   * Remote gxserver install crashes happen immediately after the approval
-   * click, before users can re-open Settings. Keep the precise remote-install
-   * diagnostic scenario enabled by default so the Settings toggle is already on
-   * for repro logs while the writer still records only sanitized phase data.
-   *
-   * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
-   * Sidebar blanking, titlebar click loss, and heavy app lag can happen before
-   * users can enable diagnostics. Default the targeted sidebar/titlebar chrome,
-   * sidebar refresh, mode-switcher, and native lifecycle scenarios on so a repro
-   * captures sanitized WebKit lifecycle, route handoff, gxserver renderer, and
-   * titlebar sampler timing breadcrumbs immediately after update.
-   */
-  /*
-   * CDXC:TerminalLinkInAppBrowser 2026-07-02-14:20:
-   * Terminal links opening in the wrong browser was reported right after the
-   * in-app routing shipped. Keep the terminal-link scenario on by default so
-   * the first repro after update already captures the sanitized routing
-   * breadcrumbs; users can turn it off in Settings diagnostics when done.
-   */
-  "native.app.modal": { enabled: true },
-  "native.chrome.responsiveness": { enabled: true },
-  "native.host.lifecycle": { enabled: true },
-  "native.menuBar.status": { enabled: true },
-  "native.mode.switcher": { enabled: true },
-  "native.remote.gxserver.install": { enabled: true },
-  "native.sidebar.refresh": { enabled: true },
-  "native.terminal.links": { enabled: true },
-  "native.terminal.resize": { enabled: true },
-};
+// Routine diagnostic disk logging is opt-in. Agents enable only the scenario
+// needed for a repro and restore it when collection is complete.
+const DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS: DiagnosticLoggingSettings["scenarios"] = {};
 const DIAGNOSTIC_LOGGING_SCENARIO_IDS = new Set<string>(
   DIAGNOSTIC_LOGGING_SCENARIOS.map((scenario) => scenario.id),
 );
@@ -885,6 +901,8 @@ export type ghostexSettings = {
    */
   diagnosticLogging: DiagnosticLoggingSettings;
   renameSessionOnDoubleClick: boolean;
+  /** Show project artwork or the folder/worktree fallback beside project names. */
+  showProjectIcons: boolean;
   hideSessionAgentIconUntilHover: boolean;
   /**
    * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
@@ -1036,6 +1054,8 @@ export type ghostexSettings = {
    */
   newSessionsDefaultEnvMode: SidebarNewSessionEnvMode;
   sidebarSide: SidebarSide;
+  /** Duration for sidebar section, group, and project disclosure animations. */
+  sidebarCollapseAnimationDurationMs: number;
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * The sidebar default width is the reset target for a double-click on the
@@ -1239,6 +1259,7 @@ export function canSettingsUpdateSourceChangeRemoteMachines(
 }
 
 export const SIDEBAR_SETTINGS_PRESET_KEYS = [
+  "showProjectIcons",
   "hideSessionAgentIconUntilHover",
   "hideBrowserFaviconUntilHover",
   "showCloseButtonOnSessionCards",
@@ -1281,6 +1302,7 @@ export type SidebarSettingsPresetSettings = Pick<ghostexSettings, SidebarSetting
  */
 export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
   codex: {
+    showProjectIcons: true,
     hideSessionAgentIconUntilHover: true,
     hideBrowserFaviconUntilHover: false,
     showCloseButtonOnSessionCards: true,
@@ -1290,6 +1312,7 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     hideMenuBarSessionStatusIndicators: true,
   },
   minimal: {
+    showProjectIcons: false,
     hideSessionAgentIconUntilHover: true,
     hideBrowserFaviconUntilHover: true,
     showCloseButtonOnSessionCards: true,
@@ -1299,6 +1322,7 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     hideMenuBarSessionStatusIndicators: true,
   },
   detailed: {
+    showProjectIcons: true,
     hideSessionAgentIconUntilHover: false,
     hideBrowserFaviconUntilHover: false,
     showCloseButtonOnSessionCards: true,
@@ -1308,6 +1332,7 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     hideMenuBarSessionStatusIndicators: false,
   },
   recommended: {
+    showProjectIcons: true,
     hideSessionAgentIconUntilHover: false,
     hideBrowserFaviconUntilHover: false,
     showCloseButtonOnSessionCards: true,
@@ -1504,6 +1529,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
     version: 1,
   },
   renameSessionOnDoubleClick: false,
+  showProjectIcons: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showProjectIcons,
   /**
    * CDXC:SidebarSessions 2026-05-16-08:46:
    * Agent identity remains configurable in Settings through an explicit
@@ -1747,6 +1773,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * should remain an explicit setting or user-assigned command.
    */
   sidebarSide: "left",
+  sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   /**
    * CDXC:SidebarChrome 2026-06-05-04:40:
    * First-run reset target remains 235px, but users can change this Settings
@@ -1755,7 +1782,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sidebarDefaultWidthPx: DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-  sidebarProjectGroupStyle: "quiet",
+  sidebarProjectGroupStyle: "branched",
   sidebarGroupsOpacityPercent: 0,
   sidebarProjectsOpacityPercent: 0,
   expandCollapsedProjectsOnJump: true,
@@ -2511,6 +2538,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       "renameSessionOnDoubleClick",
       DEFAULT_ghostex_SETTINGS.renameSessionOnDoubleClick,
     ),
+    showProjectIcons: readBoolean(
+      source,
+      "showProjectIcons",
+      DEFAULT_ghostex_SETTINGS.showProjectIcons,
+    ),
     /**
      * CDXC:SidebarSessions 2026-05-16-08:46:
      * Missing session-card icon visibility now follows the Codex preset, which
@@ -2836,6 +2868,13 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
      */
     sidebarSide: normalizeSidebarSide(
       readString(source, "sidebarSide", DEFAULT_ghostex_SETTINGS.sidebarSide),
+    ),
+    sidebarCollapseAnimationDurationMs: clampSidebarCollapseAnimationDurationMs(
+      readNumber(
+        source,
+        "sidebarCollapseAnimationDurationMs",
+        DEFAULT_ghostex_SETTINGS.sidebarCollapseAnimationDurationMs,
+      ),
     ),
     sidebarDefaultWidthPx: clampSidebarDefaultWidthPx(
       readNumber(
@@ -3446,15 +3485,18 @@ export function getSessionTitleGenerationCommandPreview(
       Settings must preview the same internal Codex title-generation command gxserver runs. Include `--ephemeral` so users see that generated titles do not create restorable Codex sessions.
       */
       return createSessionTitleGenerationHereDocPreview(
-        `${command} exec --ephemeral --skip-git-repo-check -m gpt-5.4-mini -c 'model_reasoning_effort="low"'`,
+        `${command} exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort="low"'`,
         prompt,
       );
     case "cursor":
-      return `${command} --print --yolo --trust --output-format text '${prompt}'`;
+      return `${command} --print --yolo --trust --model cursor-grok-4.5-low --output-format text '${prompt}'`;
     case "claude":
-      return createSessionTitleGenerationHereDocPreview(`${command} -p --model haiku`, prompt);
+      return createSessionTitleGenerationHereDocPreview(
+        `${command} -p --model haiku --effort low`,
+        prompt,
+      );
     case "grok":
-      return `${command} -p --model grok-composer-2.5-fast --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 '${prompt}'`;
+      return `${command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '${prompt}'`;
     case "custom":
       return createSessionTitleGenerationHereDocPreview(command, prompt);
   }

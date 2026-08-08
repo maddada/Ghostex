@@ -74,6 +74,21 @@ interface CommandPaneOpenRequest {
   sessionId?: string;
 }
 
+async function sendCommandSessionText(
+  session: SessionReference,
+  text: string,
+): Promise<void> {
+  await rpcForMachine(session.machineId, "/api/sendSessionText", {
+    projectId: session.projectId,
+    sessionId: session.sessionId,
+    text,
+  });
+  await rpcForMachine(session.machineId, "/api/sendSessionEnter", {
+    projectId: session.projectId,
+    sessionId: session.sessionId,
+  });
+}
+
 export function IntegratedAgentsPage() {
   const connections = useSyncExternalStore(
     subscribeConnectionStates,
@@ -359,6 +374,63 @@ export function IntegratedAgentsPage() {
     action?: GxserverSidebarHudCommandButton,
   ) => {
     const startupText = action?.command?.trim();
+    const reusableSession = action
+      ? commandSessions.find((session) =>
+          session.commandId === action.commandId
+          && session.activity === "idle"
+          && session.presentationState !== "mounting"
+          && session.presentationState !== "startup-failed"
+        )
+      : undefined;
+    if (reusableSession && startupText) {
+      const id = workspaceSessionId(reusableSession);
+      setHiddenCommandSessions((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      setCommandPaneOpenRequest({
+        requestId: ++commandPaneRequestId.current,
+        sessionId: id,
+      });
+
+      /*
+       * CDXC:WebCommandPaneActions 2026-08-08:
+       * An idle command session with the same commandId is the Action's pane.
+       * Running owners can receive the command through gxserver immediately;
+       * sleeping/restored owners first wake their existing provider without
+       * startup text, then use the same interaction API exactly once. No
+       * replacement session is created and no provider-start race can run the
+       * Action twice.
+       */
+      if (reusableSession.presentationState === "running") {
+        await sendCommandSessionText(reusableSession, startupText);
+        return;
+      }
+
+      setLocalCommandSessions((current) => new Map(current).set(
+        id,
+        { ...reusableSession, presentationState: "mounting", statusMessage: undefined },
+      ));
+      try {
+        const prepared = await prepareSessionAttach(reusableSession, "wake");
+        const runningSession = domainSessionToWorkspaceSession(
+          reusableSession.machineId,
+          prepared.attach.session,
+          "running",
+        );
+        setLocalCommandSessions((current) => new Map(current).set(id, runningSession));
+        await sendCommandSessionText(reusableSession, startupText);
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : String(nextError);
+        setLocalCommandSessions((current) => new Map(current).set(
+          id,
+          { ...reusableSession, presentationState: "startup-failed", statusMessage: message },
+        ));
+        throw nextError;
+      }
+      return;
+    }
     const params: Record<string, unknown> = {
       ...(project.path ? { cwd: project.path } : {}),
       ...(action ? { commandId: action.commandId } : {}),
@@ -414,7 +486,7 @@ export function IntegratedAgentsPage() {
       ));
       throw nextError;
     }
-  }, [rememberStartupText]);
+  }, [commandSessions, rememberStartupText]);
 
   useEffect(() => {
     const runAction = (event: WindowEventMap["ghostex-web:runTitlebarAction"]) => {

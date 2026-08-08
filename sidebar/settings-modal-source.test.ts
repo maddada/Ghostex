@@ -410,7 +410,7 @@ describe("settings modal source", () => {
     expect(debuggingSection).toContain('debuggingSettingVisible("showSessionCommandCopyActions")');
     expect(debuggingSection).toContain('debuggingSettingVisible("showSessionDetailsCopyAction")');
     expect(debuggingSection).toContain(
-      "Turn on to reveal debug-only UI controls and related diagnostic settings.",
+      "Turn on to reveal debug-only controls and allow routine diagnostic logging.",
     );
   });
 

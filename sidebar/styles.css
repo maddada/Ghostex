@@ -362,20 +362,153 @@ body {
  input, without inherited square button chrome around the icon.
 */
 .ghostex-command-palette-dialog {
-  height: min(620px, calc(100vh - 2rem));
-  max-height: min(620px, calc(100vh - 2rem));
+  height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
   max-width: min(654px, calc(100vw - 1rem));
   top: 50% !important;
   translate: -50% -50% !important;
   width: min(654px, calc(100vw - 1rem));
 }
 
+.quick-access-surface {
+  --quick-access-item-color: var(--foreground, var(--app-foreground));
+  --quick-access-item-font-size: 14px;
+  --quick-access-item-line-height: 20px;
+  --quick-access-group-heading-height: 32px;
+  --quick-access-list-padding-x: 3px;
+  --quick-access-list-padding-y: 4px;
+  --quick-access-row-height: 36px;
+  --quick-access-row-padding-x: 12px;
+  --quick-access-row-padding-y: 8px;
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  box-sizing: border-box;
+  color: var(--quick-access-item-color);
+  font-family: var(--font-sans, "Inter Variable", sans-serif);
+  font-size: var(--quick-access-item-font-size);
+  letter-spacing: 0;
+  line-height: var(--quick-access-item-line-height);
+}
+
+.quick-access-tabs {
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  border-bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+}
+
+.quick-access-tab {
+  appearance: none;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--app-muted, var(--muted-foreground)) 82%, var(--app-foreground, var(--foreground)) 18%);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: var(--quick-access-item-font-size);
+  font-weight: 400;
+  gap: 8px;
+  height: 38px;
+  justify-content: space-between;
+  letter-spacing: 0;
+  line-height: var(--quick-access-item-line-height);
+  min-width: 0;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.quick-access-tab + .quick-access-tab {
+  border-left: 1px solid color-mix(in srgb, var(--app-border, var(--border)) 88%, transparent);
+}
+
+.quick-access-tab:hover,
+.quick-access-tab:focus-visible {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 7%, transparent);
+  color: var(--app-foreground, var(--foreground));
+  outline: none;
+}
+
+.quick-access-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
+  color: var(--app-foreground, var(--foreground));
+}
+
+.quick-access-tab > span,
+.quick-access-tab kbd {
+  filter: saturate(0);
+}
+
+.quick-access-tab kbd {
+  color: inherit;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .ghostex-command-palette-dialog [data-slot="command"] {
   padding: 0 0 4px;
 }
 
-.ghostex-command-palette-dialog [data-slot="command-input-wrapper"] {
-  padding: 3px 3px 0;
+.quick-access-surface [data-slot="command-input-wrapper"] {
+  padding: 8px 3px 0;
+}
+
+.quick-access-surface [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+  background: color-mix(
+    in srgb,
+    var(--app-dropdown-background, var(--app-modal-background)) 76%,
+    #000000 24%
+  ) !important;
+}
+
+.quick-access-session-scope-toggle {
+  align-items: center;
+  align-self: stretch;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--app-muted-foreground, var(--muted-foreground));
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  gap: 6px;
+  height: 32px;
+  line-height: 1;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.quick-access-session-scope-toggle:hover,
+.quick-access-session-scope-toggle:focus-visible,
+.quick-access-session-scope-toggle[data-selected="true"] {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 10%, transparent);
+  color: var(--app-foreground, var(--foreground));
+  outline: none;
+}
+
+.quick-access-session-scope-toggle kbd {
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  opacity: 0.58;
+}
+
+.quick-access-surface [data-slot="command-input"],
+.quick-access-surface [data-slot="quick-access-search-input"],
+.quick-access-surface [data-slot="command-item"] {
+  color: var(--quick-access-item-color);
+  font-family: inherit;
+  font-size: var(--quick-access-item-font-size);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: var(--quick-access-item-line-height);
 }
 
 [data-slot="command-input-clear"] {
@@ -393,32 +526,92 @@ body {
 }
 
 .ghostex-command-palette-dialog [data-slot="command-group"] {
-  padding-left: 3px;
-  padding-right: 3px;
+  padding: var(--quick-access-list-padding-y) var(--quick-access-list-padding-x);
+}
+
+.ghostex-command-palette-dialog [cmdk-group-heading] {
+  box-sizing: border-box;
+  min-height: var(--quick-access-group-heading-height);
+  padding: var(--quick-access-row-padding-y) var(--quick-access-row-padding-x);
+}
+
+.ghostex-command-palette-dialog [data-slot="command-item"] {
+  box-sizing: border-box;
+  height: var(--quick-access-row-height);
+  min-height: var(--quick-access-row-height);
+  padding: var(--quick-access-row-padding-y) var(--quick-access-row-padding-x);
+  width: 100%;
+}
+
+/*
+ * Every Quick Access tab uses Command Pane's typography and color system.
+ * Previous Sessions keeps its richer session markup for restore/delete and
+ * metadata behavior, but its visible row is deliberately the same 14px,
+ * 36px-high command item when rendered in this modal.
+ */
+.quick-access-surface.previous-sessions-modal .group-sessions {
+  gap: 0;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-frame {
+  --reference-session-title-inset: 36px;
+  --reference-session-trailing-inset: 12px;
+  height: var(--quick-access-row-height);
+  min-height: var(--quick-access-row-height);
+  width: 100%;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card {
+  color: var(--quick-access-item-color);
+  height: var(--quick-access-row-height);
+  min-height: var(--quick-access-row-height);
+  padding-left: var(--reference-session-title-inset);
+  padding-right: var(--reference-session-trailing-inset);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card::after {
+  background: var(--muted, #202020);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card .session-head {
+  height: 20px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card .session-alias-heading {
+  color: var(--quick-access-item-color);
+  font-family: inherit;
+  font-size: var(--quick-access-item-font-size);
+  font-weight: 400 !important;
+  letter-spacing: 0;
+  line-height: var(--quick-access-item-line-height);
+}
+
+.quick-access-surface.previous-sessions-modal
+  .session-history-card:is([data-visible="true"], [data-focused="true"])
+  .session-alias-heading {
+  color: var(--quick-access-item-color);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-project-label,
+.quick-access-surface.previous-sessions-modal .session-history-card .session-last-interaction-time {
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 12px;
+  font-weight: 400 !important;
+  line-height: 20px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-frame .session-floating-agent-icon,
+.quick-access-surface.previous-sessions-modal
+  .session-history-frame
+  .session-floating-agent-tabler-icon {
+  left: 12px;
+  opacity: 0.5;
 }
 
 .ghostex-command-palette-list {
   flex: 1 1 auto;
   max-height: none;
   min-height: 0;
-}
-
-.ghostex-command-palette-loading {
-  align-items: center;
-  color: var(--muted-foreground);
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.ghostex-command-palette-loading-icon {
-  animation: ghostex-command-palette-loading-spin 1s linear infinite;
-}
-
-@keyframes ghostex-command-palette-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .ghostex-command-palette-copy {
@@ -444,171 +637,42 @@ body {
 }
 
 /*
- CDXC:CommandPalette 2026-06-13-22:18:
- Session-search mode reuses Previous Sessions row chrome inside shadcn Command
- items. Remove command-row padding and the invisible check slot so current and
- previous session cards align like the Previous Sessions modal while keeping
- cmdk keyboard selection on the outer item.
-
- CDXC:CommandPalette 2026-06-13-22:22:
- The command palette must show only one highlighted session row: the item
- selected by cmdk through mouse hover or Arrow-key navigation. Suppress the
- reused session card's own hover/focus/visible surface so it cannot paint a
- second highlighted row while data-selected belongs to another CommandItem.
+ CDXC:StashedPrompts 2026-08-08:
+ Saved Prompts is the fourth Ghostex Quick Access page. Its tabs, search,
+ group heading, 36px rows, typography, padding, and selected background all
+ come from the same Quick Access primitives as Command Pane.
 */
-.ghostex-command-palette-session-item[data-slot="command-item"] {
-  padding: 0;
+.ghostex-stashed-prompts-command {
+  position: relative;
 }
 
-.ghostex-command-palette-session-item[data-slot="command-item"] > svg:last-child {
-  display: none;
-}
-
-.ghostex-command-palette-session-frame {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.ghostex-command-palette-session-row {
-  border-color: transparent;
-  box-shadow: none;
-  outline-color: transparent;
-  width: 100%;
-}
-
-.ghostex-command-palette-session-item[data-slot="command-item"]
-  .ghostex-command-palette-session-row::before,
-.ghostex-command-palette-session-item[data-slot="command-item"]
-  .ghostex-command-palette-session-row::after {
-  opacity: 0;
-}
-
-/*
- CDXC:StashedPrompts 2026-07-29:
- The session Prompts modal reuses the command palette dialog chrome. Rows show
- the first three prompt lines with a metadata footer; the hover preview is the
- shared sidebar tooltip surface stretched to the row's width.
-*/
-.ghostex-stashed-prompts-scope {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-  padding: 6px 3px 2px;
-}
-
-.ghostex-stashed-prompts-scope-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.ghostex-stashed-prompts-scope-button {
-  appearance: none;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--muted-foreground);
-  cursor: default;
-  font-size: 0.75rem;
-  line-height: 1;
-  padding: 5px 9px;
-}
-
-.ghostex-stashed-prompts-scope-button:hover {
-  color: var(--foreground);
-}
-
-.ghostex-stashed-prompts-scope-button[data-active="true"] {
-  background: var(--muted);
-  border-color: var(--border);
-  color: var(--foreground);
-}
-
-.ghostex-stashed-prompts-add-button {
-  align-items: center;
-  appearance: none;
-  background: var(--muted);
-  border: 1px solid var(--border);
-  color: var(--foreground);
-  display: inline-flex;
-  font-size: 0.75rem;
-  gap: 0.3125rem;
-  line-height: 1;
-  margin-left: auto;
-  padding: 5px 9px;
-}
-
-.ghostex-stashed-prompts-add-button:hover {
-  background: color-mix(in srgb, var(--foreground) 13%, transparent);
+.ghostex-stashed-prompts-list {
+  padding-bottom: 40px;
 }
 
 .ghostex-stashed-prompts-empty {
   color: var(--muted-foreground);
   font-size: 0.8125rem;
-  padding: 24px 16px;
-  text-align: center;
+  padding: 8px 12px;
 }
 
-/* Each stash is its own bordered card; the command item is only the
-   selection/keyboard wrapper, so it contributes no padding or background. */
-.ghostex-stashed-prompt-item[data-slot="command-item"] {
-  align-items: stretch;
-  background: transparent !important;
-  padding: 3px;
-}
-
-.ghostex-stashed-prompt-item[data-slot="command-item"]:hover,
-.ghostex-stashed-prompt-item[data-slot="command-item"][data-selected="true"] {
-  background: transparent !important;
-}
-
-.ghostex-stashed-prompt-item[data-slot="command-item"] > svg:last-child {
+.ghostex-stashed-prompt-item > svg:last-child {
   display: none;
 }
 
-.ghostex-stashed-prompt-card {
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  display: grid;
+.ghostex-stashed-prompt-item .ghostex-command-palette-copy {
   flex: 1 1 auto;
-  gap: 0.375rem;
-  min-width: 0;
-  padding: 8px 10px;
-  position: relative;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
-}
-
-.ghostex-stashed-prompt-card:hover,
-.ghostex-stashed-prompt-item[data-selected="true"] .ghostex-stashed-prompt-card {
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
-  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
-}
-
-.ghostex-stashed-prompt-preview {
-  display: grid;
   min-width: 0;
 }
 
-.ghostex-stashed-prompt-line {
-  overflow: hidden;
-  /* Leave room for the hover actions so the first line never runs under them. */
-  padding-right: 52px;
-  text-overflow: ellipsis;
-  white-space: pre;
-}
-
-.ghostex-stashed-prompt-line:not(:first-child) {
-  padding-right: 0;
-}
-
-.ghostex-stashed-prompt-meta {
+.ghostex-stashed-prompt-row-meta {
   align-items: center;
   color: var(--muted-foreground);
   display: flex;
-  font-size: 0.6875rem;
-  gap: 0.5rem;
+  flex: 0 1 42%;
+  font-size: 12px;
+  gap: 6px;
+  margin-left: auto;
   min-width: 0;
 }
 
@@ -628,6 +692,11 @@ body {
   width: 13px;
 }
 
+.ghostex-stashed-prompt-project-icon > svg {
+  height: 13px !important;
+  width: 13px !important;
+}
+
 .ghostex-stashed-prompt-project-icon-image {
   border-radius: 3px;
   height: 13px;
@@ -644,45 +713,78 @@ body {
 
 .ghostex-stashed-prompt-time {
   flex: 0 0 auto;
+}
+
+.ghostex-stashed-prompt-actions {
+  align-items: center;
+  display: none;
+  gap: 2px;
   margin-left: auto;
 }
 
-/* Card actions sit in the card's top-right corner and only appear on hover
-   or while the row is the keyboard selection. */
-.ghostex-stashed-prompt-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  transition: opacity 120ms ease;
+.ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-row-meta,
+.ghostex-stashed-prompt-item:focus-within .ghostex-stashed-prompt-row-meta {
+  display: none;
 }
 
-.ghostex-stashed-prompt-card:hover .ghostex-stashed-prompt-actions,
-.ghostex-stashed-prompt-item[data-selected="true"] .ghostex-stashed-prompt-actions {
-  opacity: 1;
+.ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-actions,
+.ghostex-stashed-prompt-item:focus-within .ghostex-stashed-prompt-actions {
+  display: flex;
 }
 
 .ghostex-stashed-prompt-action {
   align-items: center;
   appearance: none;
-  background: var(--background);
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  background: transparent;
+  border: 0;
   color: var(--muted-foreground);
   display: flex;
+  height: 24px;
   justify-content: center;
-  padding: 3px;
+  padding: 0;
+  width: 24px;
 }
 
 .ghostex-stashed-prompt-action:hover {
-  background: var(--muted);
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
   color: var(--foreground);
 }
 
-.ghostex-stashed-prompts-command-editor {
-  padding: 3px 3px 4px !important;
+.ghostex-stashed-prompts-stash-hint {
+  align-items: center;
+  appearance: none;
+  background: color-mix(
+    in srgb,
+    var(--foreground) 9%,
+    var(--app-dropdown-background, var(--app-modal-background))
+  );
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, var(--border));
+  border-radius: 9999px !important;
+  bottom: 10px;
+  color: var(--muted-foreground);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 10px;
+  width: 28px;
+  z-index: 2;
+}
+
+.ghostex-stashed-prompts-stash-hint:hover,
+.ghostex-stashed-prompts-stash-hint:focus-visible {
+  background: color-mix(
+    in srgb,
+    var(--foreground) 14%,
+    var(--app-dropdown-background, var(--app-modal-background))
+  );
+  color: var(--foreground);
+  outline: none;
+}
+
+.ghostex-stashed-prompts-stash-hint-tooltip {
+  max-width: 320px;
 }
 
 .ghostex-stashed-prompt-editor {

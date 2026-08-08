@@ -148,13 +148,12 @@ CDXC:SidebarV2DataGate 2026-07-29:
 The same settings read, answering the other question every Sidebar V2 server-side
 data pass has to ask first: is this machine on V2 at all?
 
-gxserver's git-status, `origin`-remote, and project-icon passes exist ONLY to
-fill Sidebar V2 surfaces (cards' branch/±/PR badge, cross-machine grouping,
-discovered project icons — no V1 surface reads any of them). Ungated they cost a
-V1 user permanent ambient load: git spawns per live session cwd and up to a dozen
-`gh` NETWORK calls every minute, forever, for data nothing renders. So they run
-exactly when auto-settle's window does: `sidebarVersion == "v2"`, missing file /
-missing key / any other value means V1.
+gxserver's git-status and `origin`-remote passes exist ONLY to fill Sidebar V2
+surfaces (cards' branch/±/PR badge and cross-machine grouping). Ungated they cost
+a V1 user permanent ambient load: git spawns per live session cwd and up to a
+dozen `gh` NETWORK calls every minute, forever, for data nothing renders. So
+they run exactly when auto-settle's window does: `sidebarVersion == "v2"`,
+missing file / missing key / any other value means V1.
 
 Callers must resolve this ONCE PER PASS rather than at task spawn, so flipping
 the setting takes effect within one pass (~60s) without restarting the daemon.

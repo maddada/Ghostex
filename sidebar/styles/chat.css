@@ -146,6 +146,61 @@
 }
 
 /* Image links render as inline buttons that open the centered overlay. */
+/* --- Inline images ---------------------------------------------------------- */
+
+/* Pictures shared in the conversation render at their own aspect ratio, capped
+   so a tall screenshot cannot push the rest of the turn off screen, and click
+   through to the full-size overlay. */
+.ghostex-chat-inline-image-frame {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ghostex-chat-inline-image-button {
+  background: none;
+  border: none;
+  display: block;
+  line-height: 0;
+  max-width: 100%;
+  padding: 0;
+}
+
+/* CDXC:SidebarCursor forces `cursor: default !important` on every button so app
+   chrome keeps the arrow. A picture in the transcript is content, not chrome,
+   and its only affordance for "click to see it full size" is the cursor — so
+   the zoomable image opts back out, scoped to the chat. */
+.ghostex-chat-inline-image-button,
+.ghostex-chat-markdown .ghostex-chat-image-link {
+  cursor: zoom-in !important;
+}
+
+.ghostex-chat-inline-image {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: block;
+  max-height: 260px;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
+.ghostex-chat-inline-image-pending {
+  align-items: center;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  height: 72px;
+  justify-content: center;
+  width: 112px;
+}
+
+/* Inside markdown prose an image sits on its own line rather than mid-sentence. */
+.ghostex-chat-markdown .ghostex-chat-inline-image-frame {
+  margin: 0.5rem 0;
+}
+
 /* File-path links (host opens them in its editor surfaces) read as links but
    are buttons, since there is nothing for a browser to navigate to. */
 .ghostex-chat-markdown .ghostex-chat-file-link {

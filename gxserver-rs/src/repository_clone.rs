@@ -19,7 +19,7 @@ use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::DomainRepository,
     events::GxserverEventHub,
-    logging::{GxserverLogInput, GxserverLogger, LogLevel},
+    logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel},
     paths::GxserverPaths,
     presentation::{build_presentation_project_delta, increment_presentation_revision},
     storage::open_gxserver_database,
@@ -211,21 +211,24 @@ async fn run_clone_job(
         .get("shallowClone")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let _ = runtime.logger.log(GxserverLogInput {
-        level: LogLevel::Info,
-        event: "repositoryClone.started".to_string(),
-        server_id: Some(runtime.server_id.clone()),
-        request_id: None,
-        client: None,
-        duration_ms: None,
-        error: None,
-        details: Some(json!({
-            "branchSpecified": branch_specified,
-            "cloneMainOnly": clone_main_only,
-            "jobId": job_id,
-            "shallowClone": shallow_clone,
-        })),
-    });
+    let _ = runtime.logger.log_routine(
+        DiagnosticLogScenario::RepositoryClone,
+        GxserverLogInput {
+            level: LogLevel::Info,
+            event: "repositoryClone.started".to_string(),
+            server_id: Some(runtime.server_id.clone()),
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({
+                "branchSpecified": branch_specified,
+                "cloneMainOnly": clone_main_only,
+                "jobId": job_id,
+                "shallowClone": shallow_clone,
+            })),
+        },
+    );
 
     let args = build_repository_clone_git_args(&preview);
     let parent_path = preview
@@ -298,19 +301,22 @@ async fn run_clone_job(
                         job.insert("stderr".to_string(), json!(output.stderr));
                         job.insert("stdout".to_string(), json!(output.stdout));
                     }
-                    let _ = runtime.logger.log(GxserverLogInput {
-                        level: LogLevel::Info,
-                        event: "repositoryClone.completed".to_string(),
-                        server_id: Some(runtime.server_id.clone()),
-                        request_id: None,
-                        client: None,
-                        duration_ms: None,
-                        error: None,
-                        details: Some(json!({
-                            "jobId": job_id,
-                            "projectId": project.get("projectId").and_then(Value::as_str),
-                        })),
-                    });
+                    let _ = runtime.logger.log_routine(
+                        DiagnosticLogScenario::RepositoryClone,
+                        GxserverLogInput {
+                            level: LogLevel::Info,
+                            event: "repositoryClone.completed".to_string(),
+                            server_id: Some(runtime.server_id.clone()),
+                            request_id: None,
+                            client: None,
+                            duration_ms: None,
+                            error: None,
+                            details: Some(json!({
+                                "jobId": job_id,
+                                "projectId": project.get("projectId").and_then(Value::as_str),
+                            })),
+                        },
+                    );
                 }
                 Err(error) => {
                     mark_job_failed(
@@ -422,9 +428,9 @@ fn publish_cloned_project_presentation(
     */
     /*
     CDXC:SidebarV2DataGate 2026-07-29:
-    Both warms are Sidebar V2 data and answer to the same `sidebarVersion` gate
-    as the background passes: the clone still publishes its project delta on a V1
-    machine, it just does not probe for a remote and an icon no V1 surface reads.
+    The git-remote warm answers to the same `sidebarVersion` gate as its
+    background pass. Project icons render in both sidebar versions, so the icon
+    warm below is deliberately independent of that gate.
     */
     if let Ok(Some(project)) = repository.get_project(project_id) {
         let sidebar_v2_selected =
@@ -437,7 +443,7 @@ fn publish_cloned_project_presentation(
         icon rather than a folder glyph that changes a minute later. Same
         first-sighting rule as the remote probe above.
         */
-        crate::project_icon::ensure_project_icon_probed(&project, sidebar_v2_selected);
+        crate::project_icon::ensure_project_icon_probed(&project);
     }
     let _event_sequence = runtime.presentation_event_sequence.lock().map_err(|_| {
         RepositoryCloneError::dependency_unavailable("Presentation event sequencer is poisoned.")

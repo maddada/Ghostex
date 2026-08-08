@@ -51,7 +51,6 @@
   font-weight: 600;
   opacity: 1;
   pointer-events: none;
-  visibility: visible;
 }
 
 
@@ -167,8 +166,8 @@
   height: 18px;
   justify-content: center;
   transition:
-    opacity 120ms ease,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity var(--sidebar-collapse-duration, 0ms) ease,
+    transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
   width: 18px;
 }
 
@@ -263,9 +262,8 @@
   opacity: 1;
   overflow: hidden;
   transition:
-    max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 160ms ease,
-    margin-top 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    max-height var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--sidebar-collapse-duration, 0ms) ease;
 }
 
 .sidebar-collapse-shell[data-collapsed="true"] {
@@ -277,7 +275,6 @@
    * all-collapsed project list disables sidebar scrolling when the visible
    * rows fit in the viewport.
    */
-  margin-top: calc(-10px * var(--sidebar-density-scale));
   max-height: 0;
   opacity: 0;
   overflow: hidden;
@@ -982,6 +979,95 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot="zoom"] {
 
 .reference-sidebar-search-more-row > .reference-sidebar-search-slot {
   margin-top: 0;
+}
+
+/*
+ * CDXC:SidebarFooter 2026-08-07:
+ * Commands & Recents and Settings have one shared, fixed home at the bottom of the GPUI
+ * and web sidebar. The footer owns exactly the bottom 45px, including its top
+ * border, and bleeds through the reference layout padding without moving the
+ * icon/text scan columns used by Search above it.
+ */
+.reference-sidebar-footer {
+  align-items: center;
+  border-top: 1px solid var(--app-border);
+  box-sizing: border-box;
+  column-gap: 4px;
+  container-name: reference-sidebar-footer;
+  container-type: inline-size;
+  display: grid;
+  flex: 0 0 45px;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  height: 45px;
+  margin-bottom: -7px;
+  margin-left: calc(-1 * var(--reference-sidebar-footer-edge-bleed-left));
+  margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
+  min-width: 0;
+  padding: 4px 0 5px;
+  width: calc(
+    100% + var(--reference-sidebar-footer-edge-bleed-left) +
+      var(--reference-sidebar-edge-bleed-right)
+  );
+}
+
+.reference-sidebar-footer > .reference-sidebar-search-slot {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-footer
+  .reference-sidebar-footer-quick-access-button {
+  height: 35px;
+  min-height: 35px;
+  padding-left: calc(var(--reference-sidebar-footer-edge-bleed-left) - 2px);
+  padding-right: 10px;
+}
+
+.reference-sidebar-nav-shortcut {
+  color: var(--app-foreground);
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+  margin-left: auto;
+  opacity: 0.38;
+  white-space: nowrap;
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-footer
+  .reference-sidebar-nav-icon-button {
+  border: none;
+  border-radius: 5px;
+  height: 35px;
+  justify-content: center;
+  max-width: none;
+  min-height: 35px;
+  padding-left: 0;
+  padding-right: 0;
+  width: 100%;
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"]
+  .reference-sidebar-footer
+  .reference-sidebar-footer-label-short {
+  display: none;
+}
+
+@container reference-sidebar-footer (max-width: 200px) {
+  .sidebar-reference-layout[data-reference-sidebar="true"]
+    .reference-sidebar-footer
+    .reference-sidebar-footer-label-full {
+    display: none;
+  }
+
+  .sidebar-reference-layout[data-reference-sidebar="true"]
+    .reference-sidebar-footer
+    .reference-sidebar-footer-label-short {
+    display: block;
+  }
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
@@ -1739,6 +1825,70 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   opacity: 0.28;
 }
 
+.reference-remote-machine-section {
+  position: relative;
+}
+
+.reference-remote-machine-section > .reference-sidebar-section-row {
+  position: relative;
+}
+
+.reference-remote-machine-section > .reference-sidebar-section-row::before,
+.reference-remote-machine-section > .reference-sidebar-section-row::after {
+  background: #c8cdd5;
+  content: "";
+  height: 2px;
+  left: calc(6px * var(--sidebar-density-scale));
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: calc(6px * var(--sidebar-density-scale));
+  z-index: 8;
+}
+
+.reference-remote-machine-section[data-remote-machine-drop-position="before"]
+  > .reference-sidebar-section-row::before {
+  opacity: 0.72;
+  top: -15px;
+}
+
+.reference-remote-machine-section[data-remote-machine-drop-position="after"]
+  > .reference-sidebar-section-row::after {
+  bottom: -7px;
+  opacity: 0.72;
+}
+
+.remote-machine-drag-ghost {
+  background: var(--vscode-sideBar-background, var(--app-background));
+  box-shadow: 0 6px 16px color-mix(in srgb, #000000 18%, transparent);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: fixed;
+  transition: none;
+  z-index: 10000;
+}
+
+.remote-machine-drag-ghost > .reference-sidebar-section-row {
+  margin: 0;
+  min-height: 22px;
+  transition: none;
+}
+
+.remote-machine-drag-ghost,
+.remote-machine-drag-ghost * {
+  cursor: grabbing;
+}
+
+.reference-sidebar-section-row[data-reference-section="remote"]
+  .reference-sidebar-section-heading {
+  cursor: grab;
+}
+
+.reference-remote-machine-section[data-dragging="true"]
+  .reference-sidebar-section-heading {
+  cursor: grabbing;
+}
+
 /*
  * CDXC:GPUIRemoteLastSeen 2026-07-12:
  * Disconnected machines render their last-seen project groups faded. Browser
@@ -1813,67 +1963,113 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
    * a synthetic max-height; the parent session-groups viewport must measure the
    * full content height so every project and session remains reachable.
    */
+  height: auto;
   max-height: none;
   opacity: 1;
   overflow: visible;
   pointer-events: auto;
   transform: translateY(0);
   transition:
-    opacity 150ms ease,
-    transform 180ms ease,
-    visibility 0s linear 0s;
+    height var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--sidebar-collapse-duration, 0ms) ease,
+    transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
   visibility: visible;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="true"] {
+  height: 0;
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
   transform: translateY(-4px);
   transition:
-    max-height 210ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 120ms ease,
-    transform 150ms ease,
-    visibility 0s linear 210ms;
-  visibility: hidden;
+    height var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--sidebar-collapse-duration, 0ms) ease,
+    transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"] {
+  interpolate-size: allow-keywords;
+}
+
+.sidebar-animated-collapse-body {
+  height: auto;
+  min-height: 0;
+  opacity: 1;
+  overflow: hidden;
+  pointer-events: auto;
+  transform: translateY(0) scaleY(1);
+  transform-origin: top;
+  transition:
+    height var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--sidebar-collapse-duration, 0ms) ease,
+    transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-animated-collapse-body[data-collapsed="true"] {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px) scaleY(0.985);
+}
+
+.sidebar-v2-shelf-body,
+.sidebar-v2-shelf-body-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-collapse-shell,
+  .reference-sidebar-collapsible-body,
+  .sidebar-animated-collapse-body,
+  .section-titlebar-toggle-icon {
+    transition-duration: 0ms !important;
+  }
+
+  .reference-sidebar-collapsible-body[data-animate-children="true"] > * {
+    animation: none !important;
+  }
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > * {
-  animation: reference-sidebar-child-fade-in 220ms ease both;
+  animation: reference-sidebar-child-fade-in
+    calc(var(--sidebar-collapse-duration, 0ms) * 0.6) ease both;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > :nth-child(1) {
-  animation-delay: 20ms;
+  animation-delay: 0ms;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > :nth-child(2) {
-  animation-delay: 50ms;
+  animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.1);
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > :nth-child(3) {
-  animation-delay: 80ms;
+  animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.2);
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > :nth-child(4) {
-  animation-delay: 110ms;
+  animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.3);
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="false"][data-animate-children="true"]
   > :nth-child(n + 5) {
-  animation-delay: 140ms;
+  animation-delay: calc(var(--sidebar-collapse-duration, 0ms) * 0.4);
 }
 
 
@@ -1925,7 +2121,7 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   transform: rotate(90deg);
   transition:
     opacity 120ms ease,
-    transform 120ms ease;
+    transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reference-sidebar-section-heading[aria-expanded="false"] .reference-sidebar-section-chevron {
@@ -1934,22 +2130,20 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 
 .reference-sidebar-section-row:hover .reference-sidebar-section-chevron,
 .reference-sidebar-section-heading:focus-visible .reference-sidebar-section-chevron,
-.reference-sidebar-section-row:focus-within .reference-sidebar-section-chevron {
+.reference-sidebar-section-row:has(:focus-visible) .reference-sidebar-section-chevron {
   opacity: 1;
 }
 
 /*
  * CDXC:GPUIRemoteConnectFeedback 2026-07-21:
- * Connected machines use the normal collapse chevron. Every non-connected
- * state reserves that same title-adjacent slot for an always-visible Connect,
- * busy, or retryable error control, while native toasts carry full messages.
- * The heading shrinks to its title so the control reads as part of the machine
- * name, separated only by the control's own icon padding.
+ * Connected machines use the normal collapse chevron. The idle Connect action
+ * reserves a title-adjacent control, while busy and error states replace the
+ * leading cloud with status feedback. The heading shrinks only for the
+ * trailing Connect control.
  */
 .reference-sidebar-section-row[data-has-remote-connection-control="true"]
   .reference-sidebar-section-heading {
   flex: 0 1 auto;
-  gap: 0;
 }
 
 .reference-remote-machine-connection-control {
@@ -1966,20 +2160,53 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   width: 22px;
 }
 
-.reference-remote-machine-connection-control[data-kind="busy"] svg {
+.reference-remote-machine-error-cloud,
+.reference-remote-machine-busy-indicator {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  display: inline-flex;
+  flex: none;
+  height: 18px;
+  justify-content: center;
+  margin-right: 8px;
+  padding: 0;
+  width: 15px;
+}
+
+.reference-remote-machine-error-cloud {
+  color: color-mix(in srgb, #ff6b6b 58%, #fff);
+}
+
+.reference-remote-machine-busy-indicator {
+  color: color-mix(in srgb, var(--app-foreground) 40%, transparent);
+}
+
+.reference-remote-machine-busy-indicator svg {
   animation: reference-remote-machine-connection-spin 0.9s linear infinite;
 }
 
-.reference-remote-machine-connection-control[data-kind="error"] {
-  color: var(--vscode-errorForeground, #f38ba8);
+.reference-remote-machine-error-cloud:hover,
+.reference-remote-machine-error-cloud:focus-visible {
+  color: color-mix(in srgb, #ff6b6b 72%, #fff);
+  outline: none;
 }
 
-.reference-remote-machine-connection-control[data-kind="connect"]:hover,
-.reference-remote-machine-connection-control[data-kind="error"]:hover {
+.reference-remote-machine-connection-control[data-kind="connect"]:hover {
   color: color-mix(in srgb, var(--vscode-foreground) 88%, transparent);
 }
 
 .reference-sidebar-section-row[data-has-remote-connection-control="true"]
+  .reference-sidebar-section-actions {
+  margin-left: 0;
+}
+
+.reference-sidebar-section-row[data-has-remote-connection-control="true"]:is(
+    :hover,
+    :has(:focus-visible),
+    [data-actions-always-visible="true"]
+  )
   .reference-sidebar-section-actions {
   margin-left: auto;
 }
@@ -2025,12 +2252,24 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 }
 
 .reference-sidebar-section-row:hover .reference-sidebar-section-actions,
-.reference-sidebar-section-row:focus-within .reference-sidebar-section-actions,
+.reference-sidebar-section-row:has(:focus-visible) .reference-sidebar-section-actions,
 .reference-sidebar-section-row[data-actions-always-visible="true"] .reference-sidebar-section-actions {
   max-width: var(--reference-sidebar-section-actions-max-width);
   opacity: 1;
   overflow: visible;
   pointer-events: auto;
+}
+
+.reference-sidebar-section-row:hover .reference-sidebar-section-status-counts,
+.reference-sidebar-section-row:has(:focus-visible) .reference-sidebar-section-status-counts,
+.reference-sidebar-section-row[data-actions-always-visible="true"]
+  .reference-sidebar-section-status-counts {
+  display: none;
+  gap: 0;
+  margin-left: 0;
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .reference-sidebar-section-action {
@@ -2116,6 +2355,28 @@ manual mode visibly selected without adding text to the section row.
   min-height: 32px;
   padding: 10px;
   width: 100%;
+}
+
+/*
+ * Sidebar typography hierarchy: navigation/section labels are strongest,
+ * user-created project groups are next, and individual project rows remain
+ * one step lighter so nesting is readable without changing type size.
+ */
+.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-nav-label,
+.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-inline-search-input,
+.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-section-heading,
+.sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-section-heading {
+  font-weight: 800;
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title {
+  font-weight: 800;
+}
+
+.sidebar-reference-layout[data-reference-sidebar="true"]
+  .group[data-project-group="true"]
+  .group-title {
+  font-weight: 700;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"] .recent-projects-row-title,

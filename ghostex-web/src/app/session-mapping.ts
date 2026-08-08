@@ -27,6 +27,7 @@ export function presentationSessionToWorkspaceSession(
   return {
     ...reference,
     activity: session.activity,
+    ...(session.commandId ? { commandId: session.commandId } : {}),
     ...(session.agentIcon || session.agentName || session.agentId
       ? { agentIcon: session.agentIcon ?? session.agentName ?? session.agentId }
       : {}),
@@ -45,10 +46,15 @@ export function domainSessionToWorkspaceSession(
   statusMessage?: string,
 ): WorkspaceSession {
   const reference = { machineId, projectId: session.projectId, sessionId: session.sessionId };
+  const agentSessionId = typeof session.runtimeSettings.agentSessionId === "string"
+    ? session.runtimeSettings.agentSessionId.trim()
+    : "";
   return {
     ...reference,
     activity: "idle",
+    ...(session.commandId ? { commandId: session.commandId } : {}),
     ...(session.agentId ? { agentIcon: session.agentId, agentId: session.agentId } : {}),
+    ...(agentSessionId ? { agentSessionId } : {}),
     presentationState,
     ...(statusMessage ? { statusMessage } : {}),
     title: session.title || "Terminal",

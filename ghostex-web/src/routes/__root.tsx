@@ -4,6 +4,7 @@ import { AppTooltip, TooltipProvider } from "@/sidebar/app-tooltip";
 import { AddProjectModalHost } from "../app/add-project-modal-host";
 import { DelayedActionsModalHost } from "../app/delayed-actions-modal-host";
 import { RecentProjectsModalHost } from "../app/recent-projects-modal-host";
+import { SettingsModalHost } from "../app/settings-modal-host";
 import { TitlebarActions } from "../app/titlebar-actions";
 import { MachinesControl } from "../machines/MachinesControl";
 import { WebSidebar } from "../sidebar-runtime/WebSidebar";
@@ -162,6 +163,7 @@ function GhostexWebShell() {
         <RecentProjectsModalHost runtime={runtime} />
         <AddProjectModalHost />
         <DelayedActionsModalHost />
+        <SettingsModalHost runtime={runtime} />
       </div>
     </TooltipProvider>
   );

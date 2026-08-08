@@ -2,20 +2,26 @@ import { describe, expect, test } from "vitest";
 import {
   appendImageMarkdownToDescription,
   BOARD_COLUMNS,
+  BOARD_SORT_OPTIONS,
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
   buildAgentWorkPrompt,
+  DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   extractDescriptionImagePreviews,
   extractDescriptionImageReferences,
   ensureIssuePrefix,
   filterBoardTickets,
   formatProjectBoardCommentText,
+  normalizeProjectBoardViewPreferences,
   parseProjectBoardCommentText,
   priorityLabel,
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
+  PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
+  sortBoardTickets,
+  ticketCreatorName,
   type BoardTicket,
 } from "./project-board-shared";
 
@@ -92,6 +98,16 @@ describe("project board priority labels", () => {
   });
 });
 
+describe("project board creator", () => {
+  test("shows the creator only when it differs from the assignee", () => {
+    expect(ticketCreatorName("harry", "dobby")).toBe("harry");
+    expect(ticketCreatorName("harry", "harry")).toBeUndefined();
+    expect(ticketCreatorName("harry", undefined)).toBe("harry");
+    expect(ticketCreatorName(undefined, "dobby")).toBeUndefined();
+    expect(ticketCreatorName("", "dobby")).toBeUndefined();
+  });
+});
+
 describe("project board filters", () => {
   const tickets: BoardTicket[] = [
     {
@@ -132,6 +148,221 @@ describe("project board filters", () => {
     ]);
     expect(filterBoardTickets(tickets, "", "0", "XS").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
+    ]);
+  });
+});
+
+describe("project board sorting", () => {
+  const doneTickets: BoardTicket[] = [
+    {
+      boardStatus: "done",
+      closed_at: "2026-06-01T10:00:00.000Z",
+      created_at: "2026-01-01T10:00:00.000Z",
+      displayId: "ZMX-1",
+      id: "closed-june",
+      priority: 3,
+      status: "closed",
+      title: "Closed in June",
+      updated_at: "2026-06-01T10:00:00.000Z",
+    },
+    {
+      boardStatus: "done",
+      closed_at: "2026-08-05T10:00:00.000Z",
+      created_at: "2026-07-01T10:00:00.000Z",
+      displayId: "ZMX-2",
+      id: "closed-august",
+      priority: 2,
+      status: "closed",
+      title: "Closed in August",
+      updated_at: "2026-08-05T10:00:00.000Z",
+    },
+    {
+      boardStatus: "done",
+      created_at: "2026-02-01T10:00:00.000Z",
+      displayId: "ZMX-3",
+      id: "closed-without-timestamp",
+      priority: 0,
+      status: "closed",
+      title: "Closed before bd recorded closed_at",
+      updated_at: "2026-07-04T10:00:00.000Z",
+    },
+  ];
+
+  test("offers both directions for every sort key", () => {
+    expect(BOARD_SORT_OPTIONS.map((option) => option.value)).toEqual([
+      "default",
+      "updated-desc",
+      "updated-asc",
+      "created-desc",
+      "created-asc",
+      "priority-asc",
+      "priority-desc",
+    ]);
+    expect(BOARD_SORT_OPTIONS.map((option) => option.label)).toEqual([
+      "Default order",
+      "Last updated (newest first)",
+      "Last updated (oldest first)",
+      "Created (newest first)",
+      "Created (oldest first)",
+      "Priority (urgent first)",
+      "Priority (low first)",
+    ]);
+  });
+
+  test("puts the newest closed beads first in Done without a selected sort", () => {
+    expect(sortBoardTickets(doneTickets, "default", "done").map((ticket) => ticket.id)).toEqual([
+      "closed-august",
+      "closed-without-timestamp",
+      "closed-june",
+    ]);
+  });
+
+  test("keeps the newest closed beads visible under the lane limit", () => {
+    /*
+     * CDXC:ProjectBoardSort 2026-08-07:
+     * Lanes slice their ticket list before rendering, so Done ordering only helps if it happens
+     * ahead of that cap.
+     */
+    expect(
+      sortBoardTickets(doneTickets, "default", "done")
+        .slice(0, 1)
+        .map((ticket) => ticket.id),
+    ).toEqual(["closed-august"]);
+  });
+
+  test("leaves other lanes in Beads order without a selected sort", () => {
+    const todoTickets: BoardTicket[] = [
+      {
+        boardStatus: "todo",
+        created_at: "2026-01-01T10:00:00.000Z",
+        displayId: "ZMX-4",
+        id: "older",
+        priority: 2,
+        status: "open",
+        title: "Older",
+        updated_at: "2026-01-02T10:00:00.000Z",
+      },
+      {
+        boardStatus: "todo",
+        created_at: "2026-05-01T10:00:00.000Z",
+        displayId: "ZMX-5",
+        id: "newer",
+        priority: 2,
+        status: "open",
+        title: "Newer",
+        updated_at: "2026-05-02T10:00:00.000Z",
+      },
+    ];
+
+    expect(sortBoardTickets(todoTickets, "default", "todo")).toBe(todoTickets);
+  });
+
+  test("applies a selected sort to every lane in both directions", () => {
+    expect(sortBoardTickets(doneTickets, "updated-desc", "done").map((ticket) => ticket.id)).toEqual([
+      "closed-august",
+      "closed-without-timestamp",
+      "closed-june",
+    ]);
+    expect(sortBoardTickets(doneTickets, "updated-asc", "done").map((ticket) => ticket.id)).toEqual([
+      "closed-june",
+      "closed-without-timestamp",
+      "closed-august",
+    ]);
+    expect(sortBoardTickets(doneTickets, "created-desc", "backlog").map((ticket) => ticket.id)).toEqual([
+      "closed-august",
+      "closed-without-timestamp",
+      "closed-june",
+    ]);
+    expect(sortBoardTickets(doneTickets, "created-asc", "backlog").map((ticket) => ticket.id)).toEqual([
+      "closed-june",
+      "closed-without-timestamp",
+      "closed-august",
+    ]);
+  });
+
+  test("reverses the priority view, tie-break included, and keeps legacy P4 in the Low tier", () => {
+    const tickets: BoardTicket[] = [
+      {
+        boardStatus: "todo",
+        displayId: "ZMX-6",
+        id: "legacy-low",
+        priority: 4,
+        status: "open",
+        title: "Legacy low",
+        updated_at: "2026-05-02T10:00:00.000Z",
+      },
+      {
+        boardStatus: "todo",
+        displayId: "ZMX-7",
+        id: "low",
+        priority: 3,
+        status: "open",
+        title: "Low",
+        updated_at: "2026-05-01T10:00:00.000Z",
+      },
+      {
+        boardStatus: "todo",
+        displayId: "ZMX-8",
+        id: "high",
+        priority: 1,
+        status: "open",
+        title: "High",
+        updated_at: "2026-04-01T10:00:00.000Z",
+      },
+    ];
+
+    expect(sortBoardTickets(tickets, "priority-asc", "todo").map((ticket) => ticket.id)).toEqual([
+      "high",
+      "low",
+      "legacy-low",
+    ]);
+    expect(sortBoardTickets(tickets, "priority-desc", "todo").map((ticket) => ticket.id)).toEqual([
+      "legacy-low",
+      "low",
+      "high",
+    ]);
+  });
+
+  test("sinks beads with no usable timestamps to the bottom in both directions", () => {
+    const tickets: BoardTicket[] = [
+      {
+        boardStatus: "done",
+        displayId: "ZMX-9",
+        id: "undated-first",
+        priority: 2,
+        status: "closed",
+        title: "Undated",
+      },
+      {
+        boardStatus: "done",
+        closed_at: "not-a-date",
+        displayId: "ZMX-10",
+        id: "undated-second",
+        priority: 2,
+        status: "closed",
+        title: "Unparseable",
+      },
+      {
+        boardStatus: "done",
+        closed_at: "2026-03-01T10:00:00.000Z",
+        displayId: "ZMX-11",
+        id: "dated",
+        priority: 2,
+        status: "closed",
+        title: "Dated",
+        updated_at: "2026-03-01T10:00:00.000Z",
+      },
+    ];
+
+    expect(sortBoardTickets(tickets, "default", "done").map((ticket) => ticket.id)).toEqual([
+      "dated",
+      "undated-first",
+      "undated-second",
+    ]);
+    expect(sortBoardTickets(tickets, "updated-asc", "done").map((ticket) => ticket.id)).toEqual([
+      "dated",
+      "undated-first",
+      "undated-second",
     ]);
   });
 });
@@ -208,6 +439,61 @@ describe("project board statuses", () => {
     ]);
     expect(beadsStatusToBoardStatus("backlog")).toBe("backlog");
     expect(boardStatusBeadsValue("backlog")).toBe("backlog");
+  });
+});
+
+describe("project board view preferences", () => {
+  test("stores toolbar selections under one app-wide key", () => {
+    /*
+     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * Priority, estimate, and sort describe how the user reads a board rather than anything about
+     * a project, so the key carries no project id and every board restores the same selections.
+     */
+    expect(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY).toBe("ghostex-project-board-view");
+  });
+
+  test("restores stored priority, estimate, and sort selections", () => {
+    expect(
+      normalizeProjectBoardViewPreferences({
+        estimateFilter: "M",
+        priorityFilter: "1",
+        sortOption: "created-asc",
+      }),
+    ).toEqual({
+      estimateFilter: "M",
+      priorityFilter: "1",
+      sortOption: "created-asc",
+    });
+    expect(normalizeProjectBoardViewPreferences({ estimateFilter: "none" }).estimateFilter).toBe(
+      "none",
+    );
+  });
+
+  test("falls back to defaults for missing or unusable stored values", () => {
+    /*
+     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * Stored preferences outlive the option lists that produced them, and localStorage is editable
+     * from outside the board, so anything that is not a current option must land on its default
+     * instead of leaving the toolbar on a value the board cannot filter or sort by.
+     */
+    expect(normalizeProjectBoardViewPreferences(null)).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+    expect(normalizeProjectBoardViewPreferences("all")).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+    expect(normalizeProjectBoardViewPreferences({})).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+    expect(
+      normalizeProjectBoardViewPreferences({
+        estimateFilter: "XXL",
+        priorityFilter: 1,
+        sortOption: "closed-desc",
+      }),
+    ).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+  });
+
+  test("keeps every offered toolbar option restorable", () => {
+    for (const option of BOARD_SORT_OPTIONS) {
+      expect(normalizeProjectBoardViewPreferences({ sortOption: option.value }).sortOption).toBe(
+        option.value,
+      );
+    }
   });
 });
 
@@ -291,7 +577,6 @@ describe("project board issue prefix", () => {
     ]);
   });
 });
-
 describe("project board assigned agent resolution", () => {
   /*
    * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
@@ -353,4 +638,3 @@ describe("project board assigned agent resolution", () => {
     ).toBe("codex");
   });
 });
-

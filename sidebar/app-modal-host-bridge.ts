@@ -98,23 +98,10 @@ export type OpenAppModalMessage =
   | {
       /**
        * CDXC:CommandPalette 2026-06-13-22:18:
-       * Cmd+Shift+P opens the shared palette with `>` prefilled for command
-       * fuzzy finding, while Cmd+P opens it with an empty query for session
-       * search. Carry the desired initial input through the native modal bridge
-       * instead of teaching the modal host separate palette kinds.
-       *
-       * CDXC:CommandPalette 2026-06-13-22:48:
-       * Session-search sections need the sidebar's current project collapse
-       * state so rows from collapsed projects can move into the Collapsed
-       * Projects area while expanded non-current project rows stay in Other
-       * Active Projects.
-       *
-       * CDXC:CommandPalette 2026-06-19-14:11:
-       * Name the expanded non-current bucket Other Active Projects so the
-       * Current Project section reads as the active project, not as a separate
-       * category above it.
+       * The Commands tab accepts an optional initial search query. Quick Access
+       * tab selection is carried by the modal id instead of encoding a mode in
+       * the query text.
        */
-      collapsedGroupsById?: Record<string, true>;
       initialQuery?: string;
       modal: "commandPalette";
       type: "open";
@@ -264,6 +251,46 @@ declare global {
  */
 export function openAppModal(message: OpenAppModalMessage): void {
   postAppModalHostMessage(message, `AppModals:${message.modal}`);
+}
+
+export type QuickAccessPage =
+  | "commands"
+  | "recentProjects"
+  | "recentSessions"
+  | "savedPrompts";
+
+type QuickAccessOpenOptions = {
+  machineId?: string;
+  machineName?: string;
+};
+
+/**
+ * Open Ghostex Quick Access on one explicit page. Keep this mapping at the
+ * modal-host boundary so shortcuts, sidebar buttons, titlebar actions, palette
+ * commands, and the tabs themselves cannot drift back to query-driven routing.
+ */
+export function openQuickAccess(
+  page: QuickAccessPage,
+  options: QuickAccessOpenOptions = {},
+): void {
+  if (page === "recentProjects") {
+    openAppModal({
+      ...(options.machineId ? { machineId: options.machineId } : {}),
+      ...(options.machineName ? { machineName: options.machineName } : {}),
+      modal: "recentProjects",
+      type: "open",
+    });
+    return;
+  }
+  if (page === "recentSessions") {
+    openAppModal({ modal: "previousSessions", type: "open" });
+    return;
+  }
+  if (page === "savedPrompts") {
+    openAppModal({ modal: "stashedPrompts", type: "open" });
+    return;
+  }
+  openAppModal({ initialQuery: "", modal: "commandPalette", type: "open" });
 }
 
 export function closeAppModal(area = "AppModals:close"): void {

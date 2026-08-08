@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { validateOnDemandManifestV2 } from "./release-gpui/on-demand-manifest.mjs";
+import {
+  validateMacosReleaseOnDemandManifest,
+  validateOnDemandManifestV2,
+} from "./release-gpui/on-demand-manifest.mjs";
 
 export class MacosAppBundleValidationError extends Error {
   constructor(message) {
@@ -357,7 +360,7 @@ async function readOnDemandResourceManifest(resourcesRoot) {
  */
 async function validateOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot, sharedBd }) {
   try {
-    validateOnDemandManifestV2(onDemandManifest);
+    validateMacosReleaseOnDemandManifest(onDemandManifest);
   } catch (error) {
     throw new MacosAppBundleValidationError(
       `${arch} app has an invalid sealed on-demand manifest v2: ${error instanceof Error ? error.message : String(error)}`,

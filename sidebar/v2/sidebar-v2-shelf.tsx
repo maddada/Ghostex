@@ -1,5 +1,6 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
+import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
 
 /*
  * CDXC:SidebarV2 2026-07-29:
@@ -9,9 +10,9 @@ import type { ReactNode } from "react";
  *
  * - The count shows ONLY while collapsed. Expanded, the visible rows are the
  *   count, and repeating it just adds noise to the header.
- * - Collapsing UNMOUNTS the rows instead of animating a height. A shelf can
- *   hold hundreds of settled sessions; keeping them mounted behind a collapsed
- *   header would keep paying their layout cost for nothing.
+ * - Collapsing unmounts the rows after the shared disclosure animation. A
+ *   shelf can hold hundreds of settled sessions, so hidden rows must not keep
+ *   paying their layout cost once the transition is complete.
  */
 
 export type SidebarV2ShelfTone = "browser" | "settled" | "snoozed";
@@ -33,6 +34,8 @@ export function SidebarV2Shelf({
   onToggle,
   tone,
 }: SidebarV2ShelfProps) {
+  const { isPresent, isVisuallyCollapsed, setCollapsibleElement } =
+    useSidebarCollapsiblePresence(!isExpanded);
   if (count === 0) {
     return null;
   }
@@ -59,7 +62,17 @@ export function SidebarV2Shelf({
           />
         </button>
       </li>
-      {isExpanded ? children : null}
+      {isPresent ? (
+        <li
+          aria-hidden={isVisuallyCollapsed}
+          className="sidebar-v2-shelf-body sidebar-animated-collapse-body"
+          data-collapsed={String(isVisuallyCollapsed)}
+          inert={isVisuallyCollapsed ? true : undefined}
+          ref={setCollapsibleElement}
+        >
+          <ul className="sidebar-v2-shelf-body-list">{children}</ul>
+        </li>
+      ) : null}
     </>
   );
 }

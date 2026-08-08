@@ -67,8 +67,9 @@ function compareSidebarV2Inbox(
 
 /**
  * Position-stable inbox order: pinned rows first, then newest-created first.
- * Deterministic for any input order, so two clients rendering the same snapshot
- * agree without sharing scroll or drag state.
+ * Pinned rows keep the host's persisted per-project order so the user can
+ * rearrange that partition; unpinned rows remain creation-sorted and therefore
+ * never jump in response to activity.
  */
 export function sortSessionsForSidebarV2<T extends SidebarV2SortSession>(
   sessions: readonly T[],
@@ -80,7 +81,7 @@ export function sortSessionsForSidebarV2<T extends SidebarV2SortSession>(
     (session.isPinned === true ? pinned : rest).push(session);
   }
   const byCreation = (left: T, right: T) => compareSidebarV2Inbox(left, right, options);
-  return [...pinned.sort(byCreation), ...rest.sort(byCreation)];
+  return [...pinned, ...rest.sort(byCreation)];
 }
 
 /**

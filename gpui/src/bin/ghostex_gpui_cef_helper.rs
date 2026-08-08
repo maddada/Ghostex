@@ -16,6 +16,8 @@ use sidebar_bridge_manifest::{
     APP_MODAL_HOST_SURFACE_VALUE, AppModalHostBridgeSurface,
     NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS,
     PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS,
+    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
+    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD,
     SIDEBAR_BRIDGE_FUNCTION_SPECS, SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS,
     SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME, SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE,
     WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT, WEBKIT_JS_OBJECT,
@@ -138,10 +140,6 @@ fn verify_external_cef_runtime_dir() {
         library.is_file(),
         "verified helper CEF runtime is missing {}",
         library.display()
-    );
-    eprintln!(
-        "Ghostex CEF helper runtime: verified component {}",
-        runtime_dir.display()
     );
 }
 
@@ -379,7 +377,24 @@ wrap_render_process_handler! {
                 return 1;
             }
             if is_project_workarea_install_message {
-                install_project_workarea_v8_bridge(Some(&mut context));
+                /*
+                CDXC:RemoteProjectDocs 2026-08-07:
+                Mirror cef/shell.rs exactly: the install message optionally
+                carries the Manage Docs resource base URL, and the helper must
+                install it too or Docs HTML documents lose their <base> and
+                every relative image/stylesheet/script request breaks.
+                */
+                let manage_docs_resource_base_url = message
+                    .argument_list()
+                    .filter(|arguments| {
+                        arguments.size() == 1 && arguments.get_type(0) == ValueType::STRING
+                    })
+                    .map(|arguments| CefString::from(&arguments.string(0)).to_string())
+                    .filter(|value| value == PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL);
+                install_project_workarea_v8_bridge(
+                    Some(&mut context),
+                    manage_docs_resource_base_url.as_deref(),
+                );
             } else if is_install_message {
                 let runtime_settings = sidebar_runtime_settings_from_install_message(message);
                 let gxserver_bootstrap = sidebar_gxserver_bootstrap_from_process_message(
@@ -627,7 +642,10 @@ fn install_sidebar_project_context_v8_bridge(
     }
 }
 
-fn install_project_workarea_v8_bridge(context: Option<&mut cef::V8Context>) {
+fn install_project_workarea_v8_bridge(
+    context: Option<&mut cef::V8Context>,
+    manage_docs_resource_base_url: Option<&str>,
+) {
     let Some(context) = context else {
         return;
     };
@@ -660,6 +678,14 @@ fn install_project_workarea_v8_bridge(context: Option<&mut cef::V8Context>) {
             Some(&function_name),
             Some(function),
             V8Propertyattribute::default(),
+        );
+    }
+
+    if let Some(base_url) = manage_docs_resource_base_url {
+        let _ = set_v8_string_property(
+            namespace,
+            PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD,
+            base_url,
         );
     }
 

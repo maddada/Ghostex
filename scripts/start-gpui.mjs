@@ -3,7 +3,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
   closeSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -17,6 +16,11 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  codeServerComponentIdentity,
+  codeServerComponentNames,
+} from "./release-gpui/code-server-component-identity.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -40,12 +44,6 @@ const quietLogTailLines = 220;
 const quietLogDisplayLineMaxChars = 1200;
 const quietLogDisplayLineHeadChars = 760;
 const quietLogDisplayLineTailChars = 260;
-const pinnedDependencyRevisions = new Map([
-  ["zed", "1a246efd7e1b83ab568ec5e3e6c1a43a42e1abba"],
-  ["cef-rs", "0ddbc2accc06a3ac7f18e1543f752c3fb65161f2"],
-  ["gpui-component", "bc174a7ec4534b2a4174fddde314b38d30d69093"],
-  ["beads", "672d942083a1fd0c8603fa1e77620c58ba9d47c8"],
-]);
 /*
 CDXC:GPUIStartCommand 2026-07-08-04:55:
 `bun run gpui` builds the staged GPUI package and installs it to a stable,
@@ -78,32 +76,6 @@ const buildScript = path.join(
 );
 const localStartLockFile = path.join(repoRoot, "build", "ghostex-gpui-local-start.lock");
 const dependenciesRoot = path.join(repoRoot, ".dependencies");
-const dependencyPatchSpecs = new Map([
-  ["zed", [
-    {
-      abbrev: 10,
-      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "zed-windows-native-child-key-dispatch.patch"),
-      paths: ["crates/gpui_windows/src/platform.rs"],
-    },
-    {
-      abbrev: 10,
-      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "zed-windows-popup-window-semantics.patch"),
-      paths: ["crates/gpui_windows/src/window.rs"],
-    },
-  ]],
-  ["gpui-component", [
-    {
-      abbrev: 7,
-      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "gpui-component-managed-tooltip-placement.patch"),
-      paths: ["crates/ui/src/tooltip.rs"],
-    },
-    {
-      abbrev: 7,
-      patchPath: path.join(repoRoot, "scripts", "release-gpui", "patches", "gpui-component-scrollbar-options.patch"),
-      paths: ["crates/ui/src/menu/popup_menu.rs", "crates/ui/src/scroll/scrollbar.rs"],
-    },
-  ]],
-]);
 const startOptions = validateStartArguments(process.argv.slice(2));
 const startVerbose = startOptions.verbose;
 const startEnvironment = withoutColorDisablingEnvironment(process.env);
@@ -111,6 +83,12 @@ const windowsArch = process.arch === "arm64" ? "arm64" : "x64";
 const explicitWindowsWslArchive = process.env.GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE?.trim();
 const explicitWindowsWslCodeServerArchive =
   process.env.GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE?.trim();
+const windowsCodeServerIdentity = targetsWindows
+  ? await codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, "code-server") })
+  : undefined;
+const windowsCodeServerNames = windowsCodeServerIdentity
+  ? codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)
+  : undefined;
 const windowsWslArchive = targetsWindows
   ? explicitWindowsWslArchive
     ? path.resolve(explicitWindowsWslArchive)
@@ -130,7 +108,7 @@ const windowsWslCodeServerArchive = targetsWindows
       "build",
       "runtime-artifacts",
       windowsArch,
-      `code-server-linux-${windowsArch}.tar.gz`,
+      windowsCodeServerNames.archiveName,
     )
   : undefined;
 const configuration = isDarwin ? resolveLocalStartConfiguration(process.env.CONFIGURATION) : undefined;
@@ -163,6 +141,7 @@ const buildEnvironment = {
       GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME: "1",
       GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: windowsWslArchive,
       GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: windowsWslCodeServerArchive,
+      GHOSTEX_CODE_SERVER_COMPONENT_VERSION: windowsCodeServerIdentity.componentVersion,
       ...(isWsl && !startVerbose
         ? { GHOSTEX_WINDOWS_BUILD_PROGRESS_PATH: `/proc/${process.pid}/fd/1` }
         : {}),
@@ -188,9 +167,6 @@ const platformLabel = isDarwin
     : "Linux";
 logStartStep(`Checking local GPUI resources (${platformLabel})...`);
 ensureLocalReferenceCheckouts();
-if (isDarwin) {
-  ensurePinnedBeadsReferenceCheckout();
-}
 logStartDetail("Reference checkouts are ready.");
 if (!isDarwin && !targetsWindows) {
   await closeRunningGpuiBundle(appPath, {
@@ -237,11 +213,7 @@ if (!isDarwin && !targetsWindows) {
     "--zig-target",
     process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu",
   ];
-  const packagedBd = path.join(packagedRuntimeBinDir, "bd");
   const packagedTui = path.join(packagedRuntimeBinDir, "ghostex-tui");
-  if (existsSync(packagedBd)) {
-    packageArgs.push("--bd-bin", packagedBd);
-  }
   if (existsSync(packagedTui)) {
     packageArgs.push("--tui-bin", packagedTui);
   }
@@ -453,56 +425,37 @@ function ensureWindowsWslRuntimeArchive() {
       throw new Error(`The WSL2 runtime download did not produce ${windowsWslArchive}.`);
     }
   }
-  if (!existsSync(windowsWslCodeServerArchive)) {
+  const windowsWslCodeServerSidecar = `${windowsWslCodeServerArchive}.sha256`;
+  const hasWindowsWslCodeServerArchive = existsSync(windowsWslCodeServerArchive);
+  const hasWindowsWslCodeServerSidecar = existsSync(windowsWslCodeServerSidecar);
+  if (hasWindowsWslCodeServerArchive !== hasWindowsWslCodeServerSidecar) {
+    throw new Error(
+      `The cached WSL2 Source runtime must contain both ${path.basename(windowsWslCodeServerArchive)} and its filename-bound .sha256 sidecar.`,
+    );
+  }
+  if (!hasWindowsWslCodeServerArchive) {
     if (explicitWindowsWslCodeServerArchive) {
       throw new Error(
-        `GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE does not exist: ${windowsWslCodeServerArchive}`,
+        `GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE and its filename-bound .sha256 sidecar must exist: ${windowsWslCodeServerArchive}`,
       );
     }
-    const version = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
-    const portableName = `ghostex-${version}-windows-${windowsArch}-portable.zip`;
-    const portablePath = path.join(path.dirname(windowsWslCodeServerArchive), portableName);
-    const extractionRoot = path.join(
-      path.dirname(windowsWslCodeServerArchive),
-      `portable-${version}-${windowsArch}`,
-    );
-    mkdirSync(extractionRoot, { recursive: true });
-    logStartStep(`Downloading the Ghostex ${version} WSL2 Source runtime...`);
+    mkdirSync(path.dirname(windowsWslCodeServerArchive), { recursive: true });
+    logStartStep(`Downloading the Ghostex WSL2 Source runtime ${windowsCodeServerIdentity.componentVersion}...`);
     run("gh", [
-      "release",
+      "run",
       "download",
-      `v${version}`,
       "--repo",
       "maddada/Ghostex",
-      "--pattern",
-      portableName,
+      "--name",
+      windowsCodeServerNames.artifactName,
       "--dir",
-      path.dirname(portablePath),
-      "--clobber",
+      path.dirname(windowsWslCodeServerArchive),
     ], {
       quietLabel: "Windows WSL2 Source runtime download",
     });
-    run("tar.exe", [
-      "-xf",
-      portablePath,
-      "-C",
-      extractionRoot,
-      `resources/wsl/${path.basename(windowsWslCodeServerArchive)}`,
-    ], {
-      quietLabel: "Windows WSL2 Source runtime extraction",
-    });
-    const extractedArchive = path.join(
-      extractionRoot,
-      "resources",
-      "wsl",
-      path.basename(windowsWslCodeServerArchive),
-    );
-    if (existsSync(extractedArchive)) {
-      copyFileSync(extractedArchive, windowsWslCodeServerArchive);
-    }
-    if (!existsSync(windowsWslCodeServerArchive)) {
+    if (!existsSync(windowsWslCodeServerArchive) || !existsSync(windowsWslCodeServerSidecar)) {
       throw new Error(
-        `The Windows portable package did not contain ${path.basename(windowsWslCodeServerArchive)}.`,
+        `The code-server producer artifact did not contain ${path.basename(windowsWslCodeServerArchive)} and its filename-bound .sha256 sidecar.`,
       );
     }
   }
@@ -592,46 +545,15 @@ function ensureLocalReferenceCheckouts() {
   });
 }
 
-function ensurePinnedBeadsReferenceCheckout() {
-  /*
-  CDXC:GPUIProjectBoard 2026-07-12-23:10:
-  A local GPUI build must stage the pinned Beads CLI before packaging. The
-  shared resource builder correctly refuses arbitrary PATH binaries, so make
-  the pinned Beads source checkout part of `bun run gpui` preparation instead
-  of silently producing an app whose Kanban view cannot work.
-  */
-  const expectedPath = path.join(dependenciesRoot, "beads");
-  const requiredPaths = [path.join(expectedPath, "go.mod"), path.join(expectedPath, "cmd", "bd")];
-  if (requiredPaths.every(existsSync)) {
-    requirePinnedDependencyRevision("beads", expectedPath);
-    return;
-  }
-  if (
-    pathExistsWithoutFollowingFinalSymlink(expectedPath) &&
-    !dependencySubmoduleIsUninitialized("beads")
-  ) {
-    throw new Error(
-      `GPUI Beads dependency ${expectedPath} exists but is incomplete. Refusing to overwrite it; fix or replace that submodule checkout manually.`,
-    );
-  }
-  initializeDependencySubmodule("beads");
-  if (!requiredPaths.every(existsSync)) {
-    throw new Error(`GPUI Beads dependency ${expectedPath} is incomplete after submodule initialization.`);
-  }
-  requirePinnedDependencyRevision("beads", expectedPath);
-}
-
 function requirePinnedDependencyRevision(name, checkoutPath) {
-  const expectedRevision = pinnedDependencyRevisions.get(name);
+  const expectedRevision = dependencyGitOutput(repoRoot, [
+    "rev-parse",
+    `HEAD:.dependencies/${name}`,
+  ]);
   const revision = dependencyGitOutput(checkoutPath, ["rev-parse", "HEAD"]);
-  if (!expectedRevision || revision !== expectedRevision) {
+  if (revision !== expectedRevision) {
     throw new Error(
-      `GPUI dependency ${checkoutPath} is at ${revision || "an unreadable revision"}, expected ${expectedRevision ?? "a pinned revision"}. Refusing to alter an existing checkout because it may contain user work.`,
-    );
-  }
-  if (name === "beads" && dependencyGitOutput(checkoutPath, ["status", "--porcelain", "--untracked-files=all"])) {
-    throw new Error(
-      `GPUI Beads dependency ${checkoutPath} has local changes. Refusing to package a non-reproducible Project board CLI or alter the checkout.`,
+      `GPUI dependency ${checkoutPath} is at ${revision || "an unreadable revision"}, expected committed revision ${expectedRevision}. Refusing to alter an existing checkout because it may contain user work.`,
     );
   }
 }
@@ -698,64 +620,6 @@ function initializeDependencySubmodule(name) {
 
 function preparePinnedDependency(name, checkoutPath) {
   requirePinnedDependencyRevision(name, checkoutPath);
-  const patchSpecs = dependencyPatchSpecs.get(name) ?? [];
-  if (patchSpecs.length === 0) {
-    return;
-  }
-  const missingPatchSpecs = patchSpecs.filter((spec) => !dependencyPatchMatches(checkoutPath, spec));
-  if (missingPatchSpecs.length === 0) {
-    return;
-  }
-  const missingPatchPathHasChanges = missingPatchSpecs.some((spec) => dependencyPatchDiff(checkoutPath, spec));
-  const unmanagedStatus = dependencyGitOutput(checkoutPath, [
-    "status",
-    "--porcelain",
-    "--untracked-files=all",
-    "--",
-    ".",
-    ...patchSpecs.flatMap(({ paths }) => paths.map((dependencyPath) => `:(exclude)${dependencyPath}`)),
-  ]);
-  if (missingPatchPathHasChanges || unmanagedStatus) {
-    throw new Error(
-      `GPUI dependency ${checkoutPath} has changes not represented by Ghostex's checked-in patches. Refusing to overwrite them.`,
-    );
-  }
-  for (const { patchPath } of missingPatchSpecs) {
-    dependencyGit(checkoutPath, ["apply", "--check", patchPath]);
-    dependencyGit(checkoutPath, ["apply", patchPath]);
-  }
-}
-
-function dependencyPatchDiff(checkoutPath, { abbrev, paths }) {
-  return dependencyGitOutput(checkoutPath, [
-    "diff",
-    "HEAD",
-    "--no-ext-diff",
-    "--binary",
-    "--ignore-space-at-eol",
-    `--abbrev=${abbrev}`,
-    "--",
-    ...paths,
-  ]);
-}
-
-function dependencyPatchMatches(checkoutPath, spec) {
-  const actual = dependencyPatchDiff(checkoutPath, spec);
-  const { patchPath } = spec;
-  const expected = readFileSync(patchPath, "utf8");
-  return normalizeDependencyPatch(actual) === normalizeDependencyPatch(expected);
-}
-
-function normalizeDependencyPatch(patch) {
-  // A Windows checkout can carry CRLF working-tree lines even though the
-  // pinned commit and checked-in patch use LF. Git then computes a different
-  // post-image blob hash, while the source change itself is identical.
-  return patch
-    .replaceAll("\r", "")
-    .split("\n")
-    .filter((line) => !line.startsWith("index "))
-    .join("\n")
-    .trim();
 }
 
 function dependencyGitOutput(checkoutPath, args) {
@@ -767,13 +631,6 @@ function dependencyGitOutput(checkoutPath, args) {
     throw new Error(result.stderr?.trim() || `git ${args.join(" ")} failed for ${checkoutPath}.`);
   }
   return result.stdout.trim();
-}
-
-function dependencyGit(checkoutPath, args) {
-  run("git", ["-c", `safe.directory=${checkoutPath}`, "-C", checkoutPath, ...args], {
-    env: startEnvironment,
-    quietLabel: `${path.basename(checkoutPath)} dependency preparation`,
-  });
 }
 
 function pathExistsWithoutFollowingFinalSymlink(candidatePath) {

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Architecture proposals for Ghostex chat.">
+  <title>Foundation · Ghostex Chat Improvement Map</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="wordmark" href="index.html"><span class="wordmark-mark" aria-hidden="true"></span>Chat Improvement Map</a>
+      <nav class="nav" aria-label="Report pages">
+        <a href="index.html">Overview</a><a href="foundation.html" aria-current="page">Foundation</a><a href="models.html">Models</a><a href="rendering.html">Rendering</a><a href="experience.html">Experience</a><a href="roadmap.html">Roadmap</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="kicker">FND · Architecture</p>
+        <h1>Give the interface better facts.</h1>
+        <p class="lede">Ghostex currently compresses provider activity into five roles and four block types. A richer shared event contract is the prerequisite for trustworthy streaming, accurate tool correlation, semantic activity cards, and scalable provider support.</p>
+      </div>
+      <aside class="hero-note"><strong>Core rule</strong><p>Provider-specific parsing belongs at the gxserver boundary. UI components should render one normalized projection.</p></aside>
+    </section>
+
+    <nav class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#fnd-01">Event contract</a>
+      <a href="#fnd-02">Timeline projection</a>
+      <a href="#fnd-03">Streaming</a>
+      <a href="#fnd-04">Provider registry</a>
+      <a href="#fnd-05">Host capabilities</a>
+    </nav>
+
+    <section class="section" id="fnd-01">
+      <div class="section-heading"><span class="index">FND-01 · P0</span><div><h2>Provider-neutral event contract</h2><p>Extend the shared chat protocol with enough identity and structure to represent modern coding-agent work without flattening it into prose.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">FND-01A</span><h3>Stable identity</h3><p>Add turn, message, tool-call, result, and parent IDs. Pair results by identity rather than FIFO order.</p></div>
+        <div class="card wide"><span class="code">FND-01B</span><h3>Lifecycle</h3><p>Represent queued, running, completed, failed, denied, interrupted, and stale states with timestamps and duration.</p></div>
+        <div class="card"><span class="code">FND-01C</span><h3>Work kinds</h3><p>Commands, file changes, web research, delegations, plans, workflows, questions, approvals, and artifacts.</p></div>
+        <div class="card"><span class="code">FND-01D</span><h3>Usage</h3><p>Context usage, token counts, compaction, model fallback, and execution-tier changes.</p></div>
+        <div class="card"><span class="code">FND-01E</span><h3>Compatibility</h3><p>Add optional fields first and version the wire contract so older daemons remain understandable during migration.</p></div>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">WHY</span><p>Today, tool results do not carry a call identity. Concurrent or out-of-order work cannot be paired reliably, and provider-specific progress is discarded.</p></div>
+      <p class="evidence">Ghostex: shared/session-chat.ts · sidebar/chat/session-chat-tool-fold.ts · gxserver-rs/src/session_chat.rs</p>
+    </section>
+
+    <section class="section" id="fnd-02">
+      <div class="section-heading"><span class="index">FND-02 · P0</span><div><h2>Event-to-timeline projection</h2><p>Keep raw normalized events immutable, then derive rows, work groups, summaries, and the active frontier in a pure view-model layer.</p></div></div>
+      <div class="flow">
+        <div class="flow-step"><span class="code">01</span><h3>Adapter event</h3><p>A provider emits normalized facts with stable IDs.</p></div>
+        <div class="flow-step"><span class="code">02</span><h3>Turn state</h3><p>Deltas and lifecycle transitions update a keyed turn model.</p></div>
+        <div class="flow-step"><span class="code">03</span><h3>Projection</h3><p>Related operations form steps, groups, and summaries.</p></div>
+        <div class="flow-step"><span class="code">04</span><h3>Renderer</h3><p>The UI selects a semantic card by row type.</p></div>
+      </div>
+      <div class="grid" style="margin-top:16px">
+        <div class="card wide"><span class="code">FND-02A</span><h3>Active frontier stays open</h3><p>Pending, failed, interrupted, approval-blocked, and newest work remain visible. Old successful detail can recede.</p></div>
+        <div class="card wide"><span class="code">FND-02B</span><h3>Grouping is reversible</h3><p>A summary never destroys its source rows. Users can expand a step to inspect exact commands, patches, or tool data.</p></div>
+      </div>
+      <p class="evidence">Reference concepts: build-thread-timeline.ts · timeline-view.ts · assistant-stream-projection.ts</p>
+    </section>
+
+    <section class="section" id="fnd-03">
+      <div class="section-heading"><span class="index">FND-03 · P1</span><div><h2>Genuine streaming and reconciliation</h2><p>Carry assistant and reasoning deltas with stable turn IDs, while retaining the transcript as the final authority.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">FND-03A</span><h3>Delta frames</h3><p>Emit append, replace, completion, and error events against a known message or turn.</p><div class="meta"><span class="tag high">Effort L</span><span class="tag high">Risk high</span></div></div>
+        <div class="card wide"><span class="code">FND-03B</span><h3>Authoritative merge</h3><p>When the transcript catches up, reconcile by identity and source offsets rather than inventing a separate fallback response.</p><div class="meta"><span class="tag">Requires FND-01</span></div></div>
+      </div>
+      <div class="callout" style="margin-top:16px"><span class="code">GAP</span><p>The current preview-based streaming helper is not supplied by either the active desktop or web host. Users see working state and transcript increments, not true token or event streaming.</p></div>
+    </section>
+
+    <section class="section" id="fnd-04">
+      <div class="section-heading"><span class="index">FND-04 · P0</span><div><h2>Capability-driven provider registry</h2><p>Describe what each provider can do instead of branching on agent IDs throughout TypeScript, Rust, commands, and UI.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>Examples</th><th>UI effect</th></tr></thead>
+          <tbody>
+            <tr><td><span class="code">CAP-MODEL</span></td><td>Discover, select, swap while running</td><td>Show only valid model controls</td></tr>
+            <tr><td><span class="code">CAP-REASON</span></td><td>Supported effort levels per model</td><td>Clamp or preserve the nearest valid effort</td></tr>
+            <tr><td><span class="code">CAP-PERM</span></td><td>Detected and selectable permission policy</td><td>Never claim a policy the runtime cannot enforce</td></tr>
+            <tr><td><span class="code">CAP-FORK</span></td><td>Native context clone versus exported handoff</td><td>Label actions according to their real guarantee</td></tr>
+            <tr><td><span class="code">CAP-STEER</span></td><td>Active-turn steering with expected turn ID</td><td>Separate steer from queued follow-up</td></tr>
+            <tr><td><span class="code">CAP-ASK</span></td><td>Questions and approval choices</td><td>Render provider-valid response controls</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="evidence">Ghostex gap: shared/sidebar-agents.ts exposes more launchers than shared/session-chat.ts can normalize.</p>
+    </section>
+
+    <section class="section" id="fnd-05">
+      <div class="section-heading"><span class="index">FND-05 · P1</span><div><h2>Host capability injection</h2><p>Keep one shared React chat surface while desktop and web hosts declare link routing, file access, native selection, and session actions.</p></div></div>
+      <div class="grid">
+        <div class="card wide"><span class="code">FND-05A</span><h3>Explicit host features</h3><p>Render actions only when the host supplies a verified capability. Avoid hidden desktop-only branches in shared components.</p></div>
+        <div class="card wide"><span class="code">FND-05B</span><h3>Portable semantic rows</h3><p>Timeline rows remain platform-neutral; opening a file, URL, terminal, or child pane is delegated to the host.</p></div>
+      </div>
+    </section>
+
+    <footer class="footer"><a class="next-link" href="index.html">← Overview</a><a class="next-link" href="models.html">Next: Models →</a></footer>
+  </main>
+</body>
+</html>

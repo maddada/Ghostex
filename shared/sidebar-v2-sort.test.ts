@@ -55,7 +55,7 @@ describe("sortSessionsForSidebarV2", () => {
     expect(ids(sortSessionsForSidebarV2(after))).toEqual(ids(sortSessionsForSidebarV2(before)));
   });
 
-  test("pinned rows float above the rest and keep creation order inside the pin block", () => {
+  test("pinned rows float above the rest and preserve their persisted input order", () => {
     expect(
       ids(
         sortSessionsForSidebarV2([
@@ -64,7 +64,7 @@ describe("sortSessionsForSidebarV2", () => {
           session("pinned-new", { createdAt: iso(-2 * DAY_MS), isPinned: true }),
         ]),
       ),
-    ).toEqual(["pinned-new", "pinned-old", "new"]);
+    ).toEqual(["pinned-old", "pinned-new", "new"]);
   });
 
   test("equal creation stamps tie-break by session id, not by input order", () => {

@@ -58,12 +58,13 @@ use windows_sys::Win32::Security::Cryptography::{
 };
 
 use anyhow::{Context as _, Result};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use cef::CefBrowser;
+use flate2::{Compression, write::GzEncoder};
 use futures::{
     StreamExt as _,
     channel::{mpsc, oneshot},
 };
-use flate2::{write::GzEncoder, Compression};
 use gpui::Focusable as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
@@ -901,7 +902,7 @@ CDXC:GlobalActions 2026-08-01-16:00:
 The tab strip draws at most this many Global Actions. The cap keeps the action
 cluster from crowding out the tabs themselves on a narrow pane, and it bounds
 the bridge payload the same way the status-indicator bridge bounds its rows.
-Actions past the cap stay runnable from Settings and the Command Palette.
+Actions past the cap stay runnable from Settings and Ghostex Quick Access.
 */
 const GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS: usize = 8;
 const GPUI_SIDEBAR_STATUS_PET_ACTIVATION_MESSAGE_VERSION: u64 = 1;
@@ -1073,8 +1074,6 @@ const APP_MODAL_HOST_GIT_COMMIT_WINDOW_WIDTH: f32 = 1078.0;
 const APP_MODAL_HOST_GIT_COMMIT_WINDOW_HEIGHT: f32 = 758.0;
 const APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_WIDTH: f32 = 654.0 + 19.0 + 19.0;
 const APP_MODAL_HOST_COMPACT_WINDOW_WIDTH: f32 = 760.0;
-const APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_HEIGHT: f32 = 500.0;
-const APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_WIDTH: f32 = 550.0;
 const APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_HEIGHT: f32 = 680.0;
 const APP_MODAL_HOST_DELAYED_SEND_WINDOW_WIDTH: f32 = 470.0;
 /*
@@ -2474,7 +2473,7 @@ const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
         body: "Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.",
         icon_path: COMMAND_ICON_COMMAND,
         id: "command-palette-all-actions",
-        title: "Press Cmd Shift P anywhere to open the Command Palette",
+        title: "Press Cmd Shift P anywhere to open Ghostex Quick Access",
     },
     GpuiNativeTitlebarTip {
         body: "Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.",
@@ -3009,12 +3008,12 @@ impl GpuiAppModalKind {
             Self::Settings => "Ghostex Settings",
             Self::Hotkeys => "Ghostex Hotkeys",
             Self::MissingProjectFolder => "Ghostex Project Folder Missing",
-            Self::CommandPalette => "Ghostex Command Palette",
-            Self::PreviousSessions => "Ghostex Previous Sessions",
-            Self::RecentProjects => "Ghostex Recent Projects",
+            Self::CommandPalette
+            | Self::PreviousSessions
+            | Self::RecentProjects
+            | Self::StashedPrompts => "Ghostex Quick Access",
             Self::DaemonSessions => "Ghostex Running Sessions",
             Self::PinnedPrompts => "Ghostex Pinned Prompts",
-            Self::StashedPrompts => "Ghostex Prompts",
             Self::ScratchPad => "Ghostex Scratch Pad",
             Self::AgentsHub => "Ghostex Agents Hub",
             Self::DelayedSend => "Ghostex Session Automations",
@@ -3039,14 +3038,13 @@ impl GpuiAppModalKind {
 
     fn window_size(self) -> Size<Pixels> {
         match self {
-            /*
-            CDXC:StashedPrompts 2026-07-29:
-            The session Prompts modal reuses the command palette dialog chrome,
-            so it keeps the same fixed child-window frame.
-            */
-            Self::CommandPalette | Self::StashedPrompts => size(
+            /* All four Quick Access tabs share one stable child-window frame. */
+            Self::CommandPalette
+            | Self::PreviousSessions
+            | Self::RecentProjects
+            | Self::StashedPrompts => size(
                 px(APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_HEIGHT),
+                px(APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_HEIGHT),
             ),
             Self::DelayedSend => size(
                 px(APP_MODAL_HOST_DELAYED_SEND_WINDOW_WIDTH),
@@ -3059,10 +3057,6 @@ impl GpuiAppModalKind {
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
-            ),
-            Self::PreviousSessions | Self::RecentProjects => size(
-                px(APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_HEIGHT),
             ),
             Self::PinnedPrompts => size(
                 px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
@@ -3188,7 +3182,7 @@ impl GpuiAppModalKind {
     fn open_message(self) -> serde_json::Value {
         match self {
             Self::CommandPalette => serde_json::json!({
-                "initialQuery": ">",
+                "initialQuery": "",
                 "modal": self.modal_id(),
                 "type": "open",
             }),
@@ -3260,29 +3254,16 @@ impl GpuiAppModalKind {
     }
 }
 
-fn gpui_command_palette_initial_query_for_hotkey_action_id(
-    action_id: &str,
-) -> Option<&'static str> {
-    /*
-    CDXC:GPUICommandPalette 2026-06-26-07:40:
-    GPUI shares the same command-palette modal for command finding and session search. The hotkey action id is the mode selector: Cmd+Shift+P opens with `>` for commands, while Cmd+P opens with an empty query so current and previous sessions are searched immediately.
-    */
-    match action_id {
-        "openCommandPalette" => Some(">"),
-        "openSessionSearchPalette" => Some(""),
-        _ => None,
-    }
-}
-
 fn gpui_app_modal_kind_for_hotkey_action_id(action_id: &str) -> Option<GpuiAppModalKind> {
     /*
     CDXC:GPUICommandPalette 2026-06-26-23:04:
-    `runGhostexHotkeyAction` needs an explicit app-modal allowlist after shell, pane, sidebar, focus, and action-slot routes have run. Keep command-palette search modes and legacy sidebar modal ids mapped here without treating every unknown hotkey id as a modal candidate.
+    `runGhostexHotkeyAction` needs an explicit app-modal allowlist after shell, pane, sidebar, focus, and action-slot routes have run. Map the separate Quick Access command/session entry actions and legacy sidebar modal ids here without treating every unknown hotkey id as a modal candidate.
     */
     match action_id {
         "openSettings" => Some(GpuiAppModalKind::Settings),
         "openHotkeys" => Some(GpuiAppModalKind::Hotkeys),
-        "openCommandPalette" | "openSessionSearchPalette" => Some(GpuiAppModalKind::CommandPalette),
+        "openCommandPalette" => Some(GpuiAppModalKind::CommandPalette),
+        "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
         "openPreviousSessions" => Some(GpuiAppModalKind::PreviousSessions),
         "daemonSessions" | "openDaemonSessions" => Some(GpuiAppModalKind::DaemonSessions),
         "pinnedPrompts" | "openPinnedPrompts" => Some(GpuiAppModalKind::PinnedPrompts),
@@ -3331,6 +3312,7 @@ struct GpuiKeepAwakeRuntime {
 
 struct GpuiRemoteGxserverConnection {
     _base_url: String,
+    code_server_component_platform: Option<String>,
     execution_target: GpuiRemoteExecutionTarget,
     local_port: u16,
     presentation_stream_cancel: Option<Arc<AtomicBool>>,
@@ -3342,6 +3324,7 @@ struct GpuiRemoteGxserverConnection {
 impl GpuiRemoteGxserverConnection {
     fn request_target(&self) -> GpuiRemoteGxserverRequestTarget {
         GpuiRemoteGxserverRequestTarget {
+            code_server_component_platform: self.code_server_component_platform.clone(),
             execution_target: self.execution_target.clone(),
             local_port: self.local_port,
             token: self.token.clone(),
@@ -3358,6 +3341,7 @@ impl GpuiRemoteGxserverConnection {
 
 #[derive(Clone)]
 struct GpuiRemoteGxserverRequestTarget {
+    code_server_component_platform: Option<String>,
     execution_target: GpuiRemoteExecutionTarget,
     local_port: u16,
     token: String,
@@ -3799,7 +3783,7 @@ struct GpuiSidebarWorkspaceTabSession {
     activity: AgentTerminalActivity,
     agent_icon: Option<&'static str>,
     agent_session_id: Option<String>,
-    key: GpuiLocalWorkspaceSessionKey,
+    key: GpuiWorkspaceTerminalSessionKey,
     kind: AgentsWorkspaceSessionKind,
     is_generating_first_prompt_title: bool,
     presentation_state: TerminalSessionPresentationState,
@@ -3974,13 +3958,14 @@ struct GpuiT3BrowserAccessLink {
 /*
 CDXC:GPUISidebarRename 2026-07-28:
 `command` is a fixed selector, not renderer-provided command text: it may only
-be the literal "rename" (default) or "name" (Pi), and Rust alone turns it into
-terminal input.
+be the literal "rename" (default), "name" (Pi), or "title" (Hermes Agent), and
+Rust alone turns it into terminal input.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GpuiWorkspaceTerminalRenameCommandKind {
     Name,
     Rename,
+    Title,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4372,6 +4357,10 @@ const SOURCE_CODE_SERVER_LOADING_PLACEHOLDER_DELAY: Duration = Duration::from_se
 const SOURCE_CODE_SERVER_STARTUP_TIMEOUT: Duration = Duration::from_secs(7);
 const SOURCE_CODE_SERVER_PORT_BUSY_WAIT_INTERVAL: Duration = Duration::from_secs(2);
 const SOURCE_CODE_SERVER_HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const SOURCE_CODE_SERVER_REMOTE_PORT: u16 = 3777;
+const SOURCE_CODE_SERVER_TUNNEL_PORT_MIN: u16 = 43_000;
+const SOURCE_CODE_SERVER_TUNNEL_PORT_MAX: u16 = 43_999;
+const SOURCE_CODE_SERVER_TUNNEL_ATTEMPTS: usize = 24;
 
 /*
 CDXC:GPUISourceRuntimeCleanup 2026-06-28-17:09:
@@ -4475,7 +4464,51 @@ struct SourceCodeServerRuntimeTarget {
     active_project_id: GpuiProjectId,
     source_workarea_id: String,
     project_path: PathBuf,
-    runtime_url: ProjectWorkareaRealRuntimeUrl,
+    endpoint: SourceCodeServerRuntimeEndpoint,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum SourceCodeServerRuntimeEndpoint {
+    Local,
+    Remote {
+        component_platform: String,
+        connection_generation: u64,
+        execution_target: GpuiRemoteExecutionTarget,
+        machine_config: GpuiRemoteMachineConfig,
+        remote_machine_id: String,
+    },
+}
+
+impl SourceCodeServerRuntimeTarget {
+    fn component_platform(&self) -> Option<&str> {
+        match &self.endpoint {
+            SourceCodeServerRuntimeEndpoint::Local => None,
+            SourceCodeServerRuntimeEndpoint::Remote {
+                component_platform, ..
+            } => Some(component_platform.as_str()),
+        }
+    }
+
+    fn can_share_runtime_with(&self, other: &Self) -> bool {
+        match (&self.endpoint, &other.endpoint) {
+            (SourceCodeServerRuntimeEndpoint::Local, SourceCodeServerRuntimeEndpoint::Local) => {
+                true
+            }
+            (
+                SourceCodeServerRuntimeEndpoint::Remote {
+                    connection_generation: left_generation,
+                    remote_machine_id: left_machine,
+                    ..
+                },
+                SourceCodeServerRuntimeEndpoint::Remote {
+                    connection_generation: right_generation,
+                    remote_machine_id: right_machine,
+                    ..
+                },
+            ) => left_generation == right_generation && left_machine == right_machine,
+            _ => false,
+        }
+    }
 }
 
 /*
@@ -4487,6 +4520,28 @@ path, and never accept a path that was not present in the current Hub catalog.
 struct PendingSourceFileOpen {
     file_path: PathBuf,
     project_path: PathBuf,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RemotePromptEditorDeliveryTarget {
+    #[cfg(target_os = "macos")]
+    NativeTerminal(FocusedTerminalTextMountTarget),
+    GpuiEngineTerminal {
+        target: GpuiEngineTerminalEventTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
+    },
+    #[cfg(target_os = "macos")]
+    NativeView(usize),
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct PendingRemotePromptEditorRequest {
+    shell_session_id: TerminalSessionId,
+    remote_key: GpuiRemoteAttachSessionKey,
+    connection_generation: u64,
+    source_target: SourceCodeServerRuntimeTarget,
+    source_runtime_generation: u64,
+    delivery_target: RemotePromptEditorDeliveryTarget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4583,6 +4638,9 @@ struct SourceCodeServerRuntimeOwner {
     state: SourceCodeServerRuntimeLaunchState,
     target: Option<SourceCodeServerRuntimeTarget>,
     settings: Option<SourceCodeServerRuntimeSettings>,
+    runtime_origin: Option<String>,
+    prompt_editor_ipc_ready: bool,
+    pending_remote_prompt_editor_request: Option<PendingRemotePromptEditorRequest>,
 }
 
 impl SourceCodeServerRuntimeOwner {
@@ -4596,6 +4654,9 @@ impl SourceCodeServerRuntimeOwner {
             state: SourceCodeServerRuntimeLaunchState::Idle,
             target: None,
             settings: None,
+            runtime_origin: None,
+            prompt_editor_ipc_ready: false,
+            pending_remote_prompt_editor_request: None,
         }
     }
 
@@ -4604,20 +4665,83 @@ impl SourceCodeServerRuntimeOwner {
         self.generation
     }
 
+    fn queue_remote_prompt_editor_request(&mut self, request: PendingRemotePromptEditorRequest) {
+        self.pending_remote_prompt_editor_request = Some(request);
+    }
+
+    fn cancel_remote_prompt_editor_request_for_shell_session(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+    ) {
+        if self
+            .pending_remote_prompt_editor_request
+            .as_ref()
+            .is_some_and(|request| request.shell_session_id == shell_session_id)
+        {
+            self.pending_remote_prompt_editor_request = None;
+        }
+    }
+
+    fn owns_ready_remote_prompt_editor_ipc(
+        &self,
+        request: &PendingRemotePromptEditorRequest,
+    ) -> bool {
+        self.state == SourceCodeServerRuntimeLaunchState::Ready
+            && self.generation == request.source_runtime_generation
+            && self.target.as_ref() == Some(&request.source_target)
+            && self.child.is_some()
+            && self.prompt_editor_ipc_ready
+            && self
+                .runtime_origin
+                .as_deref()
+                .is_some_and(|origin| !origin.trim().is_empty())
+            && request.source_target.active_project_id.0
+                == gpui_remote_scoped_project_id(
+                    request.remote_key.remote_machine_id.as_str(),
+                    request.remote_key.project_id.as_str(),
+                )
+            && matches!(
+                &request.source_target.endpoint,
+                SourceCodeServerRuntimeEndpoint::Remote {
+                    connection_generation,
+                    remote_machine_id,
+                    ..
+                } if remote_machine_id == &request.remote_key.remote_machine_id
+                    && *connection_generation == request.connection_generation
+            )
+    }
+
     fn runtime_url_for_target(
         &self,
         target: &SourceCodeServerRuntimeTarget,
     ) -> Option<ProjectWorkareaRealRuntimeUrl> {
         (self.state == SourceCodeServerRuntimeLaunchState::Ready
             && self.target.as_ref() == Some(target)
-            && self.child.is_some())
-        .then(|| target.runtime_url.clone())
+            && self.child.is_some()
+            && self.prompt_editor_ipc_ready)
+            .then(|| {
+                source_code_server_runtime_url(
+                    self.runtime_origin.as_deref()?,
+                    target.project_path.as_path(),
+                )
+            })
+            .flatten()
     }
 
-    fn can_reuse_ready_process(&self, settings: &SourceCodeServerRuntimeSettings) -> bool {
+    fn can_reuse_ready_process(
+        &self,
+        target: &SourceCodeServerRuntimeTarget,
+        settings: &SourceCodeServerRuntimeSettings,
+    ) -> bool {
         self.state == SourceCodeServerRuntimeLaunchState::Ready
             && self.settings.as_ref() == Some(settings)
             && self.child.is_some()
+            && self.prompt_editor_ipc_ready
+            && self.runtime_origin.is_some()
+            && self
+                .target
+                .as_ref()
+                .is_some_and(|current| current.can_share_runtime_with(target))
     }
 
     fn launching_matches(
@@ -4628,6 +4752,19 @@ impl SourceCodeServerRuntimeOwner {
         self.state == SourceCodeServerRuntimeLaunchState::Launching
             && self.target.as_ref() == Some(target)
             && self.settings.as_ref() == Some(settings)
+    }
+
+    fn launching_can_share(
+        &self,
+        target: &SourceCodeServerRuntimeTarget,
+        settings: &SourceCodeServerRuntimeSettings,
+    ) -> bool {
+        self.state == SourceCodeServerRuntimeLaunchState::Launching
+            && self.settings.as_ref() == Some(settings)
+            && self
+                .target
+                .as_ref()
+                .is_some_and(|current| current.can_share_runtime_with(target))
     }
 
     fn child_is_within_startup_grace(&self) -> bool {
@@ -4643,12 +4780,15 @@ impl SourceCodeServerRuntimeOwner {
         settings: SourceCodeServerRuntimeSettings,
         started_at: Instant,
     ) {
+        self.pending_remote_prompt_editor_request = None;
         self.state = SourceCodeServerRuntimeLaunchState::Launching;
         self.failure = None;
         self.install_progress = None;
         self.target = Some(target);
         self.settings = Some(settings);
         self.started_at = Some(started_at);
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn set_ready_target(
@@ -4672,9 +4812,13 @@ impl SourceCodeServerRuntimeOwner {
         settings: SourceCodeServerRuntimeSettings,
         child: Child,
         started_at: Instant,
+        runtime_origin: String,
+        prompt_editor_ipc_ready: bool,
     ) {
         self.replace_child(child);
         self.started_at = Some(started_at);
+        self.runtime_origin = Some(runtime_origin);
+        self.prompt_editor_ipc_ready = prompt_editor_ipc_ready;
         self.set_ready_target(target, settings);
     }
 
@@ -4686,6 +4830,7 @@ impl SourceCodeServerRuntimeOwner {
         started_at: Option<Instant>,
         failure: SourceCodeServerRuntimeFailure,
     ) {
+        self.pending_remote_prompt_editor_request = None;
         if let Some(child) = child {
             self.replace_child(child);
         }
@@ -4695,6 +4840,8 @@ impl SourceCodeServerRuntimeOwner {
         self.install_progress = None;
         self.target = Some(target);
         self.settings = Some(settings);
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn set_install_required(
@@ -4702,12 +4849,15 @@ impl SourceCodeServerRuntimeOwner {
         target: SourceCodeServerRuntimeTarget,
         settings: SourceCodeServerRuntimeSettings,
     ) {
+        self.pending_remote_prompt_editor_request = None;
         self.state = SourceCodeServerRuntimeLaunchState::InstallRequired;
         self.failure = None;
         self.install_progress = None;
         self.started_at = None;
         self.target = Some(target);
         self.settings = Some(settings);
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn set_installing(
@@ -4715,12 +4865,15 @@ impl SourceCodeServerRuntimeOwner {
         target: Option<SourceCodeServerRuntimeTarget>,
         settings: Option<SourceCodeServerRuntimeSettings>,
     ) {
+        self.pending_remote_prompt_editor_request = None;
         self.state = SourceCodeServerRuntimeLaunchState::Installing;
         self.failure = None;
         self.install_progress = Some(component_store::ComponentStoreProgressPhase::Checking);
         self.started_at = Some(Instant::now());
         self.target = target;
         self.settings = settings;
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn set_install_failed(
@@ -4729,21 +4882,27 @@ impl SourceCodeServerRuntimeOwner {
         settings: Option<SourceCodeServerRuntimeSettings>,
         failure: SourceCodeServerRuntimeFailure,
     ) {
+        self.pending_remote_prompt_editor_request = None;
         self.state = SourceCodeServerRuntimeLaunchState::Failed;
         self.failure = Some(failure);
         self.install_progress = None;
         self.started_at = None;
         self.target = target;
         self.settings = settings;
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn reset_after_install(&mut self) {
+        self.pending_remote_prompt_editor_request = None;
         self.started_at = None;
         self.state = SourceCodeServerRuntimeLaunchState::Idle;
         self.failure = None;
         self.install_progress = None;
         self.target = None;
         self.settings = None;
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
     }
 
     fn replace_child(&mut self, child: Child) {
@@ -4760,11 +4919,14 @@ impl SourceCodeServerRuntimeOwner {
         };
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => {
+                self.pending_remote_prompt_editor_request = None;
                 self.child = None;
                 self.started_at = None;
                 self.state = SourceCodeServerRuntimeLaunchState::Idle;
                 self.failure = None;
                 self.install_progress = None;
+                self.runtime_origin = None;
+                self.prompt_editor_ipc_ready = false;
                 true
             }
             Ok(None) => false,
@@ -4780,20 +4942,25 @@ impl SourceCodeServerRuntimeOwner {
             let _ = child.wait();
         }
         self.generation = self.generation.saturating_add(1);
+        self.pending_remote_prompt_editor_request = None;
         self.started_at = None;
         self.state = SourceCodeServerRuntimeLaunchState::Idle;
         self.failure = None;
         self.install_progress = None;
         self.target = None;
         self.settings = None;
+        self.runtime_origin = None;
+        self.prompt_editor_ipc_ready = false;
         had_state
     }
 }
 
 struct SourceCodeServerRuntimeStartOutput {
     child: Child,
+    runtime_origin: String,
+    prompt_editor_ipc_ready: bool,
     started_at: Instant,
-    responsive: bool,
+    http_runtime_ready: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -7297,6 +7464,11 @@ fn command_pane_panel_expand_menu_label() -> &'static str {
 // CPRAILDBG: temporary diagnostic logging for the command-pane resize-rail
 // drag investigation. Remove before handoff.
 fn cpraildbg(message: &str) {
+    if !shared_settings::shared_sidebar_settings_snapshot().debugging_mode()
+        || !support_logs::scenario_id_enabled("native.pane.tabs")
+    {
+        return;
+    }
     use std::io::Write as _;
     let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
@@ -7985,7 +8157,15 @@ fn gpui_command_close_after_done_toggle_target(
 }
 
 fn command_session_is_reusable_for_action(session: &CommandTerminalSession) -> bool {
-    session.activity == CommandTerminalActivity::Idle && !session.is_sleeping
+    /*
+    CDXC:GPUICommandPaneActions 2026-08-08:
+    A sleeping command tab is still the existing pane owned by its Action. An
+    Action launch already re-selects that exact tab, marks it awake, and sends
+    startup text through the existing gxserver attach path, so excluding parked
+    tabs here discarded the reusable owner and allocated a duplicate pane.
+    Working tabs remain non-reusable so concurrent runs keep separate owners.
+    */
+    session.activity == CommandTerminalActivity::Idle
 }
 
 fn focused_command_pane_close_after_done_target(
@@ -9126,6 +9306,29 @@ impl ProjectEditorAutoSleepPolicySnapshot {
             TitlebarMode::Agents => None,
         }
     }
+}
+
+/*
+CDXC:GPUIProjectViewMemory 2026-08-07:
+The workarea a project was last shown in — and how that project's companion
+pane was arranged — is project-owned state, exactly like its Agents split
+topology. Keyed by the same canonical workspace project key, so a remote
+project's view memory is machine-scoped and never collides with a same-named
+local project. Companion slot occupants are the project's own shell session
+ids, the identical vocabulary the parked workspace model already stores, so
+they are meaningful only alongside that model and are validated against it on
+restore.
+*/
+#[derive(Clone, Copy, PartialEq)]
+struct GpuiProjectViewState {
+    active_mode: TitlebarMode,
+    companion_visible: bool,
+    companion_split_enabled: bool,
+    companion_width_ratio: f32,
+    companion_split_ratio: f32,
+    companion_top_session_id: Option<TerminalSessionId>,
+    companion_bottom_session_id: Option<TerminalSessionId>,
+    companion_focused_slot: ProjectEditorCompanionTerminalSlot,
 }
 
 struct ProjectEditorShellModel {
@@ -12151,6 +12354,58 @@ struct WorkspaceModel {
     next_session_id: u64,
 }
 
+fn workspace_terminal_session_mapping_get(
+    key: &GpuiWorkspaceTerminalSessionKey,
+    local_workspace_session_mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    remote_attach_sessions: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+) -> Option<TerminalSessionId> {
+    match key {
+        GpuiWorkspaceTerminalSessionKey::Local(key) => {
+            local_workspace_session_mappings.get(key).copied()
+        }
+        GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+            remote_attach_sessions.get(key).copied()
+        }
+    }
+}
+
+fn workspace_terminal_session_mapping_insert(
+    key: GpuiWorkspaceTerminalSessionKey,
+    shell_session_id: TerminalSessionId,
+    local_workspace_session_mappings: &mut HashMap<
+        GpuiLocalWorkspaceSessionKey,
+        TerminalSessionId,
+    >,
+    remote_attach_sessions: &mut HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+) {
+    match key {
+        GpuiWorkspaceTerminalSessionKey::Local(key) => {
+            local_workspace_session_mappings.insert(key, shell_session_id);
+        }
+        GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+            remote_attach_sessions.insert(key, shell_session_id);
+        }
+    }
+}
+
+fn workspace_terminal_session_mapping_remove(
+    key: &GpuiWorkspaceTerminalSessionKey,
+    local_workspace_session_mappings: &mut HashMap<
+        GpuiLocalWorkspaceSessionKey,
+        TerminalSessionId,
+    >,
+    remote_attach_sessions: &mut HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+) {
+    match key {
+        GpuiWorkspaceTerminalSessionKey::Local(key) => {
+            local_workspace_session_mappings.remove(key);
+        }
+        GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+            remote_attach_sessions.remove(key);
+        }
+    }
+}
+
 impl WorkspaceModel {
     fn empty_default() -> Self {
         let pane_id = WorkspacePaneId(1);
@@ -13235,6 +13490,85 @@ impl WorkspaceModel {
         )
     }
 
+    fn place_existing_session_for_new_terminal(
+        &mut self,
+        source_pane_id: WorkspacePaneId,
+        requested_pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+        placement: AgentsWorkspaceNewTerminalPlacement,
+    ) -> Option<WorkspacePaneId> {
+        /*
+        CDXC:GPUIRegisteredQuickTerminals 2026-08-07:
+        Remote gxserver presentation can publish a newly-created session before
+        its SSH attach plan returns. Reconciliation necessarily gives that row
+        a temporary tab owner, but quick-create placement is still owned by the
+        initiating Agents action. Move the existing shell tab into the captured
+        tab/split/bottom-row destination before arming its attach payload so the
+        presentation race cannot turn Cmd+D, Cmd+Shift+D, or pane controls into
+        ordinary tabs.
+        */
+        let target_pane_id = self.resolve_action_pane_id(requested_pane_id)?;
+        let placed = match placement {
+            AgentsWorkspaceNewTerminalPlacement::Tab => {
+                self.group_tab_into_pane(source_pane_id, target_pane_id, session_id)
+            }
+            AgentsWorkspaceNewTerminalPlacement::SplitRight => self.split_tab_to_pane(
+                source_pane_id,
+                target_pane_id,
+                session_id,
+                WorkspaceDropZone::Right,
+            ),
+            AgentsWorkspaceNewTerminalPlacement::SplitBelow => self.split_tab_to_pane(
+                source_pane_id,
+                target_pane_id,
+                session_id,
+                WorkspaceDropZone::Bottom,
+            ),
+            AgentsWorkspaceNewTerminalPlacement::BottomRow => {
+                return self.move_tab_to_bottom_row(source_pane_id, session_id);
+            }
+        };
+        placed.then_some(self.focused_pane)
+    }
+
+    fn move_tab_to_bottom_row(
+        &mut self,
+        source_pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+    ) -> Option<WorkspacePaneId> {
+        if !self.has_session(session_id) || collect_workspace_tab_count(&self.root) <= 1 {
+            return None;
+        }
+        let (tab, source_is_empty) = self.remove_tab_for_move(source_pane_id, session_id)?;
+        if source_is_empty {
+            self.collapse_empty_leaf(source_pane_id);
+        }
+        self.clear_focus_mode_if_invalid();
+
+        let pane_id = self.allocate_pane_id();
+        let split_id = self.allocate_split_id();
+        let new_leaf = WorkspaceNode::Leaf(WorkspaceLeaf {
+            pane_id,
+            tab_group: WorkspaceTabGroup {
+                tabs: vec![tab],
+                active_tab: session_id,
+            },
+        });
+        let current_root = std::mem::replace(&mut self.root, workspace_dummy_node());
+        self.root = WorkspaceNode::Split(WorkspaceSplit {
+            id: split_id,
+            axis: WorkspaceSplitAxis::Vertical,
+            ratio: workspace_split_ratio(WORKSPACE_BOTTOM_ROW_TOP_RATIO),
+            default_ratio: workspace_split_ratio(WORKSPACE_BOTTOM_ROW_TOP_RATIO),
+            first: Box::new(current_root),
+            second: Box::new(new_leaf),
+        });
+        self.focused_pane = pane_id;
+        self.focus_mode_pane = None;
+        self.normalize_workspace_tree();
+        Some(pane_id)
+    }
+
     fn append_mounting_session_bottom_row(&mut self) -> (WorkspacePaneId, TerminalSessionId) {
         /*
         CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
@@ -13313,11 +13647,13 @@ impl WorkspaceModel {
 
     fn reconcile_with_sidebar_tab_sessions(
         &mut self,
+        active_project_id: Option<&str>,
         tab_sessions: &[GpuiSidebarWorkspaceTabSession],
         local_workspace_session_mappings: &mut HashMap<
             GpuiLocalWorkspaceSessionKey,
             TerminalSessionId,
         >,
+        remote_attach_sessions: &mut HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     ) -> bool {
         /*
         CDXC:GPUIWorkspaceTabsParity 2026-07-05:
@@ -13336,14 +13672,21 @@ impl WorkspaceModel {
         let mut allowed_shell_sessions = HashSet::new();
 
         for tab_session in tab_sessions.iter() {
-            let shell_session_id = if let Some(shell_session_id) = local_workspace_session_mappings
-                .get(&tab_session.key)
-                .copied()
+            let shell_session_id = if let Some(shell_session_id) =
+                workspace_terminal_session_mapping_get(
+                    &tab_session.key,
+                    local_workspace_session_mappings,
+                    remote_attach_sessions,
+                )
             {
                 if self.session(shell_session_id).is_some() {
                     shell_session_id
                 } else {
-                    local_workspace_session_mappings.remove(&tab_session.key);
+                    workspace_terminal_session_mapping_remove(
+                        &tab_session.key,
+                        local_workspace_session_mappings,
+                        remote_attach_sessions,
+                    );
                     let session_id = self.allocate_session_id();
                     self.terminal_sessions.push(
                         TerminalSession::placeholder(
@@ -13355,7 +13698,12 @@ impl WorkspaceModel {
                         .with_agent_icon(tab_session.agent_icon)
                         .with_kind(tab_session.kind),
                     );
-                    local_workspace_session_mappings.insert(tab_session.key.clone(), session_id);
+                    workspace_terminal_session_mapping_insert(
+                        tab_session.key.clone(),
+                        session_id,
+                        local_workspace_session_mappings,
+                        remote_attach_sessions,
+                    );
                     changed = true;
                     session_id
                 }
@@ -13371,7 +13719,12 @@ impl WorkspaceModel {
                     .with_agent_icon(tab_session.agent_icon)
                     .with_kind(tab_session.kind),
                 );
-                local_workspace_session_mappings.insert(tab_session.key.clone(), session_id);
+                workspace_terminal_session_mapping_insert(
+                    tab_session.key.clone(),
+                    session_id,
+                    local_workspace_session_mappings,
+                    remote_attach_sessions,
+                );
                 changed = true;
                 session_id
             };
@@ -13422,7 +13775,21 @@ impl WorkspaceModel {
             .retain(|session| allowed_shell_sessions.contains(&session.id));
         changed |= self.terminal_sessions.len() != before_session_count;
         local_workspace_session_mappings.retain(|key, shell_session_id| {
-            keys.contains(key) && allowed_shell_sessions.contains(shell_session_id)
+            keys.contains(&GpuiWorkspaceTerminalSessionKey::Local(key.clone()))
+                && allowed_shell_sessions.contains(shell_session_id)
+        });
+        remote_attach_sessions.retain(|key, shell_session_id| {
+            let belongs_to_active_project = active_project_id
+                == Some(
+                    gpui_remote_scoped_project_id(
+                        key.remote_machine_id.as_str(),
+                        key.project_id.as_str(),
+                    )
+                    .as_str(),
+                );
+            !belongs_to_active_project
+                || (keys.contains(&GpuiWorkspaceTerminalSessionKey::Remote(key.clone()))
+                    && allowed_shell_sessions.contains(shell_session_id))
         });
 
         if tab_sessions.is_empty() {
@@ -13495,9 +13862,11 @@ impl WorkspaceModel {
             return changed;
         };
         for tab_session in tab_sessions {
-            let Some(shell_session_id) = local_workspace_session_mappings
-                .get(&tab_session.key)
-                .copied()
+            let Some(shell_session_id) = workspace_terminal_session_mapping_get(
+                &tab_session.key,
+                local_workspace_session_mappings,
+                remote_attach_sessions,
+            )
             else {
                 continue;
             };
@@ -14581,8 +14950,12 @@ impl CommandPaneModel {
         CDXC:GPUICommandPane 2026-06-25-11:18:
         MacOS command Actions reuse one idle command-pane tab per normalized Action title after restore, even when the live command-id map is missing. Keep the exact command-id match first, then allow idle title-owned reuse regardless of stale/missing action id; duplicate Action titles are rejected at save time, and run-start rewrites the live mapping.
 
-        CDXC:GPUICommandPaneActions 2026-06-25-16:22:
-        Native command Action reuse requires a running idle command-pane terminal. GPUI sleeping command tabs have no mounted command body, so they must not be selected as reusable Action runners; otherwise the run can become Working while no surface exists to execute the wrapper.
+        CDXC:GPUICommandPaneActions 2026-08-08:
+        Idle sleeping/restored Action tabs are reusable too. Run start wakes the
+        selected session before mounted-surface detection, and an unmounted reuse
+        goes through the exact existing gxserver attach slot with startup text.
+        This preserves the old pane/session instead of pruning it and creating a
+        duplicate while still refusing a tab whose Action is currently Working.
         */
         let title_key = gpui_command_action_title_key(title);
         if title_key.is_empty() {
@@ -16853,6 +17226,7 @@ struct GpuiShellLayoutState {
     agents_workspace_project_id: Option<String>,
     parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
     local_workspace_session_mappings: HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    remote_attach_sessions: HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     agents_chat_mode_sessions: HashSet<TerminalSessionId>,
     command_pane: CommandPaneModel,
     command_pane_project_id: Option<String>,
@@ -16862,6 +17236,7 @@ struct GpuiShellLayoutState {
     agents_delayed_send_restore_intents: Vec<GpuiAgentsDelayedSendRestoreIntent>,
     pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
     project_editor_shell: ProjectEditorShellModel,
+    project_view_states_by_project: HashMap<String, GpuiProjectViewState>,
     browser_profiles: BrowserProfileModel,
     browser_tabs: BrowserTabModel,
     browser_tabs_project_id: Option<String>,
@@ -16904,6 +17279,7 @@ impl GpuiShellLayoutState {
             agents_workspace_project_id: None,
             parked_agents_workspaces_by_project: HashMap::new(),
             local_workspace_session_mappings: HashMap::new(),
+            remote_attach_sessions: HashMap::new(),
             agents_chat_mode_sessions: HashSet::new(),
             command_pane: CommandPaneModel::shell_default_with_default_height_px(
                 content_height,
@@ -16916,6 +17292,7 @@ impl GpuiShellLayoutState {
             agents_delayed_send_restore_intents: Vec::new(),
             pending_command_gxserver_cleanup: HashSet::new(),
             project_editor_shell: ProjectEditorShellModel::shell_default(),
+            project_view_states_by_project: HashMap::new(),
             browser_profiles,
             browser_tabs,
             browser_tabs_project_id: None,
@@ -17026,6 +17403,23 @@ impl GpuiShellLayoutState {
             .filter(|project_id| gpui_workspace_project_key_allowed(project_id))
             .map(str::to_string)
             .or_else(|| sole_local_workspace_mapping_project_id(&local_workspace_session_mappings));
+        /*
+        CDXC:GPUIRemoteWorkspaceSessionReattach 2026-08-06:
+        Remote Agents tabs persist the same canonical tab-to-shell identity as
+        local tabs, additionally bounded by the saved-machine id. This contains
+        no SSH target, path, title, command, token, or terminal content. Files
+        written before remote identity persistence migrate with an empty map;
+        the first authoritative remote sidebar projection then removes the old
+        unidentifiable placeholders and allocates one tab per live session.
+        */
+        let remote_attach_sessions = match object.get("agentsWorkspaceRemoteSessionMappings") {
+            Some(value) => remote_workspace_session_mappings_from_shell_state(
+                value,
+                &agents_workspace,
+                agents_workspace_project_id.as_deref(),
+            )?,
+            None => HashMap::new(),
+        };
         /*
         CDXC:GPUISessionChatViewPersistence 2026-07-31:
         The last-used surface (terminal vs chat) per Agents session survives
@@ -17201,6 +17595,26 @@ impl GpuiShellLayoutState {
             .get("petOverlayActivitiesVisible")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
+        /*
+        CDXC:GPUIProjectViewMemory 2026-08-07:
+        Same key gate as the parked workspaces: accept a plain local project id
+        or a machine-scoped remote key, and drop anything else so a malformed
+        entry cannot resurrect a view for a project this app cannot address.
+        */
+        let project_view_states_by_project = object
+            .get("projectViewStates")
+            .and_then(serde_json::Value::as_object)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter(|(project_id, _)| gpui_workspace_project_key_allowed(project_id))
+                    .filter_map(|(project_id, value)| {
+                        project_view_state_from_shell_state(value)
+                            .map(|state| (project_id.clone(), state))
+                    })
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
 
         Some(Self {
             active_mode,
@@ -17211,6 +17625,7 @@ impl GpuiShellLayoutState {
             agents_workspace_project_id,
             parked_agents_workspaces_by_project,
             local_workspace_session_mappings,
+            remote_attach_sessions,
             agents_chat_mode_sessions,
             command_pane,
             command_pane_project_id,
@@ -17220,6 +17635,7 @@ impl GpuiShellLayoutState {
             agents_delayed_send_restore_intents,
             pending_command_gxserver_cleanup,
             project_editor_shell,
+            project_view_states_by_project,
             browser_profiles,
             browser_tabs,
             browser_tabs_project_id,
@@ -17334,6 +17750,11 @@ fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_json::Value {
             &app.local_workspace_session_mappings,
             &app.agents_workspace,
         ),
+        "agentsWorkspaceRemoteSessionMappings": remote_workspace_session_mappings_to_shell_state_json(
+            &app.remote_attach_sessions,
+            &app.agents_workspace,
+            app.agents_workspace_project_id.as_deref(),
+        ),
         "agentsChatModeSessions": agents_chat_mode_session_ids,
         "agentsDelayedSends": agents_delayed_sends_to_shell_state_json(
             &app.local_workspace_session_mappings,
@@ -17367,6 +17788,13 @@ fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_json::Value {
             })
             .collect::<serde_json::Map<_, _>>(),
         "projectEditorShell": project_editor_shell_to_shell_state_json(&app.project_editor_shell),
+        "projectViewStates": app
+            .project_view_states_for_shell_state()
+            .iter()
+            .map(|(project_id, state)| {
+                (project_id.clone(), project_view_state_to_shell_state_json(state))
+            })
+            .collect::<serde_json::Map<_, _>>(),
     })
 }
 
@@ -17424,9 +17852,53 @@ fn sole_local_workspace_mapping_project_id(
         .then(|| project_id.to_string())
 }
 
+fn remote_workspace_session_mappings_to_shell_state_json(
+    mappings: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+    workspace: &WorkspaceModel,
+    workspace_project_id: Option<&str>,
+) -> serde_json::Value {
+    let mut entries = mappings
+        .iter()
+        .filter_map(|(key, shell_session_id)| {
+            let scoped_project_id = gpui_remote_scoped_project_id(
+                key.remote_machine_id.as_str(),
+                key.project_id.as_str(),
+            );
+            (workspace_project_id == Some(scoped_project_id.as_str())
+                && workspace.has_session(*shell_session_id))
+            .then(|| {
+                (
+                    shell_session_id.0,
+                    key.remote_machine_id.as_str(),
+                    key.project_id.as_str(),
+                    key.session_id.as_str(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_unstable();
+    serde_json::Value::Array(
+        entries
+            .into_iter()
+            .map(
+                |(shell_session_id, remote_machine_id, project_id, session_id)| {
+                    serde_json::json!({
+                        "remoteMachineId": remote_machine_id,
+                        "projectId": project_id,
+                        "sessionId": session_id,
+                        "shellSessionId": shell_session_id,
+                    })
+                },
+            )
+            .collect(),
+    )
+}
+
 fn agents_workspace_project_state_to_shell_state_json(
     workspace: &WorkspaceModel,
+    workspace_project_id: Option<&str>,
     mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    remote_mappings: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     timers: &HashMap<TerminalSessionId, GpuiCommandDelayedSendTimer>,
     watchers: &HashMap<TerminalSessionId, GpuiAgentsSendWhenStoppedWatcher>,
     now: SystemTime,
@@ -17436,6 +17908,11 @@ fn agents_workspace_project_state_to_shell_state_json(
         "sessionMappings": local_workspace_session_mappings_to_shell_state_json(
             mappings,
             workspace,
+        ),
+        "remoteSessionMappings": remote_workspace_session_mappings_to_shell_state_json(
+            remote_mappings,
+            workspace,
+            workspace_project_id,
         ),
         "delayedSends": agents_delayed_sends_to_shell_state_json(
             mappings,
@@ -17449,16 +17926,18 @@ fn agents_workspace_project_state_to_shell_state_json(
 
 fn agents_workspace_project_state_from_shell_state(
     value: &serde_json::Value,
+    workspace_project_id: Option<&str>,
 ) -> Option<(
     WorkspaceModel,
     HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
+    HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     Vec<GpuiAgentsDelayedSendRestoreIntent>,
 )> {
     let object = value.as_object()?;
     if object.keys().any(|key| {
         !matches!(
             key.as_str(),
-            "workspace" | "sessionMappings" | "delayedSends"
+            "workspace" | "sessionMappings" | "remoteSessionMappings" | "delayedSends"
         )
     }) {
         return None;
@@ -17469,11 +17948,19 @@ fn agents_workspace_project_state_from_shell_state(
     let mappings = object
         .get("sessionMappings")
         .and_then(|value| local_workspace_session_mappings_from_shell_state(value, &workspace))?;
+    let remote_mappings = match object.get("remoteSessionMappings") {
+        Some(value) => remote_workspace_session_mappings_from_shell_state(
+            value,
+            &workspace,
+            workspace_project_id,
+        )?,
+        None => HashMap::new(),
+    };
     let delayed_sends = match object.get("delayedSends") {
         Some(value) => agents_delayed_send_restore_intents_from_shell_state(value, &mappings)?,
         None => Vec::new(),
     };
-    Some((workspace, mappings, delayed_sends))
+    Some((workspace, mappings, remote_mappings, delayed_sends))
 }
 
 fn local_workspace_session_mappings_from_shell_state(
@@ -17505,6 +17992,55 @@ fn local_workspace_session_mappings_from_shell_state(
             return None;
         }
         let key = GpuiLocalWorkspaceSessionKey {
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+        };
+        if mappings.insert(key, shell_session_id).is_some()
+            || !mapped_shell_session_ids.insert(shell_session_id)
+        {
+            return None;
+        }
+    }
+    Some(mappings)
+}
+
+fn remote_workspace_session_mappings_from_shell_state(
+    value: &serde_json::Value,
+    workspace: &WorkspaceModel,
+    workspace_project_id: Option<&str>,
+) -> Option<HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>> {
+    let entries = value.as_array()?;
+    if entries.len() > GPUI_SIDEBAR_WORKSPACE_TAB_SESSIONS_MAX {
+        return None;
+    }
+    let mut mappings = HashMap::with_capacity(entries.len());
+    let mut mapped_shell_session_ids = HashSet::with_capacity(entries.len());
+    for entry in entries {
+        let object = entry.as_object()?;
+        if object.len() != 4
+            || !object.contains_key("remoteMachineId")
+            || !object.contains_key("projectId")
+            || !object.contains_key("sessionId")
+            || !object.contains_key("shellSessionId")
+        {
+            return None;
+        }
+        let remote_machine_id = json_string_field(object, "remoteMachineId")?.trim();
+        let project_id = json_string_field(object, "projectId")?.trim();
+        let session_id = json_string_field(object, "sessionId")?.trim();
+        let shell_session_id = TerminalSessionId(json_u64_field(object, "shellSessionId")?);
+        let remote_machine_id = gpui_normalize_remote_machine_id(remote_machine_id)?;
+        let scoped_project_id =
+            gpui_remote_scoped_project_id(remote_machine_id.as_str(), project_id);
+        if !gpui_remote_sidebar_project_id_allowed(project_id)
+            || !gpui_remote_sidebar_session_id_allowed(session_id)
+            || workspace_project_id != Some(scoped_project_id.as_str())
+            || !workspace.has_session(shell_session_id)
+        {
+            return None;
+        }
+        let key = GpuiRemoteAttachSessionKey {
+            remote_machine_id,
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
         };
@@ -19323,6 +19859,56 @@ fn browser_tab_from_shell_state(
             browser_navigation_history_from_shell_state(object.get("history"), &url)
         } else {
             BrowserNavigationHistory::empty()
+        },
+    })
+}
+
+fn project_view_state_to_shell_state_json(state: &GpuiProjectViewState) -> serde_json::Value {
+    serde_json::json!({
+        "activeMode": state.active_mode.element_slug(),
+        "companionVisible": state.companion_visible,
+        "companionSplitEnabled": state.companion_split_enabled,
+        "companionWidthRatio": json_number_f32(project_editor_companion_width_ratio(
+            state.companion_width_ratio,
+        )),
+        "companionSplitRatio": json_number_f32(state.companion_split_ratio.clamp(0.1, 0.9)),
+        "companionTopSessionId": state.companion_top_session_id.map(|session_id| session_id.0),
+        "companionBottomSessionId": state
+            .companion_bottom_session_id
+            .map(|session_id| session_id.0),
+        "companionFocusedSlot": match state.companion_focused_slot {
+            ProjectEditorCompanionTerminalSlot::Top => "top",
+            ProjectEditorCompanionTerminalSlot::Bottom => "bottom",
+        },
+    })
+}
+
+fn project_view_state_from_shell_state(value: &serde_json::Value) -> Option<GpuiProjectViewState> {
+    let object = value.as_object()?;
+    let active_mode = object
+        .get("activeMode")
+        .and_then(serde_json::Value::as_str)
+        .and_then(TitlebarMode::from_slug)?;
+    Some(GpuiProjectViewState {
+        active_mode,
+        companion_visible: json_bool_field(object, "companionVisible").unwrap_or(true),
+        companion_split_enabled: json_bool_field(object, "companionSplitEnabled").unwrap_or(false),
+        companion_width_ratio: json_f32_field(object, "companionWidthRatio")
+            .map(project_editor_companion_width_ratio)
+            .unwrap_or(PROJECT_EDITOR_COMPANION_WIDTH_RATIO),
+        companion_split_ratio: json_f32_field(object, "companionSplitRatio")
+            .map(|ratio| ratio.clamp(0.1, 0.9))
+            .unwrap_or(PROJECT_EDITOR_COMPANION_SPLIT_RATIO),
+        companion_top_session_id: json_u64_field(object, "companionTopSessionId")
+            .map(TerminalSessionId),
+        companion_bottom_session_id: json_u64_field(object, "companionBottomSessionId")
+            .map(TerminalSessionId),
+        companion_focused_slot: match object
+            .get("companionFocusedSlot")
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("bottom") => ProjectEditorCompanionTerminalSlot::Bottom,
+            _ => ProjectEditorCompanionTerminalSlot::Top,
         },
     })
 }
@@ -24036,6 +24622,14 @@ pub struct GhostexGpuiApp {
     CDXC:GPUIRemoteMachinesSettings 2026-06-24-14:34:
     GPUI Remote Settings reconnect owns only live SSH tunnel processes and runtime auth needed to talk to the remote gxserver. Keep remote tokens out of settings, logs, sidebar state, Browser/workarea CEF clients, and persistent progress; terminate the old tunnel before replacing it so Settings reconnect behaves like the macOS app.
     */
+    /*
+    CDXC:GPUIRemoteConnectOverlay 2026-08-07:
+    Latest bounded connect wire state per saved machine, written at the single
+    status dispatch choke point. The terminal body renders a status overlay
+    from this while a surfaced remote session's machine is unreachable, so a
+    restored remote tab explains itself instead of showing an empty rectangle.
+    */
+    remote_machine_connect_states: HashMap<String, String>,
     remote_gxserver_connections: HashMap<String, GpuiRemoteGxserverConnection>,
     remote_gxserver_connect_generations: HashMap<String, u64>,
     /*
@@ -24049,13 +24643,37 @@ pub struct GhostexGpuiApp {
     */
     remote_repository_clone_requests: HashMap<String, GpuiRemoteRepositoryCloneRequest>,
     /*
-    CDXC:GPUIRemoteAttach 2026-06-24-19:06:
-    Remote attach focus state is runtime-only glue from a machine/project/session id to the GPUI terminal tab that owns the SSH attach process. Store no SSH targets, tokens, remote paths, command text, project/session names, logs, or persistent shell state in this map.
+    CDXC:GPUIRemoteAttach 2026-08-06:
+    Remote attach focus state maps the bounded saved-machine/project/session
+    identity to the GPUI terminal tab that owns the process-local SSH attach.
+    Only that canonical identity and shell tab id cross the shell-state boundary
+    so restored tabs reconcile one-to-one; SSH targets, tokens, remote paths,
+    command text, titles, project/session names, logs, and runtime payloads do
+    not.
     */
     remote_attach_sessions: HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
-    remote_attach_chat_capable_sessions: HashSet<TerminalSessionId>,
+    /*
+    CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+    Project keys (local or machine-scoped remote) whose restored-from-disk
+    Agents workspace has not yet run its one-shot resume pass. The first
+    authoritative sidebar snapshot for such a project wakes the sleeping
+    sessions its rendered panes actively surface, so reopening the app (or
+    revisiting a restored project) resumes what the user was looking at
+    instead of showing dead placeholders until a click. Consuming the key
+    makes every later sleep a user decision this pass must not override.
+    */
+    startup_restore_wake_pending: HashSet<String>,
+    /*
+    In-flight surfaced-restore SSH plan preparations, so the repeated
+    authoritative snapshots that arrive during startup cannot stack duplicate
+    remote round trips for the same tab.
+    */
+    remote_workspace_attach_pending: HashSet<GpuiRemoteAttachSessionKey>,
+    // CDXC:GPUIProjectViewMemory 2026-08-07: last workarea + companion
+    // arrangement per canonical workspace project key. See GpuiProjectViewState.
+    project_view_states_by_project: HashMap<String, GpuiProjectViewState>,
     #[cfg(target_os = "macos")]
-    remote_attach_askpass_scripts: HashMap<TerminalSessionId, GpuiRemoteAskpassScript>,
+    remote_attach_askpass_scripts: HashMap<GpuiRemoteAttachSessionKey, GpuiRemoteAskpassScript>,
     /*
     CDXC:GPUISourceRuntime 2026-06-24-23:17:
     GPUI Source uses a runtime-only code-server owner equivalent to macOS's shared editor process. It may hold the owned Child and current in-memory folder URL target while the app runs, but it must not persist paths, URLs, command text, stdout/stderr, tokens, page titles, or project names into shell state or support logs.
@@ -24319,6 +24937,10 @@ pub struct GhostexGpuiApp {
         ProjectEditorCompanionTerminalLaunchPayloadSource,
     project_editor_companion_terminal_attach_plan_pending:
         HashSet<ProjectEditorCompanionTerminalBodyMountSlotId>,
+    project_editor_companion_remote_attach_states: HashMap<
+        ProjectEditorCompanionTerminalBodyMountSlotId,
+        GpuiProjectEditorCompanionRemoteAttachState,
+    >,
     agents_terminal_surface_host: NativeTerminalSurfaceHost,
     agents_terminal_surface_lifecycle: NativeTerminalSurfaceLifecycleState,
     command_terminal_surface_host: NativeTerminalSurfaceHost<CommandTerminalBodyMountSlotId>,
@@ -24658,6 +25280,17 @@ impl GhostexGpuiApp {
         let gpui_pet_overlay_reduce_motion_enabled = gpui_macos_reduce_motion_enabled();
         let app_modal_window_id = Rc::new(Cell::new(None));
         let app_modal_window_id_for_app = app_modal_window_id.clone();
+        let startup_restore_wake_pending = shell_layout_state
+            .agents_workspace_project_id
+            .iter()
+            .cloned()
+            .chain(
+                shell_layout_state
+                    .parked_agents_workspaces_by_project
+                    .keys()
+                    .cloned(),
+            )
+            .collect();
 
         let app = cx.new(move |cx| {
             let mut this = Self {
@@ -24725,6 +25358,7 @@ impl GhostexGpuiApp {
                 keep_awake_power_ticker_active: false,
                 keep_awake_previous_working_session_count: 0,
                 keep_awake_working_session_grace_until: None,
+                remote_machine_connect_states: HashMap::new(),
                 remote_gxserver_connections: HashMap::new(),
                 remote_gxserver_connect_generations: HashMap::new(),
                 remote_gxserver_presentation_stream_generation: 0,
@@ -24732,8 +25366,10 @@ impl GhostexGpuiApp {
                 source_code_server_runtime: SourceCodeServerRuntimeOwner::new(),
                 pending_source_file_open: None,
                 pending_docs_file_open: None,
-                remote_attach_sessions: HashMap::new(),
-                remote_attach_chat_capable_sessions: HashSet::new(),
+                startup_restore_wake_pending,
+                remote_workspace_attach_pending: HashSet::new(),
+                project_view_states_by_project: shell_layout_state.project_view_states_by_project,
+                remote_attach_sessions: shell_layout_state.remote_attach_sessions,
                 #[cfg(target_os = "macos")]
                 remote_attach_askpass_scripts: HashMap::new(),
                 project_workarea_runtime_cef_surfaces: HashMap::new(),
@@ -24824,6 +25460,7 @@ impl GhostexGpuiApp {
                 project_editor_companion_terminal_launch_payload_source:
                     ProjectEditorCompanionTerminalLaunchPayloadSource::new_empty(),
                 project_editor_companion_terminal_attach_plan_pending: HashSet::new(),
+                project_editor_companion_remote_attach_states: HashMap::new(),
                 agents_terminal_surface_host: NativeTerminalSurfaceHost::new(),
                 agents_terminal_surface_lifecycle: NativeTerminalSurfaceLifecycleState::new(),
                 command_terminal_surface_host: NativeTerminalSurfaceHost::new(),
@@ -25117,7 +25754,7 @@ impl GhostexGpuiApp {
         let Some(target) = self
             .latest_sidebar_project_snapshot
             .as_ref()
-            .and_then(source_code_server_runtime_target_from_project_snapshot)
+            .and_then(|snapshot| self.source_code_server_runtime_target(snapshot))
         else {
             return false;
         };
@@ -25125,7 +25762,7 @@ impl GhostexGpuiApp {
             &self.sidebar_runtime_settings_snapshot,
         );
         let mut changed = self.source_code_server_runtime.refresh_child_exit();
-        match source_code_server_runtime_availability() {
+        match source_code_server_runtime_availability(&target) {
             SourceCodeServerRuntimeAvailability::Available => {}
             SourceCodeServerRuntimeAvailability::InstallRequired => {
                 let was_current = self.source_code_server_runtime.state
@@ -25152,9 +25789,13 @@ impl GhostexGpuiApp {
         }
         if self
             .source_code_server_runtime
-            .can_reuse_ready_process(&settings)
+            .can_reuse_ready_process(&target, &settings)
         {
             let previous_target = self.source_code_server_runtime.target.clone();
+            if previous_target.as_ref() != Some(&target) {
+                self.source_code_server_runtime
+                    .pending_remote_prompt_editor_request = None;
+            }
             self.source_code_server_runtime
                 .set_ready_target(target, settings);
             changed |= previous_target != self.source_code_server_runtime.target;
@@ -25165,6 +25806,17 @@ impl GhostexGpuiApp {
             .launching_matches(&target, &settings)
         {
             return changed;
+        }
+        if self
+            .source_code_server_runtime
+            .launching_can_share(&target, &settings)
+        {
+            if self.source_code_server_runtime.target.as_ref() != Some(&target) {
+                self.source_code_server_runtime
+                    .pending_remote_prompt_editor_request = None;
+            }
+            self.source_code_server_runtime.target = Some(target);
+            return true;
         }
         if self
             .source_code_server_runtime
@@ -25212,6 +25864,40 @@ impl GhostexGpuiApp {
         true
     }
 
+    fn source_code_server_runtime_target(
+        &self,
+        snapshot: &GpuiProjectSnapshot,
+    ) -> Option<SourceCodeServerRuntimeTarget> {
+        let active_project_id = snapshot.active_project_id.as_ref()?;
+        let endpoint = if let Some(reference) =
+            gpui_remote_project_reference_from_project_id(active_project_id.0.as_str())
+        {
+            let connection_generation = self
+                .remote_gxserver_connect_generations
+                .get(reference.remote_machine_id.as_str())
+                .copied()?;
+            let connection = self
+                .remote_gxserver_connections
+                .get(reference.remote_machine_id.as_str())?;
+            let component_platform = connection.code_server_component_platform.clone()?;
+            let settings = shared_settings::shared_sidebar_settings_snapshot();
+            let machine_config = gpui_remote_machine_config_from_settings(
+                settings.object(),
+                reference.remote_machine_id.as_str(),
+            )?;
+            SourceCodeServerRuntimeEndpoint::Remote {
+                component_platform,
+                connection_generation,
+                execution_target: connection.execution_target.clone(),
+                machine_config,
+                remote_machine_id: reference.remote_machine_id,
+            }
+        } else {
+            SourceCodeServerRuntimeEndpoint::Local
+        };
+        source_code_server_runtime_target_from_project_snapshot(snapshot, endpoint)
+    }
+
     fn finish_source_code_server_runtime_start(
         &mut self,
         generation: u64,
@@ -25238,12 +25924,22 @@ impl GhostexGpuiApp {
         }
 
         match result {
-            Ok((target, settings, output)) if output.responsive => {
+            Ok((launched_target, settings, output))
+                if output.http_runtime_ready && output.prompt_editor_ipc_ready =>
+            {
+                let target = self
+                    .source_code_server_runtime
+                    .target
+                    .clone()
+                    .filter(|target| target.can_share_runtime_with(&launched_target))
+                    .unwrap_or(launched_target);
                 self.source_code_server_runtime.set_ready(
                     target,
                     settings,
                     output.child,
                     output.started_at,
+                    output.runtime_origin,
+                    output.prompt_editor_ipc_ready,
                 );
                 self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
                 self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
@@ -25277,6 +25973,7 @@ impl GhostexGpuiApp {
                 self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
             }
         }
+        self.deliver_pending_remote_prompt_editor_request_if_ready(cx);
         self.update_project_workarea_runtime_cef_surface_visibility(cx);
         cx.notify();
     }
@@ -25331,7 +26028,7 @@ impl GhostexGpuiApp {
         let target = self
             .latest_sidebar_project_snapshot
             .as_ref()
-            .and_then(source_code_server_runtime_target_from_project_snapshot);
+            .and_then(|snapshot| self.source_code_server_runtime_target(snapshot));
         let settings = target.as_ref().map(|_| {
             SourceCodeServerRuntimeSettings::from_sidebar_runtime_settings(
                 &self.sidebar_runtime_settings_snapshot,
@@ -25361,9 +26058,12 @@ impl GhostexGpuiApp {
         .detach();
 
         let background = cx.background_executor().clone();
+        let install_target = target.clone();
         cx.spawn(async move |this, cx| {
             let result = background
-                .spawn(async move { source_code_server_install_component(progress_tx) })
+                .spawn(async move {
+                    source_code_server_install_component(install_target.as_ref(), progress_tx)
+                })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 if this.source_code_server_runtime.generation != generation {
@@ -25486,7 +26186,7 @@ impl GhostexGpuiApp {
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
         match slot_key {
             ProjectWorkareaCefSurfaceSlotKey::Source => {
-                let target = source_code_server_runtime_target_from_project_snapshot(snapshot)?;
+                let target = self.source_code_server_runtime_target(snapshot)?;
                 self.source_code_server_runtime
                     .runtime_url_for_target(&target)
             }
@@ -25596,13 +26296,44 @@ impl GhostexGpuiApp {
         };
         let manage_docs_resource_scope = if slot_key == ProjectWorkareaCefSurfaceSlotKey::Manage {
             let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
-            let project_root = snapshot.in_memory_project_path.clone()?;
-            let docs_folders =
-                gpui_manage_additional_docs_folders_text(&self.sidebar_runtime_settings_snapshot);
-            Some(cef::ManageDocsResourceScope::new(
-                project_root,
-                manage_docs_scan_root_relative_paths(&docs_folders),
-            ))
+            let active_project_id = snapshot.active_project_id.as_ref()?.0.as_str();
+            if let Some(reference) =
+                gpui_remote_project_reference_from_project_id(active_project_id)
+            {
+                /*
+                CDXC:RemoteProjectDocs 2026-08-06:
+                A remote project path belongs to its gxserver and must never be
+                installed as a local CEF resource scope. Keep the synthetic
+                Docs origin, but back it with a fixed project-id resource loader
+                through the authenticated tunnel so authored remote HTML can
+                load sibling CSS, JavaScript, images, and module imports too.
+                */
+                let target =
+                    self.gpui_remote_gxserver_request_target(reference.remote_machine_id.as_str());
+                let project_id = reference.project_id;
+                let docs_folders = gpui_manage_additional_docs_folders_text(
+                    &self.sidebar_runtime_settings_snapshot,
+                );
+                Some(cef::ManageDocsResourceScope::new_remote(Arc::new(
+                    move |relative_path| {
+                        read_remote_manage_docs_resource(
+                            target.as_ref(),
+                            project_id.as_str(),
+                            relative_path,
+                            docs_folders.as_str(),
+                        )
+                    },
+                )))
+            } else {
+                let project_root = snapshot.in_memory_project_path.clone()?;
+                let docs_folders = gpui_manage_additional_docs_folders_text(
+                    &self.sidebar_runtime_settings_snapshot,
+                );
+                Some(cef::ManageDocsResourceScope::new(
+                    project_root,
+                    manage_docs_scan_root_relative_paths(&docs_folders),
+                ))
+            }
         } else {
             None
         };
@@ -26086,14 +26817,192 @@ impl GhostexGpuiApp {
             .map(str::to_string)
     }
 
+    fn workspace_terminal_key_for_shell_session(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<GpuiWorkspaceTerminalSessionKey> {
+        if let Some(key) = self
+            .local_workspace_session_mappings
+            .iter()
+            .find_map(|(key, mapped)| (*mapped == session_id).then(|| key.clone()))
+        {
+            return Some(GpuiWorkspaceTerminalSessionKey::Local(key));
+        }
+        let active_project_id = self.agents_workspace_project_id.as_deref()?;
+        let remote_project = gpui_remote_project_reference_from_project_id(active_project_id)?;
+        self.remote_attach_sessions
+            .iter()
+            .find_map(|(key, mapped_session_id)| {
+                (*mapped_session_id == session_id
+                    && key.remote_machine_id == remote_project.remote_machine_id
+                    && key.project_id == remote_project.project_id)
+                    .then(|| GpuiWorkspaceTerminalSessionKey::Remote(key.clone()))
+            })
+    }
+
+    fn project_editor_companion_terminal_key_for_slot(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+    ) -> Option<GpuiWorkspaceTerminalSessionKey> {
+        self.is_current_project_editor_companion_terminal_body_mount_slot(slot_id)
+            .then(|| self.workspace_terminal_key_for_shell_session(slot_id.session_id))?
+    }
+
+    fn project_editor_companion_remote_attach_attempt_for_slot(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+    ) -> Option<GpuiProjectEditorCompanionRemoteAttachAttempt> {
+        let GpuiWorkspaceTerminalSessionKey::Remote(remote_key) =
+            self.project_editor_companion_terminal_key_for_slot(slot_id)?
+        else {
+            return None;
+        };
+        let connection_generation = self
+            .remote_gxserver_connect_generations
+            .get(remote_key.remote_machine_id.as_str())
+            .copied()
+            .unwrap_or(0);
+        Some(GpuiProjectEditorCompanionRemoteAttachAttempt {
+            connection_generation,
+            remote_key,
+        })
+    }
+
+    fn project_editor_companion_remote_attach_attempt_is_current(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+        attempt: &GpuiProjectEditorCompanionRemoteAttachAttempt,
+    ) -> bool {
+        self.is_current_project_editor_companion_terminal_body_mount_slot(slot_id)
+            && self
+                .project_editor_companion_remote_attach_attempt_for_slot(slot_id)
+                .as_ref()
+                == Some(attempt)
+    }
+
+    fn record_project_editor_companion_remote_attach_unavailable(
+        &mut self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+        attempt: GpuiProjectEditorCompanionRemoteAttachAttempt,
+        message: String,
+    ) {
+        if !self.project_editor_companion_remote_attach_attempt_is_current(slot_id, &attempt)
+            || !self
+                .project_editor_companion_remote_attach_states
+                .get(&slot_id)
+                .is_some_and(|state| state.attempt() == &attempt)
+        {
+            return;
+        }
+        self.project_editor_companion_remote_attach_states.insert(
+            slot_id,
+            GpuiProjectEditorCompanionRemoteAttachState::Unavailable { attempt, message },
+        );
+    }
+
+    fn clear_project_editor_companion_remote_attach_state_for_key(
+        &mut self,
+        remote_key: &GpuiRemoteAttachSessionKey,
+    ) {
+        self.project_editor_companion_remote_attach_states
+            .retain(|_, state| &state.attempt().remote_key != remote_key);
+    }
+
+    fn clear_project_editor_companion_remote_attach_states_for_machine(
+        &mut self,
+        remote_machine_id: &str,
+    ) {
+        self.project_editor_companion_remote_attach_states
+            .retain(|_, state| state.attempt().remote_key.remote_machine_id != remote_machine_id);
+    }
+
+    fn prune_project_editor_companion_remote_attach_states(&mut self) {
+        let current_attempts = self
+            .current_project_editor_companion_terminal_body_mount_slots()
+            .into_iter()
+            .filter_map(|slot_id| {
+                self.project_editor_companion_remote_attach_attempt_for_slot(slot_id)
+                    .map(|attempt| (slot_id, attempt))
+            })
+            .collect::<HashMap<_, _>>();
+        self.project_editor_companion_remote_attach_states
+            .retain(|slot_id, state| current_attempts.get(slot_id) == Some(state.attempt()));
+    }
+
+    fn project_editor_companion_remote_attach_unavailable_message(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+    ) -> Option<String> {
+        let state = self
+            .project_editor_companion_remote_attach_states
+            .get(&slot_id)?;
+        let GpuiProjectEditorCompanionRemoteAttachState::Unavailable { attempt, message } = state
+        else {
+            return None;
+        };
+        self.project_editor_companion_remote_attach_attempt_is_current(slot_id, attempt)
+            .then(|| message.clone())
+    }
+
+    fn shell_session_for_workspace_terminal_key(
+        &self,
+        key: &GpuiWorkspaceTerminalSessionKey,
+    ) -> Option<TerminalSessionId> {
+        match key {
+            GpuiWorkspaceTerminalSessionKey::Local(key) => {
+                self.local_workspace_session_mappings.get(key).copied()
+            }
+            GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                self.remote_attach_sessions.get(key).copied()
+            }
+        }
+    }
+
+    fn project_editor_companion_active_terminal_key(
+        &self,
+    ) -> Option<GpuiWorkspaceTerminalSessionKey> {
+        let active_project_id = self.project_editor_companion_active_project_id()?;
+        let focus_state = &self.sidebar_gxserver_presentation_focus_state;
+        if focus_state.active_project_id.as_deref() != Some(active_project_id.as_str()) {
+            return None;
+        }
+        let focused_session_id = focus_state.focused_session_id.as_deref()?;
+        if let Some(reference) =
+            gpui_remote_attach_session_reference_from_project_id(focused_session_id)
+        {
+            let key = GpuiRemoteAttachSessionKey::from(&reference);
+            return (gpui_remote_scoped_project_id(
+                key.remote_machine_id.as_str(),
+                key.project_id.as_str(),
+            ) == active_project_id)
+                .then_some(GpuiWorkspaceTerminalSessionKey::Remote(key));
+        }
+        if gpui_remote_project_reference_from_project_id(active_project_id.as_str()).is_some() {
+            return None;
+        }
+        Some(GpuiWorkspaceTerminalSessionKey::Local(
+            GpuiLocalWorkspaceSessionKey {
+                project_id: active_project_id,
+                session_id: focused_session_id.to_string(),
+            },
+        ))
+    }
+
+    fn project_editor_companion_active_terminal_session_id(&mut self) -> Option<TerminalSessionId> {
+        let key = self.project_editor_companion_active_terminal_key()?;
+        let session_id = self.shell_session_for_workspace_terminal_key(&key)?;
+        self.project_editor_companion_terminal_session_is_active_project_eligible(session_id)
+            .then_some(session_id)
+    }
+
     fn shell_session_belongs_to_active_project(&mut self, session_id: TerminalSessionId) -> bool {
         let Some(active_project_id) = self.project_editor_companion_active_project_id() else {
             return false;
         };
-        let Some(key) = self.local_workspace_key_for_shell_session(session_id) else {
+        let Some(key) = self.workspace_terminal_key_for_shell_session(session_id) else {
             return false;
         };
-        key.project_id == active_project_id
+        key.scoped_project_id() == active_project_id
     }
 
     fn project_editor_companion_terminal_session_is_active_project_eligible(
@@ -26121,7 +27030,12 @@ impl GhostexGpuiApp {
                 .sidebar_gxserver_presentation_focus_state
                 .active_project_tab_sessions
                 .as_ref()
-                .and_then(|sessions| sessions.iter().find(|session| session.key == key))
+                .and_then(|sessions| {
+                    sessions.iter().find(|session| {
+                        session.key
+                            == GpuiWorkspaceTerminalSessionKey::Local(key.clone())
+                    })
+                })
                 .map(|session| session.title.clone())
                 .unwrap_or_else(|| "Chat".to_string());
         }
@@ -26139,11 +27053,12 @@ impl GhostexGpuiApp {
             .as_ref()
             .into_iter()
             .flatten()
-            .filter(|session| {
-                !session.kind.is_t3()
-                    && active_project_id.as_deref() == Some(session.key.project_id.as_str())
+            .filter_map(|session| {
+                let key = session.key.as_local()?;
+                (!session.kind.is_t3()
+                    && active_project_id.as_deref() == Some(key.project_id.as_str()))
+                .then(|| key.clone())
             })
-            .map(|session| session.key.clone())
             .collect::<Vec<_>>();
         if let Some(latest_key) = self.local_workspace_latest_focus_key.clone()
             && active_project_id.as_deref() == Some(latest_key.project_id.as_str())
@@ -26151,11 +27066,33 @@ impl GhostexGpuiApp {
             keys.retain(|key| key != &latest_key);
             keys.push(latest_key);
         }
-        let mapped_session_ids = keys
+        let mut mapped_session_ids = keys
             .into_iter()
             .rev()
             .filter_map(|key| self.local_workspace_session_mappings.get(&key).copied())
             .collect::<Vec<_>>();
+        let mut remote_session_ids = self
+            .remote_attach_sessions
+            .iter()
+            .filter_map(|(key, session_id)| {
+                (active_project_id.as_deref()
+                    == Some(
+                        gpui_remote_scoped_project_id(
+                            key.remote_machine_id.as_str(),
+                            key.project_id.as_str(),
+                        )
+                        .as_str(),
+                    ))
+                .then_some(*session_id)
+            })
+            .collect::<Vec<_>>();
+        remote_session_ids.sort_by_key(|session_id| std::cmp::Reverse(session_id.0));
+        mapped_session_ids.extend(remote_session_ids);
+        if let Some(active_session_id) = self.project_editor_companion_active_terminal_session_id()
+        {
+            mapped_session_ids.retain(|session_id| *session_id != active_session_id);
+            mapped_session_ids.insert(0, active_session_id);
+        }
         mapped_session_ids
             .into_iter()
             .filter(|session_id| {
@@ -26190,6 +27127,29 @@ impl GhostexGpuiApp {
                 ) && Some(*session_id) != top
             });
         let recent = self.project_editor_companion_recent_terminal_sessions();
+
+        if let Some(active_session_id) = recent.first().copied() {
+            if !self.project_editor_shell.left_companion_split_enabled {
+                top = Some(active_session_id);
+                self.project_editor_companion_focused_terminal_slot =
+                    ProjectEditorCompanionTerminalSlot::Top;
+            } else if top == Some(active_session_id) {
+                self.project_editor_companion_focused_terminal_slot =
+                    ProjectEditorCompanionTerminalSlot::Top;
+            } else if bottom == Some(active_session_id) {
+                self.project_editor_companion_focused_terminal_slot =
+                    ProjectEditorCompanionTerminalSlot::Bottom;
+            } else if bottom.is_some()
+                && self.project_editor_companion_focused_terminal_slot
+                    == ProjectEditorCompanionTerminalSlot::Bottom
+            {
+                bottom = Some(active_session_id);
+            } else {
+                top = Some(active_session_id);
+                self.project_editor_companion_focused_terminal_slot =
+                    ProjectEditorCompanionTerminalSlot::Top;
+            }
+        }
 
         if self.project_editor_shell.left_companion_split_enabled
             && bottom.is_none()
@@ -28771,8 +29731,14 @@ impl GhostexGpuiApp {
             let target = GpuiEngineTerminalEventTarget::Agents(session_id);
             if action == "promptEditor" {
                 self.handle_gpui_engine_prompt_editor_shortcut(target, runtime_session_id, cx);
-            } else {
-                self.request_gpui_engine_terminal_attachment_paths(target, runtime_session_id, cx);
+            } else if let Some(attachment_target) =
+                self.gpui_terminal_attachment_target_for_engine_target(target)
+            {
+                self.request_gpui_engine_terminal_attachment_paths(
+                    attachment_target,
+                    runtime_session_id,
+                    cx,
+                );
             }
             return;
         }
@@ -29995,11 +30961,22 @@ impl GhostexGpuiApp {
         source_window: Option<&mut Window>,
         cx: &mut gpui::Context<Self>,
     ) {
+        if modal == GpuiAppModalKind::StashedPrompts {
+            self.enrich_gpui_saved_prompts_quick_access_open_message(&mut open_message);
+        }
         // The launcher owns modal hydration. Session-scoped callers such as
         // Rename and Delayed Send must not diverge based on their entry point.
         if modal.requires_sidebar_state() {
             open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
         }
+        let quick_access_sidebar_state_message = matches!(
+            modal,
+            GpuiAppModalKind::CommandPalette
+                | GpuiAppModalKind::PreviousSessions
+                | GpuiAppModalKind::RecentProjects
+                | GpuiAppModalKind::StashedPrompts
+        )
+        .then(|| sidebar_state_message.clone());
         self.open_gpui_app_modal_window_inner(
             modal,
             open_message,
@@ -30007,6 +30984,49 @@ impl GhostexGpuiApp {
             source_window,
             true,
             cx,
+        );
+        if let Some(sidebar_state_message) = quick_access_sidebar_state_message
+            && self.app_modal_window.is_some()
+        {
+            self.refresh_gpui_quick_access_sessions_state_in_background(
+                sidebar_state_message,
+                cx,
+            );
+        }
+    }
+
+    /*
+    CDXC:StashedPrompts 2026-08-08:
+    Saved Prompts is reachable from the global Quick Access tabs, whose React
+    message intentionally carries no project/session authority. Recover only
+    the currently focused LOCAL Agents mapping already owned by Rust so a row
+    keeps the old direct-insert behavior; remote/unmapped focus stays browse +
+    clipboard-only, matching the tab's "Local only for now" notice.
+    */
+    fn enrich_gpui_saved_prompts_quick_access_open_message(
+        &self,
+        open_message: &mut serde_json::Value,
+    ) {
+        if open_message
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+        {
+            return;
+        }
+        let Some(shell_session_id) = self.focused_agents_or_companion_shell_session_id() else {
+            return;
+        };
+        let Some(key) = self
+            .local_workspace_session_mappings
+            .iter()
+            .find_map(|(key, mapped)| (*mapped == shell_session_id).then(|| key.clone()))
+        else {
+            return;
+        };
+        open_message["projectId"] = serde_json::Value::String(key.project_id.clone());
+        open_message["sessionId"] = serde_json::Value::String(
+            gpui_combined_presentation_session_id(&key.project_id, &key.session_id),
         );
     }
 
@@ -30703,6 +31723,27 @@ impl GhostexGpuiApp {
         };
 
         match message_type {
+            "sidebarDiagnosticLog" => {
+                let Some(scenario_id) = message
+                    .get("scenarioId")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|scenario_id| !scenario_id.trim().is_empty())
+                else {
+                    return;
+                };
+                support_logs::append_for_scenario(
+                    support_logs::GpuiSupportLog::SidebarRefresh,
+                    scenario_id,
+                    message
+                        .get("event")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("gpui.sidebar.diagnostic"),
+                    message
+                        .get("details")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null),
+                );
+            }
             "runProcess" => {
                 self.receive_gpui_titlebar_native_host_run_process(message, cx);
             }
@@ -31404,6 +32445,22 @@ impl GhostexGpuiApp {
             == Some(true);
         let connect_generation =
             self.next_gpui_remote_gxserver_connect_generation(&remote_machine_id);
+        if self
+            .source_code_server_runtime
+            .target
+            .as_ref()
+            .is_some_and(|target| {
+                matches!(
+                    &target.endpoint,
+                    SourceCodeServerRuntimeEndpoint::Remote {
+                        remote_machine_id: runtime_machine_id,
+                        ..
+                    } if runtime_machine_id == &remote_machine_id
+                )
+            })
+        {
+            self.stop_source_code_server_runtime(cx);
+        }
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         let Some(config) = gpui_remote_machine_config_from_settings(
             settings_snapshot.object(),
@@ -31520,6 +32577,36 @@ impl GhostexGpuiApp {
                         None,
                         cx,
                     );
+                    self.clear_project_editor_companion_remote_attach_states_for_machine(
+                        remote_machine_id.as_str(),
+                    );
+                    self.reattach_project_editor_companion_remote_terminal_after_reconnect(
+                        remote_machine_id.as_str(),
+                        connect_generation,
+                        cx,
+                    );
+                    let reconnects_active_remote_docs = self
+                        .latest_sidebar_project_snapshot
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.active_project_id.as_ref())
+                        .and_then(|project_id| {
+                            gpui_remote_project_reference_from_project_id(project_id.0.as_str())
+                        })
+                        .is_some_and(|reference| reference.remote_machine_id == remote_machine_id);
+                    if reconnects_active_remote_docs {
+                        /*
+                        The synthetic Docs resource handler captures the exact
+                        tunnel target that owns it. Recreate only the active
+                        remote Docs surface after reconnect so resource reads
+                        use the replacement tunnel instead of a dead port/token.
+                        */
+                        self.remove_project_workarea_runtime_cef_surface(
+                            ProjectWorkareaCefSurfaceSlotKey::Manage,
+                            cx,
+                        );
+                        self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
+                    }
+                    self.ensure_source_code_server_runtime_for_current_context(cx);
                 }
                 self.dispatch_gpui_remote_machine_status(
                     remote_machine_id.as_str(),
@@ -31562,6 +32649,143 @@ impl GhostexGpuiApp {
                 );
             }
         }
+    }
+
+    fn reattach_project_editor_companion_remote_terminal_after_reconnect(
+        &mut self,
+        remote_machine_id: &str,
+        connection_generation: u64,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.active_mode.is_project_editor_mode()
+            || !self.project_editor_shell.left_companion_visible
+        {
+            return;
+        }
+        let Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) =
+            self.project_editor_companion_active_terminal_key()
+        else {
+            return;
+        };
+        if key.remote_machine_id != remote_machine_id {
+            return;
+        }
+        if !self.gpui_remote_gxserver_connect_generation_is_current(
+            remote_machine_id,
+            connection_generation,
+        ) {
+            return;
+        }
+        let Some(shell_session_id) = self.remote_attach_sessions.get(&key).copied() else {
+            return;
+        };
+        let Some(slot_id) = self
+            .current_project_editor_companion_terminal_body_mount_slots()
+            .into_iter()
+            .find(|slot_id| slot_id.session_id == shell_session_id)
+        else {
+            return;
+        };
+        let attempt = GpuiProjectEditorCompanionRemoteAttachAttempt {
+            connection_generation,
+            remote_key: key.clone(),
+        };
+        if !self.project_editor_companion_remote_attach_attempt_is_current(slot_id, &attempt) {
+            return;
+        }
+        self.project_editor_companion_remote_attach_states.insert(
+            slot_id,
+            GpuiProjectEditorCompanionRemoteAttachState::Preparing(attempt.clone()),
+        );
+        let Some(target) = self.gpui_remote_gxserver_request_target(remote_machine_id) else {
+            self.record_project_editor_companion_remote_attach_unavailable(
+                slot_id,
+                attempt,
+                "Reconnect the remote machine to show this terminal.".to_string(),
+            );
+            return;
+        };
+        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) =
+            gpui_remote_machine_config_from_settings(settings_snapshot.object(), remote_machine_id)
+        else {
+            self.record_project_editor_companion_remote_attach_unavailable(
+                slot_id,
+                attempt,
+                "The saved remote machine is missing required SSH settings.".to_string(),
+            );
+            return;
+        };
+        let reference = GpuiRemoteAttachSessionReference {
+            remote_machine_id: key.remote_machine_id,
+            project_id: key.project_id,
+            session_id: key.session_id,
+        };
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let prepare_reference = reference.clone();
+            let result = background
+                .spawn(async move {
+                    gpui_prepare_remote_attach_terminal_plan(
+                        &config,
+                        &target,
+                        &prepare_reference,
+                        true,
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if !this.gpui_remote_gxserver_connect_generation_is_current(
+                    reference.remote_machine_id.as_str(),
+                    connection_generation,
+                ) || !this
+                    .project_editor_companion_remote_attach_states
+                    .get(&slot_id)
+                    .is_some_and(|state| state.attempt() == &attempt)
+                    || !this.project_editor_companion_remote_attach_attempt_is_current(
+                        slot_id, &attempt,
+                    )
+                {
+                    if this
+                        .project_editor_companion_remote_attach_states
+                        .get(&slot_id)
+                        .is_some_and(|state| state.attempt() == &attempt)
+                    {
+                        this.project_editor_companion_remote_attach_states
+                            .remove(&slot_id);
+                    }
+                    return;
+                }
+                let expected_key = GpuiRemoteAttachSessionKey::from(&reference);
+                if this.project_editor_companion_active_terminal_key()
+                    != Some(GpuiWorkspaceTerminalSessionKey::Remote(expected_key))
+                {
+                    this.project_editor_companion_remote_attach_states
+                        .remove(&slot_id);
+                    return;
+                }
+                let plan = match result {
+                    Ok(plan) => plan,
+                    Err(message) => {
+                        this.record_project_editor_companion_remote_attach_unavailable(
+                            slot_id, attempt, message,
+                        );
+                        cx.notify();
+                        return;
+                    }
+                };
+                this.project_editor_companion_remote_attach_states
+                    .remove(&slot_id);
+                this.open_gpui_remote_attach_terminal(
+                    reference,
+                    plan,
+                    None,
+                    AgentsWorkspaceNewTerminalPlacement::Tab,
+                    cx,
+                );
+            });
+        })
+        .detach();
     }
 
     fn handle_gpui_remote_gxserver_subscribe_presentation_message(
@@ -33082,88 +34306,14 @@ impl GhostexGpuiApp {
 
         match message.action {
             GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal => {
-                let key = GpuiRemoteAttachSessionKey::from(&reference);
-                /*
-                CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
-                A remote session click activates that remote project's own
-                Agents workspace model up front — the existing-tab lookup
-                below is only meaningful against it, and the user sees the
-                project switch immediately instead of after SSH plan prep.
-                */
-                self.swap_agents_workspace_to_project_id(
-                    Some(gpui_remote_scoped_project_id(
-                        key.remote_machine_id.as_str(),
-                        key.project_id.as_str(),
-                    )),
+                self.begin_gpui_remote_attach_terminal_open(
+                    reference,
+                    config,
+                    target,
+                    None,
+                    AgentsWorkspaceNewTerminalPlacement::Tab,
                     cx,
                 );
-                /*
-                Publish focus ownership at request time, not only at mount
-                completion: the async open guard checks it, and Rust-initiated
-                entries (previous-session restore) never get a sidebar focus
-                post of their own.
-                */
-                self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
-                // macOS TerminalFocusDebugLog parity: bounded machine/gxserver
-                // ids only — no hosts, users, paths, or command text.
-                support_logs::append(
-                    support_logs::GpuiSupportLog::TerminalFocus,
-                    "gpui.remoteAttach.openRequested",
-                    serde_json::json!({
-                        "machineId": key.remote_machine_id,
-                        "projectId": key.project_id,
-                        "sessionId": key.session_id,
-                    }),
-                );
-                if self.focus_existing_gpui_remote_attach_terminal(&key, cx) {
-                    return;
-                }
-                let prepare_reference = reference.clone();
-                let update_reference = reference.clone();
-                let remote_machine_id = reference.remote_machine_id.clone();
-                let background = cx.background_executor().clone();
-                cx.spawn(async move |this, cx| {
-                    let result = background
-                        .spawn(async move {
-                            gpui_prepare_remote_attach_terminal_plan(
-                                &config,
-                                &target,
-                                &prepare_reference,
-                                true,
-                            )
-                        })
-                        .await;
-                    let _ = this.update(cx, |this, cx| match result {
-                        Ok(plan) => {
-                            this.open_gpui_remote_attach_terminal(
-                                update_reference,
-                                plan,
-                                None,
-                                AgentsWorkspaceNewTerminalPlacement::Tab,
-                                cx,
-                            );
-                            this.refresh_gpui_remote_gxserver_presentation_in_background(
-                                remote_machine_id,
-                                false,
-                                cx,
-                            );
-                        }
-                        Err(message) => {
-                            support_logs::append(
-                                support_logs::GpuiSupportLog::TerminalFocus,
-                                "gpui.remoteAttach.planFailed",
-                                serde_json::json!({ "machineId": remote_machine_id }),
-                            );
-                            this.dispatch_gpui_app_modal_toast(
-                                "warning",
-                                "Remote attach unavailable",
-                                message.as_str(),
-                                cx,
-                            );
-                        }
-                    });
-                })
-                .detach();
             }
             GpuiSidebarNativeProjectPathAction::CopyRemoteAttachCommand => {
                 let background = cx.background_executor().clone();
@@ -33512,6 +34662,130 @@ impl GhostexGpuiApp {
         }
     }
 
+    fn request_gpui_remote_attach_terminal_open(
+        &mut self,
+        reference: GpuiRemoteAttachSessionReference,
+        requested_pane_id: Option<WorkspacePaneId>,
+        placement: AgentsWorkspaceNewTerminalPlacement,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(target) = self.gpui_remote_gxserver_request_target(&reference.remote_machine_id)
+        else {
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                "Remote action unavailable",
+                "Reconnect the remote machine before using its sessions.",
+                cx,
+            );
+            return false;
+        };
+        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) = gpui_remote_machine_config_from_settings(
+            settings_snapshot.object(),
+            reference.remote_machine_id.as_str(),
+        ) else {
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                "Remote action unavailable",
+                "The saved remote machine is missing required SSH settings.",
+                cx,
+            );
+            return false;
+        };
+        self.begin_gpui_remote_attach_terminal_open(
+            reference,
+            config,
+            target,
+            requested_pane_id,
+            placement,
+            cx,
+        );
+        true
+    }
+
+    fn begin_gpui_remote_attach_terminal_open(
+        &mut self,
+        reference: GpuiRemoteAttachSessionReference,
+        config: GpuiRemoteMachineConfig,
+        target: GpuiRemoteGxserverRequestTarget,
+        requested_pane_id: Option<WorkspacePaneId>,
+        placement: AgentsWorkspaceNewTerminalPlacement,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let key = GpuiRemoteAttachSessionKey::from(&reference);
+        /*
+        A remote sidebar click or restored native placeholder activates the
+        owning machine-scoped workspace before lookup. The same path then
+        focuses a live SSH attachment or re-arms the existing canonical tab.
+        */
+        self.swap_agents_workspace_to_project_id(
+            Some(gpui_remote_scoped_project_id(
+                key.remote_machine_id.as_str(),
+                key.project_id.as_str(),
+            )),
+            cx,
+        );
+        self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.remoteAttach.openRequested",
+            serde_json::json!({
+                "machineId": key.remote_machine_id,
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            }),
+        );
+        if self.focus_existing_gpui_remote_attach_terminal(&key, cx) {
+            return;
+        }
+        let prepare_reference = reference.clone();
+        let update_reference = reference;
+        let remote_machine_id = key.remote_machine_id;
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_prepare_remote_attach_terminal_plan(
+                        &config,
+                        &target,
+                        &prepare_reference,
+                        true,
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(plan) => {
+                    this.open_gpui_remote_attach_terminal(
+                        update_reference,
+                        plan,
+                        requested_pane_id,
+                        placement,
+                        cx,
+                    );
+                    this.refresh_gpui_remote_gxserver_presentation_in_background(
+                        remote_machine_id,
+                        false,
+                        cx,
+                    );
+                }
+                Err(message) => {
+                    support_logs::append(
+                        support_logs::GpuiSupportLog::TerminalFocus,
+                        "gpui.remoteAttach.planFailed",
+                        serde_json::json!({ "machineId": remote_machine_id }),
+                    );
+                    this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Remote attach unavailable",
+                        message.as_str(),
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
     fn focus_existing_gpui_remote_attach_terminal(
         &mut self,
         key: &GpuiRemoteAttachSessionKey,
@@ -33538,7 +34812,6 @@ impl GhostexGpuiApp {
                 )
             {
                 self.remote_attach_sessions.remove(key);
-                self.remote_attach_chat_capable_sessions.remove(&session_id);
             }
             return false;
         };
@@ -33552,9 +34825,33 @@ impl GhostexGpuiApp {
             */
             return false;
         }
-        self.active_mode = TitlebarMode::Agents;
+        let workspace_key = GpuiWorkspaceTerminalSessionKey::Remote(key.clone());
+        let keep_editor_mode =
+            self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key);
+        let project_editor_mode = self.active_mode;
         self.agents_workspace.select_tab(pane_id, session_id);
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+        if keep_editor_mode {
+            self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
+                project_editor_mode,
+                pane_id,
+                session_id,
+                &workspace_key,
+            );
+            self.retarget_project_editor_companion_to_workspace_terminal(
+                project_editor_mode,
+                session_id,
+                &workspace_key,
+                true,
+                cx,
+            );
+        } else {
+            self.active_mode = TitlebarMode::Agents;
+            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.request_agents_terminal_text_focus_handoff(AgentsTerminalBodyMountSlotId {
+                pane_id,
+                session_id,
+            });
+        }
         self.scroll_workspace_pane_active_tab(pane_id);
         self.persist_shell_layout_state();
         self.set_sidebar_gxserver_remote_attach_focus_state(key, cx);
@@ -33571,7 +34868,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let key = GpuiRemoteAttachSessionKey::from(&reference);
-        let chat_capable = plan.chat_capable;
         /*
         SSH plan preparation runs in the background, so by the time it
         completes the user may have focused something else. Mirror the local
@@ -33609,6 +34905,27 @@ impl GhostexGpuiApp {
             )),
             cx,
         );
+        /*
+        The sidebar projection is the display-title authority for both local
+        and remote workspaces. Attach metadata is still needed before the
+        sidebar has published a row, but it must not overwrite a projected
+        display/primary/terminal/alias title when re-arming a restored tab.
+        */
+        let projected_tab_session = self
+            .sidebar_gxserver_presentation_focus_state
+            .active_project_tab_sessions
+            .as_deref()
+            .and_then(|sessions| {
+                sessions.iter().find(|session| {
+                    session.key == GpuiWorkspaceTerminalSessionKey::Remote(key.clone())
+                })
+            });
+        let tab_title = projected_tab_session
+            .map(|session| session.title.clone())
+            .unwrap_or_else(|| plan.title.clone());
+        let tab_agent_icon = projected_tab_session
+            .and_then(|session| session.agent_icon)
+            .or(plan.agent_icon);
         if self.focus_existing_gpui_remote_attach_terminal(&key, cx) {
             return;
         }
@@ -33632,7 +34949,7 @@ impl GhostexGpuiApp {
             .unwrap_or_default();
         #[cfg(not(target_os = "macos"))]
         let env_vars = Vec::new();
-        let payload = AgentsTerminalStartupExplicitLaunchPayload {
+        let payload = AgentsTerminalExplicitLaunchPayload {
             working_directory: None,
             command: Some(plan.terminal_command),
             env_vars,
@@ -33648,6 +34965,8 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        let resolved_requested_pane_id =
+            requested_pane_id.unwrap_or(self.agents_workspace.focused_pane);
         if let Some(existing_session_id) = self.remote_attach_sessions.get(&key).copied() {
             if let Some(existing_pane_id) = self
                 .agents_workspace
@@ -33662,24 +34981,35 @@ impl GhostexGpuiApp {
                 reuse path local sessions take after a restart — instead of
                 stacking a duplicate attach tab.
                 */
+                let Some(placed_pane_id) = self
+                    .agents_workspace
+                    .place_existing_session_for_new_terminal(
+                        existing_pane_id,
+                        requested_pane_id.unwrap_or(existing_pane_id),
+                        existing_session_id,
+                        placement,
+                    )
+                else {
+                    self.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Remote attach unavailable",
+                        "GPUI could not place the remote terminal in the requested pane.",
+                        cx,
+                    );
+                    return;
+                };
                 let runtime_session_id = self
                     .agents_terminal_runtime_sessions
                     .ensure_runtime_session_id(existing_session_id);
                 let mount_slot_id = AgentsTerminalBodyMountSlotId {
-                    pane_id: existing_pane_id,
+                    pane_id: placed_pane_id,
                     session_id: existing_session_id,
                 };
                 self.agents_terminal_launch_payload_source
                     .insert_explicit_payload_for_mount_slot(
                         runtime_session_id,
                         mount_slot_id,
-                        AgentsTerminalExplicitLaunchPayload {
-                            working_directory: payload.working_directory.clone(),
-                            command: payload.command.clone(),
-                            env_vars: payload.env_vars.clone(),
-                            initial_input: None,
-                            wait_after_command: false,
-                        },
+                        payload.clone(),
                     );
                 if let Some(session) = self
                     .agents_workspace
@@ -33687,29 +35017,42 @@ impl GhostexGpuiApp {
                     .iter_mut()
                     .find(|session| session.id == existing_session_id)
                 {
-                    session.title = plan.title.clone();
-                    session.agent_icon = plan.agent_icon;
-                }
-                if chat_capable {
-                    self.remote_attach_chat_capable_sessions
-                        .insert(existing_session_id);
-                } else {
-                    self.remote_attach_chat_capable_sessions
-                        .remove(&existing_session_id);
+                    session.title = tab_title.clone();
+                    session.agent_icon = tab_agent_icon;
                 }
                 #[cfg(target_os = "macos")]
                 if let Some(askpass) = plan.askpass {
                     self.remote_attach_askpass_scripts
-                        .insert(existing_session_id, askpass);
+                        .insert(key.clone(), askpass);
                 }
-                self.active_mode = TitlebarMode::Agents;
                 self.agents_workspace
-                    .select_tab(existing_pane_id, existing_session_id);
-                self.set_shell_focus_with_terminal_handoff(
-                    ShellFocusTarget::AgentsPane(existing_pane_id),
-                    true,
-                );
-                self.scroll_workspace_pane_active_tab(existing_pane_id);
+                    .select_tab(placed_pane_id, existing_session_id);
+                let workspace_key = GpuiWorkspaceTerminalSessionKey::Remote(key.clone());
+                if self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key)
+                {
+                    let project_editor_mode = self.active_mode;
+                    self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
+                        project_editor_mode,
+                        placed_pane_id,
+                        existing_session_id,
+                        &workspace_key,
+                    );
+                    self.retarget_project_editor_companion_to_workspace_terminal(
+                        project_editor_mode,
+                        existing_session_id,
+                        &workspace_key,
+                        true,
+                        cx,
+                    );
+                } else {
+                    self.active_mode = TitlebarMode::Agents;
+                    self.set_shell_focus_with_terminal_handoff(
+                        ShellFocusTarget::AgentsPane(placed_pane_id),
+                        true,
+                    );
+                    self.request_agents_terminal_text_focus_handoff(mount_slot_id);
+                }
+                self.scroll_workspace_pane_active_tab(placed_pane_id);
                 self.persist_shell_layout_state();
                 self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
                 support_logs::append(
@@ -33725,24 +35068,24 @@ impl GhostexGpuiApp {
                 return;
             }
             self.remote_attach_sessions.remove(&key);
-            self.remote_attach_chat_capable_sessions
-                .remove(&existing_session_id);
         }
-        let requested_pane_id = requested_pane_id.unwrap_or(self.agents_workspace.focused_pane);
         let created = match placement {
-            AgentsWorkspaceNewTerminalPlacement::Tab => self
-                .agents_workspace
-                .add_mounting_session_to_pane(requested_pane_id)
-                .map(|session_id| (self.agents_workspace.focused_pane, session_id)),
+            AgentsWorkspaceNewTerminalPlacement::Tab => {
+                self.agents_workspace.add_running_session_to_pane(
+                    resolved_requested_pane_id,
+                    tab_title.clone(),
+                    tab_agent_icon,
+                )
+            }
             AgentsWorkspaceNewTerminalPlacement::SplitRight => self
                 .agents_workspace
-                .split_mounting_session_to_right_of_pane(requested_pane_id),
+                .split_mounting_session_to_right_of_pane(resolved_requested_pane_id),
             AgentsWorkspaceNewTerminalPlacement::SplitBelow => self
                 .agents_workspace
-                .split_mounting_session_below_pane(requested_pane_id),
+                .split_mounting_session_below_pane(resolved_requested_pane_id),
             AgentsWorkspaceNewTerminalPlacement::BottomRow => self
                 .agents_workspace
-                .resolve_action_pane_id(requested_pane_id)
+                .resolve_action_pane_id(resolved_requested_pane_id)
                 .map(|resolved_pane_id| {
                     self.agents_workspace.focus_pane(resolved_pane_id);
                     self.agents_workspace.append_mounting_session_bottom_row()
@@ -33763,34 +35106,49 @@ impl GhostexGpuiApp {
             .iter_mut()
             .find(|session| session.id == session_id)
         {
-            session.title = plan.title;
-            session.agent_icon = plan.agent_icon;
+            session.title = tab_title;
+            session.agent_icon = tab_agent_icon;
+            session.set_presentation_state_with_startup_eligibility(
+                TerminalSessionPresentationState::Running,
+                false,
+            );
         }
         let runtime_session_id = self
             .agents_terminal_runtime_sessions
             .ensure_runtime_session_id(session_id);
-        let startup_body_slot_id = AgentsTerminalStartupBodySlotId {
+        let mount_slot_id = AgentsTerminalBodyMountSlotId {
             pane_id,
             session_id,
         };
-        self.agents_terminal_startup_launch_payload_source
-            .insert_explicit_payload_for_startup_key(
-                runtime_session_id,
-                session_id,
-                startup_body_slot_id,
-                payload,
-            );
+        self.agents_terminal_launch_payload_source
+            .insert_explicit_payload_for_mount_slot(runtime_session_id, mount_slot_id, payload);
         #[cfg(target_os = "macos")]
         if let Some(askpass) = plan.askpass {
             self.remote_attach_askpass_scripts
-                .insert(session_id, askpass);
+                .insert(key.clone(), askpass);
         }
         self.remote_attach_sessions.insert(key.clone(), session_id);
-        if chat_capable {
-            self.remote_attach_chat_capable_sessions.insert(session_id);
+        let workspace_key = GpuiWorkspaceTerminalSessionKey::Remote(key.clone());
+        if self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key) {
+            let project_editor_mode = self.active_mode;
+            self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
+                project_editor_mode,
+                pane_id,
+                session_id,
+                &workspace_key,
+            );
+            self.retarget_project_editor_companion_to_workspace_terminal(
+                project_editor_mode,
+                session_id,
+                &workspace_key,
+                true,
+                cx,
+            );
+        } else {
+            self.active_mode = TitlebarMode::Agents;
+            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.request_agents_terminal_text_focus_handoff(mount_slot_id);
         }
-        self.active_mode = TitlebarMode::Agents;
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
         self.scroll_workspace_pane_active_tab(pane_id);
         self.persist_shell_layout_state();
         self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
@@ -33799,7 +35157,7 @@ impl GhostexGpuiApp {
             "gpui.remoteAttach.terminalOpened",
             serde_json::json!({
                 "machineId": key.remote_machine_id,
-                "mode": "createdMountingTab",
+                "mode": "createdRunningAttachTab",
                 "sessionId": key.session_id,
             }),
         );
@@ -35709,6 +37067,20 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         debug_assert!(gpui_remote_gxserver_status_state_is_known(state));
+        /*
+        CDXC:GPUIRemoteConnectOverlay 2026-08-07:
+        Every connect transition funnels through here, so this is where the
+        render tree learns a machine's reachability. The terminal body draws a
+        status overlay for remote sessions whose machine is not connected, and
+        the workspace re-arms restored remote tabs on the connected edge. Only
+        the bounded wire state slug is retained — never hosts, tokens, or the
+        sanitized message text.
+        */
+        self.remote_machine_connect_states
+            .insert(remote_machine_id.to_string(), state.to_string());
+        if state == GpuiRemoteGxserverConnectState::Connected.wire_status_state() {
+            self.attach_surfaced_remote_workspace_terminals(remote_machine_id, cx);
+        }
         let mut payload = serde_json::json!({
             "machineId": remote_machine_id,
             "state": state,
@@ -35945,6 +37317,41 @@ impl GhostexGpuiApp {
                     active_project_id.as_deref(),
                     focused_session_id.as_deref(),
                 )
+            },
+            cx,
+        );
+    }
+
+    fn refresh_gpui_quick_access_sessions_state_in_background(
+        &mut self,
+        mut sidebar_state_message: serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUIQuickAccessSessions 2026-08-08:
+        The reusable app-modal hydrate is settings-oriented and intentionally
+        carries no session groups. Read the authoritative gxserver presentation
+        off the UI thread when the Sessions page opens, project it into the
+        existing SidebarSessionGroup contract, and apply it as a normal
+        sessionState message. Closed-session paging remains independent, so the
+        modal can display whichever real dataset arrives first without a fake
+        loading row or a second list area.
+        */
+        let active_project_id = self.gpui_daemon_sessions_active_project_id();
+        self.run_gpui_app_modal_sidebar_status_task(
+            move || {
+                let groups = gpui_read_gxserver_presentation_snapshot()
+                    .map(|snapshot| {
+                        gpui_quick_access_sidebar_groups_from_presentation_snapshot(
+                            &snapshot,
+                            active_project_id.as_deref(),
+                        )
+                    })
+                    .unwrap_or_default();
+                sidebar_state_message["groups"] = serde_json::Value::Array(groups);
+                sidebar_state_message["type"] =
+                    serde_json::Value::String("sessionState".to_string());
+                sidebar_state_message
             },
             cx,
         );
@@ -38957,15 +40364,6 @@ impl GhostexGpuiApp {
                 let sidebar_state_message =
                     self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
                 let mut open_message = modal.open_message();
-                if let Some(initial_query) =
-                    gpui_command_palette_initial_query_for_hotkey_action_id(action_id)
-                {
-                    /*
-                    CDXC:GPUICommandPalette 2026-06-26-07:40:
-                    Cmd+P opens the same command-palette modal in session-search mode. Override only the initial query to the empty string so GPUI preserves the shared command-mode `>` default for Cmd+Shift+P while direct session search does not start in command-finding mode.
-                    */
-                    open_message["initialQuery"] = serde_json::json!(initial_query);
-                }
                 if modal.requires_sidebar_state() {
                     open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
                 }
@@ -39112,6 +40510,12 @@ impl GhostexGpuiApp {
             "installFable56OrchestrationSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallFable56OrchestrationSkill,
+                    cx,
+                );
+            }
+            "installFindPrevSessionSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallFindPrevSessionSkill,
                     cx,
                 );
             }
@@ -39423,6 +40827,10 @@ impl GhostexGpuiApp {
                     .get("projectId")
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string);
+                let prompt_id = command
+                    .get("promptId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
                 let session_id = command
                     .get("sessionId")
                     .and_then(serde_json::Value::as_str)
@@ -39432,6 +40840,7 @@ impl GhostexGpuiApp {
                         gpui_save_stashed_prompt_result_message(
                             &request_id,
                             &content,
+                            prompt_id.as_deref(),
                             project_id.as_deref(),
                             session_id.as_deref(),
                         )
@@ -39797,18 +41206,57 @@ impl GhostexGpuiApp {
                 let additional_docs_folders_text = gpui_manage_additional_docs_folders_text(
                     &self.sidebar_runtime_settings_snapshot,
                 );
+                let remote_context = snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.active_project_id.as_ref())
+                    .and_then(|project_id| {
+                        gpui_remote_project_reference_from_project_id(project_id.0.as_str())
+                    })
+                    .map(|reference| {
+                        let target = self.gpui_remote_gxserver_request_target(
+                            reference.remote_machine_id.as_str(),
+                        );
+                        (reference, target)
+                    });
                 let background = cx.background_executor().clone();
                 cx.spawn(async move |this, cx| {
-                    let response = background
+                    let outcome = background
                         .spawn(async move {
-                            run_manage_files_bridge_request_for_project_snapshot(
-                                &payload,
-                                snapshot.as_ref(),
-                                &additional_docs_folders_text,
-                            )
+                            match remote_context {
+                                Some((reference, target)) => {
+                                    run_remote_manage_files_bridge_request_for_project_snapshot(
+                                        &payload,
+                                        snapshot.as_ref(),
+                                        &additional_docs_folders_text,
+                                        &reference,
+                                        target.as_ref(),
+                                    )
+                                }
+                                None => run_manage_files_bridge_request_for_project_snapshot(
+                                    &payload,
+                                    snapshot.as_ref(),
+                                    &additional_docs_folders_text,
+                                ),
+                            }
                         })
                         .await;
                     let _ = this.update(cx, |this, cx| {
+                        let ManageFilesBridgeOutcome {
+                            action,
+                            request_id,
+                            mut response,
+                            side_effect,
+                        } = outcome;
+                        if let Some(side_effect) = side_effect
+                            && let Err(error) =
+                                this.perform_manage_files_bridge_side_effect(side_effect, cx)
+                        {
+                            response = manage_files_bridge_error_response(
+                                &action,
+                                &request_id,
+                                &error,
+                            );
+                        }
                         this.dispatch_project_workarea_json_event(
                             slot_key,
                             "ghostex-manage-files-response",
@@ -40687,11 +42135,6 @@ impl GhostexGpuiApp {
                                 .agents_workspace
                                 .active_session_in_pane(requested_pane_id)
                                 != Some(shell_session_id)
-                            || !this
-                                .sidebar_gxserver_presentation_focus_state
-                                .visible_session_ids
-                                .iter()
-                                .any(|session_id| session_id == &key.session_id)
                             || !this.agents_tab_selected_local_runtime_missing(
                                 requested_pane_id,
                                 shell_session_id,
@@ -41028,7 +42471,10 @@ impl GhostexGpuiApp {
                     .active_project_tab_sessions
                     .as_mut()
                     && let Some(tab_session) =
-                        tab_sessions.iter_mut().find(|session| session.key == key)
+                        tab_sessions.iter_mut().find(|session| {
+                            session.key
+                                == GpuiWorkspaceTerminalSessionKey::Local(key.clone())
+                        })
                     && tab_session.title != title
                 {
                     tab_session.title = title;
@@ -41482,9 +42928,16 @@ impl GhostexGpuiApp {
         &self,
         session_id: TerminalSessionId,
     ) -> Option<GpuiRemoteAttachSessionKey> {
+        let scoped_project_id = self.agents_workspace_project_id.as_deref()?;
+        let remote_project = gpui_remote_project_reference_from_project_id(scoped_project_id)?;
         self.remote_attach_sessions
             .iter()
-            .find_map(|(key, mapped)| (*mapped == session_id).then(|| key.clone()))
+            .find_map(|(key, mapped)| {
+                (*mapped == session_id
+                    && key.remote_machine_id == remote_project.remote_machine_id
+                    && key.project_id == remote_project.project_id)
+                    .then(|| key.clone())
+            })
     }
 
     fn agents_session_chat_eligible(&self, session_id: TerminalSessionId) -> bool {
@@ -41499,15 +42952,30 @@ impl GhostexGpuiApp {
                 .sidebar_gxserver_presentation_focus_state
                 .active_project_tab_sessions
                 .as_deref()
-                .and_then(|sessions| sessions.iter().find(|session| session.key == key))
+                .and_then(|sessions| {
+                    sessions.iter().find(|session| {
+                        session.key
+                            == GpuiWorkspaceTerminalSessionKey::Local(key.clone())
+                    })
+                })
                 .and_then(|session| session.agent_session_id.as_deref())
                 .is_some_and(|agent_session_id| !agent_session_id.trim().is_empty());
         }
         let Some(key) = self.agents_chat_remote_key_for_session(session_id) else {
             return false;
         };
-        self.remote_attach_chat_capable_sessions
-            .contains(&session_id)
+        let has_projected_agent_session_id = self
+            .sidebar_gxserver_presentation_focus_state
+            .active_project_tab_sessions
+            .as_deref()
+            .and_then(|sessions| {
+                sessions.iter().find(|session| {
+                    session.key == GpuiWorkspaceTerminalSessionKey::Remote(key.clone())
+                })
+            })
+            .and_then(|session| session.agent_session_id.as_deref())
+            .is_some_and(|agent_session_id| !agent_session_id.trim().is_empty());
+        has_projected_agent_session_id
             && self
                 .gpui_remote_gxserver_request_target(key.remote_machine_id.as_str())
                 .is_some()
@@ -42008,6 +43476,30 @@ impl GhostexGpuiApp {
         persist_gpui_gxserver_presentation_focus_state(
             &self.sidebar_gxserver_presentation_focus_state,
         );
+        if self.active_mode.is_project_editor_mode()
+            && self.project_editor_shell.left_companion_visible
+        {
+            let mode = self.active_mode;
+            let focus_companion =
+                self.shell_focus == ShellFocusTarget::ProjectEditorCompanion(mode);
+            if let Some(key) = self.project_editor_companion_active_terminal_key()
+                && let Some(session_id) = self.shell_session_for_workspace_terminal_key(&key)
+                && self.project_editor_companion_terminal_session_is_active_project_eligible(
+                    session_id,
+                )
+            {
+                self.retarget_project_editor_companion_to_workspace_terminal(
+                    mode,
+                    session_id,
+                    &key,
+                    focus_companion,
+                    cx,
+                );
+            } else {
+                self.sync_project_editor_companion_terminal_selection();
+            }
+        }
+        self.prune_project_editor_companion_remote_attach_states();
         #[cfg(target_os = "windows")]
         {
             let focus_companion =
@@ -42125,9 +43617,11 @@ impl GhostexGpuiApp {
             return false;
         }
         if self.project_editor_companion_terminal_session_is_eligible(shell_session_id) {
-            self.retarget_project_editor_companion_to_local_workspace_terminal(
+            let workspace_key = GpuiWorkspaceTerminalSessionKey::Local(key);
+            self.retarget_project_editor_companion_to_workspace_terminal(
                 mode,
                 shell_session_id,
+                &workspace_key,
                 focus_companion,
                 cx,
             );
@@ -42161,8 +43655,10 @@ impl GhostexGpuiApp {
             return false;
         }
         let changed = self.agents_workspace.reconcile_with_sidebar_tab_sessions(
+            focus_state.active_project_id.as_deref(),
             tab_sessions,
             &mut self.local_workspace_session_mappings,
+            &mut self.remote_attach_sessions,
         );
         if changed {
             self.local_app_shot_session_mappings
@@ -42233,22 +43729,38 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionReattach 2026-07-24:
-        The presentation snapshot's visible session ids describe every
-        terminal currently surfaced by the restored split layout, not only the
-        focused pane. Each surfaced Running local session needs its own
-        process-local gxserver attach payload after restart. Prepare those
-        exact active pane/session slots without selecting a tab, moving pane
-        focus, or publishing a new focused session.
+        CDXC:GPUIWorkspaceSessionReattach 2026-07-24 (revised 2026-08-07):
+        Every terminal the restored split layout currently surfaces — not only
+        the focused pane — needs its own process-local gxserver attach payload
+        after restart. "Surfaced" is read from the live workspace model (a
+        rendered pane's active tab), which is the only current statement of
+        what is on screen. It used to be gated on the presentation snapshot's
+        visible session ids as well, but that set is a snapshot of what *was*
+        surfaced when it was published: after a session closed while the app
+        was shut down, reconcile promotes a background tab to active and that
+        promoted tab is absent from the stale set, so the pane the user is
+        looking at stayed empty until clicked. Prepare those exact active
+        pane/session slots without selecting a tab, moving pane focus, or
+        publishing a new focused session.
         */
+        /*
+        The remote and wake passes read the live workspace model rather than
+        the local projection, so they run before its guard: a remote workspace
+        or a fully-sleeping project must resume even on a snapshot that carries
+        no local tab rows.
+        */
+        if let Some(remote_machine_id) = self
+            .agents_workspace_project_id
+            .as_deref()
+            .and_then(gpui_remote_project_reference_from_project_id)
+            .map(|remote_project| remote_project.remote_machine_id)
+        {
+            self.attach_surfaced_remote_workspace_terminals(&remote_machine_id, cx);
+        }
+        self.resume_restored_workspace_surfaced_terminals(cx);
         let Some(tab_sessions) = focus_state.active_project_tab_sessions.as_deref() else {
             return;
         };
-        let visible_session_ids = focus_state
-            .visible_session_ids
-            .iter()
-            .map(String::as_str)
-            .collect::<HashSet<_>>();
         let rendered_pane_ids = self
             .agents_workspace
             .rendered_leaf_order()
@@ -42256,24 +43768,20 @@ impl GhostexGpuiApp {
             .collect::<HashSet<_>>();
         let candidates = tab_sessions
             .iter()
-            .filter(|session| {
-                !session.kind.is_t3()
-                    && session.presentation_state == TerminalSessionPresentationState::Running
-                    && visible_session_ids.contains(session.key.session_id.as_str())
-            })
             .filter_map(|session| {
-                let shell_session_id = self
-                    .local_workspace_session_mappings
-                    .get(&session.key)
-                    .copied()?;
-                let pane_id = self
-                    .agents_workspace
-                    .pane_id_for_session(shell_session_id)?;
+                let key = session.key.as_local()?;
+                if session.kind.is_t3()
+                    || session.presentation_state != TerminalSessionPresentationState::Running
+                {
+                    return None;
+                }
+                let shell_session_id = self.local_workspace_session_mappings.get(key).copied()?;
+                let pane_id = self.agents_workspace.pane_id_for_session(shell_session_id)?;
                 (rendered_pane_ids.contains(&pane_id)
                     && self.agents_workspace.active_session_in_pane(pane_id)
                         == Some(shell_session_id)
                     && self.agents_tab_selected_local_runtime_missing(pane_id, shell_session_id))
-                .then(|| (session.key.clone(), pane_id))
+                .then(|| (key.clone(), pane_id))
             })
             .collect::<Vec<_>>();
 
@@ -42289,6 +43797,341 @@ impl GhostexGpuiApp {
         }
     }
 
+    fn resume_restored_workspace_surfaced_terminals(&mut self, cx: &mut gpui::Context<Self>) {
+        /*
+        CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+        A restored workspace keeps the sessions its panes surfaced at quit, but
+        their daemon providers may have gone to sleep (auto-sleep, or the
+        machine rebooted) while the app was closed. Attach alone cannot show
+        those: a sleeping session has no zmx provider to attach to. Wake each
+        pane's surfaced-but-sleeping session exactly once per restored project,
+        which respawns the agent session server-side and then attaches through
+        the ordinary lifecycle path. Later sleeps are user decisions, so the
+        project key is consumed on the first authoritative pass and never
+        re-armed.
+        */
+        let Some(project_id) = self.agents_workspace_project_id.clone() else {
+            return;
+        };
+        if !self.startup_restore_wake_pending.remove(&project_id) {
+            return;
+        }
+        let surfaced = self
+            .agents_workspace
+            .rendered_leaf_order()
+            .into_iter()
+            .filter_map(|pane_id| {
+                self.agents_workspace
+                    .active_session_in_pane(pane_id)
+                    .map(|session_id| (pane_id, session_id))
+            })
+            .collect::<Vec<_>>();
+        for (pane_id, session_id) in surfaced {
+            if self
+                .agents_workspace
+                .session(session_id)
+                .is_none_or(|session| {
+                    session.kind.is_t3()
+                        || session.presentation_state
+                            != TerminalSessionPresentationState::Sleeping
+                })
+            {
+                continue;
+            }
+            self.request_mapped_sleeping_agents_terminal_wake(pane_id, session_id, cx);
+        }
+    }
+
+    fn current_project_view_state(&self) -> GpuiProjectViewState {
+        GpuiProjectViewState {
+            active_mode: self.available_titlebar_mode_or_agents(self.active_mode),
+            companion_visible: self.project_editor_shell.left_companion_visible,
+            companion_split_enabled: self.project_editor_shell.left_companion_split_enabled,
+            companion_width_ratio: self.project_editor_shell.left_companion_width_ratio,
+            companion_split_ratio: self.project_editor_shell.left_companion_split_ratio,
+            companion_top_session_id: self.project_editor_companion_terminal_session_id,
+            companion_bottom_session_id: self.project_editor_companion_secondary_terminal_session_id,
+            companion_focused_slot: self.project_editor_companion_focused_terminal_slot,
+        }
+    }
+
+    fn project_view_states_for_shell_state(&self) -> HashMap<String, GpuiProjectViewState> {
+        /*
+        CDXC:GPUIProjectViewMemory 2026-08-07:
+        The live project's view is only in the app fields, never in the map, so
+        the writer folds it in at serialization time. Without this, quitting
+        while on a project would persist that project's view as of the last
+        time the user switched away from it.
+        */
+        let mut states = self.project_view_states_by_project.clone();
+        if let Some(project_id) = self.agents_workspace_project_id.clone() {
+            states.insert(project_id, self.current_project_view_state());
+        }
+        states
+    }
+
+    fn capture_outgoing_project_view_state(&mut self) {
+        if let Some(project_id) = self.agents_workspace_project_id.clone() {
+            let state = self.current_project_view_state();
+            self.project_view_states_by_project.insert(project_id, state);
+        }
+    }
+
+    fn apply_project_view_state_for_active_project(&mut self, cx: &mut gpui::Context<Self>) {
+        /*
+        CDXC:GPUIProjectViewMemory 2026-08-07:
+        Restore the incoming project's own workarea and companion arrangement.
+        Companion occupants are validated against the workspace model that was
+        just swapped in — a session the reconcile has since removed simply
+        leaves that slot to the ordinary selection sync.
+        */
+        let Some(state) = self
+            .agents_workspace_project_id
+            .as_ref()
+            .and_then(|project_id| self.project_view_states_by_project.get(project_id))
+            .copied()
+        else {
+            return;
+        };
+        self.project_editor_shell.left_companion_visible = state.companion_visible;
+        self.project_editor_shell.left_companion_split_enabled = state.companion_split_enabled;
+        self.project_editor_shell.left_companion_width_ratio = state.companion_width_ratio;
+        self.project_editor_shell.left_companion_split_ratio = state.companion_split_ratio;
+        self.project_editor_companion_terminal_session_id = state
+            .companion_top_session_id
+            .filter(|session_id| self.agents_workspace.has_session(*session_id));
+        self.project_editor_companion_secondary_terminal_session_id = state
+            .companion_bottom_session_id
+            .filter(|session_id| self.agents_workspace.has_session(*session_id));
+        self.project_editor_companion_focused_terminal_slot = state.companion_focused_slot;
+        let target_mode = self.available_titlebar_mode_or_agents(state.active_mode);
+        if self.active_mode != target_mode {
+            self.active_mode = target_mode;
+            self.set_shell_focus(default_shell_focus_for_mode(
+                target_mode,
+                &self.agents_workspace,
+                &self.project_editor_shell,
+            ));
+            self.update_browser_visibility_for_active_mode(cx);
+        }
+    }
+
+    fn agents_remote_connect_status_for_session(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<(&'static str, Option<&'static str>)> {
+        /*
+        CDXC:GPUIRemoteConnectOverlay 2026-08-07:
+        A remote tab can only show content once its machine's tunnel is up, so
+        while that machine has no live connection the body states why instead
+        of rendering an empty rectangle. Local sessions never qualify, and a
+        connected machine returns nothing so the overlay disappears the moment
+        the attach can proceed.
+        */
+        let key = match self.workspace_terminal_key_for_shell_session(session_id)? {
+            GpuiWorkspaceTerminalSessionKey::Remote(key) => key,
+            GpuiWorkspaceTerminalSessionKey::Local(_) => return None,
+        };
+        if self
+            .remote_gxserver_connections
+            .contains_key(&key.remote_machine_id)
+        {
+            return None;
+        }
+        Some(gpui_remote_connect_overlay_labels(
+            self.remote_machine_connect_states
+                .get(&key.remote_machine_id)
+                .map(String::as_str),
+        ))
+    }
+
+    fn attach_surfaced_remote_workspace_terminals(
+        &mut self,
+        remote_machine_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUIRemoteWorkspaceRestore 2026-08-07:
+        The remote counterpart of `attach_surfaced_local_workspace_terminals`.
+        Parking a workspace always kills its SSH clients, so every restored
+        remote tab is dead by definition and used to need a tab-strip or
+        sidebar click to come back. Re-arm each surfaced remote tab of the live
+        remote workspace as soon as its machine reports connected — the same
+        "prepare a plan, insert the payload into that exact mount slot" shape
+        the local path uses. This deliberately does not select tabs, move pane
+        focus, change the titlebar mode, or publish presentation focus: the
+        restored layout already says what is surfaced, and a split's other
+        panes must re-arm without fighting each other for focus.
+        */
+        let Some(active_project_id) = self.agents_workspace_project_id.clone() else {
+            return;
+        };
+        let Some(remote_project) = gpui_remote_project_reference_from_project_id(&active_project_id)
+        else {
+            return;
+        };
+        if remote_project.remote_machine_id != remote_machine_id {
+            return;
+        }
+        let Some(target) = self.gpui_remote_gxserver_request_target(remote_machine_id) else {
+            return;
+        };
+        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) =
+            gpui_remote_machine_config_from_settings(settings_snapshot.object(), remote_machine_id)
+        else {
+            return;
+        };
+        let candidates = self
+            .agents_workspace
+            .rendered_leaf_order()
+            .into_iter()
+            .filter_map(|pane_id| {
+                self.agents_workspace
+                    .active_session_in_pane(pane_id)
+                    .map(|session_id| (pane_id, session_id))
+            })
+            .filter(|(pane_id, session_id)| {
+                self.agents_tab_selected_local_runtime_missing(*pane_id, *session_id)
+            })
+            .filter_map(|(pane_id, session_id)| {
+                self.remote_attach_sessions
+                    .iter()
+                    .find_map(|(key, mapped)| (*mapped == session_id).then(|| key.clone()))
+                    .filter(|key| key.remote_machine_id == remote_machine_id)
+                    .map(|key| (pane_id, session_id, key))
+            })
+            .collect::<Vec<_>>();
+
+        for (pane_id, session_id, key) in candidates {
+            if !self.remote_workspace_attach_pending.insert(key.clone()) {
+                continue;
+            }
+            let reference = GpuiRemoteAttachSessionReference {
+                remote_machine_id: key.remote_machine_id.clone(),
+                project_id: key.project_id.clone(),
+                session_id: key.session_id.clone(),
+            };
+            let prepare_config = config.clone();
+            let prepare_target = target.clone();
+            let background = cx.background_executor().clone();
+            cx.spawn(async move |this, cx| {
+                let prepare_reference = reference.clone();
+                let result = background
+                    .spawn(async move {
+                        /*
+                        Wake is requested here for the same reason the click
+                        path requests it: a restored session whose zmx provider
+                        died while the app was closed must be resumed remotely
+                        before there is anything to attach to.
+                        */
+                        gpui_prepare_remote_attach_terminal_plan(
+                            &prepare_config,
+                            &prepare_target,
+                            &prepare_reference,
+                            true,
+                        )
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    this.remote_workspace_attach_pending.remove(&key);
+                    let Ok(plan) = result else {
+                        support_logs::append(
+                            support_logs::GpuiSupportLog::TerminalFocus,
+                            "gpui.remoteAttach.surfacedRestorePlanFailed",
+                            serde_json::json!({ "machineId": key.remote_machine_id }),
+                        );
+                        return;
+                    };
+                    this.arm_surfaced_remote_workspace_terminal(&key, pane_id, session_id, plan, cx);
+                });
+            })
+            .detach();
+        }
+    }
+
+    fn arm_surfaced_remote_workspace_terminal(
+        &mut self,
+        key: &GpuiRemoteAttachSessionKey,
+        pane_id: WorkspacePaneId,
+        session_id: TerminalSessionId,
+        plan: GpuiRemoteAttachTerminalPlan,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        The SSH round trip runs in the background, so the layout may have moved
+        on. Mirror the local `SurfacedRestore` completion guard exactly: the
+        mapping, the pane placement, and the empty-runtime condition must all
+        still hold, otherwise this payload belongs to a slot that no longer
+        exists.
+        */
+        if self.remote_attach_sessions.get(key).copied() != Some(session_id)
+            || self.agents_workspace.pane_id_for_session(session_id) != Some(pane_id)
+            || self.agents_workspace.active_session_in_pane(pane_id) != Some(session_id)
+            || !self.agents_tab_selected_local_runtime_missing(pane_id, session_id)
+        {
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        let env_vars = plan
+            .askpass
+            .as_ref()
+            .map(|askpass| {
+                vec![
+                    (
+                        "DISPLAY".to_string(),
+                        env::var("DISPLAY").unwrap_or_else(|_| "localhost:0".to_string()),
+                    ),
+                    (
+                        "SSH_ASKPASS".to_string(),
+                        gpui_path_string(askpass.script.as_path()),
+                    ),
+                    ("SSH_ASKPASS_REQUIRE".to_string(), "force".to_string()),
+                ]
+            })
+            .unwrap_or_default();
+        #[cfg(not(target_os = "macos"))]
+        let env_vars = Vec::new();
+        let payload = AgentsTerminalExplicitLaunchPayload {
+            working_directory: None,
+            command: Some(plan.terminal_command),
+            env_vars,
+            initial_input: None,
+            wait_after_command: false,
+        };
+        if payload.to_ghostty_launch_payload().is_err() {
+            return;
+        }
+        let runtime_session_id = self
+            .agents_terminal_runtime_sessions
+            .ensure_runtime_session_id(session_id);
+        self.agents_terminal_launch_payload_source
+            .insert_explicit_payload_for_mount_slot(
+                runtime_session_id,
+                AgentsTerminalBodyMountSlotId {
+                    pane_id,
+                    session_id,
+                },
+                payload,
+            );
+        #[cfg(target_os = "macos")]
+        if let Some(askpass) = plan.askpass {
+            self.remote_attach_askpass_scripts
+                .insert(key.clone(), askpass);
+        }
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.remoteAttach.terminalOpened",
+            serde_json::json!({
+                "machineId": key.remote_machine_id,
+                "mode": "surfacedRestore",
+                "sessionId": key.session_id,
+            }),
+        );
+        self.persist_shell_layout_state();
+        cx.notify();
+    }
+
     fn prune_t3_workspace_panes_after_reconcile(
         &mut self,
         tab_sessions: &[GpuiSidebarWorkspaceTabSession],
@@ -42298,7 +44141,7 @@ impl GhostexGpuiApp {
         let valid_keys = tab_sessions
             .iter()
             .filter(|session| session.kind.is_t3())
-            .map(|session| session.key.clone())
+            .filter_map(|session| session.key.as_local().cloned())
             .collect::<HashSet<_>>();
         if self
             .pending_t3_workspace_focus_key
@@ -42500,6 +44343,108 @@ impl GhostexGpuiApp {
         false
     }
 
+    fn request_remote_workspace_terminal_lifecycle(
+        &mut self,
+        pane_id: WorkspacePaneId,
+        shell_session_id: TerminalSessionId,
+        action: GpuiLocalWorkspaceLifecycleAction,
+        mutation_kind: GpuiLocalWorkspaceLifecycleMutationKind,
+        replacement_key: Option<GpuiRemoteAttachSessionKey>,
+        skip_replacement_fallback: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) =
+            self.workspace_terminal_key_for_shell_session(shell_session_id)
+        else {
+            return false;
+        };
+        let replacement_shell_session_id = replacement_key
+            .as_ref()
+            .and_then(|key| self.remote_attach_sessions.get(key).copied());
+        let request = GpuiLocalWorkspaceLifecycleRequest {
+            action,
+            confirmed_close_slot_id: None,
+            mutation_kind,
+            pane_id,
+            replacement_shell_session_id,
+            shell_session_id,
+        };
+        if action != GpuiLocalWorkspaceLifecycleAction::Close
+            && gpui_local_workspace_lifecycle_request_is_pending(
+                &self.local_workspace_lifecycle_requests,
+                &request,
+            )
+        {
+            return true;
+        }
+        let Some(request_id) = self.next_local_workspace_lifecycle_request_id() else {
+            return false;
+        };
+        let mut message = serde_json::Map::new();
+        message.insert(
+            "action".to_string(),
+            serde_json::Value::String(action.as_str().to_string()),
+        );
+        message.insert(
+            "projectId".to_string(),
+            serde_json::Value::String(gpui_remote_scoped_project_id(
+                key.remote_machine_id.as_str(),
+                key.project_id.as_str(),
+            )),
+        );
+        message.insert("requestId".to_string(), serde_json::json!(request_id));
+        message.insert(
+            "sessionId".to_string(),
+            serde_json::Value::String(key.session_id),
+        );
+        message.insert(
+            "type".to_string(),
+            serde_json::Value::String(
+                GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_TYPE.to_string(),
+            ),
+        );
+        message.insert(
+            "version".to_string(),
+            serde_json::json!(GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_VERSION),
+        );
+        if let Some(replacement_key) = replacement_key {
+            message.insert(
+                "replacementProjectId".to_string(),
+                serde_json::Value::String(gpui_remote_scoped_project_id(
+                    replacement_key.remote_machine_id.as_str(),
+                    replacement_key.project_id.as_str(),
+                )),
+            );
+            message.insert(
+                "replacementSessionId".to_string(),
+                serde_json::Value::String(replacement_key.session_id),
+            );
+        } else if skip_replacement_fallback {
+            message.insert(
+                "skipReplacementFallback".to_string(),
+                serde_json::Value::Bool(true),
+            );
+        }
+        if action == GpuiLocalWorkspaceLifecycleAction::Close {
+            let changed = self.apply_local_workspace_terminal_lifecycle_result(request, cx);
+            let _ = self.dispatch_gpui_workspace_terminal_lifecycle_request(
+                serde_json::Value::Object(message),
+                cx,
+            );
+            return changed;
+        }
+        self.local_workspace_lifecycle_requests
+            .insert(request_id, request);
+        if self.dispatch_gpui_workspace_terminal_lifecycle_request(
+            serde_json::Value::Object(message),
+            cx,
+        ) {
+            return true;
+        }
+        self.local_workspace_lifecycle_requests.remove(&request_id);
+        false
+    }
+
     fn receive_sidebar_workspace_terminal_lifecycle_result_payload(
         &mut self,
         payload: &str,
@@ -42664,6 +44609,20 @@ impl GhostexGpuiApp {
         if !self.agents_terminal_session_is_mapped_sleeping(session_id) {
             return false;
         }
+        if let Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) =
+            self.workspace_terminal_key_for_shell_session(session_id)
+        {
+            return self.request_gpui_remote_attach_terminal_open(
+                GpuiRemoteAttachSessionReference {
+                    remote_machine_id: key.remote_machine_id,
+                    project_id: key.project_id,
+                    session_id: key.session_id,
+                },
+                Some(pane_id),
+                AgentsWorkspaceNewTerminalPlacement::Tab,
+                cx,
+            );
+        }
         /*
         CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
         Mapped sleeping Agents sessions must wake through SidebarApp/gxserver before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
@@ -42721,13 +44680,22 @@ impl GhostexGpuiApp {
         &mut self,
         session_id: TerminalSessionId,
     ) -> bool {
+        /*
+        CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+        "Mapped" means the tab carries a canonical gxserver identity that wake
+        can address, which a remote attach tab does through
+        `remote_attach_sessions` just as a local tab does through the local
+        mappings. Requiring a local mapping here made the remote wake branch in
+        `request_mapped_sleeping_agents_terminal_wake` unreachable, so a
+        sleeping remote session could never be resumed from its tab.
+        */
         self.agents_workspace
             .session(session_id)
             .is_some_and(|session| {
                 session.presentation_state == TerminalSessionPresentationState::Sleeping
             })
             && self
-                .local_workspace_key_for_shell_session(session_id)
+                .workspace_terminal_key_for_shell_session(session_id)
                 .is_some()
     }
 
@@ -42852,22 +44820,38 @@ impl GhostexGpuiApp {
         &self,
         key: &GpuiLocalWorkspaceSessionKey,
     ) -> bool {
+        self.should_keep_project_editor_open_for_workspace_terminal_focus(
+            &GpuiWorkspaceTerminalSessionKey::Local(key.clone()),
+        )
+    }
+
+    fn should_keep_project_editor_open_for_workspace_terminal_focus(
+        &self,
+        key: &GpuiWorkspaceTerminalSessionKey,
+    ) -> bool {
         if !self.active_mode.is_project_editor_mode()
             || !self.project_editor_shell.left_companion_visible
         {
             return false;
         }
         self.project_editor_companion_active_project_id()
-            .is_some_and(|active_project_id| key.project_id.as_str() == active_project_id.as_str())
+            .is_some_and(|active_project_id| key.scoped_project_id() == active_project_id)
     }
 
-    fn retarget_project_editor_companion_to_local_workspace_terminal(
+    fn retarget_project_editor_companion_to_workspace_terminal(
         &mut self,
         mode: TitlebarMode,
         shell_session_id: TerminalSessionId,
+        workspace_key: &GpuiWorkspaceTerminalSessionKey,
         focus_companion: bool,
         cx: &mut gpui::Context<Self>,
     ) {
+        if self.shell_session_for_workspace_terminal_key(workspace_key) != Some(shell_session_id)
+            || self.project_editor_companion_active_project_id().as_deref()
+                != Some(workspace_key.scoped_project_id().as_str())
+        {
+            return;
+        }
         self.mark_project_editor_mode_awake(mode, cx);
         self.project_editor_companion_t3_key = None;
         if self.project_editor_companion_terminal_session_id == Some(shell_session_id) {
@@ -42922,7 +44906,11 @@ impl GhostexGpuiApp {
         mode: TitlebarMode,
         pane_id: WorkspacePaneId,
         session_id: TerminalSessionId,
+        workspace_key: &GpuiWorkspaceTerminalSessionKey,
     ) {
+        if self.shell_session_for_workspace_terminal_key(workspace_key) != Some(session_id) {
+            return;
+        }
         /*
         CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
         When a sidebar click keeps a project-editor mode open, the companion
@@ -42961,6 +44949,9 @@ impl GhostexGpuiApp {
                 ProjectEditorCompanionTerminalBodyMountSlotId { mode, session_id },
                 payload,
             );
+        if let GpuiWorkspaceTerminalSessionKey::Remote(remote_key) = workspace_key {
+            self.clear_project_editor_companion_remote_attach_state_for_key(remote_key);
+        }
     }
 
     fn request_project_editor_companion_terminal_attach_payload(
@@ -42976,6 +44967,169 @@ impl GhostexGpuiApp {
         mount slot. Startup text is never sent from this path; it belongs to
         the first materializing mount only.
         */
+        if let Some(GpuiWorkspaceTerminalSessionKey::Remote(remote_key)) =
+            self.project_editor_companion_terminal_key_for_slot(slot_id)
+        {
+            let Some(attempt) =
+                self.project_editor_companion_remote_attach_attempt_for_slot(slot_id)
+            else {
+                return;
+            };
+            if self
+                .project_editor_companion_remote_attach_states
+                .get(&slot_id)
+                .is_some_and(|state| state.attempt() == &attempt)
+            {
+                return;
+            }
+            self.project_editor_companion_remote_attach_states.insert(
+                slot_id,
+                GpuiProjectEditorCompanionRemoteAttachState::Preparing(attempt.clone()),
+            );
+            let Some(target) =
+                self.gpui_remote_gxserver_request_target(remote_key.remote_machine_id.as_str())
+            else {
+                self.record_project_editor_companion_remote_attach_unavailable(
+                    slot_id,
+                    attempt,
+                    "Reconnect the remote machine to show this terminal.".to_string(),
+                );
+                cx.notify();
+                return;
+            };
+            let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+            let Some(config) = gpui_remote_machine_config_from_settings(
+                settings_snapshot.object(),
+                remote_key.remote_machine_id.as_str(),
+            ) else {
+                self.record_project_editor_companion_remote_attach_unavailable(
+                    slot_id,
+                    attempt,
+                    "The saved remote machine is missing required SSH settings.".to_string(),
+                );
+                cx.notify();
+                return;
+            };
+            let reference = GpuiRemoteAttachSessionReference {
+                remote_machine_id: remote_key.remote_machine_id.clone(),
+                project_id: remote_key.project_id.clone(),
+                session_id: remote_key.session_id.clone(),
+            };
+            let background = cx.background_executor().clone();
+            cx.spawn(async move |this, cx| {
+                let result = background
+                    .spawn(async move {
+                        gpui_prepare_remote_attach_terminal_plan(&config, &target, &reference, true)
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if !this
+                        .project_editor_companion_remote_attach_states
+                        .get(&slot_id)
+                        .is_some_and(|state| state.attempt() == &attempt)
+                    {
+                        return;
+                    }
+                    if !this.project_editor_companion_remote_attach_attempt_is_current(
+                        slot_id, &attempt,
+                    ) {
+                        this.project_editor_companion_remote_attach_states
+                            .remove(&slot_id);
+                        return;
+                    }
+                    let plan = match result {
+                        Ok(plan) => plan,
+                        Err(message) => {
+                            this.record_project_editor_companion_remote_attach_unavailable(
+                                slot_id, attempt, message,
+                            );
+                            cx.notify();
+                            return;
+                        }
+                    };
+                    let Some(runtime_session_id) = this
+                        .agents_terminal_runtime_sessions
+                        .runtime_session_id_for_shell_session(slot_id.session_id)
+                    else {
+                        this.project_editor_companion_remote_attach_states
+                            .remove(&slot_id);
+                        return;
+                    };
+                    if this
+                        .agents_gpui_engine_terminals
+                        .get(&slot_id.session_id)
+                        .is_some_and(|record| record.runtime_session_id == runtime_session_id)
+                    {
+                        this.project_editor_companion_remote_attach_states
+                            .remove(&slot_id);
+                        return;
+                    }
+                    #[cfg(target_os = "macos")]
+                    let env_vars = plan
+                        .askpass
+                        .as_ref()
+                        .map(|askpass| {
+                            vec![
+                                (
+                                    "DISPLAY".to_string(),
+                                    env::var("DISPLAY")
+                                        .unwrap_or_else(|_| "localhost:0".to_string()),
+                                ),
+                                (
+                                    "SSH_ASKPASS".to_string(),
+                                    gpui_path_string(askpass.script.as_path()),
+                                ),
+                                ("SSH_ASKPASS_REQUIRE".to_string(), "force".to_string()),
+                            ]
+                        })
+                        .unwrap_or_default();
+                    #[cfg(not(target_os = "macos"))]
+                    let env_vars = Vec::new();
+                    let payload = AgentsTerminalExplicitLaunchPayload {
+                        working_directory: None,
+                        command: Some(plan.terminal_command),
+                        env_vars,
+                        initial_input: None,
+                        wait_after_command: false,
+                    };
+                    if payload.to_ghostty_launch_payload().is_err() {
+                        this.record_project_editor_companion_remote_attach_unavailable(
+                            slot_id,
+                            attempt,
+                            "GPUI could not prepare the remote attach terminal command."
+                                .to_string(),
+                        );
+                        cx.notify();
+                        return;
+                    }
+                    if let Some(session) = this
+                        .agents_workspace
+                        .terminal_sessions
+                        .iter_mut()
+                        .find(|session| session.id == slot_id.session_id)
+                    {
+                        session.title = plan.title;
+                        session.agent_icon = plan.agent_icon;
+                    }
+                    #[cfg(target_os = "macos")]
+                    if let Some(askpass) = plan.askpass {
+                        this.remote_attach_askpass_scripts
+                            .insert(remote_key.clone(), askpass);
+                    }
+                    this.project_editor_companion_terminal_launch_payload_source
+                        .insert_explicit_payload_for_mount_slot(
+                            runtime_session_id,
+                            slot_id,
+                            payload,
+                        );
+                    this.project_editor_companion_remote_attach_states
+                        .remove(&slot_id);
+                    cx.notify();
+                });
+            })
+            .detach();
+            return;
+        }
         if !self
             .project_editor_companion_terminal_attach_plan_pending
             .insert(slot_id)
@@ -43175,14 +45329,17 @@ impl GhostexGpuiApp {
             shell_session_id,
         );
         if keep_editor_mode {
+            let workspace_key = GpuiWorkspaceTerminalSessionKey::Local(key.clone());
             self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
                 project_editor_mode,
                 pane_id,
                 shell_session_id,
+                &workspace_key,
             );
-            self.retarget_project_editor_companion_to_local_workspace_terminal(
+            self.retarget_project_editor_companion_to_workspace_terminal(
                 project_editor_mode,
                 shell_session_id,
+                &workspace_key,
                 true,
                 cx,
             );
@@ -43241,6 +45398,7 @@ impl GhostexGpuiApp {
         let keep_editor_mode =
             self.should_keep_project_editor_open_for_local_workspace_terminal_focus(&key);
         let project_editor_mode = self.active_mode;
+        let workspace_key = GpuiWorkspaceTerminalSessionKey::Local(key.clone());
         let result = insert_gpui_local_workspace_attach_terminal(
             &mut self.agents_workspace,
             &mut self.agents_terminal_runtime_sessions,
@@ -43270,10 +45428,12 @@ impl GhostexGpuiApp {
                 project_editor_mode,
                 pane_id,
                 session_id,
+                &workspace_key,
             );
-            self.retarget_project_editor_companion_to_local_workspace_terminal(
+            self.retarget_project_editor_companion_to_workspace_terminal(
                 project_editor_mode,
                 session_id,
+                &workspace_key,
                 true,
                 cx,
             );
@@ -43788,13 +45948,25 @@ impl GhostexGpuiApp {
         active-project snapshot. A raw remote project id here would swap the
         workspace to a nonexistent project key and blank the pane.
         */
+        let scoped_project_id = gpui_remote_scoped_project_id(
+            key.remote_machine_id.as_str(),
+            key.project_id.as_str(),
+        );
+        let active_project_tab_sessions = (self
+            .sidebar_gxserver_presentation_focus_state
+            .active_project_id
+            .as_deref()
+            == Some(scoped_project_id.as_str()))
+        .then(|| {
+            self.sidebar_gxserver_presentation_focus_state
+                .active_project_tab_sessions
+                .clone()
+        })
+        .flatten();
         self.set_sidebar_gxserver_presentation_focus_state(
             GpuiGxserverPresentationFocusState {
-                active_project_id: Some(gpui_remote_scoped_project_id(
-                    key.remote_machine_id.as_str(),
-                    key.project_id.as_str(),
-                )),
-                active_project_tab_sessions: None,
+                active_project_id: Some(scoped_project_id),
+                active_project_tab_sessions,
                 focused_session_id: Some(scoped_session_id.clone()),
                 visible_session_ids: vec![scoped_session_id],
             },
@@ -44206,6 +46378,9 @@ impl GhostexGpuiApp {
         if self.agents_workspace_project_id == new_project_id {
             return false;
         }
+        self.source_code_server_runtime
+            .pending_remote_prompt_editor_request = None;
+        self.capture_outgoing_project_view_state();
         if self.agents_workspace_project_id.is_none()
             && new_project_id.as_ref().is_some_and(|project_id| {
                 !self
@@ -44218,6 +46393,7 @@ impl GhostexGpuiApp {
             })
         {
             self.agents_workspace_project_id = new_project_id;
+            self.apply_project_view_state_for_active_project(cx);
             self.persist_shell_layout_state();
             return true;
         }
@@ -44232,7 +46408,9 @@ impl GhostexGpuiApp {
         */
         let outgoing_state = agents_workspace_project_state_to_shell_state_json(
             &self.agents_workspace,
+            self.agents_workspace_project_id.as_deref(),
             &self.local_workspace_session_mappings,
+            &self.remote_attach_sessions,
             &self.agents_delayed_send_timers,
             &self.agents_send_when_stopped_watchers,
             SystemTime::now(),
@@ -44258,13 +46436,25 @@ impl GhostexGpuiApp {
         let restored_state = new_project_id.as_ref().and_then(|project_id| {
             self.parked_agents_workspaces_by_project
                 .remove(project_id)
-                .and_then(|state| agents_workspace_project_state_from_shell_state(&state))
-                .filter(|(_, mappings, _)| mappings.keys().all(|key| key.project_id == *project_id))
+                .and_then(|state| {
+                    agents_workspace_project_state_from_shell_state(&state, Some(project_id))
+                })
+                .filter(|(_, mappings, _, _)| {
+                    mappings.keys().all(|key| key.project_id == *project_id)
+                })
         });
-        let (workspace, mappings, delayed_send_restore_intents) = restored_state
-            .unwrap_or_else(|| (WorkspaceModel::empty_default(), HashMap::new(), Vec::new()));
+        let (workspace, mappings, remote_mappings, delayed_send_restore_intents) =
+            restored_state.unwrap_or_else(|| {
+                (
+                    WorkspaceModel::empty_default(),
+                    HashMap::new(),
+                    HashMap::new(),
+                    Vec::new(),
+                )
+            });
         self.agents_workspace = workspace;
         self.local_workspace_session_mappings = mappings;
+        self.remote_attach_sessions.extend(remote_mappings);
         self.agents_workspace_project_id = new_project_id;
         let restored_terminal_runtime = self
             .agents_workspace_project_id
@@ -44357,6 +46547,7 @@ impl GhostexGpuiApp {
             ));
         }
         self.restore_gpui_agents_delayed_sends(delayed_send_restore_intents, cx);
+        self.apply_project_view_state_for_active_project(cx);
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);
         cx.notify();
@@ -46319,17 +48510,24 @@ impl GhostexGpuiApp {
         let Some(session_id) = self.agents_workspace.active_session_in_pane(pane_id) else {
             return;
         };
-        let Some(key) = self.local_workspace_key_for_shell_session(session_id) else {
+        let Some(key) = self.workspace_terminal_key_for_shell_session(session_id) else {
             return;
         };
-        self.local_workspace_latest_focus_key = Some(key.clone());
-        self.dispatch_gpui_workspace_tab_session_selected(
-            key.project_id.as_str(),
-            key.session_id.as_str(),
-            false,
-            false,
-            cx,
-        );
+        match key {
+            GpuiWorkspaceTerminalSessionKey::Local(key) => {
+                self.local_workspace_latest_focus_key = Some(key.clone());
+                self.dispatch_gpui_workspace_tab_session_selected(
+                    key.project_id.as_str(),
+                    key.session_id.as_str(),
+                    false,
+                    false,
+                    cx,
+                );
+            }
+            GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
+            }
+        }
     }
 
     fn acknowledge_agents_pane_attention_from_chrome_click(
@@ -46443,6 +48641,27 @@ impl GhostexGpuiApp {
                 selected_local_runtime_missing,
                 cx,
             );
+        } else if let Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) =
+            self.workspace_terminal_key_for_shell_session(session_id)
+        {
+            if !selected_local_was_sleeping
+                && self.agents_tab_selected_local_runtime_missing(pane_id, session_id)
+            {
+                let _ = self.request_gpui_remote_attach_terminal_open(
+                    GpuiRemoteAttachSessionReference {
+                        remote_machine_id: key.remote_machine_id,
+                        project_id: key.project_id,
+                        session_id: key.session_id,
+                    },
+                    Some(pane_id),
+                    AgentsWorkspaceNewTerminalPlacement::Tab,
+                    cx,
+                );
+            } else {
+                self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
+            }
+        } else if let Some(key) = self.agents_chat_remote_key_for_session(session_id) {
+            self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
         }
         if wake_on_tab_selection {
             if self.agents_terminal_session_is_mapped_sleeping(session_id) {
@@ -46494,6 +48713,22 @@ impl GhostexGpuiApp {
             .agents_workspace
             .session_belongs_to_pane(pane_id, session_id)
         {
+            return;
+        }
+
+        if let Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) =
+            self.workspace_terminal_key_for_shell_session(session_id)
+        {
+            let _ = self.request_gpui_remote_attach_terminal_open(
+                GpuiRemoteAttachSessionReference {
+                    remote_machine_id: key.remote_machine_id,
+                    project_id: key.project_id,
+                    session_id: key.session_id,
+                },
+                Some(pane_id),
+                AgentsWorkspaceNewTerminalPlacement::Tab,
+                cx,
+            );
             return;
         }
 
@@ -47515,15 +49750,25 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.source_code_server_runtime
+            .cancel_remote_prompt_editor_request_for_shell_session(shell_session_id);
         /*
         CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:57:
         Removing a GPUI shell tab must also drop only the process-local gxserver/session mapping for that shell id. Close provider cleanup and acknowledged Sleep transitions remain sidebar-owned through the lifecycle bridge; this cleanup prevents stale GPUI mappings from selecting a deleted tab without fabricating daemon success, deleting gxserver rows, logging ids, or touching persisted private data.
         */
+        let scoped_remote_key = self
+            .workspace_terminal_key_for_shell_session(shell_session_id)
+            .and_then(|key| match key {
+                GpuiWorkspaceTerminalSessionKey::Remote(key) => Some(key),
+                GpuiWorkspaceTerminalSessionKey::Local(_) => None,
+            });
         self.remove_agents_chat_surface_for_session(shell_session_id, cx);
-        self.remote_attach_sessions
-            .retain(|_, mapped_session_id| *mapped_session_id != shell_session_id);
-        self.remote_attach_chat_capable_sessions
-            .remove(&shell_session_id);
+        if let Some(remote_key) = scoped_remote_key.as_ref() {
+            self.clear_project_editor_companion_remote_attach_state_for_key(remote_key);
+            self.remote_attach_sessions.remove(remote_key);
+            #[cfg(target_os = "macos")]
+            self.remote_attach_askpass_scripts.remove(remote_key);
+        }
         let removed_keys = self
             .local_workspace_session_mappings
             .iter()
@@ -47565,14 +49810,12 @@ impl GhostexGpuiApp {
         if !self.agents_workspace.can_close_tab(pane_id, session_id) {
             return false;
         }
-        let target_is_mapped = self
-            .local_workspace_key_for_shell_session(session_id)
-            .is_some();
+        let target_key = self.workspace_terminal_key_for_shell_session(session_id);
         let replacement_key = self
             .agents_workspace
             .selected_session_after_direct_tab_close(pane_id, session_id)
             .and_then(|replacement_session_id| {
-                self.local_workspace_key_for_shell_session(replacement_session_id)
+                self.workspace_terminal_key_for_shell_session(replacement_session_id)
             });
         /*
         CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
@@ -47582,17 +49825,34 @@ impl GhostexGpuiApp {
         Mapped GPUI workspace close bypasses Ghostty close-confirm, commits the Rust tab mutation locally, and routes only provider cleanup through SidebarApp. Mounted surface close-confirm remains for unmapped/local-only running terminals only.
         */
         let skip_replacement_fallback = replacement_key.is_none();
-        if target_is_mapped {
-            return self.request_local_workspace_terminal_lifecycle(
-                pane_id,
-                session_id,
-                GpuiLocalWorkspaceLifecycleAction::Close,
-                GpuiLocalWorkspaceLifecycleMutationKind::DirectClose,
-                replacement_key,
-                skip_replacement_fallback,
-                None,
-                cx,
-            );
+        match target_key {
+            Some(GpuiWorkspaceTerminalSessionKey::Local(_)) => {
+                return self.request_local_workspace_terminal_lifecycle(
+                    pane_id,
+                    session_id,
+                    GpuiLocalWorkspaceLifecycleAction::Close,
+                    GpuiLocalWorkspaceLifecycleMutationKind::DirectClose,
+                    replacement_key.and_then(|key| key.as_local().cloned()),
+                    skip_replacement_fallback,
+                    None,
+                    cx,
+                );
+            }
+            Some(GpuiWorkspaceTerminalSessionKey::Remote(_)) => {
+                return self.request_remote_workspace_terminal_lifecycle(
+                    pane_id,
+                    session_id,
+                    GpuiLocalWorkspaceLifecycleAction::Close,
+                    GpuiLocalWorkspaceLifecycleMutationKind::DirectClose,
+                    replacement_key.and_then(|key| match key {
+                        GpuiWorkspaceTerminalSessionKey::Remote(key) => Some(key),
+                        GpuiWorkspaceTerminalSessionKey::Local(_) => None,
+                    }),
+                    skip_replacement_fallback,
+                    cx,
+                );
+            }
+            None => {}
         }
 
         if self.request_close_agents_gpui_engine_terminal(
@@ -47655,24 +49915,37 @@ impl GhostexGpuiApp {
         let mut close_requested = false;
         let mut model_changed = false;
         for close_session_id in session_ids {
-            if self
-                .local_workspace_key_for_shell_session(close_session_id)
-                .is_some()
+            if let Some(workspace_key) =
+                self.workspace_terminal_key_for_shell_session(close_session_id)
             {
                 /*
                 CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
                 Scoped mapped close follows macOS by removing the Rust tab immediately and asking SidebarApp to clean up the provider asynchronously, before considering any mounted Ghostty close-confirm path. This prevents either a retryable terminal prompt or a delayed external bridge from blocking local tab removal.
                 */
-                if self.request_local_workspace_terminal_lifecycle(
-                    pane_id,
-                    close_session_id,
-                    GpuiLocalWorkspaceLifecycleAction::Close,
-                    GpuiLocalWorkspaceLifecycleMutationKind::ScopedClose,
-                    None,
-                    false,
-                    None,
-                    cx,
-                ) {
+                let requested = match workspace_key {
+                    GpuiWorkspaceTerminalSessionKey::Local(_) => self
+                        .request_local_workspace_terminal_lifecycle(
+                            pane_id,
+                            close_session_id,
+                            GpuiLocalWorkspaceLifecycleAction::Close,
+                            GpuiLocalWorkspaceLifecycleMutationKind::ScopedClose,
+                            None,
+                            false,
+                            None,
+                            cx,
+                        ),
+                    GpuiWorkspaceTerminalSessionKey::Remote(_) => self
+                        .request_remote_workspace_terminal_lifecycle(
+                            pane_id,
+                            close_session_id,
+                            GpuiLocalWorkspaceLifecycleAction::Close,
+                            GpuiLocalWorkspaceLifecycleMutationKind::ScopedClose,
+                            None,
+                            false,
+                            cx,
+                        ),
+                };
+                if requested {
                     close_requested = true;
                 }
                 continue;
@@ -47749,7 +50022,7 @@ impl GhostexGpuiApp {
                 self.agents_workspace
                     .replacement_session_after_direct_tab_sleep(pane_id, session_id)
                     .and_then(|replacement_session_id| {
-                        self.local_workspace_key_for_shell_session(replacement_session_id)
+                        self.workspace_terminal_key_for_shell_session(replacement_session_id)
                     })
             } else {
                 None
@@ -47759,22 +50032,40 @@ impl GhostexGpuiApp {
             } else {
                 GpuiLocalWorkspaceLifecycleMutationKind::ScopedSleep
             };
-            if self
-                .local_workspace_key_for_shell_session(sleep_session_id)
-                .is_some()
+            if let Some(workspace_key) =
+                self.workspace_terminal_key_for_shell_session(sleep_session_id)
             {
                 let skip_replacement_fallback =
                     scope == AgentsWorkspaceTabSleepScope::Sleep && replacement_key.is_none();
-                if self.request_local_workspace_terminal_lifecycle(
-                    pane_id,
-                    sleep_session_id,
-                    GpuiLocalWorkspaceLifecycleAction::Sleep,
-                    mutation_kind,
-                    replacement_key,
-                    skip_replacement_fallback,
-                    None,
-                    cx,
-                ) {
+                let requested = match workspace_key {
+                    GpuiWorkspaceTerminalSessionKey::Local(_) => self
+                        .request_local_workspace_terminal_lifecycle(
+                            pane_id,
+                            sleep_session_id,
+                            GpuiLocalWorkspaceLifecycleAction::Sleep,
+                            mutation_kind,
+                            replacement_key
+                                .clone()
+                                .and_then(|key| key.as_local().cloned()),
+                            skip_replacement_fallback,
+                            None,
+                            cx,
+                        ),
+                    GpuiWorkspaceTerminalSessionKey::Remote(_) => self
+                        .request_remote_workspace_terminal_lifecycle(
+                            pane_id,
+                            sleep_session_id,
+                            GpuiLocalWorkspaceLifecycleAction::Sleep,
+                            mutation_kind,
+                            replacement_key.clone().and_then(|key| match key {
+                                GpuiWorkspaceTerminalSessionKey::Remote(key) => Some(key),
+                                GpuiWorkspaceTerminalSessionKey::Local(_) => None,
+                            }),
+                            skip_replacement_fallback,
+                            cx,
+                        ),
+                };
+                if requested {
                     lifecycle_requested = true;
                 }
                 continue;
@@ -48242,7 +50533,15 @@ impl GhostexGpuiApp {
         };
         match action_id {
             "attachFileOrFolder" => {
-                self.request_gpui_engine_terminal_attachment_paths(target, runtime_session_id, cx);
+                if let Some(attachment_target) =
+                    self.gpui_terminal_attachment_target_for_engine_target(target)
+                {
+                    self.request_gpui_engine_terminal_attachment_paths(
+                        attachment_target,
+                        runtime_session_id,
+                        cx,
+                    );
+                }
             }
             "stashPrompt" => {
                 if let GpuiEngineTerminalEventTarget::Agents(session_id) = target {
@@ -48311,6 +50610,35 @@ impl GhostexGpuiApp {
         target: FocusedTerminalTextMountTarget,
         cx: &mut gpui::Context<Self>,
     ) {
+        let remote_context = match target {
+            FocusedTerminalTextMountTarget::Agents(slot_id) => self
+                .remote_prompt_editor_context_for_shell_session(slot_id.session_id)
+                .map(|(key, connection_generation)| {
+                    (slot_id.session_id, key, connection_generation)
+                }),
+            FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id) => self
+                .remote_prompt_editor_context_for_shell_session(slot_id.session_id)
+                .map(|(key, connection_generation)| {
+                    (slot_id.session_id, key, connection_generation)
+                }),
+            FocusedTerminalTextMountTarget::Command(_) => None,
+        };
+        if let Some((shell_session_id, key, connection_generation)) = remote_context {
+            cx.spawn(async move |this, cx| {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.queue_remote_prompt_editor_request(
+                        shell_session_id,
+                        &key,
+                        connection_generation,
+                        RemotePromptEditorDeliveryTarget::NativeTerminal(target),
+                        window,
+                        cx,
+                    );
+                });
+            })
+            .detach();
+            return;
+        }
         let originating_session_id = match target {
             FocusedTerminalTextMountTarget::Agents(slot_id) => self
                 .local_workspace_session_mappings
@@ -51559,15 +53887,22 @@ impl GhostexGpuiApp {
 
         if let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) {
             self.agents_workspace.select_tab(pane_id, session_id);
-            if let Some(key) = self.local_workspace_key_for_shell_session(session_id) {
-                self.local_workspace_latest_focus_key = Some(key.clone());
-                self.dispatch_gpui_workspace_tab_session_selected(
-                    key.project_id.as_str(),
-                    key.session_id.as_str(),
-                    false,
-                    false,
-                    cx,
-                );
+            if let Some(key) = self.workspace_terminal_key_for_shell_session(session_id) {
+                match key {
+                    GpuiWorkspaceTerminalSessionKey::Local(key) => {
+                        self.local_workspace_latest_focus_key = Some(key.clone());
+                        self.dispatch_gpui_workspace_tab_session_selected(
+                            key.project_id.as_str(),
+                            key.session_id.as_str(),
+                            false,
+                            false,
+                            cx,
+                        );
+                    }
+                    GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                        self.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
+                    }
+                }
             }
         }
         self.focus_project_editor_companion(mode, window, cx);
@@ -53075,6 +55410,7 @@ impl GhostexGpuiApp {
         self.agents_terminal_runtime_sessions
             .reconcile_with_workspace(&self.agents_workspace);
         self.sync_project_editor_companion_terminal_selection();
+        self.prune_project_editor_companion_remote_attach_states();
         let logical_slot_ids = self.current_project_editor_companion_terminal_body_mount_slots();
         let settings =
             shared_settings::shared_sidebar_settings_snapshot().gpui_terminal_engine_settings();
@@ -53134,6 +55470,9 @@ impl GhostexGpuiApp {
                     !self
                         .agents_gpui_engine_terminals
                         .contains_key(&slot_id.session_id)
+                        && self
+                            .project_editor_companion_remote_attach_unavailable_message(*slot_id)
+                            .is_none()
                 })
                 .collect::<Vec<_>>()
         };
@@ -53276,8 +55615,11 @@ impl GhostexGpuiApp {
                 });
         }
         #[cfg(target_os = "macos")]
-        self.remote_attach_askpass_scripts
-            .retain(|session_id, _| self.agents_workspace.has_session(*session_id));
+        self.remote_attach_askpass_scripts.retain(|key, _| {
+            self.remote_attach_sessions
+                .get(key)
+                .is_some_and(|session_id| self.agents_workspace.has_session(*session_id))
+        });
 
         {
             let workspace = &self.agents_workspace;
@@ -53874,18 +56216,40 @@ impl GhostexGpuiApp {
                 self.insert_paths_into_gpui_engine_terminal(target, paths, cx);
             }
             TerminalViewEvent::AttachPathsRequested => {
-                self.request_gpui_engine_terminal_attachment_paths(target, runtime_session_id, cx);
+                if let Some(attachment_target) =
+                    self.gpui_terminal_attachment_target_for_engine_target(target)
+                {
+                    self.request_gpui_engine_terminal_attachment_paths(
+                        attachment_target,
+                        runtime_session_id,
+                        cx,
+                    );
+                }
             }
             TerminalViewEvent::AgentActionRequested(action) => {
                 self.handle_gpui_engine_terminal_agent_action(target, *action, cx);
             }
             TerminalViewEvent::EscapePressed => {
                 if let Some(shell_session_id) = agents_shell_session_id {
+                    support_logs::append_temporary(
+                        support_logs::GpuiSupportLog::TerminalFocus,
+                        "TEMP.gpui.sessionInterrupt.compositedEscapeRouted",
+                        serde_json::json!({
+                            "shellSessionId": format!("{:?}", shell_session_id),
+                        }),
+                    );
                     self.dispatch_gpui_workspace_terminal_escape_pressed(shell_session_id, cx);
                 }
             }
             TerminalViewEvent::FirstPromptTitleGenerationCancelRequested => {
                 if let Some(shell_session_id) = agents_shell_session_id {
+                    support_logs::append_temporary(
+                        support_logs::GpuiSupportLog::TerminalFocus,
+                        "TEMP.gpui.sessionInterrupt.titleCancelRouted",
+                        serde_json::json!({
+                            "shellSessionId": format!("{:?}", shell_session_id),
+                        }),
+                    );
                     self.dispatch_gpui_workspace_first_prompt_title_generation_cancel(
                         shell_session_id,
                         cx,
@@ -54089,6 +56453,31 @@ impl GhostexGpuiApp {
         runtime_session_id: AgentsTerminalRuntimeSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        let remote_context = match target {
+            GpuiEngineTerminalEventTarget::Agents(shell_session_id) => self
+                .remote_prompt_editor_context_for_shell_session(shell_session_id)
+                .map(|(key, connection_generation)| (shell_session_id, key, connection_generation)),
+            GpuiEngineTerminalEventTarget::Command(_) => None,
+        };
+        if let Some((shell_session_id, key, connection_generation)) = remote_context {
+            cx.spawn(async move |this, cx| {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.queue_remote_prompt_editor_request(
+                        shell_session_id,
+                        &key,
+                        connection_generation,
+                        RemotePromptEditorDeliveryTarget::GpuiEngineTerminal {
+                            target,
+                            runtime_session_id,
+                        },
+                        window,
+                        cx,
+                    );
+                });
+            })
+            .detach();
+            return;
+        }
         let Some(originating_session_id) =
             self.prompt_editor_originating_session_id_for_engine_target(target)
         else {
@@ -54123,6 +56512,239 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    fn remote_prompt_editor_context_for_shell_session(
+        &self,
+        shell_session_id: TerminalSessionId,
+    ) -> Option<(GpuiRemoteAttachSessionKey, u64)> {
+        let GpuiWorkspaceTerminalSessionKey::Remote(key) =
+            self.workspace_terminal_key_for_shell_session(shell_session_id)?
+        else {
+            return None;
+        };
+        let connection_generation = self
+            .remote_gxserver_connect_generations
+            .get(key.remote_machine_id.as_str())
+            .copied()?;
+        Some((key, connection_generation))
+    }
+
+    fn queue_remote_prompt_editor_request(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+        key: &GpuiRemoteAttachSessionKey,
+        connection_generation: u64,
+        delivery_target: RemotePromptEditorDeliveryTarget,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let context_is_current = self
+            .remote_prompt_editor_context_for_shell_session(shell_session_id)
+            .is_some_and(|(current_key, current_generation)| {
+                current_key == *key && current_generation == connection_generation
+            });
+        let scoped_project_id =
+            gpui_remote_scoped_project_id(key.remote_machine_id.as_str(), key.project_id.as_str());
+        let source_target = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .filter(|snapshot| {
+                snapshot.active_project_id.as_ref().map(|id| id.0.as_str())
+                    == Some(scoped_project_id.as_str())
+            })
+            .and_then(|snapshot| self.source_code_server_runtime_target(snapshot));
+        let source_target_is_current = source_target.as_ref().is_some_and(|target| {
+            matches!(
+                &target.endpoint,
+                SourceCodeServerRuntimeEndpoint::Remote {
+                    connection_generation: target_generation,
+                    remote_machine_id,
+                    ..
+                } if remote_machine_id == &key.remote_machine_id
+                    && *target_generation == connection_generation
+            )
+        });
+        if !context_is_current || !source_target_is_current {
+            self.report_remote_prompt_editor_failure(
+                "The remote project or session changed before its editor could open.",
+                window,
+                cx,
+            );
+            return false;
+        }
+        if !self.set_active_mode(TitlebarMode::Source, window, cx) {
+            self.report_remote_prompt_editor_failure(
+                "Code view is unavailable for this remote project.",
+                window,
+                cx,
+            );
+            return false;
+        }
+        self.focus_project_editor_surface(TitlebarMode::Source, window, cx);
+        let Some(source_target) = source_target else {
+            return false;
+        };
+        let runtime_is_owned_for_request = matches!(
+            self.source_code_server_runtime.state,
+            SourceCodeServerRuntimeLaunchState::Launching
+                | SourceCodeServerRuntimeLaunchState::Ready
+        ) && self.source_code_server_runtime.target.as_ref()
+            == Some(&source_target);
+        if !runtime_is_owned_for_request {
+            self.report_remote_prompt_editor_failure(
+                "Code view is unavailable for this remote project.",
+                window,
+                cx,
+            );
+            return false;
+        }
+        let source_runtime_generation = self.source_code_server_runtime.generation;
+        self.source_code_server_runtime
+            .queue_remote_prompt_editor_request(PendingRemotePromptEditorRequest {
+                shell_session_id,
+                remote_key: key.clone(),
+                connection_generation,
+                source_target,
+                source_runtime_generation,
+                delivery_target,
+            });
+        self.deliver_pending_remote_prompt_editor_request_if_ready(cx);
+        true
+    }
+
+    fn deliver_pending_remote_prompt_editor_request_if_ready(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(request) = self
+            .source_code_server_runtime
+            .pending_remote_prompt_editor_request
+            .clone()
+        else {
+            return false;
+        };
+        if !self
+            .source_code_server_runtime
+            .owns_ready_remote_prompt_editor_ipc(&request)
+        {
+            let still_waiting_for_owned_runtime = self.source_code_server_runtime.state
+                == SourceCodeServerRuntimeLaunchState::Launching
+                && self.source_code_server_runtime.generation == request.source_runtime_generation
+                && self.source_code_server_runtime.target.as_ref() == Some(&request.source_target);
+            if !still_waiting_for_owned_runtime {
+                self.source_code_server_runtime
+                    .pending_remote_prompt_editor_request = None;
+            }
+            return false;
+        }
+
+        let authoritative_session_is_current = self
+            .remote_prompt_editor_context_for_shell_session(request.shell_session_id)
+            .is_some_and(|(current_key, current_generation)| {
+                current_key == request.remote_key
+                    && current_generation == request.connection_generation
+            });
+        let authoritative_target_is_current = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .and_then(|snapshot| self.source_code_server_runtime_target(snapshot))
+            .is_some_and(|target| target == request.source_target);
+        let delivery_target_is_current = match request.delivery_target {
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeTerminal(
+                FocusedTerminalTextMountTarget::Agents(slot_id),
+            ) => slot_id.session_id == request.shell_session_id,
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeTerminal(
+                FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id),
+            ) => slot_id.session_id == request.shell_session_id,
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeTerminal(
+                FocusedTerminalTextMountTarget::Command(_),
+            ) => false,
+            RemotePromptEditorDeliveryTarget::GpuiEngineTerminal {
+                target: GpuiEngineTerminalEventTarget::Agents(shell_session_id),
+                runtime_session_id,
+            } => {
+                shell_session_id == request.shell_session_id
+                    && self
+                        .agents_gpui_engine_terminals
+                        .get(&shell_session_id)
+                        .is_some_and(|record| record.runtime_session_id == runtime_session_id)
+            }
+            RemotePromptEditorDeliveryTarget::GpuiEngineTerminal {
+                target: GpuiEngineTerminalEventTarget::Command(_),
+                ..
+            } => false,
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeView(native_view) => {
+                self.agents_terminal_session_id_containing_responder(
+                    native_view as *mut std::ffi::c_void,
+                )
+                .or_else(|| {
+                    self.project_editor_companion_terminal_session_id_containing_responder(
+                        native_view as *mut std::ffi::c_void,
+                    )
+                }) == Some(request.shell_session_id)
+            }
+        };
+        if !authoritative_session_is_current
+            || !authoritative_target_is_current
+            || !delivery_target_is_current
+        {
+            self.source_code_server_runtime
+                .pending_remote_prompt_editor_request = None;
+            return false;
+        }
+
+        self.source_code_server_runtime
+            .pending_remote_prompt_editor_request = None;
+        match request.delivery_target {
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeTerminal(target) => {
+                self.send_prompt_editor_shortcut_to_native_terminal_target(target)
+            }
+            RemotePromptEditorDeliveryTarget::GpuiEngineTerminal {
+                target,
+                runtime_session_id,
+            } => {
+                self.send_prompt_editor_shortcut_to_gpui_engine_terminal(
+                    target,
+                    runtime_session_id,
+                    cx,
+                );
+                true
+            }
+            #[cfg(target_os = "macos")]
+            RemotePromptEditorDeliveryTarget::NativeView(native_view) => {
+                terminal_ghostty_surface::send_native_prompt_editor_shortcut_for_view(
+                    native_view as *mut std::ffi::c_void,
+                )
+            }
+        }
+    }
+
+    fn report_remote_prompt_editor_failure(
+        &mut self,
+        description: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: "gpui-remote-prompt-editor-failed".to_string(),
+                level: GpuiAppToastLevel::from_raw(Some("warning")),
+                title: "Remote prompt editor unavailable".to_string(),
+                description: Some(description.to_string()),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            window,
+            cx,
+        );
     }
 
     fn prompt_editor_originating_session_id_for_engine_target(
@@ -54197,9 +56819,33 @@ impl GhostexGpuiApp {
         let _ = gpui_open_terminal_action_url(open_value);
     }
 
+    fn gpui_terminal_attachment_target_for_engine_target(
+        &self,
+        target: GpuiEngineTerminalEventTarget,
+    ) -> Option<GpuiTerminalAttachmentTarget> {
+        let GpuiEngineTerminalEventTarget::Agents(session_id) = target else {
+            return Some(GpuiTerminalAttachmentTarget::Terminal(target));
+        };
+        let Some(slot_id) = self
+            .current_project_editor_companion_terminal_body_mount_slots()
+            .into_iter()
+            .find(|slot_id| slot_id.session_id == session_id)
+        else {
+            if self.active_mode.is_project_editor_mode() {
+                return None;
+            }
+            return Some(GpuiTerminalAttachmentTarget::Terminal(target));
+        };
+        let session_key = self.project_editor_companion_terminal_key_for_slot(slot_id)?;
+        Some(GpuiTerminalAttachmentTarget::ProjectEditorCompanion {
+            slot_id,
+            session_key,
+        })
+    }
+
     fn request_gpui_engine_terminal_attachment_paths(
         &mut self,
-        target: GpuiEngineTerminalEventTarget,
+        target: GpuiTerminalAttachmentTarget,
         runtime_session_id: AgentsTerminalRuntimeSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -54230,30 +56876,40 @@ impl GhostexGpuiApp {
 
     fn attach_selected_path_to_gpui_engine_terminal(
         &mut self,
-        target: GpuiEngineTerminalEventTarget,
+        target: GpuiTerminalAttachmentTarget,
         runtime_session_id: AgentsTerminalRuntimeSessionId,
         path: PathBuf,
         cx: &mut gpui::Context<Self>,
     ) {
-        if !self.gpui_engine_terminal_target_matches_runtime(target, runtime_session_id) {
+        if !self.gpui_terminal_attachment_target_matches_runtime(&target, runtime_session_id) {
             return;
         }
 
-        let remote_machine_id = match target {
-            GpuiEngineTerminalEventTarget::Agents(session_id) => self
+        let remote_machine_id = match &target {
+            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Agents(
+                session_id,
+            )) => self
                 .remote_attach_sessions
                 .iter()
                 .find_map(|(key, mapped_session_id)| {
-                    (*mapped_session_id == session_id).then(|| key.remote_machine_id.clone())
+                    (mapped_session_id == session_id).then(|| key.remote_machine_id.clone())
                 }),
-            GpuiEngineTerminalEventTarget::Command(_) => None,
+            GpuiTerminalAttachmentTarget::ProjectEditorCompanion {
+                session_key: GpuiWorkspaceTerminalSessionKey::Remote(remote_key),
+                ..
+            } => Some(remote_key.remote_machine_id.clone()),
+            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Command(_))
+            | GpuiTerminalAttachmentTarget::ProjectEditorCompanion {
+                session_key: GpuiWorkspaceTerminalSessionKey::Local(_),
+                ..
+            } => None,
         };
         let Some(remote_machine_id) = remote_machine_id else {
             match gpui_local_terminal_attachment_reference(path.as_path()) {
                 Ok(reference) => {
                     let text = gpui_terminal_attachment_markdown_text(&[reference]);
                     let _ = self.paste_text_into_gpui_engine_terminal_target(
-                        target,
+                        target.engine_target(),
                         runtime_session_id,
                         text.as_str(),
                         cx,
@@ -54310,14 +56966,16 @@ impl GhostexGpuiApp {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if !this.gpui_engine_terminal_target_matches_runtime(target, runtime_session_id) {
+                if !this
+                    .gpui_terminal_attachment_target_matches_runtime(&target, runtime_session_id)
+                {
                     return;
                 }
                 match result {
                     Ok(reference) => {
                         let text = gpui_terminal_attachment_markdown_text(&[reference]);
                         if this.paste_text_into_gpui_engine_terminal_target(
-                            target,
+                            target.engine_target(),
                             runtime_session_id,
                             text.as_str(),
                             cx,
@@ -54340,6 +56998,29 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    fn gpui_terminal_attachment_target_matches_runtime(
+        &self,
+        target: &GpuiTerminalAttachmentTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
+    ) -> bool {
+        if !self
+            .gpui_engine_terminal_target_matches_runtime(target.engine_target(), runtime_session_id)
+        {
+            return false;
+        }
+        match target {
+            GpuiTerminalAttachmentTarget::Terminal(_) => true,
+            GpuiTerminalAttachmentTarget::ProjectEditorCompanion {
+                slot_id,
+                session_key,
+            } => {
+                self.project_editor_companion_terminal_key_for_slot(*slot_id)
+                    .as_ref()
+                    == Some(session_key)
+            }
+        }
     }
 
     fn gpui_engine_terminal_target_matches_runtime(
@@ -54385,6 +57066,134 @@ impl GhostexGpuiApp {
         };
         view.update(cx, |view, cx| view.paste_text(text, cx));
         true
+    }
+
+    fn perform_manage_files_bridge_side_effect(
+        &mut self,
+        side_effect: ManageFilesBridgeSideEffect,
+        cx: &mut gpui::Context<Self>,
+    ) -> Result<(), String> {
+        match side_effect {
+            ManageFilesBridgeSideEffect::CopyFullPath(path) => {
+                cx.write_to_clipboard(ClipboardItem::new_string(path));
+                Ok(())
+            }
+            ManageFilesBridgeSideEffect::RevealInFinder(path) => {
+                gpui_reveal_path_in_finder(&path)
+            }
+            ManageFilesBridgeSideEffect::AddToSessionContext(prompt) => {
+                let session_id = self
+                    .manage_session_context_target_session_id()
+                    .ok_or_else(|| "No active agent session is available.".to_string())?;
+                if self.insert_manage_file_context_into_agents_session(session_id, &prompt, cx) {
+                    Ok(())
+                } else {
+                    Err("No active agent session is available.".to_string())
+                }
+            }
+        }
+    }
+
+    fn manage_session_context_target_session_id(&self) -> Option<TerminalSessionId> {
+        let mut candidates = Vec::new();
+        if let Some(key) = self.project_editor_companion_active_terminal_key()
+            && let Some(session_id) = self.shell_session_for_workspace_terminal_key(&key)
+        {
+            candidates.push(session_id);
+        }
+        if let Some(session_id) = self.focused_agents_or_companion_shell_session_id() {
+            candidates.push(session_id);
+        }
+        if let (Some(active_project_id), Some(latest_key)) = (
+            self.latest_sidebar_project_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.active_project_id.as_ref())
+                .map(|project_id| project_id.0.as_str()),
+            self.local_workspace_latest_focus_key.as_ref(),
+        ) && latest_key.project_id == active_project_id
+            && let Some(session_id) = self.local_workspace_session_mappings.get(latest_key)
+        {
+            candidates.push(*session_id);
+        }
+        let mut seen = HashSet::new();
+        candidates.into_iter().find(|session_id| {
+            seen.insert(*session_id)
+                && self
+                    .agents_workspace
+                    .session(*session_id)
+                    .is_some_and(|session| {
+                        !session.kind.is_t3()
+                            && session.presentation_state
+                                == TerminalSessionPresentationState::Running
+                            && session.agent_icon.is_some()
+                    })
+        })
+    }
+
+    fn insert_manage_file_context_into_agents_session(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+        prompt: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if prompt.is_empty()
+            || !self
+                .agents_workspace
+                .session(shell_session_id)
+                .is_some_and(|session| {
+                    !session.kind.is_t3()
+                        && session.presentation_state == TerminalSessionPresentationState::Running
+                        && session.agent_icon.is_some()
+                })
+        {
+            return false;
+        }
+        let companion_focused = matches!(
+            self.focused_terminal_text_mount_target(),
+            Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id))
+                if slot_id.session_id == shell_session_id
+        );
+        let pane_id = self.agents_workspace.pane_id_for_session(shell_session_id);
+        if !companion_focused {
+            let Some(pane_id) = pane_id else {
+                return false;
+            };
+            self.active_mode = TitlebarMode::Agents;
+            self.agents_workspace.select_tab(pane_id, shell_session_id);
+            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.scroll_workspace_pane_active_tab(pane_id);
+        }
+        if let Some(view) = self
+            .agents_gpui_engine_terminals
+            .get(&shell_session_id)
+            .map(|record| record.view.clone())
+        {
+            view.update(cx, |view, cx| view.paste_text(prompt, cx));
+            cx.notify();
+            return true;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let inserted = if companion_focused {
+                self.send_text_bytes_to_focused_project_editor_companion_terminal_surface(
+                    prompt.as_bytes(),
+                )
+            } else if let Some(pane_id) = pane_id {
+                let slot_id = AgentsTerminalBodyMountSlotId {
+                    pane_id,
+                    session_id: shell_session_id,
+                };
+                self.agents_terminal_ghostty_surface_matches(slot_id)
+                    && self.send_text_bytes_to_focused_agents_terminal_surface(prompt.as_bytes())
+            } else {
+                false
+            };
+            if inserted {
+                cx.notify();
+                return true;
+            }
+        }
+        false
     }
 
     /// Inserts a stashed prompt back into the mapped Agents terminal for a
@@ -55365,6 +58174,11 @@ impl GhostexGpuiApp {
                 .values()
                 .map(|surface| surface.runtime_session_id())
                 .chain(
+                    self.project_editor_companion_terminal_ghostty_surfaces
+                        .values()
+                        .map(|surface| surface.runtime_session_id()),
+                )
+                .chain(
                     self.agents_gpui_engine_terminals
                         .values()
                         .map(|record| record.runtime_session_id),
@@ -55563,7 +58377,64 @@ impl GhostexGpuiApp {
         {
             app.tick_if_woken();
             app.tick();
-            self.drain_agents_terminal_runtime_clipboard_requests(cx);
+            self.drain_project_editor_companion_terminal_runtime_requests(cx);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn drain_project_editor_companion_terminal_runtime_requests(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let paste_previewable_images_enabled =
+            shared_settings::shared_sidebar_settings_snapshot().terminal_paste_previewable_images();
+        let slot_ids = self
+            .project_editor_companion_terminal_ghostty_surfaces
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let mut runtime_osc_state_changed = false;
+        for slot_id in slot_ids {
+            let Some(surface) = self
+                .project_editor_companion_terminal_ghostty_surfaces
+                .get(&slot_id)
+            else {
+                continue;
+            };
+            surface.drain_runtime_clipboard_requests(
+                true,
+                || {
+                    terminal_runtime_clipboard_read_text(
+                        || cx.read_from_clipboard(),
+                        paste_previewable_images_enabled,
+                    )
+                },
+                |text| {
+                    terminal_runtime_clipboard_write_standard_text(text, |item| {
+                        cx.write_to_clipboard(item);
+                    });
+                },
+            );
+            let action_events = surface.drain_runtime_action_events();
+            if action_events.is_empty() {
+                continue;
+            }
+            if action_events.iter().any(|event| {
+                matches!(
+                    event,
+                    terminal_ghostty_surface::GhosttyRuntimeActionEvent::StartSearch { .. }
+                )
+            }) {
+                self.terminal_search_focus_pending = Some(surface.runtime_session_id());
+            }
+            runtime_osc_state_changed |= apply_gpui_terminal_runtime_action_events(
+                &mut self.agents_terminal_runtime_osc_states,
+                surface.runtime_session_id(),
+                action_events,
+            );
+        }
+        if runtime_osc_state_changed {
+            cx.notify();
         }
     }
 
@@ -55681,6 +58552,15 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        support_logs::append_temporary(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "TEMP.gpui.sessionInterrupt.escapeTargetResolved",
+            serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+                "shellSessionId": format!("{:?}", shell_session_id),
+            }),
+        );
         let Some(sidebar) = self.sidebar.clone() else {
             return;
         };
@@ -55780,6 +58660,11 @@ impl GhostexGpuiApp {
             "gpui.terminalFocus.terminalEscapeDispatched",
             serde_json::json!({ "shellSessionId": format!("{:?}", shell_session_id) }),
         );
+        support_logs::append_temporary(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "TEMP.gpui.sessionInterrupt.nativeEscapeRouted",
+            serde_json::json!({ "shellSessionId": format!("{:?}", shell_session_id) }),
+        );
         self.dispatch_gpui_workspace_terminal_escape_pressed(shell_session_id, cx);
         // Escape is terminal input, not a companion-focus exit. Reassert the
         // exact mounted companion host after the sidebar attention sideband so
@@ -55804,6 +58689,32 @@ impl GhostexGpuiApp {
         native_view: *mut std::ffi::c_void,
         cx: &mut gpui::Context<Self>,
     ) {
+        let remote_shell_session_id = self
+            .agents_terminal_session_id_containing_responder(native_view)
+            .or_else(|| {
+                self.project_editor_companion_terminal_session_id_containing_responder(native_view)
+            });
+        let remote_context = remote_shell_session_id.and_then(|shell_session_id| {
+            self.remote_prompt_editor_context_for_shell_session(shell_session_id)
+                .map(|(key, connection_generation)| (shell_session_id, key, connection_generation))
+        });
+        if let Some((shell_session_id, key, connection_generation)) = remote_context {
+            let native_view = native_view as usize;
+            cx.spawn(async move |this, cx| {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.queue_remote_prompt_editor_request(
+                        shell_session_id,
+                        &key,
+                        connection_generation,
+                        RemotePromptEditorDeliveryTarget::NativeView(native_view),
+                        window,
+                        cx,
+                    );
+                });
+            })
+            .detach();
+            return;
+        }
         let Some(originating_session_id) =
             self.prompt_editor_originating_session_id_for_native_view(native_view)
         else {
@@ -56059,6 +58970,13 @@ impl GhostexGpuiApp {
         {
             return surface.perform_binding_action(action);
         }
+        if let Some(surface) = self
+            .project_editor_companion_terminal_ghostty_surfaces
+            .values()
+            .find(|surface| surface.runtime_session_id() == runtime_session_id)
+        {
+            return surface.perform_binding_action(action);
+        }
         false
     }
 
@@ -56138,7 +59056,29 @@ impl GhostexGpuiApp {
         if !closed {
             return;
         }
-        if let Some(slot_id) = self
+        let companion_slot_id = self
+            .project_editor_companion_terminal_ghostty_surfaces
+            .iter()
+            .find_map(|(slot_id, surface)| {
+                (surface.runtime_session_id() == runtime_session_id).then_some(*slot_id)
+            })
+            .or_else(|| {
+                self.current_project_editor_companion_terminal_body_mount_slots()
+                    .into_iter()
+                    .find(|slot_id| {
+                        self.agents_gpui_engine_terminals
+                            .get(&slot_id.session_id)
+                            .is_some_and(|record| record.runtime_session_id == runtime_session_id)
+                    })
+            });
+        if let Some(slot_id) = companion_slot_id {
+            self.focus_project_editor_companion_terminal_session(
+                slot_id.mode,
+                slot_id.session_id,
+                window,
+                cx,
+            );
+        } else if let Some(slot_id) = self
             .agents_terminal_ghostty_surfaces
             .iter()
             .find_map(|(slot_id, surface)| {
@@ -56330,6 +59270,48 @@ impl GhostexGpuiApp {
         #[cfg(target_os = "macos")]
         {
             let surface = self.command_terminal_ghostty_surfaces.get(&slot_id)?;
+            return (surface.mount_slot_id() == slot_id).then(|| surface.runtime_session_id());
+        }
+        #[cfg(not(target_os = "macos"))]
+        None
+    }
+
+    fn render_project_editor_companion_terminal_search_bar(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let runtime_session_id =
+            self.project_editor_companion_terminal_search_bar_runtime_session_id(slot_id)?;
+        let search = self
+            .agents_terminal_runtime_osc_states
+            .get(&runtime_session_id)?
+            .search
+            .clone()?;
+        Some(self.render_terminal_search_bar(
+            runtime_session_id,
+            &search,
+            format!(
+                "companion-{}-{}",
+                slot_id.mode.element_slug(),
+                slot_id.session_id.0
+            ),
+            cx,
+        ))
+    }
+
+    fn project_editor_companion_terminal_search_bar_runtime_session_id(
+        &self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+    ) -> Option<AgentsTerminalRuntimeSessionId> {
+        if let Some(record) = self.agents_gpui_engine_terminals.get(&slot_id.session_id) {
+            return Some(record.runtime_session_id);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let surface = self
+                .project_editor_companion_terminal_ghostty_surfaces
+                .get(&slot_id)?;
             return (surface.mount_slot_id() == slot_id).then(|| surface.runtime_session_id());
         }
         #[cfg(not(target_os = "macos"))]
@@ -63840,6 +66822,7 @@ impl GhostexGpuiApp {
         );
         let is_generating_first_prompt_title = active_session
             .is_some_and(|session| session.is_generating_first_prompt_title);
+        let remote_connect_status = self.agents_remote_connect_status_for_session(session_id);
 
         /*
         CDXC:GPUIWorkspaceLifecycle 2026-06-22-05:23:
@@ -64266,6 +67249,11 @@ impl GhostexGpuiApp {
             })
             .when(is_generating_first_prompt_title, |this| {
                 this.child(render_agents_first_prompt_title_overlay(pane_id, session_id))
+            })
+            .when_some(remote_connect_status, |this, (title, detail)| {
+                this.child(render_agents_remote_connect_status_overlay(
+                    pane_id, session_id, title, detail,
+                ))
             })
             .when_some(self.workspace_pane_drop_zone(pane_id), |this, zone| {
                 this.child(self.render_workspace_pane_drop_feedback(pane_id, zone))
@@ -65217,7 +68205,11 @@ impl GhostexGpuiApp {
             .map(|record| record.view.clone());
         let gpui_engine_owns_pointer_input = gpui_engine_view.is_some();
         let gpui_engine_slot_id = slot_id.filter(|_| gpui_engine_owns_pointer_input);
-        let native_slot_id = slot_id.filter(|_| gpui_engine_view.is_none());
+        let remote_attach_unavailable_message = slot_id.and_then(|slot_id| {
+            self.project_editor_companion_remote_attach_unavailable_message(slot_id)
+        });
+        let native_slot_id = slot_id
+            .filter(|_| gpui_engine_view.is_none() && remote_attach_unavailable_message.is_none());
         let has_terminal_split = self
             .project_editor_companion_secondary_terminal_session_id
             .is_some();
@@ -65252,22 +68244,15 @@ impl GhostexGpuiApp {
                 })
             })
             .flatten();
-        div()
-            .id(body_id)
+        let search_bar = slot_id.and_then(|slot_id| {
+            self.render_project_editor_companion_terminal_search_bar(slot_id, cx)
+        });
+        let terminal_body = div()
             .relative()
-            .flex_grow(flex_grow)
-            .flex_shrink_1()
-            .flex_basis(relative(0.0))
+            .flex_1()
             .min_w_0()
             .min_h_0()
             .w_full()
-            .when(has_terminal_split, |this| {
-                this.border_1().border_color(if show_focus_outline {
-                    workspace_pane_focused_border_color()
-                } else {
-                    rgb(0x000000).opacity(0.0).into()
-                })
-            })
             .bg(workspace_terminal_placeholder_color())
             .when_some(gpui_engine_slot_id, |this, slot_id| {
                 this.capture_any_mouse_down(cx.listener(
@@ -65324,6 +68309,32 @@ impl GhostexGpuiApp {
                         .text_size(px(12.0))
                         .text_color(workspace_tab_inactive_text_color())
                         .child("No running terminal"),
+                )
+            })
+            .when_some(remote_attach_unavailable_message, |this, message| {
+                this.child(
+                    v_flex()
+                        .absolute()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .px(px(24.0))
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(workspace_terminal_placeholder_title_color())
+                                .child("Remote terminal unavailable"),
+                        )
+                        .child(
+                            div()
+                                .mt(px(5.0))
+                                .max_w(px(390.0))
+                                .text_size(px(12.5))
+                                .line_height(px(18.0))
+                                .text_color(workspace_terminal_placeholder_message_color())
+                                .child(message),
+                        ),
                 )
             })
             .when_some(gpui_engine_view, |this, view| {
@@ -65393,7 +68404,26 @@ impl GhostexGpuiApp {
                         .text_color(rgb(0xffffff).opacity(0.24))
                         .child(label),
                 )
+            });
+        v_flex()
+            .id(body_id)
+            .flex_grow(flex_grow)
+            .flex_shrink_1()
+            .flex_basis(relative(0.0))
+            .min_w_0()
+            .min_h_0()
+            .w_full()
+            .overflow_hidden()
+            .when(has_terminal_split, |this| {
+                this.border_1().border_color(if show_focus_outline {
+                    workspace_pane_focused_border_color()
+                } else {
+                    rgb(0x000000).opacity(0.0).into()
+                })
             })
+            .bg(workspace_terminal_placeholder_color())
+            .when_some(search_bar, |this, search_bar| this.child(search_bar))
+            .child(terminal_body)
             .into_any_element()
     }
 
@@ -65909,7 +68939,7 @@ impl GhostexGpuiApp {
         let Some(snapshot) = self.latest_sidebar_project_snapshot.as_ref() else {
             return fallback;
         };
-        let Some(target) = source_code_server_runtime_target_from_project_snapshot(snapshot) else {
+        let Some(target) = self.source_code_server_runtime_target(snapshot) else {
             return fallback;
         };
         let settings = SourceCodeServerRuntimeSettings::from_sidebar_runtime_settings(
@@ -68487,7 +71517,7 @@ impl GhostexGpuiApp {
             .menu("Settings", Box::new(OpenGpuiSettingsModal))
             .menu("Plugins", Box::new(OpenGpuiPluginsModal))
             .menu("Hotkeys", Box::new(OpenGpuiHotkeysModal))
-            .menu("Command Palette", Box::new(OpenGpuiCommandPaletteModal))
+            .menu("Quick Access", Box::new(OpenGpuiCommandPaletteModal))
             .menu("Configure Agents", Box::new(OpenGpuiConfigureAgentsModal))
             .menu("Configure Actions", Box::new(OpenGpuiConfigureActionsModal))
             .menu("Open Targets", Box::new(OpenGpuiOpenTargetsModal))
@@ -68987,7 +72017,7 @@ impl GhostexGpuiApp {
                     move |_, _| titlebar_popup_tip_row(
                         "titlebar/bug.svg",
                         "Debug mode is on".to_string(),
-                        "Ghostex is showing debug UI controls; diagnostic disk logging is configured separately.".to_string(),
+                        "Ghostex is showing debug UI controls and allowing enabled diagnostic scenarios to write routine logs.".to_string(),
                         false,
                     ),
                 );
@@ -71509,7 +74539,6 @@ impl GhostexGpuiApp {
             .as_ref()
             .is_some_and(|surface| runtime_can_go_forward || surface.read(cx).can_go_forward());
         let can_reload = active_browser_surface.is_some();
-        let reload_tooltip = if is_loading { "Stop Loading" } else { "Reload" };
         let reload_action = if is_loading {
             BrowserToolbarAction::StopLoading
         } else {
@@ -71578,7 +74607,7 @@ impl GhostexGpuiApp {
                         "reload",
                         BROWSER_ICON_RELOAD,
                         can_reload,
-                        Some(reload_tooltip.into()),
+                        None,
                         reload_action,
                         pane_id,
                         cx,
@@ -71587,7 +74616,7 @@ impl GhostexGpuiApp {
                         "home",
                         BROWSER_ICON_HOME,
                         true,
-                        Some("Project Home".into()),
+                        None,
                         BrowserToolbarAction::Home,
                         pane_id,
                         cx,
@@ -71700,7 +74729,7 @@ impl GhostexGpuiApp {
                 }),
             )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, |window, cx| {
-                Tooltip::new("New browser tab").build(window, cx)
+                titlebar_tooltip("New browser tab", window, cx)
             })
             .child(self.render_browser_tab_new_icon(12.0))
             .into_any_element()
@@ -71742,7 +74771,7 @@ impl GhostexGpuiApp {
                 }),
             )
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, |window, cx| {
-                Tooltip::new("Browser pane actions menu").build(window, cx)
+                titlebar_tooltip("Browser pane actions menu", window, cx)
             })
             .child(self.render_browser_tab_overflow_icon())
             .into_any_element()
@@ -71906,7 +74935,7 @@ impl GhostexGpuiApp {
             ))
             .when_some(tooltip, |this, tooltip| {
                 this.managed_tooltip_with_placement(tooltip_placement, move |window, cx| {
-                    Tooltip::new(tooltip.clone()).build(window, cx)
+                    titlebar_tooltip(tooltip.clone(), window, cx)
                 })
             })
     }
@@ -75591,7 +78620,7 @@ impl GpuiTitlebarReadingPanel {
         }
         if settings.debugging_mode() {
             notices.push(GpuiNativeTitlebarNotice {
-                body: "Ghostex is showing debug UI controls. Routine disk logging is controlled by Diagnostic disk logging scenarios in Settings.".to_string(),
+                body: "Ghostex is showing debug UI controls and allowing enabled Diagnostic disk logging scenarios to write routine logs.".to_string(),
                 target: GpuiNativeTitlebarNoticeTarget::DebuggingMode,
                 title: "Debug mode is on".to_string(),
             });
@@ -77651,7 +80680,7 @@ fn main() {
     support_logs::install_panic_hook();
     cef::prepare_application();
     #[cfg(target_os = "macos")]
-    reconcile_gpui_managed_ghostty_theme_config();
+    reconcile_gpui_managed_ghostty_config();
     // Workspace chrome background follows the user's Ghostty `background`
     // config color (macOS defaultWorkspaceBackgroundColor parity). Read once
     // before the window opens so first paint already uses the real color.
@@ -77873,19 +80902,26 @@ fn main() {
 }
 
 #[cfg(target_os = "macos")]
-fn reconcile_gpui_managed_ghostty_theme_config() {
+fn reconcile_gpui_managed_ghostty_config() {
     let snapshot = shared_settings::shared_sidebar_settings_snapshot();
     let settings = snapshot.gpui_terminal_engine_settings();
-    if settings.ghostty_theme.is_empty() {
-        return;
+    /*
+    CDXC:GPUITerminalRemoteTuiCopy 2026-08-06:
+    Older Ghostex managed blocks set `mouse-shift-capture = always`. When a
+    full-screen application enables mouse reporting, that sends Shift-drag to
+    the PTY too, leaving no gesture that can create the local selection Cmd-C
+    requires. Reconcile the managed key to `false` so Shift keeps the standard
+    terminal selection override for local and SSH-attached sessions. The same
+    startup pass repairs the historical explicit theme color overrides while
+    preserving user-authored lines outside Ghostex's marked block.
+    */
+    let mut keys = vec!["mouse-shift-capture"];
+    if !settings.ghostty_theme.is_empty() {
+        keys.push("theme");
     }
-    // Older Ghostex managed blocks left explicit black/white/palette entries
-    // beside `theme`, which Ghostty correctly treats as overrides. Reconcile
-    // the selected theme once at startup so existing installs are repaired,
-    // while user-authored colors outside Ghostex's marked block stay intact.
     let _ = shared_settings::write_ghostty_terminal_config_from_settings_object(
         snapshot.object(),
-        &["theme"],
+        &keys,
     );
 }
 
@@ -81110,6 +84146,95 @@ fn render_agents_first_prompt_title_overlay(
         .into_any_element()
 }
 
+/// Status overlay drawn over the terminal body while a surfaced remote session's
+/// machine is not connected. Same normal-layout contract as the title overlay
+/// above: an absolutely-positioned child of the body it covers, occluding input
+/// for exactly that rectangle, with no hidden hit region beyond it.
+fn render_agents_remote_connect_status_overlay(
+    pane_id: WorkspacePaneId,
+    session_id: TerminalSessionId,
+    title: &str,
+    detail: Option<&str>,
+) -> AnyElement {
+    v_flex()
+        .id(format!(
+            "ghostex-gpui-terminal-remote-connect-overlay-{}-{}",
+            pane_id.0, session_id.0
+        ))
+        .occlude()
+        .absolute()
+        .inset_0()
+        .items_center()
+        .justify_center()
+        .bg(rgb(0x000000).opacity(0.58))
+        .child(
+            div()
+                .text_size(px(17.0))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(0xffffff).opacity(0.96))
+                .child(title.to_string()),
+        )
+        .when_some(detail, |this, detail| {
+            this.child(
+                div()
+                    .mt(px(5.0))
+                    .text_size(px(12.0))
+                    .font_weight(FontWeight::NORMAL)
+                    .text_color(rgb(0xffffff).opacity(0.58))
+                    .child(detail.to_string()),
+            )
+        })
+        .into_any_element()
+}
+
+/// Overlay copy for a remote machine's latest connect wire state. Mirrors the
+/// sidebar's `remoteMachineBusyLabel` / `remoteMachineFailureLabel` vocabulary so
+/// the terminal area and the sidebar row never disagree about one machine.
+fn gpui_remote_connect_overlay_labels(state: Option<&str>) -> (&'static str, Option<&'static str>) {
+    match state {
+        Some("installing") => ("Installing gxserver…", None),
+        Some("downloadingRemoteServerPackage") => ("Downloading server package…", None),
+        Some("installApprovalRequired") => (
+            "Remote setup needed",
+            Some("Approve the gxserver install for this machine."),
+        ),
+        Some("installFailed") => (
+            "Remote setup failed",
+            Some("Reconnect the machine to try again."),
+        ),
+        Some("sshFailed") => ("Cannot reach machine", Some("SSH connection failed.")),
+        Some("tunnelFailed") => ("Cannot reach machine", Some("SSH tunnel failed.")),
+        Some("keychainFailed") => (
+            "Cannot reach machine",
+            Some("Saved credentials are unavailable."),
+        ),
+        Some("tokenUnavailable") => (
+            "Cannot reach machine",
+            Some("The remote gxserver token is unavailable."),
+        ),
+        Some("presentationSubscribeFailed") | Some("presentationStreamFailed") => (
+            "Reconnecting to machine…",
+            Some("The remote session stream dropped."),
+        ),
+        Some("unsupported") | Some("unsupportedRemotePlatform") => (
+            "Machine unsupported",
+            Some("This remote platform cannot host gxserver."),
+        ),
+        Some("invalid") => (
+            "Machine unavailable",
+            Some("The saved machine settings are incomplete."),
+        ),
+        Some("failed") => (
+            "Cannot reach machine",
+            Some("Reconnect the machine to try again."),
+        ),
+        // `connecting`, `disconnected`, and the pre-first-status cold-start
+        // window all describe the same user-visible situation: the machine is
+        // not reachable yet and a connect attempt is expected.
+        _ => ("Connecting to machine…", None),
+    }
+}
+
 fn workspace_terminal_placeholder_message_color() -> Hsla {
     rgb(0xe5e8ec).opacity(0.64).into()
 }
@@ -82403,6 +85528,9 @@ const MANAGE_FILE_LIST_MAX_DEPTH: usize = 8;
 const MANAGE_FILE_PREVIEW_MAX_BYTES: u64 = 2_000_000;
 const MANAGE_FILE_SAVE_MAX_BYTES: usize = 2_000_000;
 const MANAGE_GIT_BASELINE_MAX_BYTES: usize = 1024 * 1024;
+const MANAGE_REMOTE_RESOURCE_MAX_BYTES: usize = 12 * 1024 * 1024;
+const MANAGE_SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
+static MANAGE_REMOTE_RESOURCE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 const MANAGE_DOCS_RELATIVE_PATH: &str = "docs";
 const MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str = ".ghostex/manage-annotations.json";
 const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
@@ -82506,6 +85634,7 @@ const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-computer-use",
     "ghostex-agent-orchestration",
     "ghostex-fable-5.6-orchestration",
+    "ghostex-find-prev-session",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
 ];
@@ -82517,6 +85646,7 @@ fn gpui_bundled_agent_skill_name(skill_id: &str) -> Option<&'static str> {
         "embeddedBrowserUse" => Some("ghostex-embedded-browser-use"),
         "agentOrchestration" => Some("ghostex-agent-orchestration"),
         "fable56Orchestration" => Some("ghostex-fable-5.6-orchestration"),
+        "findPrevSession" => Some("ghostex-find-prev-session"),
         "generateTitle" => Some("ghostex-auto-rename-session"),
         "moveCodexSession" => Some("ghostex-move-codex-session"),
         _ => None,
@@ -82952,6 +86082,30 @@ struct GpuiTerminalSearchState {
 enum GpuiEngineTerminalEventTarget {
     Agents(TerminalSessionId),
     Command(CommandSessionId),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GpuiTerminalAttachmentTarget {
+    Terminal(GpuiEngineTerminalEventTarget),
+    // Companion can display a shell id borrowed from a project-local remote
+    // namespace. Retain the full shared workspace identity across the native
+    // picker and upload so parked projects with the same numeric id cannot
+    // redirect either the upload or its eventual paste.
+    ProjectEditorCompanion {
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+        session_key: GpuiWorkspaceTerminalSessionKey,
+    },
+}
+
+impl GpuiTerminalAttachmentTarget {
+    fn engine_target(&self) -> GpuiEngineTerminalEventTarget {
+        match self {
+            Self::Terminal(target) => *target,
+            Self::ProjectEditorCompanion { slot_id, .. } => {
+                GpuiEngineTerminalEventTarget::Agents(slot_id.session_id)
+            }
+        }
+    }
 }
 
 /// Where a command tab dropped into the Agents workspace should land.
@@ -83932,6 +87086,27 @@ fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|_| "macOS could not open the requested Ghostex Settings target.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err("Select an item to reveal.".to_string());
+    }
+    std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "Could not reveal the selected Docs item in Finder.".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn gpui_reveal_path_in_finder(_path: &Path) -> Result<(), String> {
+    Err("Reveal in Finder is available only on macOS.".to_string())
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -85309,6 +88484,55 @@ struct GpuiRemoteAttachSessionKey {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+struct GpuiProjectEditorCompanionRemoteAttachAttempt {
+    connection_generation: u64,
+    remote_key: GpuiRemoteAttachSessionKey,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GpuiProjectEditorCompanionRemoteAttachState {
+    Preparing(GpuiProjectEditorCompanionRemoteAttachAttempt),
+    Unavailable {
+        attempt: GpuiProjectEditorCompanionRemoteAttachAttempt,
+        message: String,
+    },
+}
+
+impl GpuiProjectEditorCompanionRemoteAttachState {
+    fn attempt(&self) -> &GpuiProjectEditorCompanionRemoteAttachAttempt {
+        match self {
+            Self::Preparing(attempt) | Self::Unavailable { attempt, .. } => attempt,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum GpuiWorkspaceTerminalSessionKey {
+    Local(GpuiLocalWorkspaceSessionKey),
+    Remote(GpuiRemoteAttachSessionKey),
+}
+
+impl GpuiWorkspaceTerminalSessionKey {
+    fn scoped_project_id(&self) -> String {
+        match self {
+            Self::Local(key) => key.project_id.clone(),
+            Self::Remote(key) => gpui_remote_scoped_project_id(
+                key.remote_machine_id.as_str(),
+                key.project_id.as_str(),
+            ),
+        }
+    }
+
+    fn as_local(&self) -> Option<&GpuiLocalWorkspaceSessionKey> {
+        match self {
+            Self::Local(key) => Some(key),
+            Self::Remote(_) => None,
+        }
+    }
+
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct GpuiRemoteAttachSessionReference {
     remote_machine_id: String,
     project_id: String,
@@ -85335,7 +88559,6 @@ struct GpuiRemoteAttachTerminalPlan {
     agent_icon: Option<&'static str>,
     #[cfg(target_os = "macos")]
     askpass: Option<GpuiRemoteAskpassScript>,
-    chat_capable: bool,
     clipboard_command: String,
     terminal_command: String,
     title: String,
@@ -87874,6 +91097,29 @@ fn gpui_remote_token_read_command() -> &'static str {
     )
 }
 
+fn gpui_remote_windows_wsl_gxserver_owner_command() -> &'static str {
+    /*
+    Windows WSL2 stops a distribution after its last Windows-owned execution
+    ends, even when gxserver detached successfully inside Linux. Keep the SSH
+    tunnel's remote command attached to the exact gxserver pid that produced
+    the saved token. The command neither restarts nor substitutes for gxserver:
+    it exits when that daemon exits, so the tunnel and WSL lifetime share one
+    honest owner.
+    */
+    concat!(
+        "case \"${GHOSTEX_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"$GHOSTEX_HOME/state\";; ",
+        "*) case \"${XDG_STATE_HOME:-}\" in /*) GHOSTEX_REMOTE_STATE_DIR=\"${XDG_STATE_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_STATE_DIR=\"$HOME/.local/state/ghostex\";; esac;; esac; ",
+        "GHOSTEX_REMOTE_TOKEN_FILE=\"$GHOSTEX_REMOTE_STATE_DIR/gxserver/auth/token\"; ",
+        "if [ ! -r \"$GHOSTEX_REMOTE_TOKEN_FILE\" ] && [ -r \"$HOME/.ghostex/gxserver/auth/token\" ]; then GHOSTEX_REMOTE_TOKEN_FILE=\"$HOME/.ghostex/gxserver/auth/token\"; fi; ",
+        "GHOSTEX_REMOTE_RUNTIME_FILE=\"${GHOSTEX_REMOTE_TOKEN_FILE%/auth/token}/runtime/server.json\"; ",
+        "if [ ! -r \"$GHOSTEX_REMOTE_RUNTIME_FILE\" ]; then exit 1; fi; ",
+        "GHOSTEX_REMOTE_GXSERVER_PID=\"$(sed -n 's/.*\"pid\"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' \"$GHOSTEX_REMOTE_RUNTIME_FILE\" | head -n 1)\"; ",
+        "case \"$GHOSTEX_REMOTE_GXSERVER_PID\" in ''|*[!0-9]*) exit 1;; esac; ",
+        "kill -0 \"$GHOSTEX_REMOTE_GXSERVER_PID\" 2>/dev/null || exit 1; ",
+        "while kill -0 \"$GHOSTEX_REMOTE_GXSERVER_PID\" 2>/dev/null; do sleep 5; done"
+    )
+}
+
 fn gpui_remote_managed_gxserver_build_identity_command() -> &'static str {
     concat!(
         "case \"${GHOSTEX_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"$GHOSTEX_HOME\";; ",
@@ -89621,11 +92867,6 @@ fn gpui_prepare_remote_attach_terminal_plan(
         .and_then(serde_json::Value::as_object)
         .ok_or_else(|| "Remote attach metadata is unavailable.".to_string())?;
     let agent_icon = gpui_workspace_attach_agent_icon(attach);
-    let chat_capable = attach
-        .get("session")
-        .and_then(serde_json::Value::as_object)
-        .and_then(|session| json_string_field(session, "agentSessionId"))
-        .is_some();
     let title = gpui_remote_presentation_session_title(target, reference)?;
     let clipboard_command =
         gpui_remote_ghostex_attach_ssh_command(config, &target.execution_target, reference);
@@ -89640,7 +92881,6 @@ fn gpui_prepare_remote_attach_terminal_plan(
         agent_icon,
         #[cfg(target_os = "macos")]
         askpass,
-        chat_capable,
         clipboard_command,
         terminal_command,
         title,
@@ -92538,10 +95778,16 @@ fn gpui_remote_ghostex_attach_command(reference: &GpuiRemoteAttachSessionReferen
         "--project-id".to_string(),
         gpui_shell_single_quote(reference.project_id.as_str()),
     ];
-    if gpui_current_zmx_prompt_editor_attach_mode_is_monaco() {
-        // Advertise --prompt-editor monaco only when GhostexEditor.app is resolvable.
-        parts.extend(["--prompt-editor".to_string(), "monaco".to_string()]);
-    }
+    /*
+    Remote Ctrl+G owns a file on the authoritative remote session. Advertise
+    the fixed code-server capability so the remote CLI uses h2fe's remote Code
+    runtime IPC; never advertise the Mac-only GhostexEditor capability across
+    SSH and never let a remote path fall through to a local editor.
+    */
+    parts.extend([
+        "--prompt-editor".to_string(),
+        "code-server".to_string(),
+    ]);
     [
         "case \"${GHOSTEX_HOME:-}\" in /*) ghostex_data_dir=\"$GHOSTEX_HOME\";; *) case \"${XDG_DATA_HOME:-}\" in /*) ghostex_data_dir=\"${XDG_DATA_HOME%/}/ghostex\";; *) ghostex_data_dir=\"$HOME/.local/share/ghostex\";; esac;; esac".to_string(),
         "remote_ghostex=\"$ghostex_data_dir/gxserver/package/bin/ghostex\"".to_string(),
@@ -93082,14 +96328,21 @@ fn gpui_open_remote_gxserver_tunnel(
     execution_target: &GpuiRemoteExecutionTarget,
     token: &str,
 ) -> Result<GpuiRemoteGxserverConnection, String> {
+    let code_server_component_platform =
+        gpui_remote_code_server_component_platform(config, execution_target);
     for local_port in gpui_remote_gxserver_candidate_ports() {
-        let mut tunnel = match gpui_spawn_remote_gxserver_tunnel(config, local_port) {
+        let mut tunnel = match gpui_spawn_remote_gxserver_tunnel(
+            config,
+            execution_target,
+            local_port,
+        ) {
             Ok(tunnel) => tunnel,
             Err(_) => continue,
         };
         if gpui_wait_for_remote_authenticated_health(local_port, token) {
             return Ok(GpuiRemoteGxserverConnection {
                 _base_url: format!("http://127.0.0.1:{local_port}"),
+                code_server_component_platform,
                 execution_target: execution_target.clone(),
                 local_port,
                 presentation_stream_cancel: None,
@@ -93112,12 +96365,40 @@ fn gpui_open_remote_gxserver_tunnel(
 }
 
 #[cfg(target_os = "macos")]
+fn gpui_remote_code_server_component_platform(
+    config: &GpuiRemoteMachineConfig,
+    execution_target: &GpuiRemoteExecutionTarget,
+) -> Option<String> {
+    let probe = gpui_run_remote_ssh_in_execution_target(
+        config,
+        execution_target,
+        gpui_remote_install_target_probe_command(),
+        GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
+    );
+    let target = (probe.exit_code == 0)
+        .then(|| gpui_extract_remote_install_target(probe.stdout.as_str()))
+        .flatten()?;
+    if target.normalized_os() != "linux" {
+        return None;
+    }
+    match target.normalized_arch().as_str() {
+        "x64" => Some("linux-x64".to_string()),
+        "arm64" => Some("linux-arm64".to_string()),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn gpui_spawn_remote_gxserver_tunnel(
     config: &GpuiRemoteMachineConfig,
+    execution_target: &GpuiRemoteExecutionTarget,
     local_port: u16,
 ) -> Result<GpuiRemoteSpawnedTunnel, String> {
     let askpass = gpui_remote_ssh_askpass_script(config)?;
-    let mut arguments = vec!["-N".to_string()];
+    let mut arguments = Vec::new();
+    if matches!(execution_target, GpuiRemoteExecutionTarget::PosixHost) {
+        arguments.push("-N".to_string());
+    }
     arguments.extend(gpui_remote_ssh_client_options(config.has_saved_password));
     arguments.extend([
         "-o".to_string(),
@@ -93126,6 +96407,12 @@ fn gpui_spawn_remote_gxserver_tunnel(
         format!("{local_port}:127.0.0.1:{GPUI_GXSERVER_LOCAL_API_PORT}"),
     ]);
     arguments.extend(gpui_remote_ssh_target_arguments(config));
+    if let GpuiRemoteExecutionTarget::WindowsWsl { distribution } = execution_target {
+        arguments.push(gpui_remote_command_for_windows_wsl(
+            Some(distribution.as_str()),
+            gpui_remote_windows_wsl_gxserver_owner_command(),
+        ));
+    }
     let mut command = Command::new("/usr/bin/ssh");
     command
         .args(arguments)
@@ -95253,6 +98540,8 @@ fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json:
         home.join(".agents/skills/ghostex-agent-orchestration/SKILL.md");
     let fable56_orchestration_skill_path =
         home.join(".agents/skills/ghostex-fable-5.6-orchestration/SKILL.md");
+    let find_prev_session_skill_path =
+        home.join(".agents/skills/ghostex-find-prev-session/SKILL.md");
     let generate_title_skill_path =
         home.join(".agents/skills/ghostex-auto-rename-session/SKILL.md");
     let move_codex_session_skill_path =
@@ -95262,6 +98551,7 @@ fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json:
     let computer_use_skill_installed = gpui_is_file(&computer_use_skill_path);
     let agent_orchestration_skill_installed = gpui_is_file(&agent_orchestration_skill_path);
     let fable56_orchestration_skill_installed = gpui_is_file(&fable56_orchestration_skill_path);
+    let find_prev_session_skill_installed = gpui_is_file(&find_prev_session_skill_path);
     let generate_title_skill_installed = gpui_is_file(&generate_title_skill_path);
     let move_codex_session_skill_installed = gpui_is_file(&move_codex_session_skill_path);
     let cua_driver_path = gpui_which_command("cua-driver");
@@ -95312,6 +98602,11 @@ fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json:
             } else {
                 "Ghostex Fable 5.6 Orchestration skill is not installed.".to_string()
             });
+            parts.push(if find_prev_session_skill_installed {
+                "Ghostex Find Previous Session skill is installed.".to_string()
+            } else {
+                "Ghostex Find Previous Session skill is not installed.".to_string()
+            });
             parts.push(if generate_title_skill_installed {
                 "Ghostex Auto Rename Session skill is installed.".to_string()
             } else {
@@ -95354,6 +98649,8 @@ fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json:
         "detail": detail,
         "fable56OrchestrationSkillInstalled": fable56_orchestration_skill_installed,
         "fable56OrchestrationSkillPath": if fable56_orchestration_skill_installed { Some(gpui_path_string(&fable56_orchestration_skill_path)) } else { None },
+        "findPrevSessionSkillInstalled": find_prev_session_skill_installed,
+        "findPrevSessionSkillPath": if find_prev_session_skill_installed { Some(gpui_path_string(&find_prev_session_skill_path)) } else { None },
         "generatedAt": gpui_status_generated_at(),
         "generateTitleSkillInstalled": generate_title_skill_installed,
         "generateTitleSkillPath": if generate_title_skill_installed { Some(gpui_path_string(&generate_title_skill_path)) } else { None },
@@ -95490,6 +98787,7 @@ enum GpuiGhostexCliSettingsAction {
     InstallComputerUseSkill,
     InstallAgentOrchestrationSkill,
     InstallFable56OrchestrationSkill,
+    InstallFindPrevSessionSkill,
     InstallGenerateTitleSkill,
     InstallMoveCodexSessionSkill,
     FinishDesktopControlSetup { driver_installed: bool },
@@ -95506,6 +98804,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallComputerUseSkill => "installComputerUseSkill",
             Self::InstallAgentOrchestrationSkill => "installAgentOrchestrationSkill",
             Self::InstallFable56OrchestrationSkill => "installFable56OrchestrationSkill",
+            Self::InstallFindPrevSessionSkill => "installFindPrevSessionSkill",
             Self::InstallGenerateTitleSkill => "installGenerateTitleSkill",
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
@@ -95522,6 +98821,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallComputerUseSkill => "Ghostex Computer Use installed",
             Self::InstallAgentOrchestrationSkill => "Ghostex Agent Orchestration installed",
             Self::InstallFable56OrchestrationSkill => "Ghostex Fable 5.6 Orchestration installed",
+            Self::InstallFindPrevSessionSkill => "Ghostex Find Previous Session installed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session installed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control installed",
@@ -95540,6 +98840,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallFable56OrchestrationSkill => {
                 "Ghostex Fable 5.6 Orchestration install failed"
             }
+            Self::InstallFindPrevSessionSkill => "Ghostex Find Previous Session install failed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session install failed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control setup incomplete",
@@ -95623,6 +98924,13 @@ fn gpui_run_ghostex_cli_settings_action(
                 action,
                 &["fable-5.6-orchestration", "install-skill"],
                 "Ghostex Fable 5.6 Orchestration",
+            )
+        }
+        GpuiGhostexCliSettingsAction::InstallFindPrevSessionSkill => {
+            gpui_install_bundled_ghostex_skill_action(
+                action,
+                &["find-prev-session", "install-skill"],
+                "Ghostex Find Previous Session",
             )
         }
         GpuiGhostexCliSettingsAction::InstallGenerateTitleSkill => {
@@ -97094,10 +100402,17 @@ fn gpui_trimmed_nonempty_str(value: Option<&str>) -> Option<&str> {
 
 #[derive(Clone, Debug)]
 struct GpuiPreviousSessionsRequest {
+    cursor: Option<String>,
     limit: usize,
     query: Option<String>,
     request_id: String,
     session_tags: Option<Vec<String>>,
+}
+
+#[derive(Default)]
+struct GpuiPreviousSessionsPage {
+    cursor: Option<String>,
+    items: Vec<serde_json::Value>,
 }
 
 struct GpuiRemotePreviousSessionSource {
@@ -97129,6 +100444,10 @@ enum GpuiPreviousSessionRestoreResult {
 fn gpui_previous_sessions_request_from_command(
     command: &serde_json::Map<String, serde_json::Value>,
 ) -> GpuiPreviousSessionsRequest {
+    let cursor = command
+        .get("cursor")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
     let limit = command
         .get("limit")
         .and_then(serde_json::Value::as_u64)
@@ -97153,6 +100472,7 @@ fn gpui_previous_sessions_request_from_command(
                 .collect::<Vec<_>>()
         });
     GpuiPreviousSessionsRequest {
+        cursor,
         limit,
         query,
         request_id,
@@ -97168,26 +100488,29 @@ fn gpui_previous_sessions_result_message(
     CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
     GPUI Previous Sessions loads real local gxserver history through `/api/listPreviousSessions` with the same bounded previous-only params as the TypeScript sidebar runtime. The response is a transient `previousSessionsResult` sidebarState payload so the shared modal clears loading without replacing the stored hydrate snapshot, and transport/token/network/parser failures return an empty contract-shaped result without logging private daemon data.
     */
-    let mut previous_sessions =
-        gpui_list_previous_sessions_from_gxserver(&request).unwrap_or_default();
+    let local_page = gpui_list_previous_sessions_from_gxserver(&request).unwrap_or_default();
+    let mut next_cursor = local_page.cursor;
+    let mut previous_sessions = local_page.items;
     for remote_source in &remote_sources {
-        previous_sessions.extend(
-            gpui_list_previous_sessions_from_remote_gxserver(&request, remote_source)
-                .unwrap_or_default(),
-        );
+        let remote_page = gpui_list_previous_sessions_from_remote_gxserver(&request, remote_source)
+            .unwrap_or_default();
+        if next_cursor.is_none() {
+            next_cursor = remote_page.cursor;
+        }
+        previous_sessions.extend(remote_page.items);
     }
     gpui_sort_previous_session_items_by_closed_time(&mut previous_sessions);
-    previous_sessions.truncate(request.limit);
     gpui_previous_sessions_result_payload(
         &request.request_id,
         request.query.as_deref(),
+        next_cursor.as_deref(),
         previous_sessions,
     )
 }
 
 fn gpui_list_previous_sessions_from_gxserver(
     request: &GpuiPreviousSessionsRequest,
-) -> Result<Vec<serde_json::Value>, String> {
+) -> Result<GpuiPreviousSessionsPage, String> {
     let result = gpui_gxserver_rpc_result(
         "/api/listPreviousSessions",
         &gpui_previous_sessions_list_params(request),
@@ -97197,16 +100520,22 @@ fn gpui_list_previous_sessions_from_gxserver(
         .get("results")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| "gxserver returned invalid previous-session results.".to_string())?;
-    Ok(results
-        .iter()
-        .filter_map(gpui_gxserver_search_result_to_previous_session_item)
-        .collect())
+    Ok(GpuiPreviousSessionsPage {
+        cursor: result
+            .get("cursor")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        items: results
+            .iter()
+            .filter_map(gpui_gxserver_search_result_to_previous_session_item)
+            .collect(),
+    })
 }
 
 fn gpui_list_previous_sessions_from_remote_gxserver(
     request: &GpuiPreviousSessionsRequest,
     remote_source: &GpuiRemotePreviousSessionSource,
-) -> Result<Vec<serde_json::Value>, String> {
+) -> Result<GpuiPreviousSessionsPage, String> {
     let result = gpui_remote_gxserver_rpc_result(
         &remote_source.target,
         "/api/listPreviousSessions",
@@ -97218,16 +100547,22 @@ fn gpui_list_previous_sessions_from_remote_gxserver(
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| "Remote gxserver returned invalid previous-session results.".to_string())?;
     let history_id_prefix = format!("remote-gxserver:{}", remote_source.remote_machine_id);
-    Ok(results
-        .iter()
-        .filter_map(|result| {
-            gpui_gxserver_search_result_to_previous_session_item_with_options(
-                result,
-                history_id_prefix.as_str(),
-                remote_source.machine_name.as_deref(),
-            )
-        })
-        .collect())
+    Ok(GpuiPreviousSessionsPage {
+        cursor: result
+            .get("cursor")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        items: results
+            .iter()
+            .filter_map(|result| {
+                gpui_gxserver_search_result_to_previous_session_item_with_options(
+                    result,
+                    history_id_prefix.as_str(),
+                    remote_source.machine_name.as_deref(),
+                )
+            })
+            .collect(),
+    })
 }
 
 fn gpui_previous_sessions_list_params(request: &GpuiPreviousSessionsRequest) -> serde_json::Value {
@@ -97238,6 +100573,12 @@ fn gpui_previous_sessions_list_params(request: &GpuiPreviousSessionsRequest) -> 
         "limit".to_string(),
         serde_json::Value::Number(serde_json::Number::from(request.limit as u64)),
     );
+    if let Some(cursor) = request.cursor.as_ref() {
+        params.insert(
+            "cursor".to_string(),
+            serde_json::Value::String(cursor.clone()),
+        );
+    }
     if let Some(query) = request.query.as_ref() {
         params.insert(
             "query".to_string(),
@@ -97274,6 +100615,7 @@ fn gpui_previous_session_item_closed_time(item: &serde_json::Value) -> &str {
 fn gpui_previous_sessions_result_payload(
     request_id: &str,
     query: Option<&str>,
+    cursor: Option<&str>,
     previous_sessions: Vec<serde_json::Value>,
 ) -> serde_json::Value {
     let mut payload = serde_json::Map::new();
@@ -97285,6 +100627,12 @@ fn gpui_previous_sessions_result_payload(
         payload.insert(
             "query".to_string(),
             serde_json::Value::String(query.to_string()),
+        );
+    }
+    if let Some(cursor) = cursor {
+        payload.insert(
+            "cursor".to_string(),
+            serde_json::Value::String(cursor.to_string()),
         );
     }
     payload.insert(
@@ -97337,6 +100685,7 @@ fn gpui_stashed_prompts_result_message(
 fn gpui_save_stashed_prompt_result_message(
     request_id: &str,
     content: &str,
+    prompt_id: Option<&str>,
     project_id: Option<&str>,
     session_id: Option<&str>,
 ) -> serde_json::Value {
@@ -97345,6 +100694,12 @@ fn gpui_save_stashed_prompt_result_message(
         "content".to_string(),
         serde_json::Value::String(content.to_string()),
     );
+    if let Some(prompt_id) = prompt_id {
+        params.insert(
+            "promptId".to_string(),
+            serde_json::Value::String(prompt_id.to_string()),
+        );
+    }
     if let Some(project_id) = project_id {
         params.insert(
             "projectId".to_string(),
@@ -98315,6 +101670,45 @@ fn gpui_titlebar_resource_groups_from_presentation_snapshot(
         .collect()
 }
 
+fn gpui_quick_access_sidebar_groups_from_presentation_snapshot(
+    snapshot: &serde_json::Value,
+    active_project_id: Option<&str>,
+) -> Vec<serde_json::Value> {
+    gpui_titlebar_resource_groups_from_presentation_snapshot(snapshot, active_project_id)
+        .into_iter()
+        .filter_map(|mut group| {
+            let group_object = group.as_object_mut()?;
+            group_object.insert(
+                "isFocusModeActive".to_string(),
+                serde_json::Value::Bool(false),
+            );
+            group_object.insert("layoutVisibleCount".to_string(), serde_json::json!(1));
+            group_object.insert("viewMode".to_string(), serde_json::json!("grid"));
+            group_object.insert("visibleCount".to_string(), serde_json::json!(1));
+
+            for session in group_object
+                .get_mut("sessions")
+                .and_then(serde_json::Value::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                let Some(session_object) = session.as_object_mut() else {
+                    continue;
+                };
+                session_object.insert("column".to_string(), serde_json::json!(0));
+                session_object.insert("isFocused".to_string(), serde_json::Value::Bool(false));
+                session_object.insert("isVisible".to_string(), serde_json::Value::Bool(false));
+                session_object.insert("row".to_string(), serde_json::json!(0));
+                session_object.insert(
+                    "shortcutLabel".to_string(),
+                    serde_json::Value::String(String::new()),
+                );
+            }
+            Some(group)
+        })
+        .collect()
+}
+
 fn gpui_titlebar_resource_session_from_presentation(
     project_id: &str,
     session: &serde_json::Map<String, serde_json::Value>,
@@ -98351,6 +101745,36 @@ fn gpui_titlebar_resource_session_from_presentation(
         "title": title,
     });
     let value_object = value.as_object_mut()?;
+    /*
+    Quick Access reuses this bounded live-session projection. Preserve the
+    gxserver-owned visible title and its comparison metadata so the shared
+    session card does not reinterpret a confirmed title as an unsynced local
+    terminal title and add the `∗` marker.
+    */
+    gpui_insert_optional_string(
+        value_object,
+        "displayTitle",
+        json_string_field(session, "displayTitle"),
+    );
+    gpui_insert_optional_string(
+        value_object,
+        "displayTitleTooltip",
+        json_string_field(session, "displayTitleTooltip"),
+    );
+    gpui_insert_optional_string(
+        value_object,
+        "primaryTitle",
+        json_string_field(session, "primaryTitle")
+            .or_else(|| json_string_field(session, "title")),
+    );
+    if let Some(is_primary_title_terminal_title) =
+        json_bool_field(session, "isPrimaryTitleTerminalTitle")
+    {
+        value_object.insert(
+            "isPrimaryTitleTerminalTitle".to_string(),
+            serde_json::Value::Bool(is_primary_title_terminal_title),
+        );
+    }
     gpui_insert_optional_string(
         value_object,
         "agentIcon",
@@ -98359,7 +101783,9 @@ fn gpui_titlebar_resource_session_from_presentation(
     gpui_insert_optional_string(
         value_object,
         "lastInteractionAt",
-        json_string_field(session, "lastActiveAt"),
+        json_string_field(session, "meaningfulActivityAt")
+            .or_else(|| json_string_field(session, "lastActiveAt"))
+            .or_else(|| json_string_field(session, "updatedAt")),
     );
     gpui_insert_optional_string(
         value_object,
@@ -104159,6 +107585,7 @@ fn append_url_query_params_with_percent_encoded_spaces(
 
 fn source_code_server_runtime_target_from_project_snapshot(
     snapshot: &GpuiProjectSnapshot,
+    endpoint: SourceCodeServerRuntimeEndpoint,
 ) -> Option<SourceCodeServerRuntimeTarget> {
     /*
     CDXC:GPUISourceRuntime 2026-06-24-23:17:
@@ -104170,17 +107597,22 @@ fn source_code_server_runtime_target_from_project_snapshot(
     let active_project_id = snapshot.active_project_id.as_ref()?.clone();
     let source_workarea_id = snapshot.surface_ids.source_workarea_id.as_ref()?.clone();
     let project_path = snapshot.in_memory_project_path.as_ref()?.clone();
-    let runtime_url =
-        ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(append_url_query_params(
-            format!("{SOURCE_CODE_SERVER_EDITOR_ORIGIN}/"),
-            &[("folder", gpui_path_string(&project_path))],
-        ))?;
     Some(SourceCodeServerRuntimeTarget {
         active_project_id,
         source_workarea_id,
         project_path,
-        runtime_url,
+        endpoint,
     })
+}
+
+fn source_code_server_runtime_url(
+    runtime_origin: &str,
+    project_path: &Path,
+) -> Option<ProjectWorkareaRealRuntimeUrl> {
+    ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(append_url_query_params(
+        format!("{}/", runtime_origin.trim_end_matches('/')),
+        &[("folder", gpui_path_string(project_path))],
+    ))
 }
 
 fn source_code_server_start_runtime_for_target(
@@ -104212,6 +107644,17 @@ fn source_code_server_spawn_runtime(
     settings: &SourceCodeServerRuntimeSettings,
     startup_deadline: Instant,
 ) -> Result<SourceCodeServerRuntimeStartOutput, String> {
+    if matches!(
+        target.endpoint,
+        SourceCodeServerRuntimeEndpoint::Remote { .. }
+    ) {
+        #[cfg(target_os = "macos")]
+        return source_code_server_spawn_remote_runtime(target, startup_deadline);
+        #[cfg(not(target_os = "macos"))]
+        return Err(
+            "Remote Source runtime is available only from the macOS SSH owner.".to_string(),
+        );
+    }
     if source_code_server_health_check() {
         let remaining = startup_deadline.saturating_duration_since(Instant::now());
         let _ = source_code_server_wait_until_not_responsive(
@@ -104268,13 +107711,15 @@ fn source_code_server_spawn_runtime(
     let child = command
         .spawn()
         .map_err(|_| "failed to start Source runtime".to_string())?;
-    let responsive = source_code_server_wait_until_responsive(
+    let readiness = source_code_server_wait_until_responsive(
         startup_deadline.saturating_duration_since(Instant::now()),
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
+        runtime_origin: SOURCE_CODE_SERVER_EDITOR_ORIGIN.to_string(),
+        prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
-        responsive,
+        http_runtime_ready: readiness.http_runtime_ready,
     })
 }
 
@@ -104323,14 +107768,213 @@ fn source_code_server_spawn_runtime(
     let child = command
         .spawn()
         .map_err(|_| "failed to start Source runtime in WSL".to_string())?;
-    let responsive = source_code_server_wait_until_responsive(
+    let readiness = source_code_server_wait_until_responsive(
         startup_deadline.saturating_duration_since(Instant::now()),
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
+        runtime_origin: SOURCE_CODE_SERVER_EDITOR_ORIGIN.to_string(),
+        prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
-        responsive,
+        http_runtime_ready: readiness.http_runtime_ready,
     })
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_spawn_remote_runtime(
+    target: &SourceCodeServerRuntimeTarget,
+    startup_deadline: Instant,
+) -> Result<SourceCodeServerRuntimeStartOutput, String> {
+    let SourceCodeServerRuntimeEndpoint::Remote {
+        component_platform,
+        execution_target,
+        machine_config,
+        ..
+    } = &target.endpoint
+    else {
+        return Err("Remote Source runtime target is invalid.".to_string());
+    };
+    let store = on_demand_component_store()?
+        .ok_or_else(|| "The sealed code-server component manifest is unavailable.".to_string())?;
+    let installed =
+        store.query_current_for_platform(SOURCE_CODE_SERVER_COMPONENT_NAME, component_platform)?;
+    if !installed.installed {
+        return Err("The Linux code-server component is not installed.".to_string());
+    }
+    source_code_server_validate_remote_linux_payload(&installed.path)?;
+    source_code_server_ensure_remote_payload(machine_config, execution_target, &installed)?;
+
+    for local_port in source_code_server_remote_candidate_ports() {
+        if Instant::now() >= startup_deadline {
+            break;
+        }
+        let askpass = gpui_remote_ssh_askpass_script(machine_config)?;
+        let mut arguments = gpui_remote_ssh_client_options(machine_config.has_saved_password);
+        arguments.extend([
+            "-o".to_string(),
+            "ExitOnForwardFailure=yes".to_string(),
+            "-L".to_string(),
+            format!("127.0.0.1:{local_port}:127.0.0.1:{SOURCE_CODE_SERVER_REMOTE_PORT}"),
+        ]);
+        arguments.extend(gpui_remote_ssh_target_arguments(machine_config));
+        arguments.push(gpui_remote_command_for_execution_target(
+            execution_target,
+            source_code_server_remote_launch_command(target.project_path.as_path()).as_str(),
+        ));
+        let mut command = Command::new("/usr/bin/ssh");
+        command
+            .args(arguments)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(environment) = gpui_remote_ssh_askpass_environment(askpass.as_ref()) {
+            command.envs(environment);
+        }
+        let started_at = Instant::now();
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(_) => continue,
+        };
+        let readiness = source_code_server_wait_until_responsive_at(
+            local_port,
+            startup_deadline.saturating_duration_since(Instant::now()),
+        );
+        let child_running = child.try_wait().ok().flatten().is_none();
+        if readiness.is_ready() && child_running {
+            return Ok(SourceCodeServerRuntimeStartOutput {
+                child,
+                runtime_origin: format!("http://127.0.0.1:{local_port}"),
+                prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
+                started_at,
+                http_runtime_ready: readiness.http_runtime_ready,
+            });
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    Err("Remote Source runtime did not become reachable through SSH.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_ensure_remote_payload(
+    config: &GpuiRemoteMachineConfig,
+    execution_target: &GpuiRemoteExecutionTarget,
+    installed: &component_store::InstalledComponent,
+) -> Result<(), String> {
+    let component_key = format!("{}:{}", installed.version, installed.platform);
+    let ready_command = source_code_server_remote_payload_ready_command(component_key.as_str());
+    let ready = gpui_run_remote_ssh_in_execution_target(
+        config,
+        execution_target,
+        ready_command.as_str(),
+        Duration::from_secs(15),
+    );
+    if ready.exit_code == 0 {
+        return Ok(());
+    }
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let archive_path = env::temp_dir().join(format!(
+        "ghostex-code-server-{}-{unique:x}.tar.gz",
+        std::process::id()
+    ));
+    let archive_result = Command::new("/usr/bin/tar")
+        .args(["-czf"])
+        .arg(&archive_path)
+        .arg("-C")
+        .arg(&installed.path)
+        .arg(".")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|_| "Could not package the Linux code-server component.".to_string())?;
+    if !archive_result.success() {
+        let _ = fs::remove_file(&archive_path);
+        return Err("Could not package the Linux code-server component.".to_string());
+    }
+    let upload_command = source_code_server_remote_payload_upload_command(component_key.as_str());
+    let upload = gpui_run_remote_ssh_with_stdin_file_in_execution_target(
+        config,
+        execution_target,
+        upload_command.as_str(),
+        archive_path.as_path(),
+        Duration::from_secs(180),
+    );
+    let _ = fs::remove_file(&archive_path);
+    if upload.exit_code != 0 {
+        return Err("Could not upload the Linux code-server component over SSH.".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_remote_data_root_script() -> &'static str {
+    r#"if [ -n "${GHOSTEX_HOME:-}" ] && [ "${GHOSTEX_HOME#/}" != "$GHOSTEX_HOME" ]; then ghostex_data="$GHOSTEX_HOME"; elif [ -n "${XDG_DATA_HOME:-}" ]; then ghostex_data="$XDG_DATA_HOME/ghostex"; else ghostex_data="$HOME/.local/share/ghostex"; fi
+code_root="$ghostex_data/code-server""#
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_remote_payload_ready_command(component_key: &str) -> String {
+    format!(
+        "set -eu\n{}\ntest -f \"$code_root/package/.ghostex-component-key\"\ntest \"$(cat \"$code_root/package/.ghostex-component-key\")\" = {}\ntest -x \"$code_root/package/lib/node\"\ntest -f \"$code_root/package/out/node/entry.js\"\ntest -f \"$code_root/package/lib/vscode/out/server-main.js\"",
+        source_code_server_remote_data_root_script(),
+        gpui_shell_quote(component_key),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_remote_payload_upload_command(component_key: &str) -> String {
+    format!(
+        "set -eu\n{}\numask 077\nreleases=\"$code_root/releases\"\nmkdir -p \"$releases\"\nstage=\"$releases/.install-$$\"\nrelease=\"$releases/{}\"\npointer_stage=\"$code_root/.package-$$\"\ncleanup() {{ rm -rf -- \"$stage\"; rm -f -- \"$pointer_stage\"; }}\ntrap cleanup EXIT HUP INT TERM\nfor abandoned in \"$releases\"/.install-* \"$code_root\"/.package-*; do\n  if [ ! -e \"$abandoned\" ] && [ ! -L \"$abandoned\" ]; then continue; fi\n  abandoned_pid=${{abandoned##*-}}\n  case \"$abandoned_pid\" in ''|*[!0-9]*) continue ;; esac\n  if [ ! -d \"/proc/$abandoned_pid\" ]; then rm -rf -- \"$abandoned\"; fi\ndone\nrm -rf -- \"$stage\"\nrm -f -- \"$pointer_stage\"\nmkdir \"$stage\"\ntar -xzf - -C \"$stage\"\ntest -x \"$stage/lib/node\"\ntest -f \"$stage/out/node/entry.js\"\ntest -f \"$stage/lib/vscode/out/server-main.js\"\nprintf '%s' {} >\"$stage/.ghostex-component-key\"\nif [ -e \"$release\" ]; then\n  test -f \"$release/.ghostex-component-key\"\n  test \"$(cat \"$release/.ghostex-component-key\")\" = {}\n  test -x \"$release/lib/node\"\n  test -f \"$release/out/node/entry.js\"\n  test -f \"$release/lib/vscode/out/server-main.js\"\n  rm -rf -- \"$stage\"\nelif ! mv -T \"$stage\" \"$release\"; then\n  test -f \"$release/.ghostex-component-key\"\n  test \"$(cat \"$release/.ghostex-component-key\")\" = {}\n  test -x \"$release/lib/node\"\n  test -f \"$release/out/node/entry.js\"\n  test -f \"$release/lib/vscode/out/server-main.js\"\n  rm -rf -- \"$stage\"\nfi\nprevious_release=$(readlink -f \"$code_root/package\" 2>/dev/null || true)\nln -s \"releases/{}\" \"$pointer_stage\"\nmv -Tf \"$pointer_stage\" \"$code_root/package\"\nfor candidate in \"$releases\"/*; do\n  [ -d \"$candidate\" ] || continue\n  if [ \"$candidate\" = \"$release\" ] || [ \"$candidate\" = \"$previous_release\" ]; then continue; fi\n  if find \"$candidate\" -maxdepth 0 -mmin +10 -print -quit | grep -q .; then rm -rf -- \"$candidate\"; fi\ndone\ntrap - EXIT HUP INT TERM",
+        source_code_server_remote_data_root_script(),
+        installed_key_path_fragment(component_key),
+        gpui_shell_quote(component_key),
+        gpui_shell_quote(component_key),
+        gpui_shell_quote(component_key),
+        installed_key_path_fragment(component_key),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn installed_key_path_fragment(component_key: &str) -> String {
+    component_key
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_remote_launch_command(project_path: &Path) -> String {
+    format!(
+        "set -eu\n{}\npackage=\"$code_root/package\"\nruntime=\"$code_root/runtime\"\nmkdir -p \"$runtime/user-data\" \"$runtime/extensions\"\ncd {}\nchild=\ncleanup() {{ if [ -n \"$child\" ]; then kill \"$child\" 2>/dev/null || true; wait \"$child\" 2>/dev/null || true; fi; }}\ntrap cleanup EXIT HUP INT TERM\n\"$package/lib/node\" \"$package/out/node/entry.js\" --auth none --bind-addr 127.0.0.1:{} --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override --ignore-last-opened --app-name 'ghostex Code' --user-data-dir \"$runtime/user-data\" --extensions-dir \"$runtime/extensions\" &\nchild=$!\nwait \"$child\"",
+        source_code_server_remote_data_root_script(),
+        gpui_shell_quote(gpui_path_string(project_path).as_str()),
+        SOURCE_CODE_SERVER_REMOTE_PORT,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn source_code_server_remote_candidate_ports() -> Vec<u16> {
+    let range =
+        u64::from(SOURCE_CODE_SERVER_TUNNEL_PORT_MAX - SOURCE_CODE_SERVER_TUNNEL_PORT_MIN + 1);
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64
+        ^ u64::from(std::process::id());
+    (0..SOURCE_CODE_SERVER_TUNNEL_ATTEMPTS)
+        .map(|offset| SOURCE_CODE_SERVER_TUNNEL_PORT_MIN + ((seed + offset as u64) % range) as u16)
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104376,9 +108020,11 @@ fn on_demand_component_store() -> Result<Option<component_store::ComponentStore>
     component_store::ComponentStore::from_manifest(manifest).map(Some)
 }
 
-fn source_code_server_runtime_availability() -> SourceCodeServerRuntimeAvailability {
+fn source_code_server_runtime_availability(
+    target: &SourceCodeServerRuntimeTarget,
+) -> SourceCodeServerRuntimeAvailability {
     #[cfg(not(target_os = "windows"))]
-    if source_code_server_resolve_repo_root().is_ok() {
+    if target.component_platform().is_none() && source_code_server_resolve_repo_root().is_ok() {
         return SourceCodeServerRuntimeAvailability::Available;
     }
     let store = match on_demand_component_store() {
@@ -104394,7 +108040,13 @@ fn source_code_server_runtime_availability() -> SourceCodeServerRuntimeAvailabil
             );
         }
     };
-    match store.query_current(SOURCE_CODE_SERVER_COMPONENT_NAME) {
+    let installed = match target.component_platform() {
+        Some(platform) => {
+            store.query_current_for_platform(SOURCE_CODE_SERVER_COMPONENT_NAME, platform)
+        }
+        None => store.query_current(SOURCE_CODE_SERVER_COMPONENT_NAME),
+    };
+    match installed {
         Ok(installed) if installed.installed => SourceCodeServerRuntimeAvailability::Available,
         Ok(_) => SourceCodeServerRuntimeAvailability::InstallRequired,
         Err(_) => SourceCodeServerRuntimeAvailability::Failed(
@@ -104404,6 +108056,7 @@ fn source_code_server_runtime_availability() -> SourceCodeServerRuntimeAvailabil
 }
 
 fn source_code_server_install_component(
+    target: Option<&SourceCodeServerRuntimeTarget>,
     progress_tx: mpsc::UnboundedSender<component_store::ComponentStoreProgressPhase>,
 ) -> Result<component_store::InstalledComponent, String> {
     let store = on_demand_component_store()?
@@ -104411,27 +108064,53 @@ fn source_code_server_install_component(
     let mut report_progress = |progress: component_store::ComponentStoreProgress| {
         let _ = progress_tx.unbounded_send(progress.phase);
     };
-    let installed = store.install(SOURCE_CODE_SERVER_COMPONENT_NAME, &mut report_progress)?;
+    let component_platform = target.and_then(SourceCodeServerRuntimeTarget::component_platform);
+    let installed = match component_platform {
+        Some(platform) => store.install_for_platform(
+            SOURCE_CODE_SERVER_COMPONENT_NAME,
+            platform,
+            &mut report_progress,
+        )?,
+        None => store.install(SOURCE_CODE_SERVER_COMPONENT_NAME, &mut report_progress)?,
+    };
     #[cfg(not(target_os = "windows"))]
     {
-        source_code_server_validate_development_payload(&installed.path)?;
-        let node_path = installed.path.join("lib/node");
-        if source_code_server_node_major(&node_path) != Some(SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR)
-        {
-            return Err("The installed code-server component has an invalid Node runtime.".to_string());
+        if component_platform.is_some() {
+            source_code_server_validate_remote_linux_payload(&installed.path)?;
+        } else {
+            source_code_server_validate_development_payload(&installed.path)?;
+            let node_path = installed.path.join("lib/node");
+            if source_code_server_node_major(&node_path)
+                != Some(SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR)
+            {
+                return Err(
+                    "The installed code-server component has an invalid Node runtime.".to_string(),
+                );
+            }
         }
     }
     #[cfg(target_os = "windows")]
     {
-        #[cfg(target_arch = "x86_64")]
-        const ARCHIVE_NAME: &str = "code-server-linux-x64.tar.gz";
-        #[cfg(target_arch = "aarch64")]
-        const ARCHIVE_NAME: &str = "code-server-linux-arm64.tar.gz";
-        if !installed.path.join(ARCHIVE_NAME).is_file() {
-            return Err("The installed code-server component is missing its WSL archive.".to_string());
-        }
+        component_store::verify_installed_windows_code_server_component(
+            &installed.path,
+            &installed.version,
+            &installed.platform,
+        )?;
     }
     Ok(installed)
+}
+
+fn source_code_server_validate_remote_linux_payload(repo_root: &Path) -> Result<(), String> {
+    for relative_path in [
+        "lib/node",
+        "out/node/entry.js",
+        "lib/vscode/out/server-main.js",
+    ] {
+        if !repo_root.join(relative_path).is_file() {
+            return Err("The Linux code-server component is incomplete.".to_string());
+        }
+    }
+    Ok(())
 }
 
 fn source_code_server_install_failure(message: &str) -> SourceCodeServerRuntimeFailure {
@@ -104468,9 +108147,7 @@ fn source_code_server_resolve_repo_root() -> Result<PathBuf, String> {
             return Ok(candidate);
         }
     }
-    if !configured_root_is_set
-        && let Some(store) = on_demand_component_store()?
-    {
+    if !configured_root_is_set && let Some(store) = on_demand_component_store()? {
         let installed = store.query_current(SOURCE_CODE_SERVER_COMPONENT_NAME)?;
         if installed.installed
             && installed.path.join("out/node/entry.js").is_file()
@@ -104851,42 +108528,84 @@ fn source_code_server_is_bundled_runtime(repo_root: &Path) -> bool {
     repo_root.join("lib/node").is_file()
 }
 
-fn source_code_server_health_check() -> bool {
-    let Ok(address) = format!(
-        "{}:{}",
-        SOURCE_CODE_SERVER_EDITOR_HOST, SOURCE_CODE_SERVER_EDITOR_PORT
-    )
-    .parse::<std::net::SocketAddr>() else {
-        return false;
+#[derive(Clone, Copy, Default)]
+struct SourceCodeServerReadiness {
+    http_runtime_ready: bool,
+    prompt_editor_ipc_ready: bool,
+}
+
+impl SourceCodeServerReadiness {
+    fn is_ready(self) -> bool {
+        self.http_runtime_ready && self.prompt_editor_ipc_ready
+    }
+}
+
+fn source_code_server_readiness_at(port: u16) -> SourceCodeServerReadiness {
+    let Ok(address) =
+        format!("{}:{}", SOURCE_CODE_SERVER_EDITOR_HOST, port).parse::<std::net::SocketAddr>()
+    else {
+        return SourceCodeServerReadiness::default();
     };
     let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_secs(1)) else {
-        return false;
+        return SourceCodeServerReadiness::default();
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
     let request = format!(
         "GET /healthz HTTP/1.1\r\nHost: {}:{}\r\nConnection: close\r\n\r\n",
-        SOURCE_CODE_SERVER_EDITOR_HOST, SOURCE_CODE_SERVER_EDITOR_PORT
+        SOURCE_CODE_SERVER_EDITOR_HOST, port
     );
     if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        return SourceCodeServerReadiness::default();
     }
     let mut response = String::new();
     if stream.read_to_string(&mut response).is_err() {
-        return false;
+        return SourceCodeServerReadiness::default();
     }
-    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+    let http_runtime_ready =
+        response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200");
+    if !http_runtime_ready {
+        return SourceCodeServerReadiness::default();
+    }
+    let prompt_editor_ipc_ready = response
+        .split_once("\r\n\r\n")
+        .and_then(|(_, body)| serde_json::from_str::<serde_json::Value>(body).ok())
+        .and_then(|body| {
+            body.get("promptEditorIpcReady")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false);
+    SourceCodeServerReadiness {
+        http_runtime_ready,
+        prompt_editor_ipc_ready,
+    }
 }
 
-fn source_code_server_wait_until_responsive(timeout: Duration) -> bool {
+fn source_code_server_health_check_at(port: u16) -> bool {
+    source_code_server_readiness_at(port).http_runtime_ready
+}
+
+fn source_code_server_health_check() -> bool {
+    source_code_server_health_check_at(SOURCE_CODE_SERVER_EDITOR_PORT)
+}
+
+fn source_code_server_wait_until_responsive_at(
+    port: u16,
+    timeout: Duration,
+) -> SourceCodeServerReadiness {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if source_code_server_health_check() {
-            return true;
+        let readiness = source_code_server_readiness_at(port);
+        if readiness.is_ready() {
+            return readiness;
         }
         thread::sleep(SOURCE_CODE_SERVER_HEALTH_POLL_INTERVAL);
     }
-    source_code_server_health_check()
+    source_code_server_readiness_at(port)
+}
+
+fn source_code_server_wait_until_responsive(timeout: Duration) -> SourceCodeServerReadiness {
+    source_code_server_wait_until_responsive_at(SOURCE_CODE_SERVER_EDITOR_PORT, timeout)
 }
 
 fn source_code_server_wait_until_not_responsive(timeout: Duration) -> bool {
@@ -105122,11 +108841,61 @@ fn gpui_manage_additional_docs_folders_text(
         .unwrap_or_default()
 }
 
+enum ManageFilesBridgeSideEffect {
+    AddToSessionContext(String),
+    CopyFullPath(String),
+    RevealInFinder(PathBuf),
+}
+
+struct ManageFilesBridgeOutcome {
+    action: String,
+    request_id: String,
+    response: serde_json::Value,
+    side_effect: Option<ManageFilesBridgeSideEffect>,
+}
+
+fn manage_files_bridge_outcome(
+    action: String,
+    request_id: String,
+    result: Result<serde_json::Value, String>,
+) -> ManageFilesBridgeOutcome {
+    let mut response = match result {
+        Ok(response) => response,
+        Err(error) => manage_files_bridge_error_response(&action, &request_id, &error),
+    };
+    let side_effect = if response.get("error").is_some() {
+        None
+    } else {
+        let object = response.as_object_mut();
+        match action.as_str() {
+            "addToSessionContext" => object
+                .and_then(|object| object.remove("contextPrompt"))
+                .and_then(|value| value.as_str().map(str::to_string))
+                .map(ManageFilesBridgeSideEffect::AddToSessionContext),
+            "copyFullPath" => object
+                .and_then(|object| object.remove("fullPath"))
+                .and_then(|value| value.as_str().map(str::to_string))
+                .map(ManageFilesBridgeSideEffect::CopyFullPath),
+            "revealInFinder" => object
+                .and_then(|object| object.remove("revealPath"))
+                .and_then(|value| value.as_str().map(PathBuf::from))
+                .map(ManageFilesBridgeSideEffect::RevealInFinder),
+            _ => None,
+        }
+    };
+    ManageFilesBridgeOutcome {
+        action,
+        request_id,
+        response,
+        side_effect,
+    }
+}
+
 fn run_manage_files_bridge_request_for_project_snapshot(
     payload: &str,
     snapshot: Option<&GpuiProjectSnapshot>,
     additional_docs_folders_text: &str,
-) -> serde_json::Value {
+) -> ManageFilesBridgeOutcome {
     let request = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
     let action = request
         .get("action")
@@ -105139,11 +108908,139 @@ fn run_manage_files_bridge_request_for_project_snapshot(
         .unwrap_or("")
         .to_string();
 
-    let result = manage_files_bridge_result(&request, snapshot, additional_docs_folders_text);
-    match result {
-        Ok(response) => response,
-        Err(error) => manage_files_bridge_error_response(&action, &request_id, &error),
+    manage_files_bridge_outcome(
+        action,
+        request_id,
+        manage_files_bridge_result(&request, snapshot, additional_docs_folders_text),
+    )
+}
+
+fn run_remote_manage_files_bridge_request_for_project_snapshot(
+    payload: &str,
+    snapshot: Option<&GpuiProjectSnapshot>,
+    additional_docs_folders_text: &str,
+    reference: &GpuiRemoteProjectReference,
+    target: Option<&GpuiRemoteGxserverRequestTarget>,
+) -> ManageFilesBridgeOutcome {
+    /*
+    CDXC:RemoteProjectDocs 2026-08-06:
+    Remote Docs uses the owning gxserver as the filesystem boundary. The CEF
+    request must still match the active machine-scoped project/editor snapshot,
+    then Rust replaces that scoped presentation id with the daemon's raw
+    project id and forwards only the fixed Docs action fields through the live
+    authenticated tunnel. No remote path, host, token, or generic endpoint
+    authority crosses the renderer bridge; a disconnected machine fails
+    directly instead of probing the same path on the local Mac.
+    */
+    let request = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
+    let action = manage_request_string(&request, "action").unwrap_or_default();
+    let request_id = manage_request_string(&request, "requestId").unwrap_or_default();
+    let result = (|| {
+        let snapshot =
+            snapshot.ok_or_else(|| "No active Docs project is available.".to_string())?;
+        manage_validate_request_identity(&request, snapshot)?;
+        if !matches!(
+            action.as_str(),
+            "list"
+                | "read"
+                | "stat"
+                | "save"
+                | "rename"
+                | "delete"
+                | "duplicate"
+                | "createFolder"
+                | "move"
+                | "copyFullPath"
+                | "addToSessionContext"
+        ) {
+            return if action == "revealInFinder" {
+                Err("Reveal in Finder is unavailable for remote Docs items.".to_string())
+            } else {
+                Err("Unsupported Docs file action.".to_string())
+            };
+        }
+        let target =
+            target.ok_or_else(|| "Reconnect the remote machine to use Docs.".to_string())?;
+        let mut params = serde_json::Map::new();
+        params.insert(
+            "action".to_string(),
+            serde_json::Value::String(action.clone()),
+        );
+        params.insert(
+            "requestId".to_string(),
+            serde_json::Value::String(request_id.clone()),
+        );
+        params.insert(
+            "projectId".to_string(),
+            serde_json::Value::String(reference.project_id.clone()),
+        );
+        params.insert(
+            "additionalDocsFolders".to_string(),
+            serde_json::Value::String(additional_docs_folders_text.to_string()),
+        );
+        for key in ["path", "newPath", "content"] {
+            if let Some(value) = manage_request_string(&request, key) {
+                params.insert(key.to_string(), serde_json::Value::String(value));
+            }
+        }
+        let response = gpui_remote_gxserver_rpc_result(
+            target,
+            "/api/runProjectDocsAction",
+            &serde_json::Value::Object(params),
+            Duration::from_secs(30),
+        )?;
+        if !response.is_object()
+            || response.get("action").and_then(serde_json::Value::as_str) != Some(action.as_str())
+            || response
+                .get("requestId")
+                .and_then(serde_json::Value::as_str)
+                != Some(request_id.as_str())
+        {
+            return Err("The remote Docs service returned an invalid response.".to_string());
+        }
+        Ok(response)
+    })();
+    manage_files_bridge_outcome(action, request_id, result)
+}
+
+fn read_remote_manage_docs_resource(
+    target: Option<&GpuiRemoteGxserverRequestTarget>,
+    project_id: &str,
+    relative_path: &str,
+    additional_docs_folders_text: &str,
+) -> Option<Vec<u8>> {
+    let target = target?;
+    let request_id = format!(
+        "docs-resource-{}",
+        MANAGE_REMOTE_RESOURCE_REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let response = gpui_remote_gxserver_rpc_result(
+        target,
+        "/api/runProjectDocsAction",
+        &serde_json::json!({
+            "action": "readResource",
+            "additionalDocsFolders": additional_docs_folders_text,
+            "path": relative_path,
+            "projectId": project_id,
+            "requestId": request_id,
+        }),
+        Duration::from_secs(30),
+    )
+    .ok()?;
+    if !response.is_object()
+        || response.get("action").and_then(serde_json::Value::as_str) != Some("readResource")
+        || response
+            .get("requestId")
+            .and_then(serde_json::Value::as_str)
+            != Some(request_id.as_str())
+    {
+        return None;
     }
+    let encoded = response
+        .get("dataBase64")
+        .and_then(serde_json::Value::as_str)?;
+    let data = BASE64_STANDARD.decode(encoded).ok()?;
+    (data.len() <= MANAGE_REMOTE_RESOURCE_MAX_BYTES).then_some(data)
 }
 
 fn manage_files_bridge_result(
@@ -105261,7 +109158,142 @@ fn manage_files_bridge_result(
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
         })),
+        "revealInFinder" => Ok(serde_json::json!({
+            "action": action,
+            "requestId": request_id,
+            "revealPath": manage_docs_action_item_path(
+                &root,
+                manage_request_string(request, "path").as_deref(),
+                docs_folders,
+                "Select an item to reveal.",
+            )?,
+            "rootName": MANAGE_DOCS_RELATIVE_PATH,
+        })),
+        "copyFullPath" => Ok(serde_json::json!({
+            "action": action,
+            "fullPath": manage_docs_action_item_path(
+                &root,
+                manage_request_string(request, "path").as_deref(),
+                docs_folders,
+                "Select an item to copy its full path.",
+            )?,
+            "requestId": request_id,
+            "rootName": MANAGE_DOCS_RELATIVE_PATH,
+        })),
+        "addToSessionContext" => Ok(serde_json::json!({
+            "action": action,
+            "contextPrompt": manage_session_context_prompt(
+                &root,
+                manage_request_string(request, "path").as_deref(),
+                docs_folders,
+            )?,
+            "requestId": request_id,
+            "rootName": MANAGE_DOCS_RELATIVE_PATH,
+        })),
         _ => Err("Unsupported Docs file action.".to_string()),
+    }
+}
+
+fn manage_docs_action_item(
+    root: &Path,
+    path: Option<&str>,
+    additional_docs_folders_text: &str,
+    unavailable_message: &str,
+) -> Result<(PathBuf, String, fs::Metadata), String> {
+    let (target, relative_path) = manage_operation_url(root, path)?;
+    if relative_path.is_empty() {
+        return Err(unavailable_message.to_string());
+    }
+    manage_validate_docs_action_relative_path(&relative_path, additional_docs_folders_text)?;
+    let metadata = fs::metadata(&target).map_err(|_| unavailable_message.to_string())?;
+    Ok((target, relative_path, metadata))
+}
+
+fn manage_docs_action_item_path(
+    root: &Path,
+    path: Option<&str>,
+    additional_docs_folders_text: &str,
+    unavailable_message: &str,
+) -> Result<String, String> {
+    let (target, _, _) = manage_docs_action_item(
+        root,
+        path,
+        additional_docs_folders_text,
+        unavailable_message,
+    )?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+fn manage_session_context_prompt(
+    root: &Path,
+    path: Option<&str>,
+    additional_docs_folders_text: &str,
+) -> Result<String, String> {
+    /*
+    CDXC:ManageFileActions 2026-08-08:
+    Session-context staging reads only a validated Docs file, caps it before
+    and after the read, rejects binary/non-UTF-8 content, and formats a fenced
+    relative-path block. The CEF response strips this private prompt before
+    dispatch; only the selected live agent terminal receives it.
+    */
+    let unavailable = "Select a file to add to session context.";
+    let (target, relative_path, metadata) = manage_docs_action_item(
+        root,
+        path,
+        additional_docs_folders_text,
+        unavailable,
+    )?;
+    if !metadata.is_file() {
+        return Err(unavailable.to_string());
+    }
+    if metadata.len() > MANAGE_SESSION_CONTEXT_MAX_BYTES as u64 {
+        return Err("File is too large to add to session context.".to_string());
+    }
+    let data = fs::read(&target).map_err(|_| unavailable.to_string())?;
+    if data.len() > MANAGE_SESSION_CONTEXT_MAX_BYTES {
+        return Err("File is too large to add to session context.".to_string());
+    }
+    if data.contains(&0) {
+        return Err("Only UTF-8 text files can be added to session context.".to_string());
+    }
+    let text = String::from_utf8(data)
+        .map_err(|_| "Only UTF-8 text files can be added to session context.".to_string())?;
+    let fence = manage_session_context_fence(&text);
+    let language = manage_session_context_language(&relative_path);
+    let fence_header = if language.is_empty() {
+        fence.clone()
+    } else {
+        format!("{fence}{language}")
+    };
+    Ok(format!(
+        "\nFile context: {relative_path}\n\n{fence_header}\n{text}\n{fence}\n"
+    ))
+}
+
+fn manage_session_context_fence(text: &str) -> String {
+    let mut length = 3;
+    while text.contains(&"`".repeat(length)) {
+        length += 1;
+    }
+    "`".repeat(length)
+}
+
+fn manage_session_context_language(relative_path: &str) -> &'static str {
+    match Path::new(relative_path)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("css") => "css",
+        Some("excalidraw" | "json") => "json",
+        Some("htm" | "html") => "html",
+        Some("js" | "mjs") => "javascript",
+        Some("md" | "markdown" | "mdown" | "mkdn") => "markdown",
+        Some("sh" | "zsh") => "shell",
+        Some("swift") => "swift",
+        Some("ts" | "tsx") => "typescript",
+        _ => "",
     }
 }
 
@@ -106324,8 +110356,7 @@ fn project_board_bridge_runtime_context_from_snapshot(
             .map(|reference| reference.project_id.clone())
             .or(active_project_id),
         project_path,
-        remote_machine_id: remote_reference
-            .map(|reference| reference.remote_machine_id),
+        remote_machine_id: remote_reference.map(|reference| reference.remote_machine_id),
         remote_target: None,
     })
 }
@@ -106735,7 +110766,8 @@ fn gpui_project_beads_prompt_generation_command(
     // macOS `projectBeadsPromptGenerationCommand` parity, including the
     // ephemeral Codex exec profile so a title prompt can never become a
     // restorable Codex transcript.
-    const CODEX_EXEC_ARGS: &str = "exec --ephemeral --skip-git-repo-check -m gpt-5.4-mini -c 'model_reasoning_effort=\"low\"'";
+    const CODEX_EXEC_ARGS: &str =
+        "exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"'";
     let normalized_agent_id = agent_id
         .map(|value| value.trim().to_lowercase())
         .unwrap_or_default();
@@ -106749,15 +110781,21 @@ fn gpui_project_beads_prompt_generation_command(
     if let Some(command) = command {
         return Ok(match normalized_agent_id.as_str() {
             "codex" => format!("{command} {CODEX_EXEC_ARGS}"),
-            "cursor" => format!("{command} --print --mode ask --trust --output-format text"),
-            "claude" | "gemini" => format!("{command} -p"),
+            "cursor" => format!(
+                "{command} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
+            ),
+            "claude" => format!("{command} -p --model haiku --effort low"),
+            "gemini" => format!("{command} -p"),
             _ => command.to_string(),
         });
     }
     match normalized_agent_id.as_str() {
         "codex" => Ok(format!("codex {CODEX_EXEC_ARGS}")),
-        "claude" => Ok("claude -p".to_string()),
-        "cursor" => Ok("cursor-agent --print --mode ask --trust --output-format text".to_string()),
+        "claude" => Ok("claude -p --model haiku --effort low".to_string()),
+        "cursor" => Ok(
+            "cursor-agent --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
+                .to_string(),
+        ),
         "gemini" => Ok("gemini -p".to_string()),
         _ => Err(format!(
             "{normalized_agent_id} does not support background title generation."
@@ -108080,8 +112118,8 @@ fn gpui_sidebar_gxserver_bootstrap(
     CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
     Build the GPUI sidebar bootstrap only from real local gxserver facts: the selected loopback API port, the existing auth-token helper, protocol version 1, a stable GPUI sidebar client id, and the explicit active project id already stored from the live sidebar snapshot. Do not infer optional session ids from project paths, titles, shell terminal ids, Browser tabs, fixtures, or fallback state.
 
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-13:34:
-    `initialActiveProjectId` may be supplied only from the validated latest sidebar active-project snapshot or the exact local workspace-focus key whose raw session matches `focusedSessionId`. Quick/projectless or pre-snapshot startup bootstraps intentionally omit it, and this helper must not query gxserver project lists, persist ids, or log project identity.
+    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-13:34 (revised 2026-08-07):
+    `initialActiveProjectId` may be supplied only from the validated latest sidebar active-project snapshot, the exact local workspace-focus key whose raw session matches `focusedSessionId`, or the contract-validated persisted focus state's own `activeProjectId` (cold-start replay of the last active workspace project). This helper must not query gxserver project lists or log project identity.
 
     CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
     `focusedSessionId` and `visibleSessionIds` may be supplied only from the separate GPUI focus state that has already accepted real gxserver presentation ids. Local ids remain raw daemon session ids; remote ids remain machine-scoped sidebar ids so bootstrap replay is collision-safe.
@@ -108093,6 +112131,7 @@ fn gpui_sidebar_gxserver_bootstrap(
         .filter(|key| focus_state.focused_session_id.as_deref() == Some(key.session_id.as_str()))
         .map(|key| key.project_id.as_str())
         .or_else(|| gpui_active_project_id_from_snapshot(latest_snapshot))
+        .or(focus_state.active_project_id.as_deref())
         .map(str::to_string);
     Some(cef::SidebarGxserverBootstrap {
         base_url: format!("http://{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}"),
@@ -109587,11 +113626,12 @@ fn gpui_workspace_terminal_rename_command_input(
 ) -> String {
     /*
     CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
-    This is the only rename path that turns the validated title into terminal input. It must remain the fixed `/rename <title>` command (or Pi's `/name <title>`, chosen by the validated enum selector) for the already-resolved Agents surface and must not add shell escaping, logging, persistence, fallback commands, or renderer-selected text.
+    This is the only rename path that turns the validated title into terminal input. It must remain a fixed `/rename <title>`, Pi `/name <title>`, or Hermes Agent `/title <title>` command chosen by the validated enum selector for the already-resolved Agents surface and must not add shell escaping, logging, persistence, fallback commands, or renderer-selected text.
     */
     match command {
         GpuiWorkspaceTerminalRenameCommandKind::Name => format!("/name {title}"),
         GpuiWorkspaceTerminalRenameCommandKind::Rename => format!("/rename {title}"),
+        GpuiWorkspaceTerminalRenameCommandKind::Title => format!("/title {title}"),
     }
 }
 
@@ -111780,6 +115820,9 @@ fn gpui_sidebar_workspace_terminal_rename_command_from_value(
         Some(serde_json::Value::String(command)) if command == "name" => {
             GpuiWorkspaceTerminalRenameCommandKind::Name
         }
+        Some(serde_json::Value::String(command)) if command == "title" => {
+            GpuiWorkspaceTerminalRenameCommandKind::Title
+        }
         Some(_) => {
             return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField);
         }
@@ -112248,14 +116291,25 @@ fn gxserver_workspace_tab_session_from_value(
             }
         }
     };
+    let key = if let Some(remote_project) =
+        gpui_remote_project_reference_from_project_id(project_id.as_str())
+    {
+        GpuiWorkspaceTerminalSessionKey::Remote(GpuiRemoteAttachSessionKey {
+            remote_machine_id: remote_project.remote_machine_id,
+            project_id: remote_project.project_id,
+            session_id,
+        })
+    } else {
+        GpuiWorkspaceTerminalSessionKey::Local(GpuiLocalWorkspaceSessionKey {
+            project_id,
+            session_id,
+        })
+    };
     Ok(GpuiSidebarWorkspaceTabSession {
         activity,
         agent_icon: gpui_sidebar_agent_icon(json_string_field(object, "agentIcon")),
         agent_session_id,
-        key: GpuiLocalWorkspaceSessionKey {
-            project_id,
-            session_id,
-        },
+        key,
         kind,
         is_generating_first_prompt_title,
         presentation_state,
@@ -112296,7 +116350,7 @@ fn gxserver_workspace_focus_project_id_field(
         .as_str()
         .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?
         .trim();
-    if !gpui_remote_sidebar_project_id_allowed(value) {
+    if !gpui_workspace_project_key_allowed(value) {
         return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField);
     }
     Ok(value.to_string())
@@ -112490,9 +116544,19 @@ fn persist_gpui_gxserver_presentation_focus_state(state: &GpuiGxserverPresentati
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
+    /*
+    CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+    `activeProjectId` persists alongside the focus ids so a cold start can
+    replay the last active workspace project (local or machine-scoped remote)
+    through the sidebar bootstrap instead of re-deriving it from the focused
+    session alone — a derivation that fails whenever the focused session was
+    remote or the focused id is stale. Tab sessions stay unpersisted: the
+    sidebar's first hydrate is their only authority.
+    */
     let payload = serde_json::json!({
         "version": GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION,
         "type": GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_TYPE,
+        "activeProjectId": state.active_project_id,
         "focusedSessionId": state.focused_session_id,
         "visibleSessionIds": state.visible_session_ids,
     });

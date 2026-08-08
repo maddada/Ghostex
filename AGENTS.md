@@ -150,6 +150,14 @@ Corollary: after you verify a surgical bug fix, tell the user it should be commi
 
 - Never run "bun run start" or any command that would restart the app unless I ask you to.
 
+### Diagnostic logging workflow
+
+- Routine disk logs must have an explicit **Diagnostic disk logging scenario** and may write only while both **Show debug UI controls** and that unexpired scenario are enabled. Do not add unscoped routine disk logging. Errors, crashes, and important warnings remain unconditional.
+- Before testing or requesting a reproduction that needs diagnostic logs, record the current logging settings, enable only the smallest set of scenarios needed, and prefer the shortest useful expiry.
+- Reproduce the issue yourself when authorized and practical. Otherwise, ask the user to reproduce it after confirming the required scenarios are enabled.
+- As soon as the needed evidence is collected—or the logging attempt is abandoned—restore the previous settings and turn off every scenario and debug switch that you enabled. Never leave extra diagnostics running because they can consume disk, CPU, and make the user's computer lag while they continue working.
+- Do not turn off scenarios or debug settings that were already enabled by the user; restore exactly the state observed before the diagnostic session.
+
 ###  Don't switch the repo to another branch ever
   - We run multiple agents at a time on 1 worktree so agents should never switch the branch this folder is on away from main
   - If you need to do work that requires switching to a new branch then please create a temp worktree and do the needed work there.

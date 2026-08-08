@@ -18,19 +18,6 @@ import {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDirectory, "../..");
 const prepareScript = join(scriptDirectory, "prepare-references.sh");
-const tooltipPatch = join(
-  scriptDirectory,
-  "patches/gpui-component-managed-tooltip-placement.patch",
-);
-const scrollbarPatch = join(
-  scriptDirectory,
-  "patches/gpui-component-scrollbar-options.patch",
-);
-const expectedChangedFiles = [
-  "crates/ui/src/menu/popup_menu.rs",
-  "crates/ui/src/scroll/scrollbar.rs",
-  "crates/ui/src/tooltip.rs",
-];
 const cleanOnly = process.argv.slice(2).includes("--clean");
 
 function git(cwd, args) {
@@ -54,48 +41,6 @@ function referenceMetadata() {
   return { revision, url };
 }
 
-function exactPatchedCheckout(checkout) {
-  const tooltipDiff = git(checkout, [
-    "diff",
-    "--no-ext-diff",
-    "--binary",
-    "--abbrev=7",
-    "--",
-    "crates/ui/src/tooltip.rs",
-  ]);
-  const scrollbarDiff = git(checkout, [
-    "diff",
-    "--no-ext-diff",
-    "--binary",
-    "--abbrev=7",
-    "--",
-    "crates/ui/src/menu/popup_menu.rs",
-    "crates/ui/src/scroll/scrollbar.rs",
-  ]);
-  const changedFiles = git(checkout, ["diff", "--name-only", "--no-ext-diff"])
-    .split(/\r?\n/u)
-    .filter(Boolean)
-    .sort();
-  const untracked = git(checkout, ["ls-files", "--others", "--exclude-standard"]);
-
-  return (
-    tooltipDiff === readFileSync(tooltipPatch, "utf8").trim() &&
-    scrollbarDiff === readFileSync(scrollbarPatch, "utf8").trim() &&
-    JSON.stringify(changedFiles) === JSON.stringify(expectedChangedFiles) &&
-    untracked === ""
-  );
-}
-
-function applyCheckedPatches(checkout) {
-  for (const patch of [tooltipPatch, scrollbarPatch]) {
-    git(checkout, ["apply", "--check", patch]);
-    git(checkout, ["apply", patch]);
-  }
-  if (!exactPatchedCheckout(checkout)) {
-    throw new Error("Clean gpui-component checkout does not exactly match the checked-in patches");
-  }
-}
-
 function prepareCleanCheckout({ revision, source, url }) {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "ghostex-reference-contract-"));
   const checkout = join(temporaryRoot, "gpui-component");
@@ -111,7 +56,6 @@ function prepareCleanCheckout({ revision, source, url }) {
       git(checkout, ["fetch", "--depth=1", "origin", revision]);
     }
     git(checkout, ["checkout", "--detach", revision]);
-    applyCheckedPatches(checkout);
     return { checkout, temporaryRoot };
   } catch (error) {
     rmSync(temporaryRoot, { force: true, recursive: true });
@@ -141,7 +85,7 @@ function verifyContract(checkout, revision) {
       .join("; ");
     throw new Error(
       `Ghostex uses managed tooltip placements missing from the clean pinned ` +
-        `gpui-component patch: ${details}. Update the checked-in release patch before dispatching.`,
+        `gpui-component revision: ${details}. Update the pinned fork before dispatching.`,
     );
   }
 
@@ -160,8 +104,8 @@ function verifyContract(checkout, revision) {
   );
   if (popupMenuContract.missing.length > 0) {
     throw new Error(
-      `Clean gpui-component reference is missing patched PopupMenu methods: ` +
-        `${popupMenuContract.missing.join(", ")}. Update the checked-in release patch before dispatching.`,
+      `Clean gpui-component reference is missing required PopupMenu methods: ` +
+        `${popupMenuContract.missing.join(", ")}. Update the pinned fork before dispatching.`,
     );
   }
 
@@ -189,20 +133,13 @@ try {
       );
     }
     const status = git(localReference, ["status", "--porcelain", "--untracked-files=all"]);
-    if (status && !exactPatchedCheckout(localReference)) {
+    if (status) {
       throw new Error(
-        `Local gpui-component has changes not represented by the checked-in release patches:\n` +
-          `${status}\nUpdate the patches before dispatching so clean CI builds use the same API.`,
+        `Local gpui-component has uncommitted changes:\n${status}\n` +
+          `Release builds must use the clean pinned revision.`,
       );
     }
-    if (status) {
-      checkout = localReference;
-    } else {
-      ({ checkout, temporaryRoot } = prepareCleanCheckout({
-        ...metadata,
-        source: localReference,
-      }));
-    }
+    checkout = localReference;
   } else {
     ({ checkout, temporaryRoot } = prepareCleanCheckout(metadata));
   }

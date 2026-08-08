@@ -430,9 +430,33 @@ impl<'a> DomainRepository<'a> {
             )));
         }
         let project_id = optional_trimmed_string_param(params, "projectId")?;
+        let requested_prompt_id = optional_trimmed_string_param(params, "promptId")?;
         let session_id = optional_trimmed_string_param(params, "sessionId")?;
         let cwd = optional_trimmed_string_param(params, "cwd")?;
         let timestamp = now_iso();
+        if let Some(prompt_id) = requested_prompt_id {
+            let updated = self
+                .db
+                .execute(
+                    r#"
+                    UPDATE stashed_prompts
+                    SET content = ?2,
+                        updatedAt = ?3
+                    WHERE promptId = ?1
+                    "#,
+                    params![prompt_id, content, timestamp],
+                )
+                .map_err(sql_error)?;
+            if updated == 0 {
+                return Err(DomainStateError::not_found(
+                    "Saved prompt does not exist.",
+                ));
+            }
+            let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
+                DomainStateError::corrupt_state("Saved prompt vanished during update.")
+            })?;
+            return Ok(json!({ "prompt": prompt }));
+        }
         let existing_prompt_id: Option<String> = self
             .db
             .query_row(
@@ -517,7 +541,8 @@ impl<'a> DomainRepository<'a> {
             .prepare(
                 r#"
                 SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
-                       s.createdAt, s.updatedAt, p.name, p.identityIconJson
+                       s.createdAt, s.updatedAt, p.name, p.identityIconJson,
+                       p.path, p.worktreeJson
                 FROM stashed_prompts s
                 LEFT JOIN projects p ON p.projectId = s.projectId
                 ORDER BY s.updatedAt DESC, s.promptId DESC
@@ -1704,12 +1729,14 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
     let updated_at: String = row.get(6)?;
     let project_name: Option<String> = row.get(7)?;
     let identity_icon_json: Option<String> = row.get(8)?;
+    let project_path: Option<String> = row.get(9)?;
+    let worktree_json: Option<String> = row.get(10)?;
     /*
     CDXC:StashedPrompts 2026-07-29:
-    Stash rows label their origin project with the same identity icon the
-    sidebar and Recent Projects use, so publish only the two presentation
-    fields those React components read (`icon`, `iconDataUrl`) and let the
-    client fall back to a folder glyph.
+    Stash rows label their origin project with the same icon priority as the
+    sidebar. Publish the user-selected identity fields plus the cached icon
+    discovered from the repository; the client ranks those fields and falls
+    back to a folder glyph.
     */
     let identity_icon = identity_icon_json
         .as_deref()
@@ -1721,12 +1748,22 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
         .as_ref()
         .and_then(|icon| icon.get("iconDataUrl").and_then(Value::as_str))
         .map(str::to_string);
+    let project = json!({
+        "path": project_path,
+        "worktree": worktree_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<Value>(value).ok()),
+    });
+    let project_discovered_icon_data_url = crate::project_icon::project_icon_key(&project)
+        .as_deref()
+        .and_then(crate::project_icon::published_project_icon_data_url);
     Ok(json!({
         "content": content,
         "createdAt": created_at,
         "cwd": cwd,
         "projectIcon": project_icon,
         "projectIconDataUrl": project_icon_data_url,
+        "projectDiscoveredIconDataUrl": project_discovered_icon_data_url,
         "projectId": project_id,
         "projectName": project_name,
         "promptId": prompt_id,
@@ -1739,7 +1776,8 @@ fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Opt
     db.query_row(
         r#"
         SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
-               s.createdAt, s.updatedAt, p.name, p.identityIconJson
+               s.createdAt, s.updatedAt, p.name, p.identityIconJson,
+               p.path, p.worktreeJson
         FROM stashed_prompts s
         LEFT JOIN projects p ON p.projectId = s.projectId
         WHERE s.promptId = ?1
@@ -5408,6 +5446,30 @@ mod tests {
             .save_stashed_prompt(&stash_params("   \n  ", Some("P1aaa")))
             .expect_err("blank content rejected");
         assert_eq!(error.code, "badRequest");
+    }
+
+    #[test]
+    fn stashed_prompts_edit_updates_existing_row_in_place() {
+        let (_temp, db) = open_test_database();
+        let repository = DomainRepository::new(&db, "S7k");
+
+        let saved = repository
+            .save_stashed_prompt(&stash_params("original prompt", Some("P1aaa")))
+            .expect("save prompt");
+        let saved_prompt = saved.get("prompt").expect("saved prompt");
+        let prompt_id = value_str(saved_prompt, "promptId").to_string();
+
+        let mut edit_params = stash_params("edited prompt", Some("P2bbb"));
+        edit_params.insert("promptId".to_string(), json!(prompt_id));
+        let edited = repository
+            .save_stashed_prompt(&edit_params)
+            .expect("edit prompt");
+        let edited_prompt = edited.get("prompt").expect("edited prompt");
+
+        assert_eq!(value_str(edited_prompt, "promptId"), prompt_id);
+        assert_eq!(value_str(edited_prompt, "content"), "edited prompt");
+        assert_eq!(value_str(edited_prompt, "projectId"), "P1aaa");
+        assert_eq!(listed_stash_contents(&repository, None), vec!["edited prompt"]);
     }
 
     #[test]

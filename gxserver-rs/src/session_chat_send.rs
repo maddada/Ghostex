@@ -414,6 +414,9 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
 // ---------------------------------------------------------------------------
 
 struct SessionChatSendJob {
+    project_id: String,
+    session_id: String,
+    source: &'static str,
     zmx_name: String,
     generation: u64,
     steps: Vec<SessionChatSendStep>,
@@ -444,6 +447,7 @@ pub fn enqueue_session_chat_send(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
+    source: &'static str,
     steps: Vec<SessionChatSendStep>,
 ) {
     if steps.is_empty() {
@@ -462,6 +466,9 @@ pub fn enqueue_session_chat_send(
             SessionChatSendQueue { tx, generation }
         });
     let job = SessionChatSendJob {
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+        source,
         zmx_name: zmx_name.to_string(),
         generation: queue.generation.load(Ordering::SeqCst),
         steps,
@@ -500,6 +507,14 @@ async fn run_session_chat_send_worker(
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
                 SessionChatSendStep::Write(payload) => {
+                    crate::zmx::log_temporary_zmx_input_write(
+                        &job.project_id,
+                        &job.session_id,
+                        &job.zmx_name,
+                        "sessionChatQueueWrite",
+                        job.source,
+                        &payload,
+                    );
                     let zmx_name = job.zmx_name.clone();
                     let write = tokio::task::spawn_blocking(move || {
                         crate::zmx::session_chat_zmx_write(&zmx_name, &payload)

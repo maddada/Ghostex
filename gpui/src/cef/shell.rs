@@ -6,7 +6,9 @@ use super::sidebar_bridge_manifest::{
     APP_MODAL_HOST_SURFACE_VALUE, NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS,
     NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS,
     PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS,
-    ProjectWorkareaBridgeFunctionId, SIDEBAR_BRIDGE_FUNCTION_SPECS,
+    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
+    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, ProjectWorkareaBridgeFunctionId,
+    SIDEBAR_BRIDGE_FUNCTION_SPECS,
     SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS, SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME,
     SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, SidebarBridgeFunctionId,
     WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT, WEBKIT_JS_OBJECT,
@@ -17,10 +19,7 @@ use super::sidebar_bridge_manifest::{
 };
 use anyhow::{Context as _, Result};
 use cef::rc::Rc as _;
-use cef::wrapper::{
-    resource_manager::{ResourceManager, ResourceManagerProvider, ResourceManagerRequest},
-    stream_resource_handler::StreamResourceHandler,
-};
+use cef::wrapper::resource_manager::{get_mime_type, get_url_without_query_or_fragment};
 use cef::{
     App, BrowserProcessHandler, BrowserSettings, Callback, CefString, Client, CommandLine,
     ContentSettingTypes, ContentSettingValues, ContextMenuHandler, ContextMenuParams, Cookie,
@@ -35,18 +34,20 @@ use cef::{
     ImplSetCookieCallback, ImplTask, ImplV8Context as _, ImplV8Handler, ImplV8Value as _,
     LifeSpanHandler, LoadHandler, MediaAccessCallback, MediaAccessPermissionTypes, MenuModel,
     PermissionHandler, PermissionPromptCallback, PermissionRequestResult, PermissionRequestTypes,
-    PopupFeatures, ProcessId, ProcessMessage, RenderProcessHandler, Request, RequestHandler,
-    ResourceHandler, ResourceRequestHandler, ReturnValue, SetCookieCallback, State, Task, ThreadId,
-    V8Handler, V8Propertyattribute, V8Value, ValueType, WindowInfo, WindowOpenDisposition, WrapApp,
-    WrapBrowserProcessHandler, WrapClient, WrapContextMenuHandler, WrapDisplayHandler,
-    WrapFindHandler, WrapFocusHandler, WrapLifeSpanHandler, WrapLoadHandler, WrapPermissionHandler,
-    WrapRenderProcessHandler, WrapRequestHandler, WrapResourceRequestHandler,
-    WrapSetCookieCallback, WrapTask, WrapV8Handler, ZoomCommand, post_task,
-    stream_reader_create_for_file, string_multimap_alloc, string_multimap_append, wrap_app,
-    wrap_browser_process_handler, wrap_client, wrap_context_menu_handler, wrap_display_handler,
-    wrap_find_handler, wrap_focus_handler, wrap_life_span_handler, wrap_load_handler,
-    wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
-    wrap_resource_request_handler, wrap_set_cookie_callback, wrap_task, wrap_v8_handler,
+    ImplResourceHandler, ImplResponse as _, ImplStreamReader as _, PopupFeatures, ProcessId,
+    ProcessMessage, RenderProcessHandler, Request, RequestHandler, ResourceHandler,
+    ResourceReadCallback, ResourceRequestHandler, Response, ReturnValue, SetCookieCallback, State,
+    StreamReader, Task, ThreadId, V8Handler, V8Propertyattribute, V8Value, ValueType, WindowInfo,
+    WindowOpenDisposition, WrapApp, WrapBrowserProcessHandler, WrapClient, WrapContextMenuHandler,
+    WrapDisplayHandler, WrapFindHandler, WrapFocusHandler, WrapLifeSpanHandler, WrapLoadHandler,
+    WrapPermissionHandler, WrapRenderProcessHandler, WrapRequestHandler, WrapResourceHandler,
+    WrapResourceRequestHandler, WrapSetCookieCallback, WrapTask, WrapV8Handler, ZoomCommand,
+    post_task, stream_reader_create_for_file, string_multimap_alloc, string_multimap_append,
+    wrap_app, wrap_browser_process_handler, wrap_client, wrap_context_menu_handler,
+    wrap_display_handler, wrap_find_handler, wrap_focus_handler, wrap_life_span_handler,
+    wrap_load_handler, wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
+    wrap_resource_handler, wrap_resource_request_handler, wrap_set_cookie_callback, wrap_task,
+    wrap_v8_handler,
 };
 use gpui::{Bounds, Pixels};
 use percent_encoding::percent_decode_str;
@@ -1215,19 +1216,39 @@ CEF's blocking-file thread, canonicalizes both ends, and serves only paths
 inside the configured Docs roots; ordinary Browser/sidebar/workarea clients
 never receive this request handler or the project path.
 */
-const MANAGE_DOCS_RESOURCE_BASE_URL: &str = "https://ghostex-docs.invalid/";
+const MANAGE_DOCS_RESOURCE_BASE_URL: &str = PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL;
 
-#[derive(Clone, Debug)]
+type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
+
+#[derive(Clone)]
+enum ManageDocsResourceSource {
+    Local {
+        project_root: PathBuf,
+        allowed_relative_roots: Vec<String>,
+    },
+    Remote {
+        loader: ManageDocsRemoteResourceLoader,
+    },
+}
+
+#[derive(Clone)]
 pub struct ManageDocsResourceScope {
-    project_root: PathBuf,
-    allowed_relative_roots: Vec<String>,
+    source: ManageDocsResourceSource,
 }
 
 impl ManageDocsResourceScope {
     pub fn new(project_root: PathBuf, allowed_relative_roots: Vec<String>) -> Self {
         Self {
-            project_root,
-            allowed_relative_roots,
+            source: ManageDocsResourceSource::Local {
+                project_root,
+                allowed_relative_roots,
+            },
+        }
+    }
+
+    pub fn new_remote(loader: ManageDocsRemoteResourceLoader) -> Self {
+        Self {
+            source: ManageDocsResourceSource::Remote { loader },
         }
     }
 
@@ -1236,182 +1257,274 @@ impl ManageDocsResourceScope {
     }
 
     fn request_handler(&self) -> RequestHandler {
-        let resource_manager = ResourceManager::new();
-        if let Ok(mut manager) = resource_manager.lock() {
-            manager.add_provider(
-                Box::new(GhostexManageDocsResourceProvider {
-                    allowed_relative_roots: self.allowed_relative_roots.clone(),
-                    project_root: self.project_root.clone(),
-                }),
-                0,
-                "ghostex-manage-docs",
-            );
+        GhostexManageDocsRequestHandler::new(self.source.clone())
+    }
+}
+
+/*
+CDXC:GPUIManageHtmlResources 2026-08-07:
+Serve Docs resources straight from a CEF resource handler instead of the cef
+wrapper's ResourceManager. That wrapper re-locks its own manager mutex while
+already holding it (ResourceManager::send_request -> ResourceManagerRequest::
+send_request), so the very first Docs subresource permanently wedged the
+browser-process IO thread and froze every CEF pane in the app. We need no
+provider ordering or async continuation here, so the direct handler is both
+correct and simpler: CEF calls `open`/`read` on a blocking-capable worker
+sequence, never the IO thread, which is exactly where the file open, the
+remote fetch, and the reads belong.
+*/
+fn manage_docs_resource_relative_path(url: &str) -> Option<String> {
+    let encoded_relative_path = url.strip_prefix(MANAGE_DOCS_RESOURCE_BASE_URL)?;
+    let encoded_relative_path = get_url_without_query_or_fragment(encoded_relative_path);
+    let relative_path = percent_decode_str(encoded_relative_path).decode_utf8().ok()?;
+    if relative_path.is_empty()
+        || relative_path.contains(['\0', '\\'])
+        || relative_path.starts_with('/')
+    {
+        return None;
+    }
+    if relative_path
+        .split('/')
+        .any(|component| component.is_empty() || component == "." || component == "..")
+    {
+        return None;
+    }
+    Some(relative_path.to_string())
+}
+
+/// Opens a Docs resource. Runs on a CEF worker sequence, never the IO thread.
+fn open_manage_docs_resource(
+    source: &ManageDocsResourceSource,
+    relative_path: &str,
+) -> Option<ManageDocsResourceBody> {
+    match source {
+        ManageDocsResourceSource::Local {
+            project_root,
+            allowed_relative_roots,
+        } => {
+            let project_root = std::fs::canonicalize(project_root).ok()?;
+            let candidate = std::fs::canonicalize(
+                relative_path
+                    .split('/')
+                    .fold(project_root.clone(), |path, component| path.join(component)),
+            )
+            .ok()?;
+            if !candidate.is_file() || !candidate.starts_with(&project_root) {
+                return None;
+            }
+            let allowed = allowed_relative_roots.iter().any(|relative_root| {
+                let root = project_root.join(relative_root);
+                std::fs::canonicalize(root)
+                    .ok()
+                    .is_some_and(|root| root.starts_with(&project_root) && candidate.starts_with(root))
+            });
+            if !allowed {
+                return None;
+            }
+            let file_name = candidate.to_string_lossy();
+            let stream = stream_reader_create_for_file(Some(&CefString::from(file_name.as_ref())))?;
+            Some(ManageDocsResourceBody::Stream(stream))
         }
-        GhostexManageDocsRequestHandler::new(resource_manager)
+        ManageDocsResourceSource::Remote { loader } => {
+            let data = loader(relative_path)?;
+            Some(ManageDocsResourceBody::Buffer { data, offset: 0 })
+        }
     }
 }
 
-struct GhostexManageDocsResourceProvider {
-    project_root: PathBuf,
-    allowed_relative_roots: Vec<String>,
+enum ManageDocsResourceBody {
+    /// Local files stream from disk so a large Docs asset is never buffered whole.
+    Stream(StreamReader),
+    Buffer {
+        data: Vec<u8>,
+        offset: usize,
+    },
 }
 
-impl ResourceManagerProvider for GhostexManageDocsResourceProvider {
-    fn on_request(&self, request: Arc<Mutex<ResourceManagerRequest>>) -> bool {
-        let candidate = {
-            let Ok(request) = request.lock() else {
-                return false;
-            };
-            let Some(encoded_relative_path) =
-                request.url().strip_prefix(MANAGE_DOCS_RESOURCE_BASE_URL)
-            else {
-                return false;
-            };
-            let Ok(relative_path) = percent_decode_str(encoded_relative_path).decode_utf8() else {
-                return false;
-            };
-            if relative_path.is_empty()
-                || relative_path.contains(['\0', '\\'])
-                || relative_path.starts_with('/')
-            {
-                return false;
-            }
-            let components = relative_path.split('/').collect::<Vec<_>>();
-            if components
-                .iter()
-                .any(|component| component.is_empty() || *component == "." || *component == "..")
-            {
-                return false;
-            }
-            components
-                .iter()
-                .fold(self.project_root.clone(), |path, component| {
-                    path.join(component)
-                })
-        };
+impl ManageDocsResourceBody {
+    fn response_length(&self) -> i64 {
+        match self {
+            Self::Stream(_) => -1,
+            Self::Buffer { data, .. } => data.len() as i64,
+        }
+    }
 
-        let mut task = GhostexOpenManageDocsResource::new(
-            request,
-            self.project_root.clone(),
-            self.allowed_relative_roots.clone(),
-            candidate,
-        );
-        post_task(ThreadId::FILE_USER_BLOCKING, Some(&mut task));
-        true
+    fn read(&mut self, data_out: *mut u8, bytes_to_read: usize) -> usize {
+        match self {
+            Self::Stream(stream) => stream.read(data_out, 1, bytes_to_read),
+            Self::Buffer { data, offset } => {
+                let available = data.len().saturating_sub(*offset);
+                let count = available.min(bytes_to_read);
+                if count > 0 {
+                    // `data_out` is CEF's buffer, guaranteed to hold `bytes_to_read`.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            data.as_ptr().add(*offset),
+                            data_out,
+                            count,
+                        );
+                    }
+                    *offset += count;
+                }
+                count
+            }
+        }
     }
 }
 
-wrap_task! {
-    struct GhostexOpenManageDocsResource {
-        request: Arc<Mutex<ResourceManagerRequest>>,
-        project_root: PathBuf,
-        allowed_relative_roots: Vec<String>,
-        candidate: PathBuf,
+wrap_resource_handler! {
+    struct GhostexManageDocsResourceHandler {
+        source: ManageDocsResourceSource,
+        relative_path: String,
+        body: Arc<Mutex<Option<ManageDocsResourceBody>>>,
     }
 
-    impl Task {
-        fn execute(&self) {
-            let handler = (|| {
-                let project_root = std::fs::canonicalize(&self.project_root).ok()?;
-                let candidate = std::fs::canonicalize(&self.candidate).ok()?;
-                if !candidate.is_file() || !candidate.starts_with(&project_root) {
-                    return None;
-                }
-                let allowed = self.allowed_relative_roots.iter().any(|relative_root| {
-                    let root = project_root.join(relative_root);
-                    std::fs::canonicalize(root)
-                        .ok()
-                        .is_some_and(|root| root.starts_with(&project_root) && candidate.starts_with(root))
-                });
-                if !allowed {
-                    return None;
-                }
-
-                let file_name = candidate.to_string_lossy();
-                let stream = stream_reader_create_for_file(Some(&CefString::from(file_name.as_ref())))?;
-                let mime_type = {
-                    let request = self.request.lock().ok()?;
-                    (request.mime_type_resolver())(request.url())
-                };
-                let mut headers = string_multimap_alloc();
-                if let Some(headers) = headers.as_mut() {
-                    string_multimap_append(
-                        Some(headers),
-                        Some(&CefString::from("Access-Control-Allow-Origin")),
-                        Some(&CefString::from("*")),
-                    );
-                    string_multimap_append(
-                        Some(headers),
-                        Some(&CefString::from("Cache-Control")),
-                        Some(&CefString::from("no-store")),
-                    );
-                }
-                Some(StreamResourceHandler::new(
-                    200,
-                    "OK".to_string(),
-                    mime_type,
-                    headers,
-                    Some(stream),
-                ))
-            })();
-
-            if let Ok(mut request) = self.request.lock() {
-                request.continue_request(handler);
+    impl ResourceHandler {
+        fn open(
+            &self,
+            _request: Option<&mut Request>,
+            handle_request: Option<&mut c_int>,
+            _callback: Option<&mut Callback>,
+        ) -> c_int {
+            // Handled synchronously on this worker sequence; blocking here is
+            // the documented contract for `open`, unlike the IO thread. The
+            // file open and the remote fetch below both depend on that.
+            if let Some(handle_request) = handle_request {
+                *handle_request = 1;
             }
+            let Some(opened) = open_manage_docs_resource(&self.source, &self.relative_path) else {
+                // Outside the Docs roots or unreadable: cancel the request.
+                return 0;
+            };
+            let Ok(mut body) = self.body.lock() else {
+                return 0;
+            };
+            *body = Some(opened);
+            1
+        }
+
+        fn response_headers(
+            &self,
+            response: Option<&mut Response>,
+            response_length: Option<&mut i64>,
+            _redirect_url: Option<&mut CefString>,
+        ) {
+            let Some(response) = response else {
+                return;
+            };
+            response.set_status(200);
+            response.set_status_text(Some(&CefString::from("OK")));
+            response.set_mime_type(Some(&CefString::from(
+                get_mime_type(&self.relative_path).as_str(),
+            )));
+            let mut headers = string_multimap_alloc();
+            if let Some(headers) = headers.as_mut() {
+                string_multimap_append(
+                    Some(headers),
+                    Some(&CefString::from("Access-Control-Allow-Origin")),
+                    Some(&CefString::from("*")),
+                );
+                string_multimap_append(
+                    Some(headers),
+                    Some(&CefString::from("Cache-Control")),
+                    Some(&CefString::from("no-store")),
+                );
+                response.set_header_map(Some(headers));
+            }
+            if let Some(response_length) = response_length {
+                *response_length = self
+                    .body
+                    .lock()
+                    .ok()
+                    .and_then(|body| body.as_ref().map(ManageDocsResourceBody::response_length))
+                    .unwrap_or(-1);
+            }
+        }
+
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        fn read(
+            &self,
+            data_out: *mut u8,
+            bytes_to_read: c_int,
+            bytes_read: Option<&mut c_int>,
+            _callback: Option<&mut ResourceReadCallback>,
+        ) -> c_int {
+            if bytes_to_read < 1 {
+                return 0;
+            }
+            let Some(bytes_read) = bytes_read else {
+                return 0;
+            };
+            let Ok(mut body) = self.body.lock() else {
+                return 0;
+            };
+            let Some(body) = body.as_mut() else {
+                *bytes_read = 0;
+                return 0;
+            };
+
+            // Fill the buffer until it is full or the source reports EOF.
+            *bytes_read = 0;
+            loop {
+                let data_out = unsafe { data_out.add(*bytes_read as usize) };
+                let read = body.read(data_out, (bytes_to_read - *bytes_read) as usize);
+                *bytes_read += read as c_int;
+                if read == 0 || *bytes_read >= bytes_to_read {
+                    break;
+                }
+            }
+
+            // Returning 0 with no bytes read signals the end of the response.
+            if *bytes_read > 0 { 1 } else { 0 }
         }
     }
 }
 
 wrap_resource_request_handler! {
     struct GhostexManageDocsResourceRequestHandler {
-        resource_manager: Arc<Mutex<ResourceManager>>,
+        source: ManageDocsResourceSource,
     }
 
     impl ResourceRequestHandler {
+        /*
+        CDXC:GPUIManageHtmlResources 2026-08-08:
+        CEF consults on_before_resource_load BEFORE resource_handler, and the
+        generated cef-rs binding's inherited default returns
+        ReturnValue::default() == RV_CANCEL. Without this explicit CONTINUE
+        override, every Docs subresource request was aborted
+        (net::ERR_ABORTED, canceled) before the resource handler was ever
+        queried, so no image/CSS/JS in rendered HTML Docs could load.
+        */
         fn on_before_resource_load(
             &self,
-            browser: Option<&mut cef::Browser>,
-            frame: Option<&mut Frame>,
-            request: Option<&mut Request>,
-            callback: Option<&mut Callback>,
+            _browser: Option<&mut cef::Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _callback: Option<&mut Callback>,
         ) -> ReturnValue {
-            let (Some(browser), Some(frame), Some(request), Some(callback)) =
-                (browser, frame, request, callback)
-            else {
-                return ReturnValue::CONTINUE;
-            };
-            let Ok(mut manager) = self.resource_manager.lock() else {
-                return ReturnValue::CONTINUE;
-            };
-            manager.on_before_resource_load(
-                browser.clone(),
-                frame.clone(),
-                request.clone(),
-                callback.clone(),
-            )
+            ReturnValue::CONTINUE
         }
 
         fn resource_handler(
             &self,
-            browser: Option<&mut cef::Browser>,
-            frame: Option<&mut Frame>,
+            _browser: Option<&mut cef::Browser>,
+            _frame: Option<&mut Frame>,
             request: Option<&mut Request>,
         ) -> Option<ResourceHandler> {
-            let (Some(browser), Some(frame), Some(request)) = (browser, frame, request) else {
-                return None;
-            };
-            self.resource_manager.lock().ok()?.resource_handler(
-                browser.clone(),
-                frame.clone(),
-                request.clone(),
-            )
+            let request_url = CefString::from(&request?.url()).to_string();
+            let relative_path = manage_docs_resource_relative_path(&request_url)?;
+            Some(GhostexManageDocsResourceHandler::new(
+                self.source.clone(),
+                relative_path,
+                Arc::new(Mutex::new(None)),
+            ))
         }
     }
 }
 
 wrap_request_handler! {
     struct GhostexManageDocsRequestHandler {
-        resource_manager: Arc<Mutex<ResourceManager>>,
+        source: ManageDocsResourceSource,
     }
 
     impl RequestHandler {
@@ -1429,7 +1542,7 @@ wrap_request_handler! {
                 .map(|request| CefString::from(&request.url()).to_string())
                 .unwrap_or_default();
             request_url.starts_with(MANAGE_DOCS_RESOURCE_BASE_URL).then(|| {
-                GhostexManageDocsResourceRequestHandler::new(self.resource_manager.clone())
+                GhostexManageDocsResourceRequestHandler::new(self.source.clone())
             })
         }
     }
@@ -2385,7 +2498,11 @@ fn install_project_workarea_v8_bridge(
     }
 
     if let Some(base_url) = manage_docs_resource_base_url {
-        set_v8_string_property(namespace, "manageDocsResourceBaseUrl", base_url);
+        set_v8_string_property(
+            namespace,
+            PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD,
+            base_url,
+        );
     }
 
     global.set_value_bykey(

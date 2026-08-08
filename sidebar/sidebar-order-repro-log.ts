@@ -10,6 +10,7 @@ export function postSidebarOrderReproLog(
   vscode.postMessage({
     details: enrichSidebarOrderReproDetails(details),
     event,
+    scenarioId: "native.pane.reorder",
     type: "sidebarDebugLog",
   });
 }

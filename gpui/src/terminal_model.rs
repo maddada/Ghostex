@@ -44,11 +44,11 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
@@ -64,6 +64,18 @@ const WAKEUP_COALESCE_WINDOW: Duration = Duration::from_millis(4);
 
 /// PTY read buffer size per read call.
 const PTY_READ_BUFFER_LEN: usize = 64 * 1024;
+
+/// Process-local correlation id for temporary paste diagnostics. It connects
+/// the main-thread encode/channel handoff to the background PTY write without
+/// recording clipboard contents.
+static NEXT_PASTE_TRACE_ID: AtomicU64 = AtomicU64::new(1);
+
+static PASTE_DIAGNOSTIC_SINK: OnceLock<TerminalPasteDiagnosticSink> = OnceLock::new();
+
+struct PtyWriteRequest {
+    bytes: Vec<u8>,
+    paste_trace_id: Option<u64>,
+}
 
 pub type Rgb = ffi::GhosttyColorRgb;
 
@@ -94,6 +106,53 @@ pub enum TerminalEvent {
     TitleChanged,
     /// Child process exited. Terminal contents stay readable afterwards.
     Exited(TerminalExit),
+}
+
+/// Content-free stages of a clipboard paste moving from VT encoding to the
+/// background PTY writer. The GPUI host may install a sink; standalone model
+/// consumers intentionally run without one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalPasteDiagnostic {
+    Encoded {
+        trace_id: u64,
+        child_pid: Option<u32>,
+        bracketed_paste: bool,
+        source_byte_length: usize,
+        source_contains_line_break: bool,
+        source_contains_non_ascii: bool,
+        encoded_byte_length: usize,
+    },
+    ChannelQueued {
+        trace_id: u64,
+        child_pid: Option<u32>,
+        success: bool,
+        error_kind: Option<std::io::ErrorKind>,
+    },
+    PtyWriteStarted {
+        trace_id: u64,
+        child_pid: Option<u32>,
+        encoded_byte_length: usize,
+    },
+    PtyWriteCompleted {
+        trace_id: u64,
+        child_pid: Option<u32>,
+        duration_micros: u128,
+        stage: &'static str,
+        success: bool,
+        error_kind: Option<std::io::ErrorKind>,
+    },
+}
+
+pub type TerminalPasteDiagnosticSink = Arc<dyn Fn(TerminalPasteDiagnostic) + Send + Sync>;
+
+pub fn install_paste_diagnostic_sink(sink: TerminalPasteDiagnosticSink) {
+    let _ = PASTE_DIAGNOSTIC_SINK.set(sink);
+}
+
+fn emit_paste_diagnostic(diagnostic: TerminalPasteDiagnostic) {
+    if let Some(sink) = PASTE_DIAGNOSTIC_SINK.get() {
+        sink(diagnostic);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -265,7 +324,7 @@ pub struct TerminalModel {
     render_state: VtRenderState,
     /// Feeds the pty-write thread; sends never block, the thread owns the
     /// PTY write half and performs the actual (possibly blocking) writes.
-    write_tx: mpsc::Sender<Vec<u8>>,
+    write_tx: mpsc::Sender<PtyWriteRequest>,
     master: Box<dyn MasterPty + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     /// OS pid of the spawned child, for foreground-process liveness checks.
@@ -323,16 +382,35 @@ impl TerminalModel {
         // the VT reply sender held by the terminal callbacks (dropped once
         // the model and the pty-read thread release the terminal) — and its
         // exit drops the PTY write half.
-        let (write_tx, write_rx) = mpsc::channel::<Vec<u8>>();
+        let (write_tx, write_rx) = mpsc::channel::<PtyWriteRequest>();
+        let writer_child_pid = child_pid;
         thread::Builder::new()
             .name("ghostex-terminal-pty-write".into())
             .spawn(move || {
-                while let Ok(bytes) = write_rx.recv() {
-                    // A dying PTY makes these writes fail; the exit path
-                    // already reports that, so writes are best-effort.
-                    let _ = pty_writer
-                        .write_all(&bytes)
-                        .and_then(|()| pty_writer.flush());
+                while let Ok(request) = write_rx.recv() {
+                    let started_at = Instant::now();
+                    if let Some(trace_id) = request.paste_trace_id {
+                        emit_paste_diagnostic(TerminalPasteDiagnostic::PtyWriteStarted {
+                            trace_id,
+                            child_pid: writer_child_pid,
+                            encoded_byte_length: request.bytes.len(),
+                        });
+                    }
+
+                    let (stage, result) = match pty_writer.write_all(&request.bytes) {
+                        Ok(()) => ("flush", pty_writer.flush()),
+                        Err(error) => ("write", Err(error)),
+                    };
+                    if let Some(trace_id) = request.paste_trace_id {
+                        emit_paste_diagnostic(TerminalPasteDiagnostic::PtyWriteCompleted {
+                            trace_id,
+                            child_pid: writer_child_pid,
+                            duration_micros: started_at.elapsed().as_micros(),
+                            stage,
+                            success: result.is_ok(),
+                            error_kind: result.as_ref().err().map(std::io::Error::kind),
+                        });
+                    }
                 }
             })?;
 
@@ -347,7 +425,10 @@ impl TerminalModel {
             let title_events = Arc::clone(&events);
             vt.set_host_callbacks(VtHostCallbacks {
                 write_pty: Some(Box::new(move |bytes| {
-                    let _ = reply_tx.send(bytes.to_vec());
+                    let _ = reply_tx.send(PtyWriteRequest {
+                        bytes: bytes.to_vec(),
+                        paste_trace_id: None,
+                    });
                 })),
                 bell: Some(Box::new(move || bell_events(TerminalEvent::Bell))),
                 title_changed: Some(Box::new(move || title_events(TerminalEvent::TitleChanged))),
@@ -457,7 +538,10 @@ impl TerminalModel {
     /// input handlers) never block on a stalled PTY.
     pub fn write_input(&self, bytes: &[u8]) -> std::io::Result<()> {
         self.write_tx
-            .send(bytes.to_vec())
+            .send(PtyWriteRequest {
+                bytes: bytes.to_vec(),
+                paste_trace_id: None,
+            })
             .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe))
     }
 
@@ -520,7 +604,30 @@ impl TerminalModel {
         let bracketed = self.mode_active(ffi::GHOSTTY_MODE_BRACKETED_PASTE);
         let bytes = ghostty_vt::encode_paste(text, bracketed)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
-        self.write_input(&bytes)
+        let trace_id = NEXT_PASTE_TRACE_ID.fetch_add(1, Ordering::Relaxed);
+        emit_paste_diagnostic(TerminalPasteDiagnostic::Encoded {
+            trace_id,
+            child_pid: self.child_pid,
+            bracketed_paste: bracketed,
+            source_byte_length: text.len(),
+            source_contains_line_break: text.contains(['\r', '\n']),
+            source_contains_non_ascii: !text.is_ascii(),
+            encoded_byte_length: bytes.len(),
+        });
+        let result = self
+            .write_tx
+            .send(PtyWriteRequest {
+                bytes,
+                paste_trace_id: Some(trace_id),
+            })
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+        emit_paste_diagnostic(TerminalPasteDiagnostic::ChannelQueued {
+            trace_id,
+            child_pid: self.child_pid,
+            success: result.is_ok(),
+            error_kind: result.as_ref().err().map(std::io::Error::kind),
+        });
+        result
     }
 
     /// Report a focus change to the PTY when focus reporting (mode 1004) is
@@ -704,6 +811,12 @@ impl TerminalModel {
     /// Grid size in cells as `(cols, rows)`.
     pub fn size(&self) -> (u16, u16) {
         self.size
+    }
+
+    /// Spawned child pid used only to correlate content-free runtime
+    /// diagnostics across the terminal view and PTY writer.
+    pub fn diagnostic_child_pid(&self) -> Option<u32> {
+        self.child_pid
     }
 
     /// Exit status once the child has exited.

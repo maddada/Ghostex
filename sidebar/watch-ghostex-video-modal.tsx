@@ -12,9 +12,9 @@ export type WatchGhostexVideoModalProps = {
 const WATCH_GHOSTEX_VIDEO_TITLE =
   "Ghostex Features Walkthrough";
 const WATCH_GHOSTEX_VIDEO_SOURCE_URL =
-  "https://www.loom.com/share/84a08f60871a4c57a589c057335ac25b";
+  "https://www.youtube.com/watch?v=APdP-j5n4Mw";
 const WATCH_GHOSTEX_VIDEO_EMBED_URL =
-  "https://www.loom.com/embed/84a08f60871a4c57a589c057335ac25b?hideEmbedTopBar=true";
+  "https://www.youtube.com/embed/APdP-j5n4Mw?playsinline=1&rel=0";
 
 /*
  * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
@@ -22,17 +22,14 @@ const WATCH_GHOSTEX_VIDEO_EMBED_URL =
  * Keep disabled outside-click dismissal and the first-launch dialog surface so
  * the tutorial behaves like the existing replayable feature modal.
  *
- * CDXC:GhostexTutorialVideo 2026-06-18-05:35:
- * Third-party video embeds can reject playback from WKWebView documents without a valid HTTP referrer. Keep the iframe referrer policy aligned with the native modal-host HTTPS base URL for this video-only modal.
- *
- * CDXC:GhostexTutorialVideo 2026-06-18-05:49:
- * The tutorial content uses an editable Loom embed. Keep the iframe source as
- * a single constant so the embed can be replaced later without reworking the
- * modal layout.
- *
  * CDXC:GhostexTutorialVideo 2026-08-03:
  * The native child-window title is the tutorial surface's one visible heading.
- * Do not repeat it in the video body or in Loom's embed top bar.
+ * Do not repeat it in the video body.
+ *
+ * CDXC:GhostexTutorialVideo 2026-08-08:
+ * YouTube negotiates a CEF-compatible rendition of the walkthrough after its
+ * upload finishes processing, so keep the video remote instead of adding it
+ * to every Ghostex app bundle.
  */
 
 export function WatchGhostexVideoModal({
@@ -72,7 +69,7 @@ export function WatchGhostexVideoModal({
           >
             <div className="discover-ghostex-feature-visual watch-ghostex-video-visual">
               <iframe
-                allow="fullscreen; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 className="watch-ghostex-video-frame"
                 data-source-url={WATCH_GHOSTEX_VIDEO_SOURCE_URL}
@@ -80,7 +77,7 @@ export function WatchGhostexVideoModal({
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
                 src={WATCH_GHOSTEX_VIDEO_EMBED_URL}
-                title="Ghostty tutorial video"
+                title={WATCH_GHOSTEX_VIDEO_TITLE}
               />
             </div>
           </section>

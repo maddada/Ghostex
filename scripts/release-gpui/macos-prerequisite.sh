@@ -40,15 +40,23 @@ case "$COMPONENT" in
     VERSION="${GHOSTEX_RELEASE_VERSION:-}"
     release_gpui_require_version "$VERSION"
     REMOTE_ROOT="$REPO_ROOT/build/remote-gxserver-linux"
+    CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+    CODE_SERVER_LINUX_X64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-x64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-x64.tar.gz}"
+    CODE_SERVER_LINUX_ARM64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-arm64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-arm64.tar.gz}"
+    [[ -f "$CODE_SERVER_LINUX_X64_ARCHIVE" ]] || { echo "macOS runtime preparation requires Linux x64 code-server archive: $CODE_SERVER_LINUX_X64_ARCHIVE" >&2; exit 1; }
+    [[ -f "$CODE_SERVER_LINUX_ARM64_ARCHIVE" ]] || { echo "macOS runtime preparation requires Linux arm64 code-server archive: $CODE_SERVER_LINUX_ARM64_ARCHIVE" >&2; exit 1; }
     GHOSTEX_MACOS_ARCH=arm64 \
     GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES=0 \
     GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1 \
     GHOSTEX_REMOTE_GXSERVER_LINUX_X64_PACKAGE="$REMOTE_ROOT/x64/package" \
     GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE="$REMOTE_ROOT/arm64/package" \
+    GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE="$CODE_SERVER_LINUX_X64_ARCHIVE" \
+    GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE="$CODE_SERVER_LINUX_ARM64_ARCHIVE" \
+    GHOSTEX_CODE_SERVER_COMPONENT_VERSION="$CODE_SERVER_COMPONENT_VERSION" \
     GHOSTEX_ON_DEMAND_ASSETS=1 \
+    GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
     GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
     GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
-    BEADS_ROOT="$REPO_ROOT/.dependencies/beads" \
       "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
     # CDXC:T3CodeDisabled ghostex-mzp9: validation retained but disabled:
     # required_path="gpui/runtime/macos/Web/t3code-server/dist/bin.mjs"
@@ -62,6 +70,8 @@ case "$COMPONENT" in
       "build/on-demand-assets/$VERSION/bd-darwin-arm64.tar.gz"; do
       [[ -e "$REPO_ROOT/$required_path" ]] || { echo "Prepared runtime is missing $required_path" >&2; exit 1; }
     done
+    node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
+      --manifest "$REPO_ROOT/gpui/runtime/macos/Web/on-demand-resources.json"
     tar -cf "$OUTPUT" -C "$REPO_ROOT" \
       gpui/runtime/macos \
       "build/on-demand-assets/$VERSION" \

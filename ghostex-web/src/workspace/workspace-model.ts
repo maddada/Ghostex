@@ -17,6 +17,7 @@ export interface WorkspaceSession {
   sessionId: string;
   workspaceId?: string;
   title: string;
+  commandId?: string;
   agentIcon?: string;
   /** gxserver agent id ("claude", "codex", …) used for chat eligibility. */
   agentId?: string;

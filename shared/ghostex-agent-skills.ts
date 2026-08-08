@@ -4,6 +4,7 @@ export type BundledGhostexAgentSkillId =
   | "computerUse"
   | "agentOrchestration"
   | "fable56Orchestration"
+  | "findPrevSession"
   | "generateTitle"
   | "moveCodexSession";
 
@@ -66,6 +67,14 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "fable56Orchestration",
     name: "Ghostex Fable 5.6 Orchestration",
     skillName: "ghostex-fable-5.6-orchestration",
+  },
+  {
+    command: "ghostex find-prev-session install-skill",
+    description:
+      "Teaches agents to find, inspect, resume, or fork previous Claude Code, Codex, Pi, OpenCode, Cursor Agent, and Grok sessions with Ghostex's bundled Zehn search.",
+    id: "findPrevSession",
+    name: "Ghostex Find Previous Session",
+    skillName: "ghostex-find-prev-session",
   },
   {
     command: "ghostex generate-title install-skill",

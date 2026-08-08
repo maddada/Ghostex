@@ -96,78 +96,19 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AppTooltip, TooltipProvider } from "../../sidebar/app-tooltip";
 import { SidebarContextMenuPortal } from "../../sidebar/sidebar-context-menu-portal";
+import "../../sidebar/styles/session-overlays.css";
+import {
+  requestProjectDocsFromHost,
+  type ProjectDocsFileEntry as ManageFileEntry,
+  type ProjectDocsFilePreview as ManageFilePreview,
+  type ProjectDocsGitBaseline as ManageGitBaseline,
+  type ProjectDocsGitBaselineReason as ManageGitBaselineReason,
+  type ProjectDocsRequest as ManageFilesBridgeRequest,
+  type ProjectDocsResponse as ManageFilesBridgeResponse,
+} from "../../shared/project-docs";
 import { createEditor as createMeoEditor } from "./meo/editor";
 import { applyThemeSettings as applyMeoThemeSettings } from "./meo/helpers/theme";
 import "./meo/styles.css";
-
-type ManageFileEntry = {
-  depth: number;
-  kind: "directory" | "file";
-  modifiedAt?: string;
-  name: string;
-  path: string;
-  size?: number;
-};
-
-type ManageGitBaselineReason =
-  | "binary"
-  | "error"
-  | "git-unavailable"
-  | "ignored"
-  | "not-file"
-  | "not-repo"
-  | "too-large";
-
-type ManageGitBaseline = {
-  available: boolean;
-  baseText?: string | null;
-  headOid?: string | null;
-  maxBytesExceeded?: boolean;
-  reason?: ManageGitBaselineReason;
-  tracked: boolean;
-};
-
-type ManageFilePreview = {
-  content?: string;
-  error?: string;
-  gitBaseline?: ManageGitBaseline;
-  kind: "text" | "unsupported";
-  modifiedAt?: string;
-  name: string;
-  path: string;
-  size?: number;
-};
-
-type ManageFilesBridgeRequest = {
-  action:
-    | "addToSessionContext"
-    | "list"
-    | "read"
-    | "stat"
-    | "save"
-    | "rename"
-    | "delete"
-    | "duplicate"
-    | "createFolder"
-    | "move"
-    | "revealInFinder"
-    | "openDocsFoldersSettings";
-  content?: string;
-  newPath?: string;
-  path?: string;
-  projectEditorId: string;
-  projectId: string;
-  requestId: string;
-};
-
-type ManageFilesBridgeResponse = {
-  action: ManageFilesBridgeRequest["action"];
-  entries?: ManageFileEntry[];
-  error?: string;
-  file?: ManageFilePreview;
-  requestId: string;
-  rootName?: string;
-};
 
 type ManageAnnotationType = "comment" | "redline";
 
@@ -255,6 +196,7 @@ type ManageFileContextMenuState = {
 type ManageFileOperationState = {
   action:
     | "addToSessionContext"
+    | "copyFullPath"
     | "createFile"
     | "createFolder"
     | "delete"
@@ -1262,6 +1204,35 @@ function ManageApp() {
       setError(copyError instanceof Error ? copyError.message : "Could not copy path.");
     }
   }, []);
+
+  const copyEntryFullPath = useCallback(
+    async (entry: ManageFileEntry) => {
+      if (fileOperation) {
+        return;
+      }
+      setFileOperation({ action: "copyFullPath", path: entry.path });
+      setError(undefined);
+      try {
+        const response = await requestManageFiles({
+          action: "copyFullPath",
+          path: entry.path,
+          projectEditorId,
+          projectId,
+        });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        setFileContextMenu(undefined);
+      } catch (copyError) {
+        setError(copyError instanceof Error ? copyError.message : "Could not copy full path.");
+      } finally {
+        setFileOperation((current) =>
+          current?.action === "copyFullPath" && current.path === entry.path ? undefined : current,
+        );
+      }
+    },
+    [fileOperation, projectEditorId, projectId],
+  );
 
   const revealEntryInFinder = useCallback(
     async (entry: ManageFileEntry) => {
@@ -2368,6 +2339,7 @@ function ManageApp() {
           hasExternalChanges={hasExternalChanges}
           onAnnotationsChange={updateAnnotationsForSelectedFile}
           onDraftContentChange={setDraftContent}
+          onOpenDocument={(path) => void readFile(path)}
           onReload={() => {
             if (selectedPath) {
               void readFile(selectedPath);
@@ -2393,6 +2365,7 @@ function ManageApp() {
             fileOperation.path === contextMenuEntry.path
           }
           onAddToSessionContext={() => void addFileToSessionContext(contextMenuEntry)}
+          onCopyFullPath={() => void copyEntryFullPath(contextMenuEntry)}
           onCopyPath={() => void copyEntryPath(contextMenuEntry)}
           onCreateFileHere={(kind) => {
             if (contextMenuCanCreateHere) {
@@ -2773,6 +2746,7 @@ function ManageFileContextMenu({
   creatingKind,
   isCreatingFolder,
   onAddToSessionContext,
+  onCopyFullPath,
   onCopyPath,
   onCreateFileHere,
   onCreateFolderHere,
@@ -2792,6 +2766,7 @@ function ManageFileContextMenu({
   creatingKind?: ManageArtifactKind;
   isCreatingFolder: boolean;
   onAddToSessionContext: () => void;
+  onCopyFullPath: () => void;
   onCopyPath: () => void;
   onCreateFileHere: (kind: ManageArtifactKind) => void;
   onCreateFolderHere: () => void;
@@ -2807,7 +2782,7 @@ function ManageFileContextMenu({
   const isBusy = Boolean(pendingAction);
   return (
     <SidebarContextMenuPortal
-      menuClassName="manage-file-context-menu"
+      menuClassName="session-context-menu manage-file-context-menu"
       menuStyle={{
         left: `${position.x}px`,
         position: "fixed",
@@ -2816,48 +2791,58 @@ function ManageFileContextMenu({
       onDismiss={onDismiss}
     >
       <button
-        className="manage-file-context-menu-item"
+        className="session-context-menu-item manage-file-context-menu-item"
         disabled={isBusy}
         onClick={onRevealInFinder}
         role="menuitem"
         type="button"
       >
-        <IconFolderOpen aria-hidden="true" size={14} stroke={1.8} />
+        <IconFolderOpen aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
         {pendingAction === "revealInFinder" ? "Revealing" : "Reveal in Finder"}
       </button>
       <button
-        className="manage-file-context-menu-item"
+        className="session-context-menu-item manage-file-context-menu-item"
         onClick={onCopyPath}
         role="menuitem"
         type="button"
       >
-        <IconCopy aria-hidden="true" size={14} stroke={1.8} />
+        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
         Copy Relative Path
+      </button>
+      <button
+        className="session-context-menu-item manage-file-context-menu-item"
+        disabled={isBusy}
+        onClick={onCopyFullPath}
+        role="menuitem"
+        type="button"
+      >
+        <IconCopy aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
+        {pendingAction === "copyFullPath" ? "Copying Full Path" : "Copy Full Path"}
       </button>
       {canAddToSessionContext ? (
         <button
-          className="manage-file-context-menu-item"
+          className="session-context-menu-item manage-file-context-menu-item"
           disabled={isBusy}
           onClick={onAddToSessionContext}
           role="menuitem"
           type="button"
         >
-          <IconMessagePlus aria-hidden="true" size={14} stroke={1.8} />
+          <IconMessagePlus aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
           {pendingAction === "addToSessionContext" ? "Adding context" : "Add to Session Context"}
         </button>
       ) : null}
       {canCreateHere ? (
         <>
-          <div className="manage-file-context-menu-divider" role="separator" />
+          <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" />
           <button
             aria-expanded={createFileMenuOpen}
-            className="manage-file-context-menu-item"
+            className="session-context-menu-item manage-file-context-menu-item"
             disabled={isBusy}
             onClick={() => setCreateFileMenuOpen((current) => !current)}
             role="menuitem"
             type="button"
           >
-            <IconFile aria-hidden="true" size={14} stroke={1.8} />
+            <IconFile aria-hidden="true" className="session-context-menu-icon" size={14} stroke={1.8} />
             <span>New File Here</span>
             <span className="manage-file-context-menu-spacer" />
             <IconChevronRight
@@ -2871,7 +2856,7 @@ function ManageFileContextMenu({
           {createFileMenuOpen ? (
             <div className="manage-file-context-menu-nested" role="group">
               <button
-                className="manage-file-context-menu-item manage-file-context-menu-subitem"
+                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
                 disabled={isBusy}
                 onClick={() => onCreateFileHere("markdown")}
                 role="menuitem"
@@ -2881,7 +2866,7 @@ function ManageFileContextMenu({
                 {creatingKind === "markdown" ? "Creating Markdown" : "Markdown"}
               </button>
               <button
-                className="manage-file-context-menu-item manage-file-context-menu-subitem"
+                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
                 disabled={isBusy}
                 onClick={() => onCreateFileHere("html")}
                 role="menuitem"
@@ -2891,7 +2876,7 @@ function ManageFileContextMenu({
                 {creatingKind === "html" ? "Creating HTML" : "HTML"}
               </button>
               <button
-                className="manage-file-context-menu-item manage-file-context-menu-subitem"
+                className="session-context-menu-item manage-file-context-menu-item manage-file-context-menu-subitem"
                 disabled={isBusy}
                 onClick={() => onCreateFileHere("excalidraw")}
                 role="menuitem"
@@ -2903,7 +2888,7 @@ function ManageFileContextMenu({
             </div>
           ) : null}
           <button
-            className="manage-file-context-menu-item"
+            className="session-context-menu-item manage-file-context-menu-item"
             disabled={isBusy}
             onClick={onCreateFolderHere}
             role="menuitem"
@@ -2916,9 +2901,9 @@ function ManageFileContextMenu({
       ) : null}
       {canDuplicate ? (
         <>
-          <div className="manage-file-context-menu-divider" role="separator" />
+          <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" />
           <button
-            className="manage-file-context-menu-item"
+            className="session-context-menu-item manage-file-context-menu-item"
             disabled={isBusy}
             onClick={onDuplicate}
             role="menuitem"
@@ -2931,9 +2916,9 @@ function ManageFileContextMenu({
       ) : null}
       {canRenameOrDelete ? (
         <>
-          {!canDuplicate ? <div className="manage-file-context-menu-divider" role="separator" /> : null}
+          {!canDuplicate ? <div className="session-context-menu-divider manage-file-context-menu-divider" role="separator" /> : null}
           <button
-            className="manage-file-context-menu-item"
+            className="session-context-menu-item manage-file-context-menu-item"
             disabled={isBusy}
             onClick={onRename}
             role="menuitem"
@@ -2943,7 +2928,7 @@ function ManageFileContextMenu({
             Rename
           </button>
           <button
-            className="manage-file-context-menu-item manage-file-context-menu-item-danger"
+            className="session-context-menu-item session-context-menu-item-danger manage-file-context-menu-item manage-file-context-menu-item-danger"
             data-confirming={String(confirmingDelete)}
             disabled={isBusy}
             onClick={onDelete}
@@ -3056,6 +3041,7 @@ function ManagePreview({
   isDirty,
   onAnnotationsChange,
   onDraftContentChange,
+  onOpenDocument,
   onReload,
   preview,
   previewState,
@@ -3070,6 +3056,7 @@ function ManagePreview({
   isDirty: boolean;
   onAnnotationsChange: (updater: (annotations: ManageAnnotation[]) => ManageAnnotation[]) => void;
   onDraftContentChange: (content: string) => void;
+  onOpenDocument: (path: string) => void;
   onReload: () => void;
   preview?: ManageFilePreview;
   previewState: "idle" | "loading" | "ready" | "error";
@@ -3602,6 +3589,7 @@ function ManagePreview({
           annotationsEnabled={htmlAnnotationEnabled}
           content={draftContent}
           documentKey={preview.path}
+          onOpenDocument={onOpenDocument}
         />
       ) : isMarkdown ? (
         <>
@@ -3659,26 +3647,102 @@ function ManageHtmlRenderViewer({
   annotationsEnabled,
   content,
   documentKey,
+  onOpenDocument,
 }: {
   annotationsEnabled: boolean;
   content: string;
   documentKey: string;
+  onOpenDocument: (path: string) => void;
 }) {
+  const resourceBaseUrl = manageHtmlResourceBaseUrl(documentKey);
   const renderedHtml = useMemo(
     () =>
       buildManageHtmlDocument(content, {
         injectAgentation: annotationsEnabled,
-        resourceBaseUrl: manageHtmlResourceBaseUrl(documentKey),
+        resourceBaseUrl,
       }),
-    [annotationsEnabled, content, documentKey],
+    [annotationsEnabled, content, resourceBaseUrl],
   );
 
+  /*
+   * CDXC:ManageHtmlAgentation 2026-08-08:
+   * A feature named in `allow` without an explicit allowlist defaults to
+   * `'src'`, which resolves against the frame's `src` URL. This frame renders
+   * from `srcdoc` and has no `src`, so bare feature names matched no origin
+   * and disabled clipboard and fullscreen in the rendered document instead of
+   * granting them, leaving Agentation's copy button unable to write to the
+   * clipboard. Name `'self'` explicitly: the srcdoc document is same-origin
+   * with Manage, so it resolves and the grant is real.
+   *
+   * `clipboard-read` is denied rather than omitted. Omitting it inherits this
+   * surface's permissive policy, and a programmatic `clipboard.readText()`
+   * then hangs forever because Chromium wants a permission prompt that Alloy
+   * cannot show. Denying it turns that into an immediate NotAllowedError.
+   * User-initiated paste is unaffected: Cmd+V and the `paste` event carry
+   * their data through `clipboardData`, which this policy does not gate.
+   */
   return (
     <iframe
-      allow="clipboard-read; clipboard-write; fullscreen"
+      allow="clipboard-read 'none'; clipboard-write 'self'; fullscreen 'self'"
       aria-label="Rendered HTML document"
       className="manage-html-render-view"
       data-document-key={documentKey}
+      onLoad={(event) => {
+        /*
+         * CDXC:ManageHtmlDocumentNavigation 2026-08-06:
+         * The synthetic folder base that makes sibling assets work also changes
+         * fragment-link resolution inside srcdoc. Keep fragments owned by the
+         * rendered document, and hand sibling HTML files back to Docs so its
+         * selected path, header, and preview remain synchronized.
+         */
+        const renderedDocument = event.currentTarget.contentDocument;
+        if (!renderedDocument) {
+          return;
+        }
+        renderedDocument.addEventListener("click", (clickEvent) => {
+          const mouseEvent = clickEvent as MouseEvent;
+          if (
+            clickEvent.defaultPrevented ||
+            mouseEvent.button !== 0 ||
+            mouseEvent.altKey ||
+            mouseEvent.ctrlKey ||
+            mouseEvent.metaKey ||
+            mouseEvent.shiftKey
+          ) {
+            return;
+          }
+          const eventTarget = clickEvent.target as {
+            closest?: (selector: string) => Element | null;
+          } | null;
+          const anchor = eventTarget?.closest?.("a[href]") as HTMLAnchorElement | null;
+          const href = anchor?.getAttribute("href")?.trim();
+          if (
+            !anchor ||
+            !href ||
+            anchor.hasAttribute("download") ||
+            (anchor.target && anchor.target !== "_self")
+          ) {
+            return;
+          }
+          if (href.startsWith("#")) {
+            const targetId = decodeManageHtmlFragment(href);
+            const target = targetId
+              ? renderedDocument.getElementById(targetId)
+              : renderedDocument.documentElement;
+            if (target) {
+              clickEvent.preventDefault();
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            return;
+          }
+          const linkedDocumentPath = manageHtmlLinkedDocumentPath(href, resourceBaseUrl);
+          if (!linkedDocumentPath || linkedDocumentPath === documentKey) {
+            return;
+          }
+          clickEvent.preventDefault();
+          onOpenDocument(linkedDocumentPath);
+        }, true);
+      }}
       sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts"
       srcDoc={renderedHtml}
       title={documentKey}
@@ -5113,27 +5177,11 @@ function requestManageFiles(
   if (!bridge) {
     return Promise.reject(new Error("Docs is unavailable in this host."));
   }
-  const requestId = `manage-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const message: ManageFilesBridgeRequest = {
-    ...request,
-    requestId,
-  };
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-      reject(new Error("Docs request timed out."));
-    }, MANAGE_BRIDGE_TIMEOUT_MS);
-    function handleResponse(event: Event) {
-      const response = (event as CustomEvent<ManageFilesBridgeResponse>).detail;
-      if (response?.requestId !== requestId) {
-        return;
-      }
-      window.clearTimeout(timeout);
-      window.removeEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-      resolve(response);
-    }
-    window.addEventListener(MANAGE_FILES_RESPONSE_EVENT, handleResponse);
-    bridge.postMessage(message);
+  return requestProjectDocsFromHost(request, {
+    eventName: MANAGE_FILES_RESPONSE_EVENT,
+    eventTarget: window,
+    postMessage: (message) => bridge.postMessage(message),
+    timeoutMs: MANAGE_BRIDGE_TIMEOUT_MS,
   });
 }
 
@@ -6556,6 +6604,54 @@ function manageHtmlResourceBaseUrl(documentPath: string): string | undefined {
   return new URL(`${parentPath}/`, baseUrl).toString();
 }
 
+function decodeManageHtmlFragment(href: string): string | undefined {
+  try {
+    return decodeURIComponent(href.slice(1));
+  } catch {
+    return undefined;
+  }
+}
+
+function manageHtmlLinkedDocumentPath(
+  href: string,
+  resourceBaseUrl: string | undefined,
+): string | undefined {
+  if (!resourceBaseUrl) {
+    return undefined;
+  }
+  let baseUrl: URL;
+  let linkedUrl: URL;
+  try {
+    baseUrl = new URL(resourceBaseUrl);
+    linkedUrl = new URL(href, baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (linkedUrl.origin !== baseUrl.origin) {
+    return undefined;
+  }
+  const encodedComponents = linkedUrl.pathname.split("/").filter(Boolean);
+  if (encodedComponents.length === 0) {
+    return undefined;
+  }
+  let components: string[];
+  try {
+    components = encodedComponents.map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
+  if (
+    components.some(
+      (component) =>
+        !component || component === "." || component === ".." || component.includes("\\"),
+    )
+  ) {
+    return undefined;
+  }
+  const path = components.join("/");
+  return isHtmlPath(path) ? path : undefined;
+}
+
 function injectManageHtmlResourceBase(
   documentValue: Document,
   resourceBaseUrl: string | undefined,
@@ -7660,17 +7756,11 @@ styleElement.textContent = `
   }
 
   /*
-   * CDXC:ManageFileActions 2026-06-28-04:35:
-   * The standalone Manage page does not load the shared sidebar overlay stylesheet. Define the right-click file menu and rename dialog locally so file actions remain viewport-clamped and dismissible inside the project-editor WebKit surface.
-   *
-   * CDXC:ManageFileActions 2026-06-30-01:37:
-   * The Docs file-row Rename/Delete context menu should match the polished dark popover treatment used by the sidebar dropdowns while staying anchored to the right-click coordinates. Keep the danger action visibly red, but use rounded rows, softened borders, and restrained hover chrome instead of a hard rectangular block.
-   *
-   * CDXC:ManageFileActions 2026-06-30-02:30:
-   * Docs file context menus should share the same flat #0e0e0e background and 1px #595959 border as the sidebar dropdown instead of using a gradient surface.
-   *
-   * CDXC:ManageFileActions 2026-06-30-02:45:
-   * Docs file context menu corners should match the reduced dropdown roundness with a 4px outer radius and 3px row radius.
+   * CDXC:ManageFileActions 2026-08-08:
+   * Docs uses the shared sidebar context-menu stylesheet and class contract.
+   * Keep only Docs-specific tokens and nested-row layout here so its menu
+   * surface, spacing, square corners, hover, dividers, and danger rows cannot
+   * drift from the GPUI sidebar menu again.
    */
   .sidebar-context-menu-backdrop,
   .manage-rename-backdrop {
@@ -7685,52 +7775,20 @@ styleElement.textContent = `
   }
 
   .manage-file-context-menu {
-    backdrop-filter: blur(18px);
-    background: #0e0e0e;
-    border: 1px solid #595959;
-    border-radius: 4px;
-    box-shadow:
-      0 18px 42px rgba(0, 0, 0, 0.38),
-      0 4px 12px rgba(0, 0, 0, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    color: rgba(244, 244, 245, 0.9);
-    display: grid;
-    gap: 3px;
-    min-width: 166px;
-    padding: 6px;
-    position: fixed;
-    z-index: 61;
+    --app-border: var(--manage-border);
+    --app-card: var(--manage-panel);
+    --app-context-menu-hover-background: var(--manage-row-surface);
+    color: var(--manage-text);
+    font-size: 12px;
+    font-weight: 400;
   }
 
   .manage-file-context-menu-item {
-    align-items: center;
-    background: transparent;
-    border: 0;
-    border-radius: 3px;
-    color: inherit;
-    display: flex;
-    font-size: 12.5px;
-    font-weight: 620;
-    gap: 9px;
     line-height: 16px;
-    min-height: 34px;
-    padding: 8px 10px 8px 9px;
-    text-align: left;
-    white-space: nowrap;
-    width: 100%;
   }
 
   .manage-file-context-menu-item svg {
-    color: rgba(244, 244, 245, 0.72);
-    flex: 0 0 auto;
-    height: 15px;
-    width: 15px;
-  }
-
-  .manage-file-context-menu-divider {
-    background: rgba(255, 255, 255, 0.09);
-    height: 1px;
-    margin: 3px 4px;
+    color: currentColor;
   }
 
   .manage-file-context-menu-nested {
@@ -7758,64 +7816,13 @@ styleElement.textContent = `
     transform: rotate(90deg);
   }
 
-  .manage-file-context-menu-item:hover,
-  .manage-file-context-menu-item:focus-visible {
-    background: rgba(255, 255, 255, 0.105);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045);
-    color: rgba(250, 250, 250, 0.98);
-    outline: none;
-  }
-
-  .manage-file-context-menu-item:hover svg,
-  .manage-file-context-menu-item:focus-visible svg {
-    color: rgba(250, 250, 250, 0.92);
-  }
-
   .manage-file-context-menu-item:disabled {
-    color: var(--manage-subtle);
     cursor: wait;
-  }
-
-  .manage-file-context-menu-item:disabled svg {
-    color: color-mix(in srgb, var(--manage-subtle) 72%, transparent);
-  }
-
-  .manage-file-context-menu-item-danger {
-    color: rgba(253, 164, 175, 0.9);
-  }
-
-  .manage-file-context-menu-item-danger svg {
-    color: rgba(253, 164, 175, 0.82);
-  }
-
-  .manage-file-context-menu-item-danger:hover,
-  .manage-file-context-menu-item-danger:focus-visible {
-    background: rgba(253, 164, 175, 0.125);
-    box-shadow: inset 0 0 0 1px rgba(253, 164, 175, 0.08);
-    color: var(--manage-red);
-  }
-
-  .manage-file-context-menu-item-danger:hover svg,
-  .manage-file-context-menu-item-danger:focus-visible svg {
-    color: var(--manage-red);
+    opacity: 0.42;
   }
 
   .manage-file-context-menu-item-danger[data-confirming="true"] {
-    background: rgba(253, 164, 175, 0.12);
-    box-shadow: inset 0 0 0 1px rgba(253, 164, 175, 0.12);
-    color: var(--manage-red);
-  }
-
-  .manage-file-context-menu-item:disabled:hover,
-  .manage-file-context-menu-item:disabled:focus-visible {
-    background: transparent;
-    box-shadow: none;
-    color: var(--manage-subtle);
-  }
-
-  .manage-file-context-menu-item:disabled:hover svg,
-  .manage-file-context-menu-item:disabled:focus-visible svg {
-    color: color-mix(in srgb, var(--manage-subtle) 72%, transparent);
+    background: color-mix(in srgb, #ff7b72 18%, transparent);
   }
 
   .manage-rename-backdrop {

@@ -13,6 +13,10 @@ function run(command, args, options = {}) {
   return typeof output === "string" ? output.trim() : "";
 }
 
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
 function usage() {
   return `
 Usage:
@@ -197,10 +201,18 @@ function validateLocalSource(version, { allowExistingTag }) {
 }
 
 function configuredSecrets() {
-  const json = run("gh", ["secret", "list", "--repo", repo, "--json", "name"]);
-  return new Set(
-    json ? JSON.parse(json).map(({ name }) => name) : [],
-  );
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const json = run("gh", ["secret", "list", "--repo", repo, "--json", "name"]);
+      return new Set(json ? JSON.parse(json).map(({ name }) => name) : []);
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      console.warn(`GitHub secret inventory failed (attempt ${attempt}/${attempts}); retrying...`);
+      sleep(attempt * 1500);
+    }
+  }
+  throw new Error("Unable to read GitHub repository secrets");
 }
 
 function requireSecrets(secrets, label, names) {

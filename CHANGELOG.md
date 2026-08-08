@@ -1,5 +1,29 @@
 # Changelog
 
+## 7.4.0 - 2026-08-08
+
+- Major
+  - Project Board now remembers your filters and sorting, offers both sort directions, shows ticket creators and assignees, and can resume linked conversations even after project or ticket names change.
+  - Quick Access can progressively load older sessions, while command panes and existing agent conversations reconnect more reliably when you return to them.
+- Minor
+  - Global Actions are available directly from project rows and refresh immediately after changes, thanks to @banozz.
+  - Stashed Prompts, Previous Sessions, project collections, session groups, and sidebar drag-and-drop have clearer controls and more dependable behavior.
+  - Project Board scrollbars can be clicked and dragged normally, and completed lanes default to showing the newest work first, thanks to @banozz.
+  - Session Chat loads images and completed Codex messages more smoothly, while the Android chat stays ready in the background and handles the on-screen keyboard more reliably.
+  - Windows terminal sessions, agent hooks, remote cloning, project icons, support diagnostics, and long-running gxserver connections are more dependable.
+
+## 7.3.0 - 2026-08-07
+
+- Major
+  - Quick Access now brings the Command Pane, Recent Projects, and Recent Sessions into one fast, tabbed workflow with consistent search and keyboard shortcuts.
+  - Remote projects can open Source and Prompt Editor through their connected machine, while Docs can browse and manage files on that remote workspace.
+- Minor
+  - Remote machines can be reordered directly in the sidebar, sidebar sections collapse more smoothly, and active sessions stay clearly visible through collapsed groups.
+  - Previous-session search preserves exact word and phrase matches, and choosing an already-running conversation focuses its existing terminal instead of opening a duplicate agent.
+  - Windows browser keyboard input and popup focus are more reliable, while menus, tooltips, and scrollbars have cleaner sizing and placement across the desktop app.
+  - Terminal selection, agent waits, prompt delivery, support logs, and live session tracking are more dependable during longer-running work.
+  - The Android app shows useful working, attention, and awake counts when machine and project sections are collapsed.
+
 ## 7.2.0 - 2026-08-06
 
 - Major

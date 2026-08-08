@@ -2,10 +2,9 @@
 //! conventions (SidebarRefreshDebugLog.swift and siblings):
 //!
 //! - JSON-line entries `[timestamp] {"event":..., "details":...}`.
-//! - Routine breadcrumbs are gated by the shared-settings
-//!   `diagnosticLogging.scenarios` map (same ids and missing-key defaults as
-//!   the Swift `NativeDiagnosticLogging` reader); warning/error/failure-like
-//!   events always persist.
+//! - Routine breadcrumbs require the shared `debuggingMode` ("Show debug UI
+//!   controls") gate and the matching `diagnosticLogging.scenarios` entry.
+//!   Warning/error/failure-like events and crash reports always persist.
 //! - 25 MB per-file cap with three rotations, plus a one-minute-after-startup
 //!   retention pass trimming each retained file to 25,000 lines.
 //! - Every GPUI file is `gpui-*`-prefixed so the macOS app's writers in the
@@ -90,20 +89,13 @@ impl GpuiDiagnosticScenario {
             Self::AppModal => "gpui.app.modal",
         }
     }
-
-    fn default_enabled(self) -> bool {
-        // Missing-key defaults mirror Swift NativeDiagnosticLogging
-        // (GhostexAppStorage.swift) so both apps agree immediately after an
-        // update, before Settings normalizes new scenario ids. `gpui.app.modal`
-        // is not in DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS, so it defaults off.
-        matches!(
-            self,
-            Self::HostLifecycle | Self::RemoteGxserverInstall | Self::SidebarRefresh
-        )
-    }
 }
 
 pub fn scenario_enabled(scenario: GpuiDiagnosticScenario) -> bool {
+    scenario_id_enabled(scenario.scenario_id())
+}
+
+pub fn scenario_id_enabled(scenario_id: &str) -> bool {
     let settings = shared_settings::shared_sidebar_settings_snapshot();
     let Some(state) = settings
         .object()
@@ -111,9 +103,9 @@ pub fn scenario_enabled(scenario: GpuiDiagnosticScenario) -> bool {
         .and_then(serde_json::Value::as_object)
         .and_then(|logging| logging.get("scenarios"))
         .and_then(serde_json::Value::as_object)
-        .and_then(|scenarios| scenarios.get(scenario.scenario_id()))
+        .and_then(|scenarios| scenarios.get(scenario_id))
     else {
-        return scenario.default_enabled();
+        return false;
     };
     if let Some(enabled) = state.as_bool() {
         return enabled;
@@ -138,22 +130,45 @@ pub fn scenario_enabled(scenario: GpuiDiagnosticScenario) -> bool {
     })
 }
 
-/// Appends a routine breadcrumb; dropped unless the log's scenario is enabled
-/// in shared settings (Swift writer-boundary gate parity).
+/// Appends a support event. Routine breadcrumbs require both "Show debug UI
+/// controls" and the log's scenario; important diagnostics bypass both gates.
 pub fn append(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+    let important = is_important_diagnostic(log, event, &details);
+    if !important && !debug_ui_controls_enabled() {
+        return;
+    }
     if let Some(scenario) = log.scenario() {
-        if !scenario_enabled(scenario) && !event_is_important_diagnostic(event) {
+        if !important && !scenario_enabled(scenario) {
             return;
         }
     }
     append_unconditionally(log, event, details);
 }
 
-/// Always-on, privacy-shaped instrumentation for the active Fluid Voice
-/// reproduction. Remove this helper and every `TEMP.gpui.fluidVoice.*` caller
-/// once the alternate insertion route is identified.
-pub fn append_temporary(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+/// Appends a routine event whose scenario is selected by its caller. Missing,
+/// disabled, or expired scenarios never write; important diagnostics remain
+/// unconditional.
+pub fn append_for_scenario(
+    log: GpuiSupportLog,
+    scenario_id: &str,
+    event: &str,
+    details: serde_json::Value,
+) {
+    let important = is_important_diagnostic(log, event, &details);
+    if !important && (!debug_ui_controls_enabled() || !scenario_id_enabled(scenario_id)) {
+        return;
+    }
     append_unconditionally(log, event, details);
+}
+
+/// Privacy-shaped temporary instrumentation. Routine temporary events follow
+/// the same explicit scenario as their destination log.
+pub fn append_temporary(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+    append(log, event, details);
+}
+
+fn debug_ui_controls_enabled() -> bool {
+    shared_settings::shared_sidebar_settings_snapshot().debugging_mode()
 }
 
 pub fn temporary_fluid_voice_text_shape(text: &str) -> serde_json::Value {
@@ -182,13 +197,58 @@ pub fn temporary_fluid_voice_bytes_shape(bytes: &[u8]) -> serde_json::Value {
     })
 }
 
-/// Warning/error/failure events persist without a scenario, matching the
-/// macOS `isNativePersistentLogImportantDiagnostic` behavior.
+fn is_important_diagnostic(log: GpuiSupportLog, event: &str, details: &serde_json::Value) -> bool {
+    log == GpuiSupportLog::CrashReports
+        || event_is_important_diagnostic(event)
+        || details_contain_important_diagnostic(details)
+}
+
+/// Warning/error/failure events persist without either routine-log gate.
 fn event_is_important_diagnostic(event: &str) -> bool {
     let lowered = event.to_ascii_lowercase();
-    ["error", "fail", "warning", "crash", "abort"]
-        .iter()
-        .any(|marker| lowered.contains(marker))
+    [
+        "error", "fail", "warning", "crash", "abort", "fatal", "panic",
+    ]
+    .iter()
+    .any(|marker| lowered.contains(marker))
+}
+
+fn details_contain_important_diagnostic(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(object) => object.iter().any(|(key, value)| {
+            let key = key.to_ascii_lowercase();
+            let diagnostic_key = [
+                "error", "fail", "warning", "crash", "abort", "fatal", "panic",
+            ]
+            .iter()
+            .any(|marker| key.contains(marker));
+            let diagnostic_level = matches!(key.as_str(), "level" | "severity" | "status")
+                && value.as_str().is_some_and(event_is_important_diagnostic);
+            (diagnostic_key && diagnostic_value_present(value))
+                || diagnostic_level
+                || details_contain_important_diagnostic(value)
+        }),
+        serde_json::Value::Array(values) => values.iter().any(details_contain_important_diagnostic),
+        _ => false,
+    }
+}
+
+fn diagnostic_value_present(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(value) => *value,
+        serde_json::Value::Number(value) => value.as_f64().is_some_and(|value| value != 0.0),
+        serde_json::Value::String(value) => {
+            let value = value.trim();
+            !value.is_empty()
+                && !matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "0" | "false" | "none" | "ok" | "passed" | "success"
+                )
+        }
+        serde_json::Value::Array(values) => !values.is_empty(),
+        serde_json::Value::Object(values) => !values.is_empty(),
+    }
 }
 
 fn append_unconditionally(log: GpuiSupportLog, event: &str, details: serde_json::Value) {

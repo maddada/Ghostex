@@ -6,6 +6,7 @@ import { createGroupDropData } from "../sidebar-dnd";
 import { groupSensors } from "../session-group-section";
 import { AppTooltip } from "../app-tooltip";
 import { SidebarV2ProjectIcon } from "./sidebar-v2-icons";
+import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
 import type { SidebarV2GroupModel } from "./sidebar-v2-view-model";
 
 /*
@@ -61,6 +62,8 @@ export type SidebarV2ProjectGroupSectionProps = {
   isCollapsed: boolean;
   /** True while the user's own project is the one this row represents. */
   isActive?: boolean;
+  /** True when this collapsed project owns the currently active session. */
+  containsActiveSession?: boolean;
   /**
    * True while SidebarApp is painting the cursor ghost for THIS row, so the
    * source keeps V1's faint-placeholder treatment for the whole drag even after
@@ -78,6 +81,7 @@ export type SidebarV2ProjectGroupSectionProps = {
   onSetCollapsed: (collapsed: boolean) => void;
   projectPath?: string;
   projectPathState?: "available" | "missing" | "notDirectory" | "unavailable";
+  showProjectIcons: boolean;
 };
 
 export function SidebarV2ProjectGroupSection({
@@ -87,6 +91,7 @@ export function SidebarV2ProjectGroupSection({
   headerActions,
   index,
   isActive = false,
+  containsActiveSession = false,
   isCollapsed,
   isDragPreviewSource = false,
   isDragDisabled = false,
@@ -95,6 +100,7 @@ export function SidebarV2ProjectGroupSection({
   onSetCollapsed,
   projectPath,
   projectPathState,
+  showProjectIcons,
 }: SidebarV2ProjectGroupSectionProps) {
   const sortable = useSortable({
     /*
@@ -115,6 +121,11 @@ export function SidebarV2ProjectGroupSection({
     type: "group",
   });
   const collapseLabel = `${isCollapsed ? "Expand" : "Collapse"} ${group.title}`;
+  const {
+    isPresent: shouldRenderBody,
+    isVisuallyCollapsed: isBodyVisuallyCollapsed,
+    setCollapsibleElement: setBodyElement,
+  } = useSidebarCollapsiblePresence(isCollapsed);
   const toggleCollapsed = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
       event.preventDefault();
@@ -129,6 +140,7 @@ export function SidebarV2ProjectGroupSection({
       className="group sidebar-v2-group"
       data-active={String(isActive)}
       data-collapsed={String(isCollapsed)}
+      data-contains-active-session={String(containsActiveSession)}
       data-dragging={String(Boolean(sortable.isDragging || isDragPreviewSource))}
       data-group-drop-position={dropPosition}
       /*
@@ -153,7 +165,10 @@ export function SidebarV2ProjectGroupSection({
         ref={isDragDisabled ? undefined : sortable.handleRef}
       >
         <div className="group-title-wrap">
-          <div className="group-title-row" data-project-leading-icon="true">
+          <div
+            className="group-title-row"
+            data-project-leading-icon={String(showProjectIcons)}
+          >
             {/*
              * V1's collapse control, kept as a real button sibling of the title
              * button (a button inside a button is invalid markup). The chevron is
@@ -177,12 +192,17 @@ export function SidebarV2ProjectGroupSection({
                 stroke={2}
               />
             </button>
-            <SidebarV2ProjectIcon
-              discoveredIconDataUrl={group.discoveredIconDataUrl}
-              icon={group.icon}
-              iconDataUrl={group.iconDataUrl}
-              title={group.title}
-            />
+            {showProjectIcons ? (
+              <SidebarV2ProjectIcon
+                discoveredIconDataUrl={group.discoveredIconDataUrl}
+                fallback={
+                  group.isWorktree ? "worktree" : isCollapsed ? "folder" : "folder-open"
+                }
+                icon={group.icon}
+                iconDataUrl={group.iconDataUrl}
+                title={group.title}
+              />
+            ) : null}
             {projectPathState !== undefined && projectPathState !== "available" ? (
               <AppTooltip
                 content={projectPath ? `Folder not found: ${projectPath}` : "Project folder unavailable"}
@@ -227,7 +247,17 @@ export function SidebarV2ProjectGroupSection({
           </div>
         </div>
       </div>
-      {children}
+      {shouldRenderBody ? (
+        <div
+          aria-hidden={isBodyVisuallyCollapsed}
+          className="sidebar-v2-group-body sidebar-animated-collapse-body"
+          data-collapsed={String(isBodyVisuallyCollapsed)}
+          inert={isBodyVisuallyCollapsed ? true : undefined}
+          ref={setBodyElement}
+        >
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

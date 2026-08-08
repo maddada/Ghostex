@@ -173,9 +173,12 @@ import {
   getSessionTitleGenerationCommandPreview,
   getSidebarSettingsPresetId,
   MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
+  MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MAX_SIDEBAR_DEFAULT_WIDTH_PX,
   MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
+  MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MIN_SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS,
   normalizeTerminalDevServerIgnoredPortRuleInput,
   normalizeTerminalDevServerIgnoredPortRules,
   normalizeSettingsModalNavigationState,
@@ -636,7 +639,10 @@ type MainSettingsSectionRefs = Record<
 
 /*
  * CDXC:DebuggingSettings 2026-06-28-18:14:
- * Show debug UI controls is the visibility gate for the support/debugging settings below it. When off, hide diagnostic scenario logging and session context-menu debug utilities instead of leaving disabled rows on screen.
+ * Show debug UI controls is the visibility and routine-logging gate for the
+ * support/debugging settings below it. When off, hide diagnostic scenario
+ * logging and session context-menu debug utilities instead of leaving disabled
+ * rows on screen.
  */
 const DEBUGGING_MODE_DEPENDENT_SETTING_KEYS = [
   "diagnosticLogging",
@@ -694,6 +700,7 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
      * Project git-stat display controls belong with Sidebar settings because they change sidebar project rows, not editor behavior.
      * Use changed-file wording for the file-count toggle so it does not read like an editor-pane setting.
      */
+    "showProjectIcons",
     "hideSessionAgentIconUntilHover",
     "hideBrowserFaviconUntilHover",
     "showCloseButtonOnSessionCards",
@@ -702,6 +709,7 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
     "showProjectEditorDiffFileCount",
     "hideMenuBarSessionStatusIndicators",
     "sidebarSide",
+    "sidebarCollapseAnimationDurationMs",
     "sidebarDefaultWidthPx",
     "commandsPanelDefaultHeightPx",
     "projectSessionListCollapsedCount",
@@ -932,7 +940,11 @@ const DIAGNOSTIC_LOGGING_DURATION_OPTIONS: ReadonlyArray<{
 ];
 
 const DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION: DiagnosticLoggingDurationValue = "1h";
-const DIAGNOSTIC_LOGGING_GROUPS: readonly ["macOS", "GPUI"] = ["macOS", "GPUI"];
+const DIAGNOSTIC_LOGGING_GROUPS: readonly ["macOS", "GPUI", "gxserver"] = [
+  "macOS",
+  "GPUI",
+  "gxserver",
+];
 
 /*
  * CDXC:SettingsAdvanced 2026-06-16-01:35:
@@ -1278,6 +1290,7 @@ export type SettingsModalProps = {
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
+  onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
@@ -1335,6 +1348,7 @@ export function SettingsModal({
   onInstallComputerUseSkill,
   onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
+  onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
@@ -2012,6 +2026,11 @@ export function SettingsModal({
         subtitle: "Choose how project groups are marked in the sidebar.",
         title: "Project group style",
       },
+      {
+        key: "showProjectIcons",
+        subtitle: "Show project artwork or a folder or worktree icon beside project names.",
+        title: "Show project icons",
+      },
       /*
        * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
        * Search metadata follows the visible row order: preset-controlled rows
@@ -2058,6 +2077,11 @@ export function SettingsModal({
         options: SIDEBAR_SIDE_OPTIONS,
         subtitle: "Choose which side of the screen holds the sidebar.",
         title: "Side",
+      },
+      {
+        key: "sidebarCollapseAnimationDurationMs",
+        subtitle: "Set how quickly sidebar sections, groups, and projects expand or collapse. Set to 0 for no animation.",
+        title: "Collapse animation speed",
       },
       {
         key: "sidebarDefaultWidthPx",
@@ -2419,7 +2443,10 @@ export function SettingsModal({
     debugging: getSettingsSectionSearch(settingsSearchQuery, "Debugging", [
       /*
        * CDXC:DiagnosticsSettings 2026-06-06-07:09:
-       * Debugging Mode previously combined diagnostic disk logging and debug UI exposure. Scenario-specific logging now owns disk writes so broad Debugging Mode can remain a UI/debug-control gate without turning on every persistent log.
+       * Show debug UI controls is the global gate for routine diagnostic disk
+       * logging as well as debug-only UI. Scenario controls narrow which
+       * routine log area writes while the global gate is on; important
+       * warnings, errors, and crashes remain available independently.
        *
        * CDXC:DebuggingSettings 2026-06-15-21:34:
        * The Debugging section owns support and diagnostic toggles at the bottom of Settings, including command copy actions and Copy details, so users can find debug-only context-menu features together.
@@ -2431,7 +2458,7 @@ export function SettingsModal({
        */
       {
         key: "debuggingMode",
-        subtitle: "Show debug-only UI controls without enabling routine disk logging.",
+        subtitle: "Show debug-only UI controls and allow enabled routine diagnostic logs.",
         title: "Show debug UI controls",
       },
       {
@@ -2440,7 +2467,7 @@ export function SettingsModal({
           { label: scenario.label, value: scenario.id },
           ...scenario.logFiles.map((logFile) => ({ label: logFile, value: logFile })),
         ]),
-        subtitle: "Enable exact macOS and GPUI repro logging scenarios. Warnings, errors, and crashes remain captured when scenarios are off.",
+        subtitle: "Choose routine repro log areas while Show debug UI controls is on. Important warnings, errors, and crashes remain captured when it is off.",
         title: "Diagnostic disk logging scenarios",
       },
       {
@@ -3613,6 +3640,15 @@ export function SettingsModal({
                * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
                * Users need every preset-mutated setting directly under the preset selector so applying Recommended, Codex, Minimal, or Detailed has an inspectable effect without hunting through Session Cards, Project rows, or Status Indicators.
                */}
+              {mainSettingVisible(settingsSearch.sidebar, "showProjectIcons") ? (
+              <ToggleField
+                checked={draft.showProjectIcons}
+                description="Show project artwork or a folder or worktree icon beside project names."
+                label="Show project icons"
+                {...getSettingModificationProps("showProjectIcons")}
+                onChange={(checked) => updateDraft("showProjectIcons", checked)}
+              />
+              ) : null}
               {mainSettingVisible(settingsSearch.sidebar, "hideSessionAgentIconUntilHover") ? (
               <ToggleField
                 checked={draft.hideSessionAgentIconUntilHover}
@@ -3709,6 +3745,21 @@ export function SettingsModal({
                   value={draft.sidebarDefaultWidthPx}
                 />
               </>
+              ) : null}
+              {mainSettingVisible(settingsSearch.sidebar, "sidebarCollapseAnimationDurationMs") ? (
+              <SliderNumberField
+                description="Duration in milliseconds for expanding and collapsing sidebar sections, groups, and projects. Set to 0 for instant changes."
+                label="Collapse Animation Duration"
+                {...getSettingModificationProps("sidebarCollapseAnimationDurationMs")}
+                max={MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS}
+                min={MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS}
+                onCommit={(value) => updateDraft("sidebarCollapseAnimationDurationMs", value)}
+                onChange={(value) =>
+                  updateDraftDebounced("sidebarCollapseAnimationDurationMs", value)
+                }
+                step={SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS}
+                value={draft.sidebarCollapseAnimationDurationMs}
+              />
               ) : null}
               {mainSettingVisible(settingsSearch.sidebar, "commandsPanelDefaultHeightPx") ? (
               <SliderNumberField
@@ -5092,8 +5143,8 @@ export function SettingsModal({
                     checked={draft.debuggingMode}
                     description={
                       draft.debuggingMode
-                        ? "Shows debug-only UI controls. Use the scenarios below for targeted diagnostic disk logging."
-                        : "Turn on to reveal debug-only UI controls and related diagnostic settings."
+                        ? "Shows debug-only UI controls and allows the enabled diagnostic scenarios below to write routine logs."
+                        : "Turn on to reveal debug-only controls and allow routine diagnostic logging. Important warnings, errors, and crashes remain captured."
                     }
                     label="Show debug UI controls"
                     {...getSettingModificationProps("debuggingMode")}
@@ -5227,6 +5278,7 @@ export function SettingsModal({
               onInstallComputerUseSkill={onInstallComputerUseSkill}
               onInstallCuaDriver={onInstallCuaDriver}
               onInstallFable56OrchestrationSkill={onInstallFable56OrchestrationSkill}
+              onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
               onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
               onInstallGhostexCli={onInstallGhostexCli}
               onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
@@ -7834,6 +7886,7 @@ function hasInstalledBundledAgentSkills(
     ghostexCliStatus?.embeddedBrowserSkillInstalled === true ||
     ghostexCliStatus?.computerUseSkillInstalled === true ||
     ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
+    ghostexCliStatus?.findPrevSessionSkillInstalled === true ||
     ghostexCliStatus?.generateTitleSkillInstalled === true ||
     ghostexCliStatus?.moveCodexSessionSkillInstalled === true
   );
@@ -7856,6 +7909,7 @@ function IntegrationsSettingsTab({
   onInstallComputerUseSkill,
   onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
+  onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
@@ -7884,6 +7938,7 @@ function IntegrationsSettingsTab({
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
+  onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
@@ -8033,6 +8088,7 @@ function IntegrationsSettingsTab({
               computerUse: onInstallComputerUseSkill,
               embeddedBrowserUse: onInstallBrowserControl,
               fable56Orchestration: onInstallFable56OrchestrationSkill,
+              findPrevSession: onInstallFindPrevSessionSkill,
               generateTitle: onInstallGenerateTitleSkill,
               moveCodexSession: onInstallMoveCodexSessionSkill,
             }}
@@ -12540,7 +12596,7 @@ function DiagnosticLoggingSettingsField({
   const idBase = useId();
   return (
     <SettingRow
-      description="Failures, warnings, and crashes still write when scenarios are off. Enable only the repro area you need for routine debug logs."
+      description="Routine logs are off by default and write only when Show debug UI controls and their scenario are enabled. Enable only the repro area you need; important warnings, errors, and crashes remain captured."
       htmlFor={`${idBase}-native-terminal-focus`}
       isModified={isModified}
       label="Diagnostic disk logging scenarios"

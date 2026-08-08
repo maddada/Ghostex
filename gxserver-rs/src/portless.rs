@@ -1057,22 +1057,25 @@ pub fn log_portless_background_sync_outcome(
     outcome: &PortlessBackgroundSyncOutcome,
     duration_ms: u128,
 ) {
-    let _ = logger.log(crate::logging::GxserverLogInput {
-        level: crate::logging::LogLevel::Info,
-        event: "portless.backgroundSync".to_string(),
-        server_id: None,
-        request_id: None,
-        client: None,
-        duration_ms: Some(duration_ms),
-        error: None,
-        details: Some(json!({
-            "action": outcome.action.as_str(),
-            "desiredRouteCount": outcome.desired_route_count,
-            "liveListenerCount": outcome.live_listener_count,
-            "routeCount": outcome.desired_route_count,
-            "status": outcome.status.as_str(),
-        })),
-    });
+    let _ = logger.log_routine(
+        crate::logging::DiagnosticLogScenario::Portless,
+        crate::logging::GxserverLogInput {
+            level: crate::logging::LogLevel::Info,
+            event: "portless.backgroundSync".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: Some(duration_ms),
+            error: None,
+            details: Some(json!({
+                "action": outcome.action.as_str(),
+                "desiredRouteCount": outcome.desired_route_count,
+                "liveListenerCount": outcome.live_listener_count,
+                "routeCount": outcome.desired_route_count,
+                "status": outcome.status.as_str(),
+            })),
+        },
+    );
 }
 
 pub fn log_portless_background_sync_failure(
@@ -1115,16 +1118,19 @@ pub fn log_portless_state_update_success(
             json!(record.state.setup_status.as_str()),
         );
     }
-    let _ = logger.log(crate::logging::GxserverLogInput {
-        level: crate::logging::LogLevel::Info,
-        event: "portless.stateUpdate".to_string(),
-        server_id: None,
-        request_id: None,
-        client: None,
-        duration_ms: Some(duration_ms),
-        error: None,
-        details: Some(details),
-    });
+    let _ = logger.log_routine(
+        crate::logging::DiagnosticLogScenario::Portless,
+        crate::logging::GxserverLogInput {
+            level: crate::logging::LogLevel::Info,
+            event: "portless.stateUpdate".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: Some(duration_ms),
+            error: None,
+            details: Some(details),
+        },
+    );
 }
 
 pub fn log_portless_state_update_failure(
@@ -6089,7 +6095,11 @@ LISTEN 0 511 *:4242 *:* users:(("bad",pid=0,fd=24))
             .join("native-sidebar-settings.json");
         fs::create_dir_all(settings_path.parent().expect("settings parent"))
             .expect("create settings dir");
-        fs::write(settings_path, r#"{"debuggingMode":true}"#).expect("write debugging setting");
+        fs::write(
+            settings_path,
+            r#"{"debuggingMode":true,"diagnosticLogging":{"scenarios":{"gxserver.portless":{"enabled":true}},"version":1}}"#,
+        )
+        .expect("write debugging setting");
     }
 
     fn assert_portless_log_text_has_no_forbidden_raw_values(text: &str) {

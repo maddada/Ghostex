@@ -1,0 +1,68 @@
+name: Release mobile iOS to TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Mobile semver version
+        required: true
+        default: 2.6.1
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upload:
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - name: Select Expo 57 toolchain
+        run: sudo xcode-select --switch /Applications/Xcode_26.4.1.app
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+      - name: Restore pinned mobile source
+        env:
+          MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -n "$MOBILE_DEPLOY_KEY"
+          mkdir -p "$RUNNER_TEMP/mobile-ssh"
+          printf '%s\n' "$MOBILE_DEPLOY_KEY" > "$RUNNER_TEMP/mobile-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/mobile-ssh/id_ed25519"
+          gh api meta --jq '.ssh_keys[]' | sed 's/^/github.com /' > "$RUNNER_TEMP/mobile-ssh/known_hosts"
+          git config submodule.mobile.url git@github.com:maddada/ghostex-mobile.git
+          GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/mobile-ssh/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/mobile-ssh/known_hosts" \
+            git submodule update --init --depth 1 mobile
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.13.1
+      - name: Install JavaScript dependencies
+        working-directory: mobile
+        run: bun install --frozen-lockfile
+      - name: Install App Store Connect API key
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
+          ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
+        run: |
+          test -n "$ASC_ISSUER_ID" && test -n "$ASC_KEY_BASE64" && test -n "$ASC_KEY_ID"
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s' "$ASC_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          echo "GHOSTEX_ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "GHOSTEX_ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
+          echo "GHOSTEX_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
+      - name: Build and upload TestFlight release
+        run: scripts/release-mobile/ios-testflight.sh "${{ inputs.version }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ghostex-mobile-${{ inputs.version }}-ios-testflight
+          path: build/release-gpui/${{ inputs.version }}/ios-testflight/
+          if-no-files-found: error
+          retention-days: 90

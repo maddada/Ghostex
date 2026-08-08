@@ -7,8 +7,7 @@ on:
         required: true
         type: string
       runtime_artifacts_ready:
-        required: false
-        default: false
+        required: true
         type: boolean
       update_sparkle:
         required: false
@@ -54,13 +53,26 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
+      - uses: actions/checkout@v6
+        with:
+          repository: steveyegge/beads
+          ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
+          fetch-depth: 1
+          path: build/pinned-beads-source
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: build/pinned-beads-source/go.mod
+          cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Restore embedded source checkouts
         run: |
-          git submodule update --init --depth=1 -- code-server t3code
+          git submodule update --init --depth=1 -- code-server
           git -C code-server submodule update --init --depth=1 -- lib/vscode
+      - name: Resolve immutable code-server component identity
+        id: code_server_identity
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -76,6 +88,35 @@ jobs:
         with:
           name: release-gxserver-linux-arm64
           path: build/runtime-artifacts/arm64
+      - uses: actions/download-artifact@v8
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
+          path: build/runtime-artifacts/code-server-x64
+      - uses: actions/download-artifact@v8
+        if: ${{ inputs.runtime_artifacts_ready }}
+        with:
+          name: release-code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64
+          path: build/runtime-artifacts/code-server-arm64
+      - name: Validate required remote runtime archives
+        run: |
+          for archive in \
+            build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz \
+            build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz \
+            build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }} \
+            build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz; do
+            [[ -f "$archive" ]] || { echo "Missing required macOS release archive: $archive" >&2; exit 1; }
+            tar -tzf "$archive" >/dev/null
+          done
+          for tuple in \
+            "x64 build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}" \
+            "arm64 build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz"; do
+            set -- $tuple
+            node scripts/release-gpui/verify-code-server-archive.mjs \
+              --archive "$2" \
+              --version "${{ steps.code_server_identity.outputs.component_version }}" \
+              --platform "linux-$1"
+          done
       - name: Restore remote runtime packages
         if: ${{ inputs.runtime_artifacts_ready }}
         run: |
@@ -83,7 +124,7 @@ jobs:
           tar -xzf build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
           tar -xzf build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz -C build/remote-gxserver-linux/arm64/package
       - name: Install build tools
-        run: brew install cmake ninja rsync go xcodegen
+        run: brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchains
         run: |
           curl https://mise.run | sh
@@ -115,6 +156,13 @@ jobs:
         run: |
           bun install --frozen-lockfile
           npm --prefix code-server ci
+      - name: Build pinned embedded-Dolt Beads
+        run: |
+          node scripts/build-pinned-beads-release.mjs \
+            --source-root build/pinned-beads-source \
+            --platform darwin \
+            --arch arm64 \
+            --output "$RUNNER_TEMP/ghostex-pinned-beads/bd"
       - uses: actions/setup-node@v4
         with:
           node-version: 24.13.1
@@ -179,11 +227,15 @@ jobs:
       - name: Build, sign, notarize, and optionally generate appcast
         env:
           GH_TOKEN: ${{ github.token }}
-          GHOSTEX_CODE_SIGN_IDENTITY: "Developer ID Application: Mohamad Youssef (KTKP595G3B)"
+          GHOSTEX_CODE_SIGN_IDENTITY: 'Developer ID Application: Mohamad Youssef (KTKP595G3B)'
           GHOSTEX_NOTARY_PROFILE: notarytool-profile
+          GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ inputs.update_sparkle && '1' || '0' }}
           GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz
           GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz
+          GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
+          GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: scripts/release-gpui/macos.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@v7

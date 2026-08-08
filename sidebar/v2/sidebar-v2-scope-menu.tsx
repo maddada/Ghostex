@@ -21,6 +21,7 @@ export type SidebarV2ScopeMenuProps = {
   onSelectScope: (scopeId: string) => void;
   options: readonly SidebarV2ScopeOption[];
   scopeId: string;
+  showProjectIcons: boolean;
   vscode: WebviewApi;
 };
 
@@ -28,6 +29,7 @@ export function SidebarV2ScopeMenu({
   onSelectScope,
   options,
   scopeId,
+  showProjectIcons,
   vscode,
 }: SidebarV2ScopeMenuProps) {
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; width: number }>();
@@ -49,16 +51,17 @@ export function SidebarV2ScopeMenu({
         onClick={openMenu}
         type="button"
       >
-        {activeOption?.groupId === null || activeOption === undefined ? (
+        {showProjectIcons && (activeOption?.groupId === null || activeOption === undefined) ? (
           <IconFolder aria-hidden="true" className="sidebar-v2-project-icon" size={16} stroke={1.8} />
-        ) : (
+        ) : showProjectIcons && activeOption ? (
           <SidebarV2ProjectIcon
             discoveredIconDataUrl={activeOption.discoveredIconDataUrl}
+            fallback={activeOption.isWorktree ? "worktree" : "folder"}
             icon={activeOption.icon}
             iconDataUrl={activeOption.iconDataUrl}
             title={activeOption.label}
           />
-        )}
+        ) : null}
         <span className="sidebar-v2-scope-trigger-label">
           {activeOption?.label ?? "All projects"}
         </span>
@@ -88,21 +91,22 @@ export function SidebarV2ScopeMenu({
                 role="menuitemradio"
                 type="button"
               >
-                {option.groupId === null ? (
+                {showProjectIcons && option.groupId === null ? (
                   <IconFolder
                     aria-hidden="true"
                     className="sidebar-v2-project-icon"
                     size={16}
                     stroke={1.8}
                   />
-                ) : (
+                ) : showProjectIcons ? (
                   <SidebarV2ProjectIcon
                     discoveredIconDataUrl={option.discoveredIconDataUrl}
+                    fallback={option.isWorktree ? "worktree" : "folder"}
                     icon={option.icon}
                     iconDataUrl={option.iconDataUrl}
                     title={option.label}
                   />
-                )}
+                ) : null}
                 <span className="sidebar-v2-scope-menu-label">{option.label}</span>
                 <span className="sidebar-v2-scope-menu-count">{option.count}</span>
               </button>

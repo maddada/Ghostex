@@ -1498,15 +1498,13 @@
   opacity: 0.74;
 }
 
-.session-frame[data-tagged="true"]:is(:hover, :has(.session:hover), :has(.session:focus-visible), :has(.session:focus-within))
-  .session-tag-agent-icon,
-.session-frame[data-pinned="true"]:is(:hover, :has(.session:hover), :has(.session:focus-visible), :has(.session:focus-within))
-  .session-delayed-send-agent-icon {
+.session-frame[data-tagged="true"]:is(:hover, :has(.session:hover))
+  .session-tag-agent-icon {
   /*
-   * CDXC:PinnedSessions 2026-06-30-00:34:
-   * Pin state no longer owns the agent/tag slot. Tagged rows and active timer
-   * rows can still swap the leading slot on hover/focus, but the separate
-   * floating pin button remains independent to the left.
+   * CDXC:SidebarSessionAgentIcons 2026-06-30-00:12:
+   * Tagged rows swap their tag for the agent icon on pointer hover. Active
+   * Delayed Send timers are not part of this swap: the clock owns the leading
+   * slot continuously, including while its pinned session is hovered or focused.
    */
   opacity: 0 !important;
 }
@@ -2530,7 +2528,7 @@ body[data-custom-sidebar-titlebar-colors="true"]
 
 .session-frame[data-tagged="true"][data-agent-icon-hover-only="true"]:not(:hover):not(
     :has(.session:hover)
-  ):not(:has(.session:focus-visible)):not(:has(.session:focus-within))
+  )
   .session-tag-agent-icon {
   opacity: 1 !important;
 }
@@ -2582,46 +2580,21 @@ body[data-custom-sidebar-titlebar-colors="true"]
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover)):not(
-    :has(.session:focus-visible)
-  ):not(:has(.session:focus-within))
+  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover))
   .session-floating-agent-icon,
 .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover)):not(
-    :has(.session:focus-visible)
-  ):not(:has(.session:focus-within))
+  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover))
   .session-floating-agent-tabler-icon[data-agent-icon],
 .sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover)):not(
-    :has(.session:focus-visible)
-  ):not(:has(.session:focus-within))
+  .session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover))
   .session-persistence-provider-badge[data-slot="floating"] {
   /*
    * CDXC:SidebarSessionAgentIcons 2026-06-30-00:12:
    * Tagged session rows have one leading slot. At rest, including when the row
    * is the focused/active session, the selected tag icon owns that slot. Only
-   * pointer hover or keyboard focus may swap the slot to the hidden agent icon,
-   * so tag and agent icons never overlap.
+   * pointer hover may swap the slot to the hidden agent icon. Mouse or keyboard
+   * focus alone keeps the tag visible, so tag and agent icons never overlap.
    */
-  opacity: 0 !important;
-}
-
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-frame[data-pinned="true"]:is(
-    :hover,
-    :has(.session:hover),
-    :has(.session:focus-visible),
-    :has(.session:focus-within)
-  )
-  .session-tag-agent-icon,
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-frame[data-pinned="true"]:is(
-    :hover,
-    :has(.session:hover),
-    :has(.session:focus-visible),
-    :has(.session:focus-within)
-  )
-  .session-delayed-send-agent-icon {
   opacity: 0 !important;
 }
 

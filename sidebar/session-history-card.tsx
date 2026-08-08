@@ -1,6 +1,6 @@
 import { IconX } from "@tabler/icons-react";
 import { useRef } from "react";
-import type { SidebarPreviousSessionItem } from "../shared/session-grid-contract";
+import type { SidebarPreviousSessionItem, SidebarSessionItem } from "../shared/session-grid-contract";
 import {
   getSessionCardTitleTooltip,
   OverflowTooltipText,
@@ -12,23 +12,33 @@ import { getSessionHistoryCardTitle } from "./session-history-card-title";
 import { getEffectiveSessionTag } from "./session-tag-ui";
 
 export type SessionHistoryCardProps = {
+  displayTimestamp?: string;
   isSearchSelected?: boolean;
-  onDelete: () => void;
+  onDelete?: () => void;
+  onPointerMove?: () => void;
   onRestore: () => void;
-  session: SidebarPreviousSessionItem;
+  projectLabel?: string;
+  quickAccessSessionKey?: string;
+  session: SidebarPreviousSessionItem | SidebarSessionItem;
   showDebugSessionNumbers: boolean;
 };
 
 export function SessionHistoryCard({
+  displayTimestamp,
   isSearchSelected = false,
   onDelete,
+  onPointerMove,
   onRestore,
+  projectLabel: suppliedProjectLabel,
+  quickAccessSessionKey,
   session,
   showDebugSessionNumbers,
 }: SessionHistoryCardProps) {
   const aliasHeadingRef = useRef<HTMLDivElement>(null);
+  const isClosedSession = "historyId" in session;
+  const canActivate = !isClosedSession || session.isRestorable;
   const displayTitle = getSessionHistoryCardTitle(session);
-  const displaySession =
+  const titleDisplaySession =
     session.displayTitle?.trim() || session.primaryTitle?.trim() || !session.terminalTitle?.trim()
       ? session
       : {
@@ -36,13 +46,16 @@ export function SessionHistoryCard({
           primaryTitle: session.terminalTitle,
           terminalTitle: undefined,
         };
+  const displaySession = displayTimestamp
+    ? { ...titleDisplaySession, lastInteractionAt: displayTimestamp }
+    : titleDisplaySession;
   const sessionTitleTooltip = getSessionCardTitleTooltip({
     alwaysShowTitleTooltip: true,
     session: displaySession,
     showDebugSessionNumbers,
     showSessionDetails: true,
   });
-  const projectLabel = getSessionHistoryProjectLabel(session);
+  const projectLabel = suppliedProjectLabel ?? (isClosedSession ? getSessionHistoryProjectLabel(session) : undefined);
   const effectiveSessionTag = getEffectiveSessionTag(session);
   const showTerminalSessionIcon = shouldShowTerminalSessionIcon(session);
   const hasSessionCardIcon =
@@ -77,8 +90,8 @@ export function SessionHistoryCard({
         data-has-agent-icon={String(hasSessionCardIcon)}
         data-has-project-label={String(Boolean(projectLabel))}
         data-pinned={String(session.isPinned === true)}
-        data-running="false"
-        data-restorable={String(session.isRestorable)}
+        data-running={String(!isClosedSession)}
+        data-restorable={String(canActivate)}
         data-tagged={String(Boolean(effectiveSessionTag))}
         data-visible="false"
       >
@@ -94,22 +107,23 @@ export function SessionHistoryCard({
          * because these rows restore history instead of representing open UI.
          */}
         <article
-          aria-disabled={!session.isRestorable}
+          aria-disabled={!canActivate}
           aria-pressed="false"
-          aria-label={session.isRestorable ? `Restore ${displayTitle}` : displayTitle}
+          aria-label={canActivate ? `${isClosedSession ? "Restore" : "Focus"} ${displayTitle}` : displayTitle}
           className="session session-history-card"
           data-has-agent-icon={String(hasSessionCardIcon)}
           data-dragging="false"
           data-focused="false"
           data-pinned={String(session.isPinned === true)}
-          data-running="false"
+          data-running={String(!isClosedSession)}
           data-search-selected={String(isSearchSelected)}
-          data-sidebar-history-id={session.historyId}
-          data-restorable={String(session.isRestorable)}
+          data-sidebar-history-id={isClosedSession ? session.historyId : undefined}
+          data-quick-access-session-key={quickAccessSessionKey}
+          data-restorable={String(canActivate)}
           data-tagged={String(Boolean(effectiveSessionTag))}
           data-visible="false"
           onAuxClick={(event) => {
-            if (event.button !== 1) {
+            if (!onDelete || event.button !== 1) {
               return;
             }
 
@@ -118,14 +132,14 @@ export function SessionHistoryCard({
             onDelete();
           }}
           onClick={() => {
-            if (!session.isRestorable) {
+            if (!canActivate) {
               return;
             }
 
             onRestore();
           }}
           onKeyDown={(event) => {
-            if (!session.isRestorable || (event.key !== "Enter" && event.key !== " ")) {
+            if (!canActivate || (event.key !== "Enter" && event.key !== " ")) {
               return;
             }
 
@@ -133,14 +147,15 @@ export function SessionHistoryCard({
             onRestore();
           }}
           onMouseDown={(event) => {
-            if (event.button !== 1) {
+            if (!onDelete || event.button !== 1) {
               return;
             }
 
             event.preventDefault();
           }}
-          role={session.isRestorable ? "button" : undefined}
-          tabIndex={session.isRestorable ? 0 : -1}
+          onPointerMove={onPointerMove}
+          role={canActivate ? "button" : undefined}
+          tabIndex={canActivate ? 0 : -1}
         >
           {/**
            * CDXC:PreviousSessions 2026-06-05-14:21:
@@ -159,18 +174,20 @@ export function SessionHistoryCard({
             sessionPersistenceProvider={session.sessionPersistenceProvider}
             showTerminalIcon={showTerminalSessionIcon}
           />
-          <button
-            aria-label={`Delete ${displayTitle} from session history`}
-            className="previous-session-delete-button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onDelete();
-            }}
-            type="button"
-          >
-            <IconX aria-hidden="true" size={14} stroke={1.9} />
-          </button>
+          {onDelete ? (
+            <button
+              aria-label={`Delete ${displayTitle} from session history`}
+              className="previous-session-delete-button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+              }}
+              type="button"
+            >
+              <IconX aria-hidden="true" size={14} stroke={1.9} />
+            </button>
+          ) : null}
           <SessionCardContent
             aliasHeadingRef={aliasHeadingRef}
             hideHeaderAgentIcon={true}

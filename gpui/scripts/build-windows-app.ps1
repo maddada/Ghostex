@@ -207,26 +207,47 @@ elseif ($RequireWslArchive) {
     throw "Required WSL gxserver archive is missing: $WslArchive"
 }
 if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
-    $CodeServerCommit = (& git -C $RepoRoot rev-parse --short=12 HEAD:code-server).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $CodeServerCommit) {
-        throw "Could not resolve the code-server component source revision"
+    $ComponentVersion = $env:GHOSTEX_CODE_SERVER_COMPONENT_VERSION
+    if (-not $ComponentVersion) {
+        $ComponentVersion = (& node (Join-Path $RepoRoot "scripts/release-gpui/code-server-component-identity.mjs") --root (Join-Path $RepoRoot "code-server")).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $ComponentVersion) {
+            throw "Could not resolve the code-server component payload identity"
+        }
     }
-    $ComponentVersion = "$CodeServerCommit-p1"
+    $ExpectedArchiveName = "code-server-$ComponentVersion-linux-$ReleaseArch.tar.gz"
+    if ((Split-Path -Leaf $WslCodeServerArchive) -ne $ExpectedArchiveName) {
+        throw "WSL code-server archive identity mismatch: expected $ExpectedArchiveName"
+    }
+    & node (Join-Path $RepoRoot "scripts/release-gpui/verify-code-server-archive.mjs") `
+        --archive $WslCodeServerArchive `
+        --version $ComponentVersion `
+        --platform "linux-$ReleaseArch"
+    if ($LASTEXITCODE -ne 0) {
+        throw "WSL code-server archive verification failed"
+    }
     $ComponentStage = Join-Path $ComponentRoot "windows-$ReleaseArch-stage"
-    $InnerArchiveName = "code-server-linux-$ReleaseArch.tar.gz"
+    $InnerArchiveName = $ExpectedArchiveName
     $ComponentAsset = Join-Path $ComponentAssetDir "code-server-$ComponentVersion-windows-$ReleaseArch.tar.gz"
     New-Item -ItemType Directory -Force -Path $ComponentAssetDir | Out-Null
     if (Test-Path $ComponentStage) { Remove-Item -Recurse -Force $ComponentStage }
     New-Item -ItemType Directory -Force -Path $ComponentStage | Out-Null
     Copy-Item $WslCodeServerArchive (Join-Path $ComponentStage $InnerArchiveName)
+    Copy-Item "$WslCodeServerArchive.sha256" (Join-Path $ComponentStage "$InnerArchiveName.sha256")
     & bash (Join-Path $RepoRoot "scripts/release-gpui/create-deterministic-tar.sh") $ComponentStage $ComponentAsset
     if ($LASTEXITCODE -ne 0) { throw "Could not create the deterministic Windows code-server component asset" }
     Remove-Item -Recurse -Force $ComponentStage
+    $ComponentAssetSha = (Get-FileHash -Algorithm SHA256 $ComponentAsset).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText(
+        "$ComponentAsset.sha256",
+        "$ComponentAssetSha  $(Split-Path -Leaf $ComponentAsset)`n",
+        [Text.UTF8Encoding]::new($false)
+    )
     & node (Join-Path $RepoRoot "scripts/release-gpui/publish-component.mjs") `
         --metadata-only `
         --component code-server `
         --version $ComponentVersion `
         --asset-dir $ComponentAssetDir `
+        --require-sha256-sidecars `
         --output $ComponentManifest
     if ($LASTEXITCODE -ne 0) { throw "Could not seal Windows code-server component metadata" }
 

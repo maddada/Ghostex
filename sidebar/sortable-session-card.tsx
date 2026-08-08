@@ -20,7 +20,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Modifier, type DragOperation } from "@dnd-kit/abstract";
-import { KeyboardSensor, PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
+import { KeyboardSensor, PointerSensor } from "@dnd-kit/dom";
 import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import { useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
@@ -64,6 +64,7 @@ import {
 import { closeAppModal, openAppModal } from "./app-modal-host-bridge";
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { postSidebarRefreshDebugLog } from "./sidebar-refresh-debug-log";
+import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
 import { useSidebarStore, type SidebarGroupRecord } from "./sidebar-store";
 import {
   getEffectiveSessionTag,
@@ -80,15 +81,6 @@ const CONTEXT_MENU_ITEM_HEIGHT_PX = 34;
 const CONTEXT_MENU_DIVIDER_HEIGHT_PX = 13;
 const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
 const POINTER_ALIGNED_CONTEXT_MENU_MIN_SIDEBAR_WIDTH_PX = 235;
-/**
- * CDXC:SessionReorder 2026-07-02-18:51:
- * Session rows should require the same deliberate hold as project headers so
- * normal row clicks and small pointer hesitation do not start accidental drags.
- */
-const SESSION_CARD_DRAG_HOLD_DELAY_MS = 250;
-const SESSION_CARD_DRAG_HOLD_TOLERANCE_PX = 12;
-const TOUCH_SESSION_CARD_DRAG_HOLD_DELAY_MS = 320;
-const TOUCH_SESSION_CARD_DRAG_HOLD_TOLERANCE_PX = 12;
 const COMPLETION_FLASH_DURATION_MS = 3_000;
 const SESSION_CARD_IMMEDIATE_FOCUS_CLICK_SUPPRESSION_MS = 1_500;
 const SLEEP_BELOW_DEBUG_EVENT_PREFIX = "sleepBelow";
@@ -141,23 +133,7 @@ const sessionCardModifiers = [RestrictSessionDragToVerticalAxis];
 
 const sessionCardSensors = [
   PointerSensor.configure({
-    activationConstraints(event) {
-      if (event.pointerType === "touch") {
-        return [
-          new PointerActivationConstraints.Delay({
-            tolerance: TOUCH_SESSION_CARD_DRAG_HOLD_TOLERANCE_PX,
-            value: TOUCH_SESSION_CARD_DRAG_HOLD_DELAY_MS,
-          }),
-        ];
-      }
-
-      return [
-        new PointerActivationConstraints.Delay({
-          tolerance: SESSION_CARD_DRAG_HOLD_TOLERANCE_PX,
-          value: SESSION_CARD_DRAG_HOLD_DELAY_MS,
-        }),
-      ];
-    },
+    activationConstraints: getSidebarReorderActivationConstraints,
     preventActivation(event, source) {
       return shouldPreventSessionCardDragActivation(event, source.element);
     },
@@ -824,6 +800,7 @@ export function SortableSessionCard({
           ...details,
         },
         event,
+        scenarioId: "native.pane.reorder",
         type: "sidebarDebugLog",
       });
     },
@@ -847,6 +824,7 @@ export function SortableSessionCard({
           ...details,
         },
         event: `repro.sidebarMultiSelect.${event}`,
+        scenarioId: "native.sidebar.refresh",
         type: "sidebarDebugLog",
       });
     },
@@ -1382,6 +1360,7 @@ export function SortableSessionCard({
           title: session.primaryTitle,
         },
         event: "repro.t3CloseSession.requested",
+        scenarioId: "native.t3.codePane",
         type: "sidebarDebugLog",
       });
     }
@@ -1549,6 +1528,7 @@ export function SortableSessionCard({
         terminalTitle: session.terminalTitle,
       },
       event: "session.generateTitle.clicked",
+      scenarioId: "native.session.title",
       type: "sidebarDebugLog",
     });
     vscode.postMessage({
@@ -2362,6 +2342,7 @@ export function SortableSessionCard({
         shiftKey: event?.shiftKey ?? false,
       },
       event: "repro.sidebarSessionFocusRequested",
+      scenarioId: "gpui.sidebar.focus",
       type: "sidebarDebugLog",
     });
     /*
@@ -3250,6 +3231,7 @@ function postSidebarAgentIconRenderDebugLog(
   vscode.postMessage({
     details,
     event,
+    scenarioId: "native.agent.detection",
     type: "sidebarDebugLog",
   });
 }

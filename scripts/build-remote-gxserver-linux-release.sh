@@ -99,6 +99,7 @@ package_status() {
 	local arch="$1"
 	local package_dir="$PACKAGE_ROOT/$arch/package"
 	GHOSTEX_RELEASE_MODULE="$AUTOMATION_ROOT/scripts/release-ghostex.mjs" \
+		GHOSTEX_BEADS_RELEASE_MODULE="$REPO_ROOT/scripts/beads-release.mjs" \
 		GHOSTEX_PACKAGE_DIR="$package_dir" \
 		GHOSTEX_EXPECTED_REVISION="$HEAD_REVISION" \
 		node --input-type=module --eval '
@@ -108,6 +109,9 @@ package_status() {
 		const expectedRevision = process.env.GHOSTEX_EXPECTED_REVISION;
 		const { missingRemoteGxserverLinuxPackageResources } = await import(
 			pathToFileURL(process.env.GHOSTEX_RELEASE_MODULE).href
+		);
+		const { BEADS_PACKAGE_ID } = await import(
+			pathToFileURL(process.env.GHOSTEX_BEADS_RELEASE_MODULE).href
 		);
 		const identityPath = packageDir + "/build-identity.json";
 		if (!existsSync(identityPath)) {
@@ -126,6 +130,10 @@ package_status() {
 		}
 		if (identity.sourceRevision !== expectedRevision) {
 			console.log("built from " + identity.sourceRevision + " but HEAD is " + expectedRevision);
+			process.exit(1);
+		}
+		if (identity.beadsVersion !== BEADS_PACKAGE_ID) {
+			console.log("bundles Beads " + (identity.beadsVersion || "unknown") + " but expected " + BEADS_PACKAGE_ID);
 			process.exit(1);
 		}
 		console.log("fresh (" + identity.sourceRevision + ")");
@@ -155,6 +163,19 @@ fi
 
 if [[ "$FORCE" != "1" ]] && report_freshness >/dev/null 2>&1; then
 	report_freshness
+	if [[ "${GHOSTEX_REQUIRE_BEADS_SMOKE:-0}" == "1" ]]; then
+		host_arch="$(uname -m)"
+		for arch in "${ARCHES[@]}"; do
+			case "$arch:$host_arch" in
+				x64:x86_64 | arm64:aarch64 | arm64:arm64) ;;
+				*)
+					echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native Linux $arch runner; current host is $(uname -s)/$host_arch." >&2
+					exit 1
+					;;
+			esac
+			node "$REPO_ROOT/scripts/smoke-test-packaged-beads.mjs" "$PACKAGE_ROOT/$arch/package/bin/bd"
+		done
+	fi
 	echo "Remote Linux gxserver packages already match HEAD ($HEAD_REVISION); nothing to build."
 	exit 0
 fi

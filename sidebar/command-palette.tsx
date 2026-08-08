@@ -22,7 +22,6 @@ import {
   IconLayoutDashboard,
   IconLayoutSidebar,
   IconListDetails,
-  IconLoader2,
   IconMoon,
   IconNotebook,
   IconPlayerPlay,
@@ -38,8 +37,8 @@ import {
   IconTerminal2,
   IconWindowMaximize,
   IconX,
-} from "@tabler/icons-react";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+} from '@tabler/icons-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Command,
   CommandDialog,
@@ -50,10 +49,10 @@ import {
   CommandList,
   CommandSeparator,
   CommandShortcut,
-} from "@/components/ui/command";
-import type { SidebarCommandButton } from "../shared/sidebar-commands";
-import { DEFAULT_SIDEBAR_COMMAND_ICON } from "../shared/sidebar-command-icons";
-import type { ghostexSettings } from "../shared/ghostex-settings";
+} from '@/components/ui/command';
+import type { SidebarCommandButton } from '../shared/sidebar-commands';
+import { DEFAULT_SIDEBAR_COMMAND_ICON } from '../shared/sidebar-command-icons';
+import type { ghostexSettings } from '../shared/ghostex-settings';
 import {
   GHOSTEX_HOTKEY_DEFINITIONS,
   normalizeHotkeyText,
@@ -61,51 +60,23 @@ import {
   type ghostexFocusedPaneAction,
   type ghostexHotkeyDefinition,
   type ghostexHotkeySettings,
-} from "../shared/ghostex-hotkeys";
-import type {
-  ExtensionToSidebarMessage,
-  SidebarPreviousSessionItem,
-  SidebarSessionItem,
-  SidebarToExtensionMessage,
-} from "../shared/session-grid-contract";
-import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from "../shared/workspace-open-targets";
-import { openAppModal } from "./app-modal-host-bridge";
-import { getSidebarCommandRunModeForClick } from "./command-run-feedback";
-import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
-import { formatSidebarHotkeyLabel } from "./hotkey-label";
-import { filterPreviousSessionsModalItems } from "./previous-session-search";
-import {
-  createCommandPaletteCurrentSessionItems,
-  createCommandPaletteSessionSections,
-  createPreviousSessionSearchText,
-  filterCommandPaletteCurrentSessionItems,
-  filterCommandPaletteItems,
-  filterCommandPalettePreviousSessions,
-  getCommandPaletteCommandQuery,
-  getCommandPaletteModeSwitchSelectionRange,
-  getCommandPaletteQueryForRequestedMode,
-  getCommandPaletteCurrentGroupId,
-  getPreviousSessionProjectLabel,
-  isCommandPaletteCommandMode,
-  sortCommandPalettePreviousSessionsByLastActive,
-  type CommandPaletteCurrentSessionItem,
-} from "./command-palette-session-search";
-import {
-  getSessionCardTitleTooltip,
-  OverflowTooltipText,
-  SessionCardContent,
-  SessionFloatingAgentIcon,
-  shouldShowTerminalSessionIcon,
-} from "./session-card-content";
-import { getEffectiveSessionTag } from "./session-tag-ui";
-import { useSidebarStore } from "./sidebar-store";
-import type { WebviewApi } from "./webview-api";
+} from '../shared/ghostex-hotkeys';
+import type { SidebarToExtensionMessage } from '../shared/session-grid-contract';
+import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from '../shared/workspace-open-targets';
+import { openAppModal, openQuickAccess } from './app-modal-host-bridge';
+import { QuickAccessHeader } from './quick-access-tabs';
+import { getSidebarCommandRunModeForClick } from './command-run-feedback';
+import { SidebarCommandIconGlyph } from './sidebar-command-icon';
+import { formatSidebarHotkeyLabel } from './hotkey-label';
+import { filterCommandPaletteItems } from './command-palette-session-search';
+import { useSidebarStore } from './sidebar-store';
+import type { WebviewApi } from './webview-api';
 
 type CommandPaletteProps = {
-  collapsedGroupsById?: Record<string, true>;
   commands: readonly SidebarCommandButton[];
   hotkeys?: ghostexHotkeySettings;
   initialQuery?: string;
+  isInitialLoadResolved?: boolean;
   isOpen: boolean;
   isPrewarm?: boolean;
   onBrowserCommandRun?: () => void;
@@ -118,13 +89,13 @@ type CommandPaletteProps = {
 
 type CommandPaletteOpenTargetSettings = Pick<
   ghostexSettings,
-  "customWorkspaceOpenTargets" | "workspaceOpenTargetAvailability" | "workspaceOpenTargetHiddenIds"
+  'customWorkspaceOpenTargets' | 'workspaceOpenTargetAvailability' | 'workspaceOpenTargetHiddenIds'
 >;
 
 type HotkeyPaletteCommand = {
   definition: ghostexHotkeyDefinition;
   hotkey: string;
-  kind: "hotkey";
+  kind: 'hotkey';
   searchText: string;
   title: string;
 };
@@ -132,38 +103,38 @@ type HotkeyPaletteCommand = {
 type BuiltInPaletteCommand =
   | HotkeyPaletteCommand
   | {
-      hotkey: "";
-      kind: "cloneRepository";
+      hotkey: '';
+      kind: 'cloneRepository';
       searchText: string;
       title: string;
     }
   | {
       commandId: AppModalPaletteCommandId;
-      hotkey: "";
-      kind: "appModal";
+      hotkey: '';
+      kind: 'appModal';
       modal: AppModalPaletteModal;
       searchText: string;
       title: string;
     }
   | {
       commandId: SidebarMessagePaletteCommandId;
-      hotkey: "";
-      kind: "sidebarMessage";
+      hotkey: '';
+      kind: 'sidebarMessage';
       message: PaletteSidebarMessage;
       searchText: string;
       title: string;
     }
   | {
       commandId: string;
-      hotkey: "";
-      kind: "openTarget";
+      hotkey: '';
+      kind: 'openTarget';
       searchText: string;
       targetId: string;
       title: string;
     }
   | {
-      hotkey: "";
-      kind: "pet";
+      hotkey: '';
+      kind: 'pet';
       searchText: string;
       title: string;
     };
@@ -175,139 +146,136 @@ type ProjectPaletteCommand = {
 };
 
 type AppModalPaletteCommandId =
-  | "actions"
-  | "addProject"
-  | "agentsHub"
-  | "configureAgents"
-  | "openTargets"
-  | "pinnedPrompts"
-  | "previousSessions"
-  | "runningSessions"
-  | "scratchPad";
+  | 'actions'
+  | 'addProject'
+  | 'agentsHub'
+  | 'configureAgents'
+  | 'openTargets'
+  | 'pinnedPrompts'
+  | 'previousSessions'
+  | 'runningSessions'
+  | 'scratchPad';
 
 type AppModalPaletteModal =
-  | "addProject"
-  | "agentsHub"
-  | "configureActions"
-  | "configureAgents"
-  | "daemonSessions"
-  | "hotkeys"
-  | "openTargets"
-  | "pinnedPrompts"
-  | "previousSessions"
-  | "scratchPad";
+  | 'addProject'
+  | 'agentsHub'
+  | 'configureActions'
+  | 'configureAgents'
+  | 'daemonSessions'
+  | 'hotkeys'
+  | 'openTargets'
+  | 'pinnedPrompts'
+  | 'previousSessions'
+  | 'scratchPad';
 
 type SidebarMessagePaletteCommandId =
-  | "automations"
-  | "changelog"
-  | "features"
-  | "plugins"
-  | "openCurrentProjectInFinder"
-  | "quickBrowserTab"
-  | "quickTerminal"
-  | "searchByText"
-  | "setupGhostex"
-  | "tutorialVideo";
+  | 'automations'
+  | 'changelog'
+  | 'features'
+  | 'plugins'
+  | 'openCurrentProjectInFinder'
+  | 'quickBrowserTab'
+  | 'quickTerminal'
+  | 'searchByText'
+  | 'setupGhostex'
+  | 'tutorialVideo';
 
 type PaletteSidebarMessage =
-  | Extract<SidebarToExtensionMessage, { type: "createChat" }>
-  | Extract<SidebarToExtensionMessage, { type: "openBrowserChat" }>
-  | Extract<SidebarToExtensionMessage, { type: "openBrowserPane" }>
-  | Extract<SidebarToExtensionMessage, { type: "openCurrentProjectInFinder" }>
-  | Extract<SidebarToExtensionMessage, { type: "openGhostexTutorialVideo" }>
-  | Extract<SidebarToExtensionMessage, { type: "openHighlightedFeatures" }>
-  | Extract<SidebarToExtensionMessage, { type: "openWorkspaceWelcome" }>
-  | Extract<SidebarToExtensionMessage, { type: "pickWorkspaceFolder" }>
-  | Extract<SidebarToExtensionMessage, { type: "searchPreviousSessionsByText" }>
-  | Extract<SidebarToExtensionMessage, { type: "openAutomationsPage" }>
-  | Extract<SidebarToExtensionMessage, { type: "runGhostexHotkeyAction" }>;
+  | Extract<SidebarToExtensionMessage, { type: 'createChat' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openBrowserChat' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openBrowserPane' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openCurrentProjectInFinder' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openGhostexTutorialVideo' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openHighlightedFeatures' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openWorkspaceWelcome' }>
+  | Extract<SidebarToExtensionMessage, { type: 'pickWorkspaceFolder' }>
+  | Extract<SidebarToExtensionMessage, { type: 'searchPreviousSessionsByText' }>
+  | Extract<SidebarToExtensionMessage, { type: 'openAutomationsPage' }>
+  | Extract<SidebarToExtensionMessage, { type: 'runGhostexHotkeyAction' }>;
 
 const PANE_ACTION_COMMAND_IDS = [
-  "openBrowserPane",
-  "splitMore",
-  "splitMoreDown",
-  "rotatePanesClockwise",
-  "mergeAllTabs",
-  "renameActiveSession",
-  "delayedSend",
-  "forkSession",
-  "reloadSession",
-  "sleepFocusedSession",
-  "wakeFocusedSession",
-  "closeFocusedSession",
-  "popOutPane",
-] as const satisfies readonly ghostexHotkeyDefinition["id"][];
+  'openBrowserPane',
+  'splitMore',
+  'splitMoreDown',
+  'rotatePanesClockwise',
+  'mergeAllTabs',
+  'renameActiveSession',
+  'delayedSend',
+  'forkSession',
+  'reloadSession',
+  'sleepFocusedSession',
+  'wakeFocusedSession',
+  'closeFocusedSession',
+  'popOutPane',
+] as const satisfies readonly ghostexHotkeyDefinition['id'][];
 
-const COMMAND_PALETTE_PREVIOUS_SESSIONS_LIMIT = 20;
-const COMMAND_PALETTE_PREVIOUS_SESSIONS_QUERY_DEBOUNCE_MS = 200;
-const COMMAND_PALETTE_SESSION_LOADER_DELAY_MS = 2_000;
 const COMMAND_PALETTE_INPUT_SELECTOR = '[data-ghostex-command-palette-input="true"]';
-const GHOSTEX_CHANGELOG_URL = "https://github.com/maddada/ghostex/releases";
+const GHOSTEX_CHANGELOG_URL = 'https://github.com/maddada/ghostex/releases';
 
 const APP_MODAL_PALETTE_COMMANDS = [
   {
-    commandId: "previousSessions",
-    hotkey: "",
-    kind: "appModal",
-    modal: "previousSessions",
-    searchText: "Reopen a Session history restore previous sessions old sessions",
-    title: "Reopen a Session",
+    commandId: 'previousSessions',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'previousSessions',
+    searchText: 'Reopen a Session history restore previous sessions old sessions',
+    title: 'Reopen a Session',
   },
   {
-    commandId: "pinnedPrompts",
-    hotkey: "",
-    kind: "appModal",
-    modal: "pinnedPrompts",
-    searchText: "Pinned Prompts prompt library saved prompts modal",
-    title: "Pinned Prompts",
+    commandId: 'pinnedPrompts',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'pinnedPrompts',
+    searchText: 'Pinned Prompts prompt library saved prompts modal',
+    title: 'Pinned Prompts',
   },
   {
-    commandId: "runningSessions",
-    hotkey: "",
-    kind: "appModal",
-    modal: "daemonSessions",
-    searchText: "Running Sessions daemon sessions runtimes modal",
-    title: "Running Sessions",
+    commandId: 'runningSessions',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'daemonSessions',
+    searchText: 'Running Sessions daemon sessions runtimes modal',
+    title: 'Running Sessions',
   },
   {
-    commandId: "scratchPad",
-    hotkey: "",
-    kind: "appModal",
-    modal: "scratchPad",
-    searchText: "Scratch Pad notes modal",
-    title: "Scratch Pad",
+    commandId: 'scratchPad',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'scratchPad',
+    searchText: 'Scratch Pad notes modal',
+    title: 'Scratch Pad',
   },
   {
-    commandId: "agentsHub",
-    hotkey: "",
-    kind: "appModal",
-    modal: "agentsHub",
-    searchText: "Agents Hub agents profiles skills prompts modal",
-    title: "Agents Hub",
+    commandId: 'agentsHub',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'agentsHub',
+    searchText: 'Agents Hub agents profiles skills prompts modal',
+    title: 'Agents Hub',
   },
   {
-    commandId: "configureAgents",
-    hotkey: "",
-    kind: "appModal",
-    modal: "configureAgents",
-    searchText: "Configure Agents agents settings modal",
-    title: "Configure Agents",
+    commandId: 'configureAgents',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'configureAgents',
+    searchText: 'Configure Agents agents settings modal',
+    title: 'Configure Agents',
   },
   {
-    commandId: "actions",
-    hotkey: "",
-    kind: "appModal",
-    modal: "configureActions",
-    searchText: "Actions configure project actions settings modal",
-    title: "Actions",
+    commandId: 'actions',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'configureActions',
+    searchText: 'Actions configure project actions settings modal',
+    title: 'Actions',
   },
   {
-    commandId: "openTargets",
-    hotkey: "",
-    kind: "appModal",
-    modal: "openTargets",
-    searchText: "Open Targets open in editors settings modal",
-    title: "Open Targets",
+    commandId: 'openTargets',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'openTargets',
+    searchText: 'Open Targets open in editors settings modal',
+    title: 'Open Targets',
   },
   {
     /*
@@ -318,69 +286,69 @@ const APP_MODAL_PALETTE_COMMANDS = [
      * its own machine list, so the palette command works for remote machines
      * and repository clones too.
      */
-    commandId: "addProject",
-    hotkey: "",
-    kind: "appModal",
-    modal: "addProject",
-    searchText: "Add Project add folder workspace clone repository projects",
-    title: "Add Project",
+    commandId: 'addProject',
+    hotkey: '',
+    kind: 'appModal',
+    modal: 'addProject',
+    searchText: 'Add Project add folder workspace clone repository projects',
+    title: 'Add Project',
   },
 ] as const satisfies readonly BuiltInPaletteCommand[];
 
 const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
   {
-    commandId: "searchByText",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "searchPreviousSessionsByText" },
-    searchText: "Search by Text previous sessions gx f",
-    title: "Search by Text",
+    commandId: 'searchByText',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'searchPreviousSessionsByText' },
+    searchText: 'Search by Text previous sessions gx f',
+    title: 'Search by Text',
   },
   {
-    commandId: "quickTerminal",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "createChat" },
-    searchText: "Quick Terminal new chat terminal",
-    title: "Quick Terminal",
+    commandId: 'quickTerminal',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'createChat' },
+    searchText: 'Quick Terminal new chat terminal',
+    title: 'Quick Terminal',
   },
   {
-    commandId: "quickBrowserTab",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openBrowserChat" },
-    searchText: "Quick Browser Tab browser chat",
-    title: "Quick Browser Tab",
+    commandId: 'quickBrowserTab',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openBrowserChat' },
+    searchText: 'Quick Browser Tab browser chat',
+    title: 'Quick Browser Tab',
   },
   {
-    commandId: "automations",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openAutomationsPage" },
-    searchText: "Automations schedules recurring agents",
-    title: "Automations",
+    commandId: 'automations',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openAutomationsPage' },
+    searchText: 'Automations schedules recurring agents',
+    title: 'Automations',
   },
   {
-    commandId: "plugins",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { actionId: "openPlugins", type: "runGhostexHotkeyAction" },
-    searchText: "Plugins components VS Code code-server CEF gxserver Beads bd runtimes",
-    title: "Plugins",
+    commandId: 'plugins',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { actionId: 'openPlugins', type: 'runGhostexHotkeyAction' },
+    searchText: 'Plugins components VS Code code-server CEF gxserver Beads bd runtimes',
+    title: 'Plugins',
   },
   {
-    commandId: "openCurrentProjectInFinder",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openCurrentProjectInFinder" },
-    searchText: "Open Current Project in Finder open folder workspace",
-    title: "Open Current Project in Finder",
+    commandId: 'openCurrentProjectInFinder',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openCurrentProjectInFinder' },
+    searchText: 'Open Current Project in Finder open folder workspace',
+    title: 'Open Current Project in Finder',
   },
   {
-    commandId: "features",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openGhostexTutorialVideo" },
+    commandId: 'features',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openGhostexTutorialVideo' },
     /*
      * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
      * The command-palette Features row should open the tutorial video modal so
@@ -390,42 +358,42 @@ const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
      * The tutorial video now uses Loom and the Ghostty-focused title, so search
      * metadata should match the current walkthrough terms.
      */
-    searchText: "Features Ghostty Loom tutorial video walkthrough modal",
-    title: "Features",
+    searchText: 'Features Ghostty Loom tutorial video walkthrough modal',
+    title: 'Features',
   },
   {
-    commandId: "tutorialVideo",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openGhostexTutorialVideo" },
-    searchText: "Ghostty Loom tutorial video walkthrough how to use watch 1.5x",
-    title: "Tutorial Video",
+    commandId: 'tutorialVideo',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openGhostexTutorialVideo' },
+    searchText: 'Ghostty Loom tutorial video walkthrough how to use watch 1.5x',
+    title: 'Tutorial Video',
   },
   {
-    commandId: "setupGhostex",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openWorkspaceWelcome" },
+    commandId: 'setupGhostex',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openWorkspaceWelcome' },
     /*
      * CDXC:CommandPalette 2026-06-18-04:53:
      * User-facing setup actions should use the shorter "Setup" label while
      * search text keeps Ghostex and onboarding terms discoverable.
      */
-    searchText: "Ghostex setup onboarding first launch guide modal",
-    title: "Setup",
+    searchText: 'Ghostex setup onboarding first launch guide modal',
+    title: 'Setup',
   },
   {
-    commandId: "changelog",
-    hotkey: "",
-    kind: "sidebarMessage",
-    message: { type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL },
-    searchText: "Changelog release notes releases github browser",
-    title: "Changelog",
+    commandId: 'changelog',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { type: 'openBrowserPane', url: GHOSTEX_CHANGELOG_URL },
+    searchText: 'Changelog release notes releases github browser',
+    title: 'Changelog',
   },
 ] as const satisfies readonly BuiltInPaletteCommand[];
 
 function createOpenTargetPaletteCommands(
-  settings: CommandPaletteOpenTargetSettings | undefined,
+  settings: CommandPaletteOpenTargetSettings | undefined
 ): BuiltInPaletteCommand[] {
   if (!settings) {
     return [];
@@ -440,30 +408,23 @@ function createOpenTargetPaletteCommands(
   const hiddenTargetIds = new Set(settings.workspaceOpenTargetHiddenIds);
   const availableTargetIds = new Set(settings.workspaceOpenTargetAvailability.availableTargetIds);
   const builtInTargets = BUILT_IN_WORKSPACE_OPEN_TARGETS.filter(
-    (target) =>
-      target.id !== "finder" &&
-      !hiddenTargetIds.has(target.id) &&
-      availableTargetIds.has(target.id),
-  ).map(
-    (target): BuiltInPaletteCommand => ({
-      commandId: `openTarget:${target.id}`,
-      hotkey: "",
-      kind: "openTarget",
-      searchText: `Open In ${target.label} current project workspace editor target`,
-      targetId: target.id,
-      title: `Open In: ${target.label}`,
-    }),
-  );
-  const customTargets = settings.customWorkspaceOpenTargets.map(
-    (target): BuiltInPaletteCommand => ({
-      commandId: `openTarget:${target.id}`,
-      hotkey: "",
-      kind: "openTarget",
-      searchText: `Open In ${target.label} current project workspace custom target`,
-      targetId: target.id,
-      title: `Open In: ${target.label}`,
-    }),
-  );
+    (target) => target.id !== 'finder' && !hiddenTargetIds.has(target.id) && availableTargetIds.has(target.id)
+  ).map((target): BuiltInPaletteCommand => ({
+    commandId: `openTarget:${target.id}`,
+    hotkey: '',
+    kind: 'openTarget',
+    searchText: `Open In ${target.label} current project workspace editor target`,
+    targetId: target.id,
+    title: `Open In: ${target.label}`,
+  }));
+  const customTargets = settings.customWorkspaceOpenTargets.map((target): BuiltInPaletteCommand => ({
+    commandId: `openTarget:${target.id}`,
+    hotkey: '',
+    kind: 'openTarget',
+    searchText: `Open In ${target.label} current project workspace custom target`,
+    targetId: target.id,
+    title: `Open In: ${target.label}`,
+  }));
   return [...builtInTargets, ...customTargets];
 }
 
@@ -474,7 +435,7 @@ function findCommandPaletteInput(): HTMLInputElement | null {
 function isCommandPaletteTextKey(event: KeyboardEvent): boolean {
   return (
     event.key.length === 1 &&
-    event.key !== "Dead" &&
+    event.key !== 'Dead' &&
     !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&
@@ -483,10 +444,10 @@ function isCommandPaletteTextKey(event: KeyboardEvent): boolean {
 }
 
 export function CommandPalette({
-  collapsedGroupsById = {},
   commands,
   hotkeys,
-  initialQuery = "",
+  initialQuery = '',
+  isInitialLoadResolved = true,
   isOpen,
   isPrewarm = false,
   onBrowserCommandRun,
@@ -497,96 +458,66 @@ export function CommandPalette({
   vscode,
 }: CommandPaletteProps) {
   const [inputValue, setInputValue] = useState(initialQuery);
-  const [remotePreviousSessions, setRemotePreviousSessions] = useState<
-    SidebarPreviousSessionItem[] | undefined
-  >();
-  const [resolvedPreviousSessionsQuery, setResolvedPreviousSessionsQuery] = useState<
-    string | undefined
-  >();
-  const [showSessionLoader, setShowSessionLoader] = useState(false);
-  const latestPreviousSessionsRequestRef = useRef<
-    { query: string; requestId: string } | undefined
-  >(undefined);
-  const hasRequestedPreviousSessionsRef = useRef(false);
-  const latestOpenRequestSequenceRef = useRef(openRequestSequence);
-  const pendingModeSwitchSelectionRef = useRef<{ end: number; start: number } | undefined>(
-    undefined,
-  );
-  const wasOpenRef = useRef(isOpen);
-  const groupsById = useSidebarStore((state) => state.groupsById);
-  const previousSessions = useSidebarStore((state) => state.previousSessions);
   const commandRunStates = useSidebarStore((state) => state.commandRunStates);
-  const sessionIdsByGroup = useSidebarStore((state) => state.sessionIdsByGroup);
-  const sessionsById = useSidebarStore((state) => state.sessionsById);
-  const workspaceGroupIds = useSidebarStore((state) => state.workspaceGroupIds);
-  const showDebugSessionNumbers = useSidebarStore((state) => state.hud.debuggingMode);
-  const applyLocalFocus = useSidebarStore((state) => state.applyLocalFocus);
   const normalizedHotkeys = useMemo(() => normalizeghostexHotkeySettings(hotkeys), [hotkeys]);
-  const isCommandMode = isCommandPaletteCommandMode(inputValue);
-  const commandQuery = isCommandMode ? getCommandPaletteCommandQuery(inputValue) : "";
-  const sessionQuery = isCommandMode ? "" : inputValue.trim();
+  const commandQuery = inputValue.trim();
   const createBuiltInCommand = (definition: ghostexHotkeyDefinition): HotkeyPaletteCommand => {
     const hotkey = normalizeHotkeyText(normalizedHotkeys[definition.id] ?? definition.defaultKey);
     return {
       definition,
       hotkey,
-      kind: "hotkey",
+      kind: 'hotkey',
       searchText: `${definition.title} ${definition.description} ${hotkey}`,
       title: definition.title,
     };
   };
-  const builtInCommands = useMemo(
-    () => {
-      const paneActionIds = new Set<ghostexHotkeyDefinition["id"]>(PANE_ACTION_COMMAND_IDS);
-      const hotkeyCommands: BuiltInPaletteCommand[] = GHOSTEX_HOTKEY_DEFINITIONS.filter(
-        (definition) =>
-          definition.id !== "openCommandPalette" &&
-          definition.id !== "openSessionSearchPalette" &&
-          definition.action.kind !== "runActionSlot" &&
-          !paneActionIds.has(definition.id),
-      ).map(createBuiltInCommand);
-      const petTitle = petOverlayEnabled ? "Sleep Pet" : "Wake Pet";
-      const petCommand: BuiltInPaletteCommand = {
-        hotkey: "",
-        kind: "pet",
-        searchText: `${petTitle} pet overlay ${petOverlayEnabled ? "hide sleep" : "show wake"}`,
-        title: petTitle,
-      };
-      const cloneRepositoryCommand: BuiltInPaletteCommand = {
-        hotkey: "",
-        kind: "cloneRepository",
-        searchText: "Clone Repository add project git clone github codeberg repository",
-        title: "Clone Repository",
-      };
-      const openTargetCommands = createOpenTargetPaletteCommands(openTargetSettings);
-      /*
-       * CDXC:CommandPalette 2026-06-18-03:32:
-       * Cmd+Shift+P must expose the global app-modal launchers users can reach
-       * from sidebar and titlebar chrome, including Previous Sessions and the
-       * Tips header actions Features, Setup, and Changelog.
-       *
-       * CDXC:CommandPalette 2026-06-18-03:46:
-       * The palette also needs the main-window command buttons Add Project,
-       * Search by Text, Quick Terminal, Quick Browser Tab, Automations, Open
-       * Current Project in Finder, and visible Open In editor targets. Keep
-       * context-dependent modals out of this list unless their required
-       * session, draft, file, or target payload is available.
-       */
-      return [
-        ...hotkeyCommands,
-        cloneRepositoryCommand,
-        ...APP_MODAL_PALETTE_COMMANDS,
-        ...SIDEBAR_MESSAGE_PALETTE_COMMANDS,
-        ...openTargetCommands,
-        petCommand,
-      ];
-    },
-    [normalizedHotkeys, openTargetSettings, petOverlayEnabled],
-  );
+  const builtInCommands = useMemo(() => {
+    const paneActionIds = new Set<ghostexHotkeyDefinition['id']>(PANE_ACTION_COMMAND_IDS);
+    const hotkeyCommands: BuiltInPaletteCommand[] = GHOSTEX_HOTKEY_DEFINITIONS.filter(
+      (definition) =>
+        definition.id !== 'openCommandPalette' &&
+        definition.id !== 'openSessionSearchPalette' &&
+        definition.action.kind !== 'runActionSlot' &&
+        !paneActionIds.has(definition.id)
+    ).map(createBuiltInCommand);
+    const petTitle = petOverlayEnabled ? 'Sleep Pet' : 'Wake Pet';
+    const petCommand: BuiltInPaletteCommand = {
+      hotkey: '',
+      kind: 'pet',
+      searchText: `${petTitle} pet overlay ${petOverlayEnabled ? 'hide sleep' : 'show wake'}`,
+      title: petTitle,
+    };
+    const cloneRepositoryCommand: BuiltInPaletteCommand = {
+      hotkey: '',
+      kind: 'cloneRepository',
+      searchText: 'Clone Repository add project git clone github codeberg repository',
+      title: 'Clone Repository',
+    };
+    const openTargetCommands = createOpenTargetPaletteCommands(openTargetSettings);
+    /*
+     * CDXC:CommandPalette 2026-06-18-03:32:
+     * Cmd+Shift+P must expose the global app-modal launchers users can reach
+     * from sidebar and titlebar chrome, including Previous Sessions and the
+     * Tips header actions Features, Setup, and Changelog.
+     *
+     * CDXC:CommandPalette 2026-06-18-03:46:
+     * The palette also needs the main-window command buttons Add Project,
+     * Search by Text, Quick Terminal, Quick Browser Tab, Automations, Open
+     * Current Project in Finder, and visible Open In editor targets. Keep
+     * context-dependent modals out of this list unless their required
+     * session, draft, file, or target payload is available.
+     */
+    return [
+      ...hotkeyCommands,
+      cloneRepositoryCommand,
+      ...APP_MODAL_PALETTE_COMMANDS,
+      ...SIDEBAR_MESSAGE_PALETTE_COMMANDS,
+      ...openTargetCommands,
+      petCommand,
+    ];
+  }, [normalizedHotkeys, openTargetSettings, petOverlayEnabled]);
   const paneActionCommands = useMemo(() => {
-    const definitionsById = new Map(
-      GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition]),
-    );
+    const definitionsById = new Map(GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition]));
     return PANE_ACTION_COMMAND_IDS.map((id) => definitionsById.get(id))
       .filter((definition): definition is ghostexHotkeyDefinition => definition !== undefined)
       .map(createBuiltInCommand);
@@ -599,77 +530,33 @@ export function CommandPalette({
           const actionSlotId = getActionSlotHotkeyId(slotNumber);
           return {
             command,
-            hotkey: actionSlotId
-              ? normalizeHotkeyText(normalizedHotkeys[actionSlotId] ?? "")
-              : "",
+            hotkey: actionSlotId ? normalizeHotkeyText(normalizedHotkeys[actionSlotId] ?? '') : '',
             slotNumber,
           };
         })
         .filter(({ command }) => isRunnableOrConfigurableCommand(command)),
-    [commands, normalizedHotkeys],
-  );
-  const currentSessionItems = useMemo(
-    () =>
-      createCommandPaletteCurrentSessionItems({
-        groupsById,
-        sessionIdsByGroup,
-        sessionsById,
-        workspaceGroupIds,
-      }),
-    [groupsById, sessionIdsByGroup, sessionsById, workspaceGroupIds],
+    [commands, normalizedHotkeys]
   );
   const filteredBuiltInCommands = useMemo(
     () => filterCommandPaletteItems(builtInCommands, commandQuery, (command) => command.searchText),
-    [builtInCommands, commandQuery],
+    [builtInCommands, commandQuery]
   );
   const filteredPaneActionCommands = useMemo(
-    () =>
-      filterCommandPaletteItems(paneActionCommands, commandQuery, (command) => command.searchText),
-    [commandQuery, paneActionCommands],
+    () => filterCommandPaletteItems(paneActionCommands, commandQuery, (command) => command.searchText),
+    [commandQuery, paneActionCommands]
   );
   const filteredProjectCommands = useMemo(
     () =>
-      filterCommandPaletteItems(projectCommands, commandQuery, ({ command, hotkey, slotNumber }) =>
-        `${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`,
+      filterCommandPaletteItems(
+        projectCommands,
+        commandQuery,
+        ({ command, hotkey, slotNumber }) =>
+          `${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`
       ),
-    [commandQuery, projectCommands],
-  );
-  const filteredCurrentSessionItems = useMemo(
-    () => filterCommandPaletteCurrentSessionItems(currentSessionItems, sessionQuery),
-    [currentSessionItems, sessionQuery],
-  );
-  const commandPaletteCurrentGroupId = useMemo(
-    () => getCommandPaletteCurrentGroupId(currentSessionItems),
-    [currentSessionItems],
-  );
-  const sessionSections = useMemo(
-    () =>
-      createCommandPaletteSessionSections(filteredCurrentSessionItems, {
-        collapsedGroupsById,
-        currentGroupId: commandPaletteCurrentGroupId,
-      }),
-    [collapsedGroupsById, commandPaletteCurrentGroupId, filteredCurrentSessionItems],
-  );
-  const modalPreviousSessions = useMemo(
-    () => filterPreviousSessionsModalItems(remotePreviousSessions ?? previousSessions),
-    [previousSessions, remotePreviousSessions],
-  );
-  const filteredPreviousSessions = useMemo(
-    () =>
-      sortCommandPalettePreviousSessionsByLastActive(
-        filterCommandPalettePreviousSessions(modalPreviousSessions, sessionQuery),
-      ).slice(0, COMMAND_PALETTE_PREVIOUS_SESSIONS_LIMIT),
-    [modalPreviousSessions, sessionQuery],
+    [commandQuery, projectCommands]
   );
   const hasCommandResults =
-    filteredBuiltInCommands.length > 0 ||
-    filteredPaneActionCommands.length > 0 ||
-    filteredProjectCommands.length > 0;
-  const hasSessionResults =
-    sessionSections.some((section) => section.items.length > 0) ||
-    filteredPreviousSessions.length > 0;
-  const isSessionSearchResolving =
-    !hasSessionResults && resolvedPreviousSessionsQuery !== sessionQuery;
+    filteredBuiltInCommands.length > 0 || filteredPaneActionCommands.length > 0 || filteredProjectCommands.length > 0;
 
   const focusCommandPaletteInput = () => {
     const input = findCommandPaletteInput();
@@ -687,8 +574,7 @@ export function CommandPalette({
     }
     const selectionStart = input.selectionStart ?? input.value.length;
     const selectionEnd = input.selectionEnd ?? input.value.length;
-    const nextValue =
-      input.value.slice(0, selectionStart) + text + input.value.slice(selectionEnd);
+    const nextValue = input.value.slice(0, selectionStart) + text + input.value.slice(selectionEnd);
     const nextSelection = selectionStart + text.length;
     setInputValue(nextValue);
     window.requestAnimationFrame(() => {
@@ -696,17 +582,6 @@ export function CommandPalette({
       focusedInput?.setSelectionRange(nextSelection, nextSelection);
     });
   };
-
-  useLayoutEffect(() => {
-    const selection = pendingModeSwitchSelectionRef.current;
-    if (!selection) {
-      return;
-    }
-    pendingModeSwitchSelectionRef.current = undefined;
-    const input = focusCommandPaletteInput();
-    input?.focus();
-    input?.setSelectionRange(selection.start, selection.end);
-  }, [inputValue]);
 
   useLayoutEffect(() => {
     if (!isOpen || isPrewarm) {
@@ -721,9 +596,7 @@ export function CommandPalette({
      */
     focusCommandPaletteInput();
     const animationFrameId = window.requestAnimationFrame(focusCommandPaletteInput);
-    const timeoutIds = [0, 50, 150].map((delay) =>
-      window.setTimeout(focusCommandPaletteInput, delay),
-    );
+    const timeoutIds = [0, 50, 150].map((delay) => window.setTimeout(focusCommandPaletteInput, delay));
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       for (const timeoutId of timeoutIds) {
@@ -758,7 +631,7 @@ export function CommandPalette({
       if (!input || document.activeElement === input) {
         return;
       }
-      const text = event.clipboardData?.getData("text") ?? "";
+      const text = event.clipboardData?.getData('text') ?? '';
       if (!text) {
         focusCommandPaletteInput();
         return;
@@ -768,163 +641,59 @@ export function CommandPalette({
       insertIntoCommandPaletteInput(text);
     };
 
-    window.addEventListener("focus", focusAfterCurrentEvent);
-    window.addEventListener("focusin", focusAfterCurrentEvent);
-    window.addEventListener("keydown", handlePaletteKeyDown, { capture: true });
-    document.addEventListener("paste", handlePalettePaste, { capture: true });
+    window.addEventListener('focus', focusAfterCurrentEvent);
+    window.addEventListener('focusin', focusAfterCurrentEvent);
+    window.addEventListener('keydown', handlePaletteKeyDown, { capture: true });
+    document.addEventListener('paste', handlePalettePaste, { capture: true });
     return () => {
-      window.removeEventListener("focus", focusAfterCurrentEvent);
-      window.removeEventListener("focusin", focusAfterCurrentEvent);
-      window.removeEventListener("keydown", handlePaletteKeyDown, { capture: true });
-      document.removeEventListener("paste", handlePalettePaste, { capture: true });
+      window.removeEventListener('focus', focusAfterCurrentEvent);
+      window.removeEventListener('focusin', focusAfterCurrentEvent);
+      window.removeEventListener('keydown', handlePaletteKeyDown, { capture: true });
+      document.removeEventListener('paste', handlePalettePaste, { capture: true });
     };
   }, [isOpen, isPrewarm]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      wasOpenRef.current = false;
-      latestOpenRequestSequenceRef.current = openRequestSequence;
-      pendingModeSwitchSelectionRef.current = undefined;
-      setInputValue(initialQuery);
-      setRemotePreviousSessions(undefined);
-      setResolvedPreviousSessionsQuery(undefined);
-      setShowSessionLoader(false);
-      latestPreviousSessionsRequestRef.current = undefined;
-      hasRequestedPreviousSessionsRef.current = false;
-      return;
-    }
-
-    const isFollowUpOpenRequest =
-      wasOpenRef.current && latestOpenRequestSequenceRef.current !== openRequestSequence;
-    wasOpenRef.current = true;
-    latestOpenRequestSequenceRef.current = openRequestSequence;
-    if (!isFollowUpOpenRequest) {
-      setInputValue(initialQuery);
-      return;
-    }
-
-    setInputValue((currentValue) => {
-      const nextValue = getCommandPaletteQueryForRequestedMode(currentValue, initialQuery);
-      if (nextValue !== currentValue) {
-        /*
-         * CDXC:CommandPalette 2026-06-15-10:27:
-         * Switching an already-open palette between files and commands keeps
-         * the typed query, preserves the `>` mode marker when entering command
-         * mode, and selects the editable query text so the next keystroke can
-         * replace the old search.
-         */
-        pendingModeSwitchSelectionRef.current =
-          getCommandPaletteModeSwitchSelectionRange(nextValue);
-      }
-      return nextValue;
-    });
+  useLayoutEffect(() => {
+    /*
+     * Reset the previous open's query before paint. A passive effect allowed a
+     * stale no-result query to flash "No commands found" while the reopened
+     * palette was already visible.
+     */
+    setInputValue(initialQuery);
   }, [initialQuery, isOpen, openRequestSequence]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const handleMessage = (event: MessageEvent<ExtensionToSidebarMessage>) => {
-      if (event.data.type !== "previousSessionsResult") {
-        return;
-      }
-      const latestRequest = latestPreviousSessionsRequestRef.current;
-      if (!latestRequest || event.data.requestId !== latestRequest.requestId) {
-        return;
-      }
-      setRemotePreviousSessions(event.data.previousSessions);
-      setResolvedPreviousSessionsQuery(latestRequest.query);
-    };
-    window.addEventListener("message", handleMessage);
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || isPrewarm || isCommandMode) {
-      latestPreviousSessionsRequestRef.current = undefined;
-      if (!isOpen || isCommandMode) {
-        setRemotePreviousSessions(undefined);
-        setResolvedPreviousSessionsQuery(undefined);
-        hasRequestedPreviousSessionsRef.current = false;
-      }
-      return;
-    }
-
-    const requestDelay = hasRequestedPreviousSessionsRef.current
-      ? COMMAND_PALETTE_PREVIOUS_SESSIONS_QUERY_DEBOUNCE_MS
-      : 0;
-    const timeoutId = window.setTimeout(() => {
-      const requestId = `command-palette-previous-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}`;
-      hasRequestedPreviousSessionsRef.current = true;
-      latestPreviousSessionsRequestRef.current = {
-        query: sessionQuery,
-        requestId,
-      };
-      /*
-       * CDXC:CommandPalette 2026-06-13-22:18:
-       * Session-search mode must include current sessions immediately and
-       * gxserver previous sessions in a separate section. Query history on
-       * demand like the Previous Sessions modal instead of reviving a startup
-       * hydrated cache or adding a command-palette-only fallback source.
-       */
-      vscode.postMessage({
-        limit: COMMAND_PALETTE_PREVIOUS_SESSIONS_LIMIT,
-        query: sessionQuery || undefined,
-        requestId,
-        type: "requestPreviousSessions",
-      });
-    }, requestDelay);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isCommandMode, isOpen, isPrewarm, sessionQuery, vscode]);
-
-  useEffect(() => {
-    setShowSessionLoader(false);
-    if (!isOpen || isPrewarm || isCommandMode || !isSessionSearchResolving) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setShowSessionLoader(true);
-    }, COMMAND_PALETTE_SESSION_LOADER_DELAY_MS);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isCommandMode, isOpen, isPrewarm, isSessionSearchResolving, sessionQuery]);
-
   const runBuiltInCommand = (command: BuiltInPaletteCommand) => {
-    if (command.kind === "pet") {
+    if (command.kind === 'pet') {
       onOpenChange(false);
       vscode.postMessage({
-        type: "togglePetOverlay",
+        type: 'togglePetOverlay',
       });
       return;
     }
-    if (command.kind === "cloneRepository") {
+    if (command.kind === 'cloneRepository') {
       onOpenChange(false);
-      openAppModal({ modal: "addRepository", type: "open" });
+      openAppModal({ modal: 'addRepository', type: 'open' });
       return;
     }
-    if (command.kind === "appModal") {
+    if (command.kind === 'appModal') {
+      if (command.modal === 'previousSessions') {
+        openQuickAccess('recentSessions');
+        return;
+      }
       onOpenChange(false);
-      openAppModal({ modal: command.modal, type: "open" });
+      openAppModal({ modal: command.modal, type: 'open' });
       return;
     }
-    if (command.kind === "sidebarMessage") {
+    if (command.kind === 'sidebarMessage') {
       onOpenChange(false);
       vscode.postMessage(command.message);
       return;
     }
-    if (command.kind === "openTarget") {
+    if (command.kind === 'openTarget') {
       onOpenChange(false);
       vscode.postMessage({
         targetId: command.targetId,
-        type: "openCurrentProjectInTarget",
+        type: 'openCurrentProjectInTarget',
       });
       return;
     }
@@ -936,12 +705,12 @@ export function CommandPalette({
      * focused terminal and posts the delayedSend open message back to this
      * React host.
      */
-    if (command.definition.id !== "delayedSend") {
+    if (command.definition.id !== 'delayedSend') {
       onOpenChange(false);
     }
     vscode.postMessage({
       actionId: command.definition.id,
-      type: "runGhostexHotkeyAction",
+      type: 'runGhostexHotkeyAction',
     });
   };
 
@@ -953,59 +722,36 @@ export function CommandPalette({
       */
       onOpenChange(false);
       openAppModal({
-        initialTab: "actions",
-        modal: "settings",
-        type: "open",
+        initialTab: 'actions',
+        modal: 'settings',
+        type: 'open',
       });
       return;
     }
 
-    if (command.actionType === "browser") {
+    if (command.actionType === 'browser') {
       onBrowserCommandRun?.();
     }
     /*
     CDXC:GPUICommandPane 2026-06-26-05:11:
     Command Palette Action launches may read saved command metadata to derive the click runMode, including debug reruns for close-on-exit terminal Actions. The runSidebarCommand payload stays an authority selector: commandId plus non-default runMode only. Native and GPUI hosts resolve command text, URLs, close-on-exit, cwd/env, paths, output, and other launch details from trusted saved/HUD state.
     */
-    const runMode = getSidebarCommandRunModeForClick(
-      command,
-      commandRunStates[command.commandId],
-    );
+    const runMode = getSidebarCommandRunModeForClick(command, commandRunStates[command.commandId]);
     onOpenChange(false);
     vscode.postMessage({
       commandId: command.commandId,
-      ...(runMode === "default" ? {} : { runMode }),
-      type: "runSidebarCommand",
-    });
-  };
-
-  const focusCurrentSession = (item: CommandPaletteCurrentSessionItem) => {
-    applyLocalFocus(item.groupId, item.session.sessionId);
-    onOpenChange(false);
-    vscode.postMessage({
-      sessionId: item.session.sessionId,
-      type: "focusSession",
-    });
-  };
-
-  const restorePreviousSession = (session: SidebarPreviousSessionItem) => {
-    if (!session.isRestorable) {
-      return;
-    }
-    onOpenChange(false);
-    vscode.postMessage({
-      historyId: session.historyId,
-      type: "restorePreviousSession",
+      ...(runMode === 'default' ? {} : { runMode }),
+      type: 'runSidebarCommand',
     });
   };
 
   return (
     <CommandDialog
-      className="ghostex-settings-shadcn ghostex-command-palette-dialog top-1/2 -translate-y-1/2"
-      description="Search Ghostex commands and project actions."
+      className='ghostex-settings-shadcn ghostex-command-palette-dialog top-1/2 -translate-y-1/2'
+      description='Search Ghostex commands and project actions.'
       open={isOpen}
       showCloseButton={false}
-      title="Command Palette"
+      title='Ghostex Quick Access'
       onOpenChange={onOpenChange}
     >
       {/* CDXC:CommandPalette 2026-06-13-10:26:
@@ -1044,17 +790,16 @@ export function CommandPalette({
 
           CDXC:AddRepository 2026-05-29-11:45:
           Clone Repository should be available from the command palette as a Ghostex built-in command and open the same full-window clone modal as the Projects header button, without going through configurable project actions. */}
-      <Command shouldFilter={false}>
+      <Command className='quick-access-surface' shouldFilter={false}>
+        <QuickAccessHeader activeTab='commands' />
         {/*
          * CDXC:CommandPalette 2026-06-11-09:14:
          * CommandInput sits inside InputGroup without an inline-start addon, so
          * add pl-3 so the query text aligns with command-row icons below.
          *
-         * CDXC:CommandPalette 2026-06-13-22:18:
-         * The input value is the mode switch. A trimmed leading `>` means
-         * command fuzzy finding; no prefix means current-session and previous-
-         * session search. Keep the prefix as actual input text so Cmd+Shift+P
-         * opens with the caret immediately after `>`.
+         * Ghostex Quick Access gives commands and recent sessions separate
+         * tabs, so this field is always a normal command query. Characters such
+         * as `>` have no mode-switch behavior.
          *
          * CDXC:CommandPalette 2026-06-15-16:21:
          * Escape while the command palette is shown must always close the
@@ -1062,12 +807,12 @@ export function CommandPalette({
          * close the modal directly from the palette-owned key handler.
          */}
         <CommandInput
-          className="pl-3"
+          className='pl-3'
           clearOnEscape={false}
-          clearLabel="Clear command palette search"
-          data-ghostex-command-palette-input="true"
+          clearLabel='Clear command palette search'
+          data-ghostex-command-palette-input='true'
           onKeyDown={(event) => {
-            if (event.key !== "Escape") {
+            if (event.key !== 'Escape') {
               return;
             }
 
@@ -1075,469 +820,271 @@ export function CommandPalette({
             event.stopPropagation();
             onOpenChange(false);
           }}
-          placeholder={
-            isCommandMode
-              ? "Search Ghostex commands..."
-              : "Search sessions or write > for commands..."
-          }
+          placeholder='Search commands...'
           value={inputValue}
           onValueChange={setInputValue}
         />
-        <CommandList className="ghostex-command-palette-list">
-          {isCommandMode ? (
-            <>
-              {!hasCommandResults ? <CommandEmpty>No commands found.</CommandEmpty> : null}
-              {filteredBuiltInCommands.length > 0 ? (
-                <CommandGroup heading="Ghostex">
-                  {filteredBuiltInCommands.map((command) => (
-                    <CommandItem
-                      key={getBuiltInCommandKey(command)}
-                      value={command.searchText}
-                      onSelect={() => runBuiltInCommand(command)}
-                    >
-                      <BuiltInCommandIcon command={command} />
-                      <span className="ghostex-command-palette-copy">
-                        <span className="ghostex-command-palette-title">{command.title}</span>
-                      </span>
-                      {command.hotkey ? (
-                        <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut>
-                      ) : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {filteredPaneActionCommands.length > 0 ? (
-                <>
-                  {filteredBuiltInCommands.length > 0 ? <CommandSeparator /> : null}
-                  <CommandGroup heading="Pane Actions">
-                    {filteredPaneActionCommands.map((command) => (
-                      <CommandItem
-                        key={command.definition.id}
-                        value={command.searchText}
-                        onSelect={() => runBuiltInCommand(command)}
-                      >
-                        <BuiltInCommandIcon command={command} />
-                        <span className="ghostex-command-palette-copy">
-                          <span className="ghostex-command-palette-title">{command.title}</span>
-                        </span>
-                        {command.hotkey ? (
-                          <CommandShortcut>
-                            {formatSidebarHotkeyLabel(command.hotkey)}
-                          </CommandShortcut>
-                        ) : null}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </>
-              ) : null}
-              {filteredProjectCommands.length > 0 ? (
-                <>
-                  {filteredBuiltInCommands.length > 0 || filteredPaneActionCommands.length > 0 ? (
-                    <CommandSeparator />
-                  ) : null}
-                  <CommandGroup heading="Project Actions">
-                    {filteredProjectCommands.map(({ command, hotkey, slotNumber }) => (
-                      <CommandItem
-                        key={command.commandId}
-                        value={`${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`}
-                        onSelect={() => runProjectCommand(command)}
-                      >
-                        <SidebarCommandIconGlyph
-                          icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON}
-                          stroke={1.8}
-                        />
-                        <span className="ghostex-command-palette-copy">
-                          <span className="ghostex-command-palette-title">
-                            {getCommandTitle(command)}
-                          </span>
-                          <span className="ghostex-command-palette-description">
-                            {getCommandDescription(command)}
-                          </span>
-                        </span>
-                        {hotkey ? (
-                          <CommandShortcut>{formatSidebarHotkeyLabel(hotkey)}</CommandShortcut>
-                        ) : null}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {showSessionLoader && isSessionSearchResolving ? (
-                <CommandEmpty
-                  aria-live="polite"
-                  className="ghostex-command-palette-loading"
-                  role="status"
+        <CommandList className='ghostex-command-palette-list'>
+          {!hasCommandResults ? (
+            <CommandEmpty>{isInitialLoadResolved ? 'No commands found.' : 'Loading commands…'}</CommandEmpty>
+          ) : null}
+          {filteredBuiltInCommands.length > 0 ? (
+            <CommandGroup heading='Ghostex'>
+              {filteredBuiltInCommands.map((command) => (
+                <CommandItem
+                  key={getBuiltInCommandKey(command)}
+                  value={command.searchText}
+                  onSelect={() => runBuiltInCommand(command)}
                 >
-                  <IconLoader2
-                    aria-hidden="true"
-                    className="ghostex-command-palette-loading-icon"
-                  />
-                  <span>Loading sessions...</span>
-                </CommandEmpty>
-              ) : !hasSessionResults && !isSessionSearchResolving ? (
-                <CommandEmpty>No sessions found.</CommandEmpty>
-              ) : null}
-              {sessionSections.map((section, sectionIndex) => (
-                <Fragment key={section.key}>
-                  {sectionIndex > 0 ? <CommandSeparator /> : null}
-                  <CommandGroup heading={section.heading}>
-                    {section.items.map((item) => (
-                      <CommandItem
-                        className="ghostex-command-palette-session-item"
-                        key={item.session.sessionId}
-                        value={item.searchText}
-                        onSelect={() => focusCurrentSession(item)}
-                      >
-                        <CommandPaletteSessionRow
-                          projectLabel={item.projectLabel}
-                          session={item.session}
-                          showDebugSessionNumbers={showDebugSessionNumbers}
-                          state="current"
-                        />
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </Fragment>
+                  <BuiltInCommandIcon command={command} />
+                  <span className='ghostex-command-palette-copy'>
+                    <span className='ghostex-command-palette-title'>{command.title}</span>
+                  </span>
+                  {command.hotkey ? (
+                    <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut>
+                  ) : null}
+                </CommandItem>
               ))}
-              {filteredPreviousSessions.length > 0 ? (
-                <>
-                  {sessionSections.length > 0 ? <CommandSeparator /> : null}
-                  <CommandGroup heading="Reopen a Session">
-                    {filteredPreviousSessions.map((session) => (
-                      <CommandItem
-                        className="ghostex-command-palette-session-item"
-                        disabled={!session.isRestorable}
-                        key={session.historyId}
-                        value={createPreviousSessionSearchText(session)}
-                        onSelect={() => restorePreviousSession(session)}
-                      >
-                        <CommandPaletteSessionRow
-                          projectLabel={getPreviousSessionProjectLabel(session)}
-                          session={session}
-                          showDebugSessionNumbers={showDebugSessionNumbers}
-                          state="previous"
-                        />
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </>
-              ) : null}
+            </CommandGroup>
+          ) : null}
+          {filteredPaneActionCommands.length > 0 ? (
+            <>
+              {filteredBuiltInCommands.length > 0 ? <CommandSeparator /> : null}
+              <CommandGroup heading='Pane Actions'>
+                {filteredPaneActionCommands.map((command) => (
+                  <CommandItem
+                    key={command.definition.id}
+                    value={command.searchText}
+                    onSelect={() => runBuiltInCommand(command)}
+                  >
+                    <BuiltInCommandIcon command={command} />
+                    <span className='ghostex-command-palette-copy'>
+                      <span className='ghostex-command-palette-title'>{command.title}</span>
+                    </span>
+                    {command.hotkey ? (
+                      <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut>
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
             </>
-          )}
+          ) : null}
+          {filteredProjectCommands.length > 0 ? (
+            <>
+              {filteredBuiltInCommands.length > 0 || filteredPaneActionCommands.length > 0 ? (
+                <CommandSeparator />
+              ) : null}
+              <CommandGroup heading='Project Actions'>
+                {filteredProjectCommands.map(({ command, hotkey, slotNumber }) => (
+                  <CommandItem
+                    key={command.commandId}
+                    value={`${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`}
+                    onSelect={() => runProjectCommand(command)}
+                  >
+                    <SidebarCommandIconGlyph icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON} stroke={1.8} />
+                    <span className='ghostex-command-palette-copy'>
+                      <span className='ghostex-command-palette-title'>{getCommandTitle(command)}</span>
+                      <span className='ghostex-command-palette-description'>{getCommandDescription(command)}</span>
+                    </span>
+                    {hotkey ? <CommandShortcut>{formatSidebarHotkeyLabel(hotkey)}</CommandShortcut> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          ) : null}
         </CommandList>
       </Command>
     </CommandDialog>
   );
 }
 
-function CommandPaletteSessionRow({
-  projectLabel,
-  session,
-  showDebugSessionNumbers,
-  state,
-}: {
-  projectLabel?: string;
-  session: SidebarSessionItem;
-  showDebugSessionNumbers: boolean;
-  state: "current" | "previous";
-}) {
-  const aliasHeadingRef = useRef<HTMLDivElement>(null);
-  const displaySession = getCommandPaletteDisplaySession(session);
-  const sessionTitleTooltip = getSessionCardTitleTooltip({
-    alwaysShowTitleTooltip: true,
-    session: displaySession,
-    showDebugSessionNumbers,
-    showSessionDetails: true,
-  });
-  const effectiveSessionTag = getEffectiveSessionTag(session);
-  const showTerminalSessionIcon = shouldShowTerminalSessionIcon(session);
-  const hasSessionCardIcon =
-    session.isPinned === true ||
-    Boolean(effectiveSessionTag) ||
-    Boolean(session.agentIcon) ||
-    showTerminalSessionIcon ||
-    session.isReloading === true;
-  /*
-   * CDXC:CommandPalette 2026-06-13-22:22:
-   * Session-search rows can represent multiple currently visible panes, but
-   * only the single cmdk-selected item should look highlighted. Keep live
-   * focused/visible state out of the reused session-card chrome so mouse hover
-   * and Arrow-key selection remain mutually exclusive through data-selected on
-   * the outer CommandItem.
-   */
-
-  return (
-    <OverflowTooltipText
-      text={sessionTitleTooltip.headingText}
-      textRef={aliasHeadingRef}
-      tooltip={sessionTitleTooltip.tooltip}
-      tooltipWhen={sessionTitleTooltip.tooltipWhen}
-    >
-      <div
-        className="session-frame session-history-frame ghostex-command-palette-session-frame"
-        data-focused="false"
-        data-has-agent-icon={String(hasSessionCardIcon)}
-        data-has-project-label={String(Boolean(projectLabel))}
-        data-pinned={String(session.isPinned === true)}
-        data-running={String(state === "current" && session.isRunning)}
-        data-restorable="true"
-        data-tagged={String(Boolean(effectiveSessionTag))}
-        data-visible="false"
-      >
-        <div
-          className="session session-history-card ghostex-command-palette-session-row"
-          data-has-agent-icon={String(hasSessionCardIcon)}
-          data-dragging="false"
-          data-focused="false"
-          data-pinned={String(session.isPinned === true)}
-          data-running={String(state === "current" && session.isRunning)}
-          data-search-selected="false"
-          data-restorable="true"
-          data-tagged={String(Boolean(effectiveSessionTag))}
-          data-visible="false"
-        >
-          <SessionFloatingAgentIcon
-            agentIcon={session.agentIcon}
-            faviconDataUrl={session.faviconDataUrl}
-            isFavorite={session.isFavorite}
-            sessionTag={session.sessionTag}
-            sessionPersistenceName={session.sessionPersistenceName}
-            sessionPersistenceProvider={session.sessionPersistenceProvider}
-            showTerminalIcon={showTerminalSessionIcon}
-          />
-          <SessionCardContent
-            aliasHeadingRef={aliasHeadingRef}
-            hideHeaderAgentIcon={true}
-            session={displaySession}
-            showDebugSessionNumbers={showDebugSessionNumbers}
-            showCloseButton={false}
-            showLastInteractionTime={true}
-            trailingPrefix={
-              projectLabel ? (
-                <div className="session-history-project-label" aria-hidden="true">
-                  {projectLabel}
-                </div>
-              ) : null
-            }
-          />
-        </div>
-      </div>
-    </OverflowTooltipText>
-  );
-}
-
-function getCommandPaletteDisplaySession(session: SidebarSessionItem): SidebarSessionItem {
-  return session.displayTitle?.trim() || session.primaryTitle?.trim() || !session.terminalTitle?.trim()
-    ? session
-    : {
-        ...session,
-        primaryTitle: session.terminalTitle,
-        terminalTitle: undefined,
-      };
-}
-
 function BuiltInCommandIcon({ command }: { command: BuiltInPaletteCommand }) {
-  if (command.kind === "cloneRepository") {
-    return <IconDownload aria-hidden="true" />;
+  if (command.kind === 'cloneRepository') {
+    return <IconDownload aria-hidden='true' />;
   }
-  if (command.kind === "appModal") {
+  if (command.kind === 'appModal') {
     return <AppModalCommandIcon modal={command.modal} />;
   }
-  if (command.kind === "sidebarMessage") {
+  if (command.kind === 'sidebarMessage') {
     return <SidebarMessageCommandIcon commandId={command.commandId} />;
   }
-  if (command.kind === "openTarget") {
-    return <IconExternalLink aria-hidden="true" />;
+  if (command.kind === 'openTarget') {
+    return <IconExternalLink aria-hidden='true' />;
   }
-  if (command.kind === "pet") {
-    return command.title === "Sleep Pet" ? (
-      <IconMoon aria-hidden="true" />
-    ) : (
-      <IconPlayerPlay aria-hidden="true" />
-    );
+  if (command.kind === 'pet') {
+    return command.title === 'Sleep Pet' ? <IconMoon aria-hidden='true' /> : <IconPlayerPlay aria-hidden='true' />;
   }
 
   const action = command.definition.action;
-  if (action.kind === "createSession") {
-    return <IconPlus aria-hidden="true" />;
+  if (action.kind === 'createSession') {
+    return <IconPlus aria-hidden='true' />;
   }
-  if (action.kind === "openCommandsPanel") {
-    return <IconTerminal2 aria-hidden="true" />;
+  if (action.kind === 'openCommandsPanel') {
+    return <IconTerminal2 aria-hidden='true' />;
   }
-  if (action.kind === "openSettings") {
-    return <IconSettings aria-hidden="true" />;
+  if (action.kind === 'openSettings') {
+    return <IconSettings aria-hidden='true' />;
   }
-  if (action.kind === "openHotkeys") {
-    return <IconKeyboard aria-hidden="true" />;
+  if (action.kind === 'openHotkeys') {
+    return <IconKeyboard aria-hidden='true' />;
   }
-  if (action.kind === "moveSidebar") {
-    return <IconLayoutSidebarRightExpand aria-hidden="true" />;
+  if (action.kind === 'moveSidebar') {
+    return <IconLayoutSidebarRightExpand aria-hidden='true' />;
   }
-  if (action.kind === "toggleSidebarCollapsed") {
-    return <IconLayoutSidebar aria-hidden="true" />;
+  if (action.kind === 'toggleSidebarCollapsed') {
+    return <IconLayoutSidebar aria-hidden='true' />;
   }
-  if (action.kind === "toggleCompanionPane") {
-    return <IconLayoutSidebarRightExpand aria-hidden="true" />;
+  if (action.kind === 'toggleCompanionPane') {
+    return <IconLayoutSidebarRightExpand aria-hidden='true' />;
   }
-  if (action.kind === "renameActiveSession") {
-    return <IconEdit aria-hidden="true" />;
+  if (action.kind === 'renameActiveSession') {
+    return <IconEdit aria-hidden='true' />;
   }
-  if (action.kind === "focusedPaneAction") {
+  if (action.kind === 'focusedPaneAction') {
     return <FocusedPaneCommandIcon action={action.focusedPaneAction} />;
   }
-  if (action.kind === "focusAdjacentGroup") {
-    return action.direction < 0 ? (
-      <IconChevronLeft aria-hidden="true" />
-    ) : (
-      <IconChevronRight aria-hidden="true" />
-    );
+  if (action.kind === 'focusAdjacentGroup') {
+    return action.direction < 0 ? <IconChevronLeft aria-hidden='true' /> : <IconChevronRight aria-hidden='true' />;
   }
-  if (action.kind === "focusDirection") {
+  if (action.kind === 'focusDirection') {
     return getFocusDirectionIcon(action.direction);
   }
-  if (action.kind === "splitFocusedPane") {
-    return <IconArrowsDiagonal2 aria-hidden="true" />;
+  if (action.kind === 'splitFocusedPane') {
+    return <IconArrowsDiagonal2 aria-hidden='true' />;
   }
-  if (action.kind === "setViewMode") {
-    return <IconLayoutDashboard aria-hidden="true" />;
+  if (action.kind === 'setViewMode') {
+    return <IconLayoutDashboard aria-hidden='true' />;
   }
-  return <IconKeyboard aria-hidden="true" />;
+  return <IconKeyboard aria-hidden='true' />;
 }
 
 function AppModalCommandIcon({ modal }: { modal: AppModalPaletteModal }) {
-  if (modal === "previousSessions") {
-    return <IconHistory aria-hidden="true" />;
+  if (modal === 'previousSessions') {
+    return <IconHistory aria-hidden='true' />;
   }
-  if (modal === "pinnedPrompts") {
-    return <IconPinned aria-hidden="true" />;
+  if (modal === 'pinnedPrompts') {
+    return <IconPinned aria-hidden='true' />;
   }
-  if (modal === "daemonSessions") {
-    return <IconServer aria-hidden="true" />;
+  if (modal === 'daemonSessions') {
+    return <IconServer aria-hidden='true' />;
   }
-  if (modal === "scratchPad") {
-    return <IconNotebook aria-hidden="true" />;
+  if (modal === 'scratchPad') {
+    return <IconNotebook aria-hidden='true' />;
   }
-  if (modal === "agentsHub" || modal === "configureAgents") {
-    return <IconSettingsAutomation aria-hidden="true" />;
+  if (modal === 'agentsHub' || modal === 'configureAgents') {
+    return <IconSettingsAutomation aria-hidden='true' />;
   }
-  if (modal === "configureActions") {
-    return <IconListDetails aria-hidden="true" />;
+  if (modal === 'configureActions') {
+    return <IconListDetails aria-hidden='true' />;
   }
-  if (modal === "openTargets") {
-    return <IconExternalLink aria-hidden="true" />;
+  if (modal === 'openTargets') {
+    return <IconExternalLink aria-hidden='true' />;
   }
-  if (modal === "addProject") {
-    return <IconFolderPlus aria-hidden="true" />;
+  if (modal === 'addProject') {
+    return <IconFolderPlus aria-hidden='true' />;
   }
-  return <IconKeyboard aria-hidden="true" />;
+  return <IconKeyboard aria-hidden='true' />;
 }
 
-function SidebarMessageCommandIcon({
-  commandId,
-}: {
-  commandId: SidebarMessagePaletteCommandId;
-}) {
-  if (commandId === "searchByText") {
-    return <IconSearch aria-hidden="true" />;
+function SidebarMessageCommandIcon({ commandId }: { commandId: SidebarMessagePaletteCommandId }) {
+  if (commandId === 'searchByText') {
+    return <IconSearch aria-hidden='true' />;
   }
-  if (commandId === "quickTerminal") {
-    return <IconTerminal2 aria-hidden="true" />;
+  if (commandId === 'quickTerminal') {
+    return <IconTerminal2 aria-hidden='true' />;
   }
-  if (commandId === "quickBrowserTab") {
-    return <IconBrowser aria-hidden="true" />;
+  if (commandId === 'quickBrowserTab') {
+    return <IconBrowser aria-hidden='true' />;
   }
-  if (commandId === "automations") {
-    return <IconSettingsAutomation aria-hidden="true" />;
+  if (commandId === 'automations') {
+    return <IconSettingsAutomation aria-hidden='true' />;
   }
-  if (commandId === "plugins") {
-    return <IconSettings aria-hidden="true" />;
+  if (commandId === 'plugins') {
+    return <IconSettings aria-hidden='true' />;
   }
-  if (commandId === "openCurrentProjectInFinder") {
-    return <IconFolderOpen aria-hidden="true" />;
+  if (commandId === 'openCurrentProjectInFinder') {
+    return <IconFolderOpen aria-hidden='true' />;
   }
-  if (commandId === "features") {
-    return <IconStars aria-hidden="true" />;
+  if (commandId === 'features') {
+    return <IconStars aria-hidden='true' />;
   }
-  if (commandId === "tutorialVideo") {
-    return <IconPlayerPlay aria-hidden="true" />;
+  if (commandId === 'tutorialVideo') {
+    return <IconPlayerPlay aria-hidden='true' />;
   }
-  if (commandId === "setupGhostex") {
-    return <IconChecklist aria-hidden="true" />;
+  if (commandId === 'setupGhostex') {
+    return <IconChecklist aria-hidden='true' />;
   }
-  return <IconBrandGithub aria-hidden="true" />;
+  return <IconBrandGithub aria-hidden='true' />;
 }
 
 function getBuiltInCommandKey(command: BuiltInPaletteCommand): string {
-  if (command.kind === "hotkey") {
+  if (command.kind === 'hotkey') {
     return command.definition.id;
   }
-  if (command.kind === "appModal" || command.kind === "sidebarMessage") {
+  if (command.kind === 'appModal' || command.kind === 'sidebarMessage') {
     return command.commandId;
   }
-  if (command.kind === "openTarget") {
+  if (command.kind === 'openTarget') {
     return command.commandId;
   }
   return command.kind;
 }
 
 function FocusedPaneCommandIcon({ action }: { action: ghostexFocusedPaneAction }) {
-  if (action === "openBrowserPane") {
-    return <IconBrowser aria-hidden="true" />;
+  if (action === 'openBrowserPane') {
+    return <IconBrowser aria-hidden='true' />;
   }
-  if (action === "rotatePanesClockwise") {
-    return <IconRotateClockwise aria-hidden="true" />;
+  if (action === 'rotatePanesClockwise') {
+    return <IconRotateClockwise aria-hidden='true' />;
   }
-  if (action === "mergeAllTabs") {
-    return <IconWindowMaximize aria-hidden="true" />;
+  if (action === 'mergeAllTabs') {
+    return <IconWindowMaximize aria-hidden='true' />;
   }
-  if (action === "delayedSend") {
-    return <IconClock aria-hidden="true" />;
+  if (action === 'delayedSend') {
+    return <IconClock aria-hidden='true' />;
   }
-  if (action === "closeAfterDone") {
-    return <IconClock aria-hidden="true" />;
+  if (action === 'closeAfterDone') {
+    return <IconClock aria-hidden='true' />;
   }
-  if (action === "forkSession") {
-    return <IconGitFork aria-hidden="true" />;
+  if (action === 'forkSession') {
+    return <IconGitFork aria-hidden='true' />;
   }
-  if (action === "reloadSession") {
-    return <IconRefresh aria-hidden="true" />;
+  if (action === 'reloadSession') {
+    return <IconRefresh aria-hidden='true' />;
   }
-  if (action === "sleepFocusedSession") {
-    return <IconMoon aria-hidden="true" />;
+  if (action === 'sleepFocusedSession') {
+    return <IconMoon aria-hidden='true' />;
   }
-  if (action === "wakeFocusedSession") {
-    return <IconPlayerPlay aria-hidden="true" />;
+  if (action === 'wakeFocusedSession') {
+    return <IconPlayerPlay aria-hidden='true' />;
   }
-  if (action === "closeFocusedSession") {
-    return <IconX aria-hidden="true" />;
+  if (action === 'closeFocusedSession') {
+    return <IconX aria-hidden='true' />;
   }
-  if (action === "popOutPane") {
-    return <IconExternalLink aria-hidden="true" />;
+  if (action === 'popOutPane') {
+    return <IconExternalLink aria-hidden='true' />;
   }
-  return <IconLayoutSidebarRightExpand aria-hidden="true" />;
+  return <IconLayoutSidebarRightExpand aria-hidden='true' />;
 }
 
-function getFocusDirectionIcon(direction: "down" | "left" | "right" | "up") {
-  if (direction === "up") {
-    return <IconChevronUp aria-hidden="true" />;
+function getFocusDirectionIcon(direction: 'down' | 'left' | 'right' | 'up') {
+  if (direction === 'up') {
+    return <IconChevronUp aria-hidden='true' />;
   }
-  if (direction === "right") {
-    return <IconArrowRight aria-hidden="true" />;
+  if (direction === 'right') {
+    return <IconArrowRight aria-hidden='true' />;
   }
-  if (direction === "down") {
-    return <IconChevronDown aria-hidden="true" />;
+  if (direction === 'down') {
+    return <IconChevronDown aria-hidden='true' />;
   }
-  return <IconArrowLeft aria-hidden="true" />;
+  return <IconArrowLeft aria-hidden='true' />;
 }
 
-function getActionSlotHotkeyId(slotNumber: number): ghostexHotkeyDefinition["id"] | undefined {
+function getActionSlotHotkeyId(slotNumber: number): ghostexHotkeyDefinition['id'] | undefined {
   if (slotNumber < 1 || slotNumber > 5) {
     return undefined;
   }
-  return `runActionSlot${slotNumber}` as ghostexHotkeyDefinition["id"];
+  return `runActionSlot${slotNumber}` as ghostexHotkeyDefinition['id'];
 }
 
 function isRunnableOrConfigurableCommand(command: SidebarCommandButton): boolean {
@@ -1545,7 +1092,7 @@ function isRunnableOrConfigurableCommand(command: SidebarCommandButton): boolean
 }
 
 function isConfigured(command: SidebarCommandButton): boolean {
-  return command.actionType === "browser" ? Boolean(command.url) : Boolean(command.command);
+  return command.actionType === 'browser' ? Boolean(command.url) : Boolean(command.command);
 }
 
 function getCommandTitle(command: SidebarCommandButton): string {
@@ -1553,12 +1100,12 @@ function getCommandTitle(command: SidebarCommandButton): string {
   if (name) {
     return name;
   }
-  return command.actionType === "browser" ? "Untitled Webpage" : "Untitled Action";
+  return command.actionType === 'browser' ? 'Untitled Webpage' : 'Untitled Action';
 }
 
 function getCommandDescription(command: SidebarCommandButton): string {
   const target = getCommandTarget(command);
-  const typeLabel = command.actionType === "browser" ? "Browser" : "Terminal";
+  const typeLabel = command.actionType === 'browser' ? 'Browser' : 'Terminal';
   if (!target) {
     return `${typeLabel} - Not configured`;
   }
@@ -1566,9 +1113,9 @@ function getCommandDescription(command: SidebarCommandButton): string {
 }
 
 function getCommandTarget(command: SidebarCommandButton): string | undefined {
-  const target = command.actionType === "browser" ? command.url?.trim() : command.command?.trim();
+  const target = command.actionType === 'browser' ? command.url?.trim() : command.command?.trim();
   if (!target) {
     return undefined;
   }
-  return target.split("\n")[0] || undefined;
+  return target.split('\n')[0] || undefined;
 }

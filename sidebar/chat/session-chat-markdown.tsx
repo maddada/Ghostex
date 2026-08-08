@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import { AppTooltip } from "../app-tooltip";
 import {
   isSessionChatImageHref,
+  SessionChatInlineImage,
   sessionChatImageTargetForHref,
   useSessionChatImageViewer,
   type SessionChatImageViewerApi,
@@ -103,14 +104,21 @@ function markdownComponents(
           ...(alt ? { alt } : {}),
         };
         if (viewer.canOpen(target)) {
+          // An image the agent wrote as an image renders as one; the named
+          // button stays as the stand-in when its bytes cannot be read.
           return (
-            <button
-              className="ghostex-chat-image-link"
-              onClick={() => viewer.open(target)}
-              type="button"
-            >
-              {alt || "Image"}
-            </button>
+            <SessionChatInlineImage
+              fallback={
+                <button
+                  className="ghostex-chat-image-link"
+                  onClick={() => viewer.open(target)}
+                  type="button"
+                >
+                  {alt || "Image"}
+                </button>
+              }
+              target={target}
+            />
           );
         }
       }

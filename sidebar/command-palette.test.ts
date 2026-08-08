@@ -432,10 +432,10 @@ describe("command palette source contracts", () => {
     expect(commandPaletteSource).toContain("insertIntoCommandPaletteInput(event.key)");
     expect(commandPaletteSource).toContain("insertIntoCommandPaletteInput(text)");
     expect(commandPaletteSource).toContain(
-      'window.addEventListener("keydown", handlePaletteKeyDown, { capture: true });',
+      "window.addEventListener('keydown', handlePaletteKeyDown, { capture: true });",
     );
     expect(commandPaletteSource).toContain(
-      'document.addEventListener("paste", handlePalettePaste, { capture: true });',
+      "document.addEventListener('paste', handlePalettePaste, { capture: true });",
     );
   });
 
@@ -448,7 +448,7 @@ describe("command palette source contracts", () => {
      */
     const runProjectCommandStart = commandPaletteSource.indexOf("const runProjectCommand");
     const runProjectCommandEnd = commandPaletteSource.indexOf(
-      "const focusCurrentSession",
+      "\n\n  return (",
       runProjectCommandStart,
     );
     expect(runProjectCommandStart).toBeGreaterThanOrEqual(0);
@@ -470,8 +470,8 @@ describe("command palette source contracts", () => {
     expect(runProjectCommandSource).toContain("commandRunStates[command.commandId]");
     expect(postMessageSource.trim()).toBe(`vscode.postMessage({
       commandId: command.commandId,
-      ...(runMode === "default" ? {} : { runMode }),
-      type: "runSidebarCommand",
+      ...(runMode === 'default' ? {} : { runMode }),
+      type: 'runSidebarCommand',
     });`);
   });
 
@@ -486,7 +486,7 @@ describe("command palette source contracts", () => {
      */
     const paneActionIdsStart = commandPaletteSource.indexOf("const PANE_ACTION_COMMAND_IDS");
     const paneActionIdsEnd = commandPaletteSource.indexOf(
-      "const COMMAND_PALETTE_PREVIOUS_SESSIONS_LIMIT",
+      "const COMMAND_PALETTE_INPUT_SELECTOR",
       paneActionIdsStart,
     );
     expect(paneActionIdsStart).toBeGreaterThanOrEqual(0);
@@ -516,13 +516,13 @@ describe("command palette source contracts", () => {
     expect(hotkeyMessageEnd).toBeGreaterThan(hotkeyMessageStart);
     const hotkeyMessageSource = commandPaletteSource.slice(hotkeyMessageStart, hotkeyMessageEnd);
 
-    expect(paneActionIdsSource).toContain('"sleepFocusedSession"');
-    expect(paneActionIdsSource).toContain('"wakeFocusedSession"');
-    expect(paneActionIdsSource).toContain('"closeFocusedSession"');
+    expect(paneActionIdsSource).toContain("'sleepFocusedSession'");
+    expect(paneActionIdsSource).toContain("'wakeFocusedSession'");
+    expect(paneActionIdsSource).toContain("'closeFocusedSession'");
     expect(paneActionCommandsSource).toContain(".map(createBuiltInCommand)");
     expect(hotkeyMessageSource.trim()).toBe(`vscode.postMessage({
       actionId: command.definition.id,
-      type: "runGhostexHotkeyAction",
+      type: 'runGhostexHotkeyAction',
     });`);
   });
 
@@ -758,19 +758,19 @@ describe("command palette source contracts", () => {
     expect(commandPaletteSource).toContain("Configure Agents");
     expect(commandPaletteSource).toContain("Actions");
     expect(commandPaletteSource).toContain("Open Targets");
-    expect(commandPaletteSource).toContain('action.kind === "openHotkeys"');
-    expect(commandPaletteSource).not.toContain('commandId: "hotkeys"');
+    expect(commandPaletteSource).toContain("action.kind === 'openHotkeys'");
+    expect(commandPaletteSource).not.toContain("commandId: 'hotkeys'");
     /*
      * CDXC:FocusedSessionActions 2026-06-19-15:43:
      * Focused session sleep/wake/close commands belong in the command palette
      * Pane Actions group even when only Sleep has a default shortcut.
      */
-    expect(commandPaletteSource).toContain('"sleepFocusedSession"');
-    expect(commandPaletteSource).toContain('"wakeFocusedSession"');
-    expect(commandPaletteSource).toContain('"closeFocusedSession"');
+    expect(commandPaletteSource).toContain("'sleepFocusedSession'");
+    expect(commandPaletteSource).toContain("'wakeFocusedSession'");
+    expect(commandPaletteSource).toContain("'closeFocusedSession'");
     expect(commandPaletteSource).toContain("Features");
     expect(commandPaletteSource).toContain("Tutorial Video");
-    expect(commandPaletteSource).toContain('title: "Setup"');
+    expect(commandPaletteSource).toContain("title: 'Setup'");
     expect(commandPaletteSource).toContain("Changelog");
     expect(commandPaletteSource).toContain("Add Project");
     expect(commandPaletteSource).toContain("Search by Text");
@@ -780,7 +780,7 @@ describe("command palette source contracts", () => {
     expect(commandPaletteSource).toContain("Open Current Project in Finder");
     expect(commandPaletteSource).toContain("function createOpenTargetPaletteCommands");
     expect(commandPaletteSource).toContain("Open In: ${target.label}");
-    expect(commandPaletteSource).toContain('openAppModal({ modal: command.modal, type: "open" });');
+    expect(commandPaletteSource).toContain("openAppModal({ modal: command.modal, type: 'open' });");
     expect(commandPaletteSource).toContain("vscode.postMessage(command.message);");
     /*
      * CDXC:AddProject 2026-07-30:
@@ -788,19 +788,19 @@ describe("command palette source contracts", () => {
      * dialog), not a `pickWorkspaceFolder` sidebar message that could only open
      * the local OS folder picker.
      */
-    expect(commandPaletteSource).toContain('modal: "addProject"');
-    expect(commandPaletteSource).not.toContain('message: { type: "pickWorkspaceFolder" }');
-    expect(commandPaletteSource).toContain('message: { type: "searchPreviousSessionsByText" }');
-    expect(commandPaletteSource).toContain('message: { type: "createChat" }');
-    expect(commandPaletteSource).toContain('message: { type: "openBrowserChat" }');
-    expect(commandPaletteSource).toContain('message: { type: "openAutomationsPage" }');
-    expect(commandPaletteSource).toContain('message: { type: "openCurrentProjectInFinder" }');
-    expect(commandPaletteSource).toContain('message: { type: "openGhostexTutorialVideo" }');
-    expect(commandPaletteSource).toContain('message: { type: "openWorkspaceWelcome" }');
+    expect(commandPaletteSource).toContain("modal: 'addProject'");
+    expect(commandPaletteSource).not.toContain("message: { type: 'pickWorkspaceFolder' }");
+    expect(commandPaletteSource).toContain("message: { type: 'searchPreviousSessionsByText' }");
+    expect(commandPaletteSource).toContain("message: { type: 'createChat' }");
+    expect(commandPaletteSource).toContain("message: { type: 'openBrowserChat' }");
+    expect(commandPaletteSource).toContain("message: { type: 'openAutomationsPage' }");
+    expect(commandPaletteSource).toContain("message: { type: 'openCurrentProjectInFinder' }");
+    expect(commandPaletteSource).toContain("message: { type: 'openGhostexTutorialVideo' }");
+    expect(commandPaletteSource).toContain("message: { type: 'openWorkspaceWelcome' }");
     expect(commandPaletteSource).toContain(
-      'message: { type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL }',
+      "message: { type: 'openBrowserPane', url: GHOSTEX_CHANGELOG_URL }",
     );
-    expect(commandPaletteSource).toContain('type: "openCurrentProjectInTarget"');
+    expect(commandPaletteSource).toContain("type: 'openCurrentProjectInTarget'");
     expect(commandPaletteSource).toContain("function getBuiltInCommandKey");
     expect(modalHostSource).toContain("openTargetSettings={settings}");
     expect(sessionGridContractSource).toContain('type: "openCurrentProjectInFinder"');
@@ -812,32 +812,18 @@ describe("command palette source contracts", () => {
     expect(nativeSidebarSource).toContain('case "openCurrentProjectInTarget":');
   });
 
-  test("keeps session search copy and single-row selection styling scoped", () => {
+  test("keeps command search scoped to the Quick Access command tab", () => {
     /*
      * CDXC:CommandPalette 2026-06-13-22:22:
-     * Session search mode must invite typing `>` for commands, and live
-     * focused/visible session state must not make multiple rows look hovered
-     * inside the command palette.
+     * Quick Access gives sessions their own tab, so the command tab must use a
+     * normal command query without the old `>` mode switch or session rows.
     */
-    expect(commandPaletteSource).toContain("Search sessions or write > for commands...");
+    expect(commandPaletteSource).toContain("placeholder='Search commands...'");
+    expect(commandPaletteSource).toContain("<QuickAccessHeader activeTab='commands' />");
     expect(commandPaletteSource).toContain("openRequestSequence");
-    expect(commandPaletteSource).toContain("pendingModeSwitchSelectionRef");
-    expect(commandPaletteSource).toContain('data-ghostex-command-palette-input="true"');
-    expect(commandPaletteSearchSource).toContain('heading: "Current Project"');
-    expect(commandPaletteSearchSource).toContain('heading: "Other Active Projects"');
-    expect(commandPaletteSearchSource).toContain('heading: "Collapsed Projects"');
-    expect(commandPaletteSearchSource).not.toContain("Current Sessions");
-    expect(commandPaletteSource.match(/data-focused="false"/g)?.length ?? 0).toBeGreaterThanOrEqual(
-      2,
-    );
-    expect(commandPaletteSource.match(/data-visible="false"/g)?.length ?? 0).toBeGreaterThanOrEqual(
-      2,
-    );
-    expect(sidebarStylesSource).toContain("CDXC:CommandPalette 2026-06-13-22:22:");
-    expect(sidebarStylesSource).toContain(
-      '.ghostex-command-palette-session-item[data-slot="command-item"]',
-    );
-    expect(sidebarStylesSource).toContain(".ghostex-command-palette-session-row::after");
+    expect(commandPaletteSource).not.toContain("pendingModeSwitchSelectionRef");
+    expect(commandPaletteSource).toContain("data-ghostex-command-palette-input='true'");
+    expect(commandPaletteSource).not.toContain('ghostex-command-palette-session-item');
   });
 });
 

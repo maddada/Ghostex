@@ -13,6 +13,13 @@ on:
         required: false
         default: false
         type: boolean
+    outputs:
+      code_server_component_version:
+        value: ${{ jobs.build.outputs.code_server_component_version }}
+      code_server_archive_name:
+        value: ${{ jobs.build.outputs.code_server_archive_name }}
+      code_server_artifact_name:
+        value: ${{ jobs.build.outputs.code_server_artifact_name }}
   workflow_dispatch:
     inputs:
       version:
@@ -33,20 +40,34 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ inputs.include_windows_source_runtime && inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: ${{ inputs.include_windows_source_runtime && 150 || 90 }}
+    outputs:
+      code_server_component_version: ${{ steps.code_server_identity.outputs.component_version }}
+      code_server_archive_name: ${{ steps.code_server_identity.outputs.archive_name }}
+      code_server_artifact_name: ${{ steps.code_server_identity.outputs.artifact_name }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: false
+      - uses: actions/checkout@v6
+        with:
+          repository: steveyegge/beads
+          ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
+          fetch-depth: 1
+          path: build/pinned-beads-source
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: build/pinned-beads-source/go.mod
+          cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config
       - name: Install WSL Source build dependencies
         if: ${{ inputs.include_windows_source_runtime }}
         run: >-
@@ -69,10 +90,23 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Prepare source dependencies
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 scripts/release-gpui/prepare-references.sh
-      - name: Build remote runtime
+      - name: Resolve immutable code-server component identity
+        if: ${{ inputs.include_windows_source_runtime }}
+        id: code_server_identity
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
+      - name: Build pinned embedded-Dolt Beads
         run: |
-          BEADS_ROOT="$(cd ../.. && pwd)/_references/beads" \
-            scripts/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
+          node scripts/build-pinned-beads-release.mjs \
+            --source-root build/pinned-beads-source \
+            --platform linux \
+            --arch "${{ inputs.arch }}" \
+            --output "$RUNNER_TEMP/ghostex-pinned-beads/bd"
+      - name: Build remote runtime
+        env:
+          GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
+          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
+        run: |
+          scripts/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}"
           mkdir -p "$OUTPUT"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
@@ -130,10 +164,12 @@ jobs:
           }
           require_executable code-server/release/lib/node
           require_file code-server/release/out/node/entry.js
+          require_file code-server/release/out/node/routes/health.js
           require_file code-server/release/lib/vscode/out/server-main.js
           require_file code-server/release/lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json
           require_executable code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
           require_file code-server/release/lib/vscode/node_modules/node-pty/build/Release/pty.node
+          grep -F promptEditorIpcReady code-server/release/out/node/routes/health.js >/dev/null
           code-server/release/lib/node code-server/release/out/node/entry.js --version >/dev/null
       # CDXC:T3CodeDisabled ghostex-mzp9: The setup-node and Build WSL T3 Code
       # runtime steps stay in history for a future re-enable; packaging is
@@ -166,12 +202,13 @@ jobs:
         if: ${{ inputs.include_windows_source_runtime }}
         run: |
           OUTPUT="build/release-gpui/${{ inputs.version }}/code-server-linux-${{ inputs.arch }}"
+          ARCHIVE="$OUTPUT/${{ steps.code_server_identity.outputs.archive_name }}"
           mkdir -p "$OUTPUT"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -C code-server/release \
-            -czf "$OUTPUT/code-server-linux-${{ inputs.arch }}.tar.gz" .
-          sha256sum "$OUTPUT/code-server-linux-${{ inputs.arch }}.tar.gz" \
-            | awk '{ print $1 }' >"$OUTPUT/code-server-linux-${{ inputs.arch }}.tar.gz.sha256"
+            -czf "$ARCHIVE" .
+          archive_sha256="$(sha256sum "$ARCHIVE" | awk '{ print $1 }')"
+          printf '%s  %s\n' "$archive_sha256" "$(basename "$ARCHIVE")" >"$ARCHIVE.sha256"
       - uses: actions/upload-artifact@v7
         with:
           name: release-gxserver-linux-${{ inputs.arch }}
@@ -181,7 +218,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ inputs.include_windows_source_runtime }}
         with:
-          name: release-code-server-linux-${{ inputs.arch }}
+          name: ${{ steps.code_server_identity.outputs.artifact_name }}
           path: build/release-gpui/${{ inputs.version }}/code-server-linux-${{ inputs.arch }}/
           if-no-files-found: error
           retention-days: 14

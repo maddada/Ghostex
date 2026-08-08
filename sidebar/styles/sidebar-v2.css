@@ -24,7 +24,8 @@
   --sv2-muted: var(--app-muted);
   --sv2-border: var(--app-border);
   --sv2-row-hover: color-mix(in srgb, var(--app-foreground) 8%, transparent);
-  --sv2-row-active: color-mix(in srgb, var(--app-foreground) 12%, transparent);
+  --sv2-session-row-hover: color-mix(in srgb, var(--app-foreground) 14%, transparent);
+  --sv2-row-active: color-mix(in srgb, var(--app-foreground) 18%, transparent);
 
   /*
    * Three-hue discipline: color is spent only on "act now" (amber/indigo),
@@ -81,7 +82,8 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   --sv2-pr-merged: #6d28d9;
   --sv2-pr-closed: #b91c1c;
   --sv2-row-hover: color-mix(in srgb, var(--app-foreground) 6%, transparent);
-  --sv2-row-active: color-mix(in srgb, var(--app-foreground) 10%, transparent);
+  --sv2-session-row-hover: color-mix(in srgb, var(--app-foreground) 10%, transparent);
+  --sv2-row-active: color-mix(in srgb, var(--app-foreground) 14%, transparent);
 }
 
 /* ---------------------------------------------------------------- toolbar */
@@ -198,6 +200,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-row-item {
+  position: relative;
   list-style: none;
   /*
    * Long inboxes are the normal case here, so rows opt out of layout and paint
@@ -205,6 +208,41 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
    * the scrollbar does not jump as rows realize.
    */
   content-visibility: auto;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-dragging="true"] {
+  opacity: 0.45;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-pinned-reorderable="true"] .sidebar-v2-row {
+  cursor: grab;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-dragging="true"] .sidebar-v2-row {
+  cursor: grabbing;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position]::before {
+  position: absolute;
+  z-index: 3;
+  right: 8px;
+  left: 8px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-button-background) 86%, #ffffff 14%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--app-button-background) 22%, transparent),
+    0 0 14px color-mix(in srgb, var(--app-button-background) 28%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position="before"]::before {
+  top: 0;
+}
+
+[data-sidebar-version="v2"] .sidebar-v2-row-item[data-drop-position="after"]::before {
+  bottom: 0;
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-row-item[data-variant="card"] {
@@ -258,11 +296,12 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-row:hover {
-  background: var(--sv2-row-hover);
+  background: var(--sv2-session-row-hover);
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-row[data-active="true"] {
   background: var(--sv2-row-active);
+  box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
   color: var(--sv2-foreground);
 }
 
@@ -792,7 +831,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 [data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"][data-menu-open="true"],
 [data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"]:focus-visible,
 [data-sidebar-version="v2"] .sidebar-v2-row[data-active="false"]:has(:focus-visible) {
-  background: var(--sv2-row-hover);
+  background: var(--sv2-session-row-hover);
 }
 
 /* Settle is the one labelled action: it is the primary triage verb and the
@@ -1029,7 +1068,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 
 [data-sidebar-version="v2"] .sidebar-v2-shelf-chevron {
   flex-shrink: 0;
-  transition: transform 150ms ease;
+  transition: transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-shelf-chevron[data-expanded="true"] {
@@ -1090,7 +1129,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  */
 [data-sidebar-version="v2"] .sidebar-v2-group-chevron {
   flex-shrink: 0;
-  transition: transform 150ms ease;
+  transition: transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-sidebar-version="v2"] .sidebar-v2-group-chevron[data-expanded="true"] {

@@ -14,9 +14,10 @@ type SidebarRefreshSnapshotMessage = {
  * CDXC:SidebarRefreshDiagnostics 2026-05-11-12:32
  * Sidebar refresh investigations need a dedicated persistent log that records
  * React instance lifetime, hydrate boundaries, and action-triggered session
- * count changes only when Settings debugging mode is enabled. Keep this probe
- * separate from order/startup logs so a user reproduction can be shared without
- * mixing unrelated sidebar diagnostics.
+ * count changes only when Settings enables the relevant scenario; the native
+ * writer additionally enforces the global Show debug UI controls gate. Keep
+ * this probe separate from order/startup logs so a user reproduction can be
+ * shared without mixing unrelated sidebar diagnostics.
  */
 export function createSidebarRefreshDebugInstanceId(): string {
   sidebarRefreshDebugInstanceSequence += 1;
@@ -36,6 +37,7 @@ export function postSidebarRefreshDebugLog(
   vscode.postMessage({
     details,
     event: `${SIDEBAR_REFRESH_DEBUG_EVENT_PREFIX}${event}`,
+    scenarioId: "native.sidebar.refresh",
     type: "sidebarDebugLog",
   });
 }

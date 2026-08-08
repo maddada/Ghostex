@@ -34,6 +34,7 @@ function postSidebarBootstrapReproLog(event: string, details: Record<string, unk
       elapsedMs: getBootstrapElapsedMs(),
     },
     event: `repro.sidebarStartup.bootstrap.${event}`,
+    scenarioId: "native.sidebar.refresh",
     type: "sidebarDebugLog",
   });
 }

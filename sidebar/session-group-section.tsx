@@ -9,6 +9,7 @@ import {
   IconCopy,
   IconFolder,
   IconFolderOpen,
+  IconEyeOff,
   IconGitBranch,
   IconGitPullRequest,
   IconMessageCircle,
@@ -24,7 +25,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { CollisionPriority } from "@dnd-kit/abstract";
-import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
+import { PointerSensor } from "@dnd-kit/dom";
 import { useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import {
@@ -44,6 +45,7 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { AppTooltip } from "./app-tooltip";
+import { SidebarV2ProjectIcon } from "./v2/sidebar-v2-icons";
 import { T3CODE_ENABLED } from "../shared/feature-flags";
 import {
   getSidebarSessionLifecycleState,
@@ -51,7 +53,7 @@ import {
 } from "../shared/session-grid-contract";
 import type { SidebarProjectDiffStats } from "../shared/project-diff-stats";
 import type { SidebarAgentButton } from "../shared/sidebar-agents";
-import type { SidebarCommandButton } from "../shared/sidebar-commands";
+import type { SidebarCommandButton, SidebarCommandScope } from "../shared/sidebar-commands";
 import { DEFAULT_SIDEBAR_COMMAND_ICON } from "../shared/sidebar-command-icons";
 import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
 import {
@@ -82,6 +84,7 @@ import {
 } from "./sortable-session-card";
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { useCollapsibleHeight } from "./use-collapsible-height";
+import { useSidebarCollapsiblePresence } from "./sidebar-collapse-animation";
 import type { WebviewApi } from "./webview-api";
 import { openAppModal } from "./app-modal-host-bridge";
 import {
@@ -109,6 +112,7 @@ import {
   type PrimaryAgentLauncherChangedEvent,
 } from "./primary-agent-launcher";
 import { ProjectAgentLauncherIcon } from "./project-agent-launcher-icon";
+import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
 
 const CONTEXT_MENU_MARGIN_PX = 12;
 const CONTEXT_MENU_WIDTH_PX = 196;
@@ -117,23 +121,11 @@ const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
 const GROUP_CONTROL_MENU_MARGIN_PX = 12;
 const GROUP_AGENT_MENU_WIDTH_PX = 220;
 /**
- * CDXC:ProjectReorder 2026-06-13-05:19:
- * macOS sidebar project-header reorder should require a slightly longer hold
- * than session-card dragging so normal header clicks and small pointer moves
- * do not activate project drag too soon.
- *
- * CDXC:GroupReorder 2026-07-12:
- * Mouse drags also activate through a plain distance constraint so an
- * immediate header drag reorders without waiting out the hold delay; a fast
- * pointer move past the 12px hold tolerance used to silently cancel the delay
- * constraint and the drag never started. Touch keeps hold-only activation so
- * sidebar scrolling does not turn into group drags.
+ * CDXC:SidebarReorderActivation 2026-08-08:
+ * Project headers define the shared sidebar reorder gesture. Its timing and
+ * distance constraints now live in `sidebar-reorder-activation.ts` so session,
+ * collection, and machine rows cannot silently drift to a slower gesture.
  */
-const GROUP_DRAG_HOLD_DELAY_MS = 250;
-const GROUP_DRAG_HOLD_TOLERANCE_PX = 12;
-const GROUP_DRAG_DISTANCE_PX = 8;
-const TOUCH_GROUP_DRAG_HOLD_DELAY_MS = 320;
-const TOUCH_GROUP_DRAG_HOLD_TOLERANCE_PX = 12;
 const PROJECT_EDITOR_DISPLAY_MAX_FILES = 99;
 const EMPTY_PROJECT_NEW_SESSION_LABEL = "New Session";
 const DISABLED_GROUP_DND_AX_ATTRIBUTES = [
@@ -259,37 +251,14 @@ function getProjectThemeSwatchStyle(themeColor: string | undefined): CSSProperti
 
 /**
  * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
- * Exported so Sidebar V2's grouped project headers drag with the EXACT same
- * activation constraints as V1's, instead of a second copy of the numbers. Two
- * of the properties below are load-bearing bug fixes, and a divergent copy would
- * silently lose them: the Distance constraint next to the Delay one (a fast
- * pointer move past the hold tolerance used to cancel the drag entirely), and
- * the deliberate absence of a KeyboardSensor (an uncommitted keyboard drag
- * leaves the shared dnd manager non-idle and disables EVERY pointer drag in the
- * sidebar).
+ * Exported so Sidebar V2's grouped project headers also inherit V1's control
+ * blocking and deliberate absence of a KeyboardSensor. The pointer timing and
+ * distance rules themselves live in `sidebar-reorder-activation.ts`, shared by
+ * every sidebar reorder surface.
  */
 export const groupSensors = [
   PointerSensor.configure({
-    activationConstraints(event) {
-      if (event.pointerType === "touch") {
-        return [
-          new PointerActivationConstraints.Delay({
-            tolerance: TOUCH_GROUP_DRAG_HOLD_TOLERANCE_PX,
-            value: TOUCH_GROUP_DRAG_HOLD_DELAY_MS,
-          }),
-        ];
-      }
-
-      return [
-        new PointerActivationConstraints.Delay({
-          tolerance: GROUP_DRAG_HOLD_TOLERANCE_PX,
-          value: GROUP_DRAG_HOLD_DELAY_MS,
-        }),
-        new PointerActivationConstraints.Distance({
-          value: GROUP_DRAG_DISTANCE_PX,
-        }),
-      ];
-    },
+    activationConstraints: getSidebarReorderActivationConstraints,
     preventActivation(event, source) {
       return shouldPreventGroupDragActivation(event.target, source.handle ?? source.element);
     },
@@ -522,12 +491,14 @@ export type SessionGroupSectionProps = {
   index: number;
   isGroupDragPreviewSource?: boolean;
   isCollapsed: boolean;
+  isHidden?: boolean;
   onAutoEditHandled: () => void;
   onCollapsedChange: (groupId: string, collapsed: boolean) => void;
   onCreateSessionRequested?: (groupId: string) => void;
   onFocusRequested?: (groupId: string, sessionId: string) => void;
   onCreateProjectCollection?: (projectId: string) => void;
   onMoveProjectToCollection?: (projectId: string, collectionId: string | undefined) => void;
+  onHideGroup?: () => void;
   onSessionSelectionChange?: (request: SidebarSessionSelectionChangeRequest) => void;
   orderedSessionIds?: readonly string[];
   selectedSearchSessionId?: string;
@@ -663,12 +634,14 @@ export function SessionGroupSection({
   index,
   isGroupDragPreviewSource = false,
   isCollapsed,
+  isHidden = false,
   onAutoEditHandled,
   onCollapsedChange,
   onCreateSessionRequested,
   onFocusRequested,
   onCreateProjectCollection,
   onMoveProjectToCollection,
+  onHideGroup,
   onSessionSelectionChange,
   orderedSessionIds: orderedSessionIdsProp,
   selectedSearchSessionId,
@@ -691,6 +664,9 @@ export function SessionGroupSection({
   const group = useSidebarStore((state) => state.groupsById[groupId]);
   const storedSessionIds = useSidebarStore((state) => state.sessionIdsByGroup[groupId] ?? []);
   const sessionsById = useSidebarStore((state) => state.sessionsById);
+  const containsActiveSession =
+    group?.isActive === true &&
+    storedSessionIds.some((sessionId) => sessionsById[sessionId]?.isFocused === true);
   const projectWorktreeCount = useSidebarStore((state) => {
     const projectId = state.groupsById[groupId]?.projectContext?.editor.projectId;
     if (!projectId) {
@@ -716,9 +692,27 @@ export function SessionGroupSection({
     }
     return state.hud.commandsByProject?.[projectId];
   });
+  /*
+   * CDXC:GlobalActions 2026-08-07:
+   * Global Actions live in their own daemon-owned list, never in
+   * commandsByProject, so reading only the per-project block made the row
+   * toggle dead for them. Merge the two lists here and keep each button's
+   * scope beside it: the scopes are separate id spaces, so the click needs to
+   * say which list its id came from, and React needs a key that cannot
+   * collide when both lists happen to hold the same id.
+   *
+   * Globals render first, matching Settings > Actions, which also lists Global
+   * Actions above the project's own. That order also keeps a global button at
+   * the same spot on every row, since only the project part varies per row.
+   */
+  const globalCommands = useSidebarStore((state) => state.hud.globalCommands);
   const projectRowCommands = useMemo(
-    () => (projectCommands ?? []).filter((command) => command.showOnProjectRow),
-    [projectCommands],
+    () =>
+      [
+        ...(globalCommands ?? []).map((command) => ({ command, scope: "global" }) as const),
+        ...(projectCommands ?? []).map((command) => ({ command, scope: "project" }) as const),
+      ].filter((entry) => entry.command.showOnProjectRow),
+    [globalCommands, projectCommands],
   );
   const orderedSessionIds = orderedSessionIdsProp ?? storedSessionIds;
   const [contextMenuPosition, setContextMenuPosition] = useState<GroupContextMenuPosition>();
@@ -850,6 +844,10 @@ export function SessionGroupSection({
     (state) =>
       state.hud.settings?.showProjectEditorDiffFileCount ??
       DEFAULT_ghostex_SETTINGS.showProjectEditorDiffFileCount,
+  );
+  const showProjectIcons = useSidebarStore(
+    (state) =>
+      state.hud.settings?.showProjectIcons ?? DEFAULT_ghostex_SETTINGS.showProjectIcons,
   );
   const projectSessionListCollapsedCount = useSidebarStore(
     (state) =>
@@ -1025,6 +1023,7 @@ export function SessionGroupSection({
         ...details,
       },
       event,
+      scenarioId: "native.pane.reorder",
       type: "sidebarDebugLog",
     });
   });
@@ -1213,7 +1212,18 @@ export function SessionGroupSection({
    * session rows, row dnd hooks, row observers, or sticky-body scroll
    * measurement while the user has collapsed a project.
    */
-  const shouldRenderGroupSessionsBody = !isCollapsed;
+  const {
+    isPresent: shouldRenderGroupSessionsBody,
+    isVisuallyCollapsed: isGroupSessionsBodyVisuallyCollapsed,
+    setCollapsibleElement: setGroupSessionsBodyElement,
+  } = useSidebarCollapsiblePresence(isCollapsed);
+  const setSessionsShellElement = useCallback(
+    (element: HTMLDivElement | null) => {
+      sessionsShellRef.current = element;
+      setGroupSessionsBodyElement(element);
+    },
+    [setGroupSessionsBodyElement],
+  );
   const groupTitleActionLabel =
     canToggleCollapsed ? `${isCollapsed ? "Expand" : "Collapse"} ${group.title}` : group.title;
   /**
@@ -1569,7 +1579,10 @@ export function SessionGroupSection({
     });
   };
 
-  const requestRunProjectRowCommand = (command: SidebarCommandButton) => {
+  const requestRunProjectRowCommand = (
+    command: SidebarCommandButton,
+    scope: SidebarCommandScope,
+  ) => {
     if (!projectContext) {
       return;
     }
@@ -1578,10 +1591,16 @@ export function SessionGroupSection({
      * Row Action clicks stay selector-shaped like the Command Palette: command
      * id plus the row's group id. The host resolves launch metadata from its
      * trusted per-project HUD state and activates the project before running.
+     *
+     * CDXC:GlobalActions 2026-08-07:
+     * The scope names the list to resolve the id against; the group id keeps
+     * meaning the project to run in, so a Global Action clicked on a row runs
+     * in that row's project exactly like a project one.
      */
     vscode.postMessage({
       commandId: command.commandId,
       groupId: group.groupId,
+      scope,
       type: "runSidebarCommand",
     });
   };
@@ -1945,6 +1964,7 @@ export function SessionGroupSection({
         className="group"
         data-active={String(group.isActive)}
         data-collapsed={String(isCollapsed)}
+        data-contains-active-session={String(containsActiveSession)}
         data-dragging={String(Boolean(sortable.isDragging || isGroupDragPreviewSource))}
         data-group-drop-position={groupDropPosition}
         data-drop-target={String(isGroupDropTarget)}
@@ -1991,7 +2011,7 @@ export function SessionGroupSection({
             ) : (
               <div
                 className="group-title-row"
-                data-project-leading-icon={String(!projectContext || isChatCollection)}
+                data-project-leading-icon={String(showProjectIcons)}
               >
                 {projectContext ? (
                   isChatCollection ? (
@@ -2057,6 +2077,21 @@ export function SessionGroupSection({
                     ) : null}
                   </button>
                 )}
+                {showProjectIcons && projectContext && !isChatCollection ? (
+                  <SidebarV2ProjectIcon
+                    discoveredIconDataUrl={projectContext.discoveredIconDataUrl}
+                    fallback={
+                      projectContext.worktree
+                        ? "worktree"
+                        : isCollapsed
+                          ? "folder"
+                          : "folder-open"
+                    }
+                    icon={projectContext.icon}
+                    iconDataUrl={projectContext.iconDataUrl}
+                    title={group.title}
+                  />
+                ) : null}
                 <div
                   className="group-title-handle"
                   data-draggable={String(!isChatCollection)}
@@ -2089,6 +2124,7 @@ export function SessionGroupSection({
                         type="button"
                       >
                         <span className="group-title section-titlebar-label">{group.title}</span>
+                        {isHidden ? <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} /> : null}
                       </button>
                     </AppTooltip>
                   ) : (
@@ -2108,6 +2144,7 @@ export function SessionGroupSection({
                         type="button"
                       >
                         <span className="group-title section-titlebar-label">{group.title}</span>
+                        {isHidden ? <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} /> : null}
                       </button>
                     </AppTooltip>
                   )}
@@ -2353,17 +2390,17 @@ export function SessionGroupSection({
                           />
                         </ProjectHeaderActionButton>
                         {projectHeaderActions === "all"
-                          ? projectRowCommands.map((command) => {
+                          ? projectRowCommands.map(({ command, scope }) => {
                               const commandLabel = command.name.trim() || "Run Action";
                               return (
                                 <ProjectHeaderActionButton
                                   aria-label={`Run ${commandLabel} in ${group.title}`}
                                   className="group-add-button group-project-row-command-button"
-                                  key={command.commandId}
+                                  key={`${scope}:${command.commandId}`}
                                   onClick={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
-                                    requestRunProjectRowCommand(command);
+                                    requestRunProjectRowCommand(command, scope);
                                   }}
                                   tooltip={commandLabel}
                                   type="button"
@@ -2470,13 +2507,14 @@ export function SessionGroupSection({
         ) : null}
         {shouldRenderGroupSessionsBody ? (
           <div
-            aria-hidden={isCollapsed}
+            aria-hidden={isGroupSessionsBodyVisuallyCollapsed}
             className="group-sessions-shell sidebar-collapse-shell"
-            data-collapsed={String(isCollapsed)}
+            data-collapsed={String(isGroupSessionsBodyVisuallyCollapsed)}
+            inert={isGroupSessionsBodyVisuallyCollapsed ? true : undefined}
             data-project-session-list-clipped={String(shouldClipProjectSessionList)}
             data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}
             onWheel={handleSessionsShellWheel}
-            ref={sessionsShellRef}
+            ref={setSessionsShellElement}
             style={sessionsShellStyle}
           >
             <div
@@ -2985,6 +3023,20 @@ export function SessionGroupSection({
                         />
                       </button>
                     ) : null}
+                    {onHideGroup ? (
+                      <button
+                        className="session-context-menu-item"
+                        onClick={() => {
+                          setContextMenuPosition(undefined);
+                          onHideGroup();
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <IconEyeOff aria-hidden="true" className="session-context-menu-icon" size={14} />
+                        {isHidden ? "Unhide" : "Hide"}
+                      </button>
+                    ) : null}
                     <div className="session-context-menu-divider" role="separator" />
                     <div aria-hidden="true" className="session-context-menu-spacer" />
                     <button
@@ -3096,6 +3148,20 @@ export function SessionGroupSection({
                           size={14}
                         />
                         New Group
+                      </button>
+                    ) : null}
+                    {onHideGroup ? (
+                      <button
+                        className="session-context-menu-item"
+                        onClick={() => {
+                          setContextMenuPosition(undefined);
+                          onHideGroup();
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <IconEyeOff aria-hidden="true" className="session-context-menu-icon" size={14} />
+                        {isHidden ? "Unhide" : "Hide"}
                       </button>
                     ) : null}
                     <button

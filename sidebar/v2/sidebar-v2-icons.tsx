@@ -1,4 +1,11 @@
-import { IconFolder, IconMessageCircle, IconTerminal2, IconWorld } from "@tabler/icons-react";
+import {
+  IconFolder,
+  IconFolderOpen,
+  IconGitBranch,
+  IconMessageCircle,
+  IconTerminal2,
+  IconWorld,
+} from "@tabler/icons-react";
 import type { CSSProperties } from "react";
 import type { SidebarSessionItem } from "../../shared/session-grid-contract";
 import {
@@ -111,20 +118,18 @@ export function SidebarV2SessionIcon({
  *      project, and no automatic guess should override that;
  *   2. the icon the project's OWN repository ships, discovered by gxserver;
  *   3. a typed Tabler glyph;
- *   4. the folder.
+ *   4. the surface-specific fallback: worktree, open folder, or closed folder.
  *
  * The discovered icon deliberately outranks the TYPED glyph, which is the one
  * place this chain departs from `RecentProjectIcon`. A typed glyph is almost
  * never a considered choice on a session row: V1 does not render typed glyphs on
- * session-tree project rows at all (removed 2026-06-29 —
- * `sidebar/session-group-section.tsx` returns null for project groups), so
- * nobody picked one expecting to see it here, and in practice they are legacy
- * values migrated forward from the deprecated macOS app's picker, which the gpui
- * app no longer even exposes. A repository's real favicon is a better answer
- * than an inherited `archive` glyph. Uploaded images stay on top because V1 does
- * honor those elsewhere, so they ARE load-bearing user intent; and the glyph is
- * still the fallback whenever a project ships no icon of its own, so nothing
- * that used to render disappears.
+ * session-tree project rows only gained typed glyph support when this resolver
+ * became shared, so in practice many are legacy values migrated forward from
+ * the deprecated macOS app's picker, which the gpui app no longer exposes. A
+ * repository's real favicon is a better answer than an inherited `archive`
+ * glyph. Uploaded images stay on top because they carry deliberate user intent;
+ * and the glyph is still the fallback whenever a project ships no icon of its
+ * own, so nothing that used to render disappears.
  */
 export type SidebarV2ProjectIconProps = {
   /**
@@ -135,6 +140,7 @@ export type SidebarV2ProjectIconProps = {
    * image and above the typed glyph — see the chain above.
    */
   discoveredIconDataUrl?: string;
+  fallback?: "folder" | "folder-open" | "worktree";
   icon?: WorkspaceProjectIcon;
   iconDataUrl?: string;
   title: string;
@@ -142,6 +148,7 @@ export type SidebarV2ProjectIconProps = {
 
 export function SidebarV2ProjectIcon({
   discoveredIconDataUrl,
+  fallback = "folder",
   icon,
   iconDataUrl,
   title,
@@ -200,10 +207,17 @@ export function SidebarV2ProjectIcon({
       </AppTooltip>
     );
   }
+  const FallbackIcon =
+    fallback === "worktree"
+      ? IconGitBranch
+      : fallback === "folder-open"
+        ? IconFolderOpen
+        : IconFolder;
   return (
-    <IconFolder
+    <FallbackIcon
       aria-hidden="true"
       className="sidebar-v2-project-icon"
+      data-fallback-kind={fallback}
       data-icon-variant="glyph"
       size={16}
       stroke={1.8}

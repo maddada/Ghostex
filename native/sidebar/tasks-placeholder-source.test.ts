@@ -60,6 +60,60 @@ describe("Project Board form event handling", () => {
     expect(laneLayoutSource).toContain("border-left-width: 0;");
   });
 
+  test("keeps the Kanban board scrollbars grabbable with the mouse", () => {
+    /*
+     * CDXC:BoardScrollbars 2026-08-07:
+     * The board strip and the lane bodies must keep a real scrollbar box, or the
+     * board is wheel-only: Chromium measured a 0px scroll gutter (nothing to
+     * click or drag) whenever the scroller carried scrollbar-width: none, a
+     * scrollbar-color, or a zero-sized ::-webkit-scrollbar. A decorative
+     * pointer-events: none overlay is not a scrollbar and must not come back.
+     */
+    const boardScrollbarSource = sourceBetween(
+      ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
+      ".project-board-toolbar {",
+    );
+
+    expect(boardScrollbarSource).toContain("scrollbar-width: auto;");
+    expect(boardScrollbarSource).not.toContain("scrollbar-color");
+    expect(boardScrollbarSource).toContain("height: 8px;");
+    expect(boardScrollbarSource).toContain("width: 8px;");
+    expect(tasksPlaceholderSource).not.toContain("project-board-lane-scrollbar");
+  });
+
+  test("keeps the ticket dialog body scrollbar grabbable with the mouse", () => {
+    /*
+     * CDXC:DialogScrollbar 2026-08-07:
+     * The ticket dialog body shared the comment list's hidden-scrollbar rules,
+     * so Chromium measured a 0px scroll gutter on it and neither a track click
+     * nor a thumb drag anywhere along its right edge moved it — wheel-only. It
+     * must stay on the board's real-scrollbar rules. The comment list must stay
+     * hidden here because its Radix ScrollArea paints its own grabbable bar, and
+     * the dialog thumb's hover reveal must set background-color rather than the
+     * background shorthand, which would reset the content-box clip that keeps
+     * the painted rail at 2px.
+     */
+    const hiddenScrollbarSource = sourceBetween(
+      '.project-ticket-comment-list [data-slot="scroll-area-viewport"] {',
+      ".project-board-lanes,",
+    );
+    const dialogScrollbarSource = sourceBetween(
+      ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
+      ".project-board-toolbar {",
+    );
+    const dialogThumbHoverSource = sourceBetween(
+      ".project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb {",
+      '.project-ticket-comment-list [data-slot="scroll-area-scrollbar"] {',
+    );
+
+    expect(hiddenScrollbarSource).not.toContain("project-ticket-dialog-body");
+    expect(hiddenScrollbarSource).toContain("scrollbar-width: none;");
+    expect(hiddenScrollbarSource).toContain("width: 2px;");
+    expect(dialogScrollbarSource).toContain(".project-ticket-dialog-body::-webkit-scrollbar {");
+    expect(dialogScrollbarSource).toContain(".project-ticket-dialog-body::-webkit-scrollbar-thumb {");
+    expect(dialogThumbHoverSource).toContain("background-color: var(--project-board-scrollbar);");
+  });
+
   test("shows the first-open Kanban loading overlay until initial load finishes", () => {
     /*
      * CDXC:ProjectBoardLoading 2026-06-20-18:21:
@@ -150,6 +204,33 @@ describe("Project Board form event handling", () => {
     expect(projectBoardSource).toContain("void deleteTicket(contextMenuTicket)");
     expect(projectBoardSource).toContain('"Start work"');
     expect(contextMenuSource).toContain('"Delete"');
+  });
+
+  test("shows the Beads creator distinctly from the assignee", () => {
+    /*
+     * CDXC:ProjectBoardCreator 2026-08-07-07:52:
+     * Cards and Edit ticket show who created a bead next to who works it, so the two must read
+     * differently: the creator is muted "by <name>" text with no person icon, the assignee keeps its
+     * icon chip. Both resolve the creator through ticketCreatorName so it disappears when it is unset
+     * or the same person as the assignee, and the assignee chip spells its role out in the tooltip.
+     */
+    const ticketCardSource = sourceBetween("function TicketCard(", "function ProjectBoardTicketContextMenu(");
+    const metaFieldsSource = sourceBetween("function TicketMetaFields(", "function DependencyPicker(");
+    const creatorStyleSource = sourceBetween(
+      ".project-board-card-creator {",
+      ".project-board-card-assignee {",
+    );
+
+    expect(ticketCardSource).toContain("ticketCreatorName(ticket.created_by, ticket.assignee)");
+    expect(ticketCardSource).toContain('className="project-board-card-creator"');
+    expect(ticketCardSource).toContain("by {creator}");
+    expect(ticketCardSource).toContain("title={`Assigned to ${ticket.assignee}`}");
+    expect(metaFieldsSource).toContain("ticketCreatorName(createdBy, assignee)");
+    expect(metaFieldsSource).toContain("{creator ? (");
+    expect(metaFieldsSource).toContain("<span>Created by</span>");
+    expect(metaFieldsSource).toContain('className="project-ticket-creator-value"');
+    expect(creatorStyleSource).toContain("text-overflow: ellipsis;");
+    expect(tasksPlaceholderSource).toContain("createdBy={detail.ticket?.created_by}");
   });
 
   test("reports sanitized focus-owner events for native Kanban focus arbitration", () => {
@@ -286,6 +367,68 @@ describe("Project Board form event handling", () => {
       "assignedAgentIdForTicket(ticket) || selectedAgentId || conversationState.defaultAgentId",
     );
     expect(startWorkSource).toContain("agentId: startAgentId,");
+  });
+
+  test("sorts lanes in the board toolbar before the visible ticket limit", () => {
+    /*
+     * CDXC:ProjectBoardSort 2026-08-07:
+     * The Kanban toolbar owns ticket order alongside the existing filters, and lane grouping must
+     * sort before BoardLane slices to PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN so the newest
+     * closed beads stay visible in Done.
+     */
+    const projectBoardSource = sourceBetween("function ProjectBoardApp()", "function TicketMetaFields(");
+    const filtersSource = sourceBetween(
+      '<section className="project-board-filters"',
+      '{activeSurfaceTab === "triage" ? (',
+    );
+    const laneSource = sourceBetween("function BoardLane({", "function TicketCard(");
+
+    expect(projectBoardSource).toContain(
+      "const [sortOption, setSortOption] = useState<BoardSortOption>(storedViewPreferences.sortOption);",
+    );
+    expect(projectBoardSource).toContain("result[column.key] = sortBoardTickets(");
+    expect(projectBoardSource).toContain("sortOption,\n          column.key,");
+    expect(filtersSource).toContain('aria-label="Sort tickets"');
+    expect(filtersSource).toContain("PROJECT_BOARD_SORT_SELECT_ITEMS");
+    expect(filtersSource).toContain("setSortOption(value as BoardSortOption)");
+    expect(laneSource).toContain(
+      "const visibleTickets = tickets.slice(0, PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN);",
+    );
+  });
+
+  test("restores and stores the board toolbar selections across projects", () => {
+    /*
+     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * Switching away from the Kanban tab unmounts the board surface, so the toolbar must seed its
+     * priority, estimate, and sort state from the stored preferences and write every later
+     * selection back. The key and the write are project-independent so the selections follow the
+     * user into every board. Search stays out of that payload.
+     */
+    const projectBoardSource = sourceBetween("function ProjectBoardApp()", "function TicketMetaFields(");
+
+    expect(tasksPlaceholderSource).toContain(
+      "function readProjectBoardViewPreferences(): ProjectBoardViewPreferences {",
+    );
+    expect(tasksPlaceholderSource).toContain(
+      'JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || "null"),',
+    );
+    expect(tasksPlaceholderSource).toContain("return DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES;");
+    expect(projectBoardSource).toContain(
+      "const storedViewPreferences = useMemo(() => readProjectBoardViewPreferences(), []);",
+    );
+    expect(projectBoardSource).toContain(
+      "useState<BoardPriorityFilter>(\n    storedViewPreferences.priorityFilter,\n  );",
+    );
+    expect(projectBoardSource).toContain(
+      "useState<BoardEstimateFilter>(\n    storedViewPreferences.estimateFilter,\n  );",
+    );
+    expect(projectBoardSource).toContain("useState<BoardSortOption>(storedViewPreferences.sortOption);");
+    expect(projectBoardSource).toContain(
+      "try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption }),\n      );\n    } catch {",
+    );
+    expect(projectBoardSource).toContain("}, [estimateFilter, priorityFilter, sortOption]);");
+    expect(projectBoardSource).not.toContain("JSON.stringify({ estimateFilter, priorityFilter, searchQuery");
+    expect(projectBoardSource).toContain('const [searchQuery, setSearchQuery] = useState("");');
   });
 
   test("snapshots form values before functional state updaters", () => {

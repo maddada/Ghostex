@@ -461,6 +461,28 @@
   cursor: pointer;
 }
 
+/*
+ * Project identity sits in normal flow immediately before the project name.
+ * V2 owns the renderer because it already resolves the T3-style discovered
+ * favicon chain; classic project rows reuse it here so both sidebar modes show
+ * the same image, typed glyph, worktree, or folder state.
+ */
+.group[data-project-group="true"] .sidebar-v2-project-icon {
+  border-radius: 5px;
+  color: color-mix(in srgb, var(--app-muted) 65%, transparent);
+  flex: none;
+  height: 16px;
+  object-fit: contain;
+  width: 16px;
+}
+
+.group[data-project-group="true"]
+  .sidebar-v2-project-icon[data-icon-variant="tabler"] {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
 .group[data-project-path-state="missing"] .group-project-terminal-button,
 .group[data-project-path-state="notDirectory"] .group-project-terminal-button,
 .group[data-project-path-state="unavailable"] .group-project-terminal-button,
@@ -478,7 +500,7 @@
    * the trailing slot without making the title drift during expand/collapse.
    */
   flex: 0 1 auto;
-  margin-left: calc(8px * var(--sidebar-density-scale));
+  margin-left: 10px;
   max-width: 100%;
 }
 
@@ -1864,7 +1886,7 @@ section.project-collection.project-collection-drag-ghost {
   .group[data-project-group="true"][data-active="true"]
   .group-title {
   color: #ffffff;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
@@ -2099,4 +2121,11 @@ section.project-collection.project-collection-drag-ghost {
     100% + var(--reference-sidebar-scroll-row-bleed-left, 7px) +
       var(--reference-sidebar-scroll-row-bleed-right, 0px)
   );
+}
+.sidebar-hidden-item-icon {
+  align-self: center;
+  display: block;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  opacity: 0.65;
 }

@@ -3,6 +3,7 @@ import {
   IconArrowsDiagonalMinimize,
   IconCaretRightFilled,
   IconCheck,
+  IconEyeOff,
   IconMoon,
   IconPalette,
   IconPencil,
@@ -14,7 +15,7 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
-import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
+import { PointerSensor } from "@dnd-kit/dom";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { SidebarSessionItem } from "../shared/session-grid-contract";
@@ -25,6 +26,8 @@ import {
 import { SidebarContextMenuPortal } from "./sidebar-context-menu-portal";
 import { createProjectCollectionDragData } from "./sidebar-dnd";
 import { SidebarFixedTooltipButton } from "./sidebar-fixed-tooltip-button";
+import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
+import { useSidebarCollapsiblePresence } from "./sidebar-collapse-animation";
 import {
   getAwakeTerminalAndBrowserCount,
   getGroupSessionSummary,
@@ -54,6 +57,7 @@ type ProjectCollectionSectionProps = {
    */
   dropIndicatorPosition?: "before" | "after";
   index: number;
+  containsActiveSession?: boolean;
   /*
    * CDXC:CollectionDragPreview 2026-07-22:
    * With feedback "none" dnd-kit never flips sortable.isDragging (only its
@@ -61,10 +65,12 @@ type ProjectCollectionSectionProps = {
    * drag-preview state marks the grabbed section as the faint placeholder.
    */
   isDragPreviewSource?: boolean;
+  isHidden?: boolean;
   onAutoEditHandled: () => void;
   onBulkProjectToggle: () => void;
   onChange: (collection: SidebarProjectCollection) => void;
   onDelete: () => void;
+  onHide: () => void;
   onSelectSessions: (sessionIds: string[]) => void;
   sessionIds: readonly string[];
   sessionTagListItems: readonly SidebarSessionTagListItem[];
@@ -87,10 +93,6 @@ type ContextMenuPosition = {
   y: number;
 };
 
-const PROJECT_COLLECTION_DRAG_DISTANCE_PX = 8;
-const TOUCH_PROJECT_COLLECTION_DRAG_HOLD_DELAY_MS = 320;
-const TOUCH_PROJECT_COLLECTION_DRAG_HOLD_TOLERANCE_PX = 12;
-
 /*
  * CDXC:CollectionReorder 2026-07-21:
  * Pointer-only on purpose. dnd-kit's KeyboardSensor starts a drag on
@@ -103,22 +105,7 @@ const TOUCH_PROJECT_COLLECTION_DRAG_HOLD_TOLERANCE_PX = 12;
  */
 const projectCollectionSensors = [
   PointerSensor.configure({
-    activationConstraints(event) {
-      if (event.pointerType === "touch") {
-        return [
-          new PointerActivationConstraints.Delay({
-            tolerance: TOUCH_PROJECT_COLLECTION_DRAG_HOLD_TOLERANCE_PX,
-            value: TOUCH_PROJECT_COLLECTION_DRAG_HOLD_DELAY_MS,
-          }),
-        ];
-      }
-
-      return [
-        new PointerActivationConstraints.Distance({
-          value: PROJECT_COLLECTION_DRAG_DISTANCE_PX,
-        }),
-      ];
-    },
+    activationConstraints: getSidebarReorderActivationConstraints,
   }),
 ];
 
@@ -126,14 +113,17 @@ export function ProjectCollectionSection({
   autoEdit,
   children,
   collection,
+  containsActiveSession = false,
   draggingDisabled,
   dropIndicatorPosition,
   index,
   isDragPreviewSource = false,
+  isHidden = false,
   onAutoEditHandled,
   onBulkProjectToggle,
   onChange,
   onDelete,
+  onHide,
   onSelectSessions,
   sessionIds,
   sessionTagListItems,
@@ -200,6 +190,11 @@ export function ProjectCollectionSection({
     bulkProjectActionLabel === "Collapse All"
       ? IconArrowsDiagonalMinimize
       : IconArrowsDiagonal2;
+  const {
+    isPresent: shouldRenderProjects,
+    isVisuallyCollapsed: areProjectsVisuallyCollapsed,
+    setCollapsibleElement: setProjectsElement,
+  } = useSidebarCollapsiblePresence(collection.collapsed);
 
   useEffect(() => {
     if (!autoEdit) {
@@ -276,6 +271,7 @@ export function ProjectCollectionSection({
       className="project-collection"
       data-collapsed={String(collection.collapsed)}
       data-collection-drop-position={dropIndicatorPosition}
+      data-contains-active-session={String(containsActiveSession)}
       data-dragging={String(Boolean(sortable.isDragging || isDragPreviewSource))}
       data-drop-target={String(Boolean(sortable.isDropTarget))}
       data-sidebar-project-collection-id={collection.collectionId}
@@ -345,6 +341,9 @@ export function ProjectCollectionSection({
             type="button"
           >
             {collection.title}
+            {isHidden ? (
+              <IconEyeOff aria-label="Hidden" className="sidebar-hidden-item-icon" size={13} />
+            ) : null}
           </button>
         )}
         {shouldShowCollapsedStatus ? (
@@ -400,7 +399,17 @@ export function ProjectCollectionSection({
           </SidebarFixedTooltipButton>
         ) : null}
       </div>
-      {!collection.collapsed ? <div className="project-collection-projects">{children}</div> : null}
+      {shouldRenderProjects ? (
+        <div
+          aria-hidden={areProjectsVisuallyCollapsed}
+          className="project-collection-projects sidebar-animated-collapse-body"
+          data-collapsed={String(areProjectsVisuallyCollapsed)}
+          inert={areProjectsVisuallyCollapsed ? true : undefined}
+          ref={setProjectsElement}
+        >
+          {children}
+        </div>
+      ) : null}
       {menuView ? (
         <SidebarContextMenuPortal
           menuRef={menuRef}
@@ -605,6 +614,18 @@ export function ProjectCollectionSection({
               >
                 <IconPalette className="session-context-menu-icon" size={14} />
                 Group color
+              </button>
+              <button
+                className="session-context-menu-item"
+                onClick={() => {
+                  dismissMenu();
+                  onHide();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <IconEyeOff className="session-context-menu-icon" size={14} />
+                {isHidden ? "Unhide group" : "Hide group"}
               </button>
               <button
                 className="session-context-menu-item session-context-menu-item-danger"

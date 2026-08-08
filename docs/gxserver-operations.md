@@ -143,7 +143,7 @@ The app-launched and standalone daemon paths use the same compiled daemon code.
 - Node: system Node 22 LTS or newer. Ghostex does not install Node automatically.
 - zmx: bundled from the pinned submodule. Ghostex-managed zmx sessions must not use PATH `zmx`.
 - zehn: bundled from the pinned submodule.
-- Beads: bundled as the full pinned upstream `bd` CLI. Ghostex ignores shell-installed `bd`; source checkouts must build/stage the bundled artifact and shell workflows should use `gx bd`.
+- Beads: bundled from the checksum-pinned official v1.1.2 platform archive. Ghostex ignores shell-installed `bd`; packaging stages and smoke-tests that artifact, and shell workflows should use `gx bd`.
 
 If bundled `zmx` is missing, zmx-backed attach metadata must fail clearly. Falling back to PATH `zmx` is not allowed because the pinned fork carries Ghostex refresh behavior.
 
@@ -198,7 +198,7 @@ Bundled zmx missing:
 Beads missing:
 
 - Rebuild or reinstall Ghostex so the bundled `bd` artifact is staged.
-- Source checkouts must build/stage the bundled `bd` artifact; do not use PATH `bd` as a fallback.
+- Source checkouts must run the checksum-verifying artifact stager; do not build an arbitrary checkout or use PATH `bd` as a fallback.
 
 Full native macOS build blocked:
 

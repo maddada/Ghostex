@@ -66,6 +66,7 @@ export type SidebarV2ScopeOption = {
   iconDataUrl?: string;
   /** Quick/chat collections read as a pseudo-project in the scope menu. */
   isQuick: boolean;
+  isWorktree: boolean;
   label: string;
   machineName?: string;
   scopeId: string;
@@ -106,6 +107,7 @@ export type SidebarV2GroupModel = {
   discoveredIconDataUrl?: string;
   isQuick: boolean;
   isStale: boolean;
+  isWorktree: boolean;
   /** True when this row merges more than one physical checkout. */
   isMerged: boolean;
   machineName?: string;
@@ -134,6 +136,7 @@ export type SidebarV2ProjectIdentity = Pick<
   | "iconDataUrl"
   | "isQuick"
   | "isStale"
+  | "isWorktree"
   | "machineName"
   | "title"
 >;
@@ -222,6 +225,7 @@ function resolveProjectIdentity(
     iconDataUrl: group?.projectContext?.iconDataUrl,
     isQuick: group?.isChatCollection === true,
     isStale: group?.isStale === true,
+    isWorktree: Boolean(group?.projectContext?.worktree),
     machineName: group?.remoteMachineContext?.machineName,
     /*
      * CDXC:QuickSessions 2026-05-16-12:55 (V1 precedent):
@@ -544,6 +548,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         count: allSessions.length,
         groupId: null,
         isQuick: false,
+        isWorktree: false,
         label: "All projects",
         scopeId: SIDEBAR_V2_ALL_SCOPE_ID,
       },
@@ -561,6 +566,7 @@ export function createSidebarV2ViewModel(input: SidebarV2ViewModelInput): Sideba
         icon: group.icon,
         iconDataUrl: group.iconDataUrl,
         isQuick: group.isQuick,
+        isWorktree: group.isWorktree,
         label: group.title,
         machineName: group.machineName,
         scopeId: group.groupId,

@@ -566,9 +566,13 @@ harness-injected envelopes (AGENTS.md instructions, `<environment_context>`,
 `<recommended_plugins>`, `<skill>`) plus `developer` system prompts. So the
 event lane loses no human/assistant text and additionally carries the prompt
 WITHOUT the injected preamble, while decoding both lanes would double every
-turn. If a future Codex build stops writing the event lane this arm must come
-back (and the event lane must then be dropped instead) — the two are redundant,
-never complementary.
+turn. The two are redundant, never complementary.
+
+2026-08-07 update: newer Codex builds indeed stopped writing that event lane,
+but replaced it with `event_msg`/`item_completed` (UserMessage/AgentMessage
+items) rather than promoting this `message` lane — see codex_event_message.
+This arm therefore STAYS undecoded: the `message` lane is still the duplicate,
+envelope-carrying twin in both old- and new-style rollouts.
 */
 fn codex_response_item(
     payload: &Map<String, Value>,
@@ -694,8 +698,70 @@ fn codex_event_message(
             .map(|text| transcript_message(SessionChatRole::User, vec![text_block(text)])),
         Some("agent_message") => extract_string(payload.get("message"))
             .map(|text| transcript_message(SessionChatRole::Assistant, vec![text_block(text)])),
+        /*
+        CDXC:SessionChatCore 2026-08-07:
+        Newer Codex builds (observed with gpt-5.6 rollouts, 2026-08) STOPPED
+        writing the `user_message`/`agent_message` event lane entirely; visible
+        turns instead arrive as `item_completed` events whose `item` is a
+        `UserMessage`/`AgentMessage`. Without this arm every human/assistant
+        message in a new-style rollout decoded to nothing — chat showed only
+        reasoning summaries and tool calls, while the terminal showed the full
+        final answer. The two lanes are mutually exclusive per file (measured
+        over the 60 most recent local rollouts: 46 old-lane-only, 9
+        new-lane-only, 0 both), so decoding both cannot double a turn. Like the
+        old event lane, `item_completed` UserMessages carry only the visible
+        typed prompt — never the harness-injected AGENTS.md/environment
+        envelopes. Reasoning/CommandExecution/McpToolCall/FileChange items are
+        deliberately NOT decoded here: new-style rollouts still write their
+        `response_item` twins, which remain the sole source for those lanes.
+        */
+        Some("item_completed") => {
+            let item = as_record(payload.get("item"))?;
+            let role = match item.get("type").and_then(Value::as_str) {
+                Some("UserMessage") => SessionChatRole::User,
+                Some("AgentMessage") => SessionChatRole::Assistant,
+                _ => return None,
+            };
+            let blocks = codex_item_content_blocks(item.get("content"));
+            if blocks.is_empty() {
+                return None;
+            }
+            Some(SessionChatMessage {
+                id: extract_string(item.get("id")).unwrap_or(id),
+                role,
+                blocks,
+                timestamp,
+                source: SessionChatSource::Transcript,
+                turn_id: None,
+                byte_offset: None,
+            })
+        }
         _ => None,
     }
+}
+
+/*
+`item_completed` content blocks use their own spellings: `Text` (capitalized)
+in AgentMessages, `text` in UserMessages, and `skill` for a slash-skill
+invocation chip (`{type:"skill",name,path}`). Anything else falls through to
+the shared mapper so future image/attachment blocks render like Claude's.
+*/
+fn codex_item_content_blocks(content: Option<&Value>) -> Vec<SessionChatBlock> {
+    let Some(Value::Array(items)) = content else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(|entry| {
+            let record = entry.as_object()?;
+            match record.get("type").and_then(Value::as_str) {
+                Some("Text") => extract_string(record.get("text")).map(text_block),
+                Some("skill") => extract_string(record.get("name"))
+                    .map(|name| text_block(format!("Skill: {name}"))),
+                _ => claude_content_block(record),
+            }
+        })
+        .collect()
 }
 
 fn codex_call_input(payload: &Map<String, Value>) -> Value {
@@ -4418,6 +4484,53 @@ mod tests {
     }
 
     /*
+    Record shapes copied from a real 2026-08-07 gpt-5.6 rollout. These builds
+    write NO `user_message`/`agent_message` events; the visible turns arrive
+    only as `item_completed` items, and dropping them made chat end at the last
+    reasoning summary while the terminal showed the full final answer.
+    */
+    #[test]
+    fn codex_decodes_item_completed_message_lane() {
+        let user = decode_codex_transcript_line(
+            r#"{"timestamp":"2026-08-07T13:59:00.000Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"th1","turn_id":"t1","item":{"type":"UserMessage","id":"019fdc6f-1436-7b10-a55f-23ba56beb5ac","content":[{"type":"skill","name":"ghostex-browser-use","path":"/Users/madda/.agents/skills/ghostex-browser-use/SKILL.md"},{"type":"text","text":"explain questions 2 and 3"}]}}}"#,
+            "fb",
+        )
+        .expect("user item");
+        assert_eq!(user.role, SessionChatRole::User);
+        assert_eq!(user.id, "019fdc6f-1436-7b10-a55f-23ba56beb5ac");
+        assert_eq!(
+            user.blocks,
+            vec![
+                text_block("Skill: ghostex-browser-use".to_string()),
+                text_block("explain questions 2 and 3".to_string()),
+            ]
+        );
+
+        // AgentMessage spells its text block `Text`, unlike UserMessage's `text`.
+        let assistant = decode_codex_transcript_line(
+            r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"msg_0a5b","content":[{"type":"Text","text":"Created the Markdown plan."}]}}}"#,
+            "fb",
+        )
+        .expect("assistant item");
+        assert_eq!(assistant.role, SessionChatRole::Assistant);
+        assert_eq!(assistant.id, "msg_0a5b");
+        assert_eq!(message_text(&assistant), "Created the Markdown plan.");
+
+        // Reasoning/CommandExecution/McpToolCall items stay on the
+        // response_item lane, which new-style rollouts still write.
+        assert!(decode_codex_transcript_line(
+            r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"Reasoning","id":"rs1","summary_text":["**Planning**"],"raw_content":[]}}}"#,
+            "fb",
+        )
+        .is_none());
+        assert!(decode_codex_transcript_line(
+            r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"c1"}}}"#,
+            "fb",
+        )
+        .is_none());
+    }
+
+    /*
     Record shapes below are copied from real rollouts under the codex sessions
     directory, with the bodies trimmed. `custom_tool_call` +
     `custom_tool_call_output` are as frequent as the function-call lane in
@@ -6005,7 +6118,14 @@ mod tests {
         eprintln!(
             "stale last substantive {stale_last_substantive_ms}, successor last substantive {successor_last_substantive_ms}"
         );
-        assert!(successor_last_substantive_ms > stale_last_substantive_ms);
+        // Live-files drift guard (2026-08-07): the "stale" transcript keeps
+        // receiving fresh substantive records on this machine, so the
+        // staleness premise can expire. Never freeze relationships between
+        // live files in tests — skip when the repro state is gone.
+        if successor_last_substantive_ms <= stale_last_substantive_ms {
+            eprintln!("skipping: stale transcript is no longer stale on this machine");
+            return;
+        }
         match find_claude_successor_transcript(
             stale_session_id,
             &stale_path,

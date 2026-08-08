@@ -12,20 +12,18 @@
 	path = code-server
 	url = https://github.com/maddada/code-server.git
 	branch = ghostex
-# CDXC:T3CodeSubmodule 2026-06-07-13:00: Keep the Ghostex-managed T3 Code checkout under the root `t3code` submodule so local starts, packaging, and native development fallbacks use a reviewed fork branch instead of maintainer-local ~/dev/_active/t3code-embed state.
-[submodule "t3code"]
-	path = t3code
-	url = https://github.com/maddada/m7code.git
-	branch = ghostex
+# CDXC:T3CodeExternalCheckout 2026-08-07: The T3 Code fork checkout moved out of this repository to ~/dev/references/t3code as a reference-only project; packaging no longer requires it (see CDXC:T3CodeDisabled).
 [submodule "mobile"]
 	path = mobile
 	url = https://github.com/maddada/ghostex-mobile.git
 # CDXC:GPUIDependencies 2026-08-02: Keep external GPUI build inputs inside the
-# Ghostex checkout. Gitlinks pin reviewed upstream revisions; Ghostex-owned
-# compatibility patches remain in scripts/release-gpui/patches.
+# Ghostex checkout. Gitlinks pin reviewed revisions, and the dependencies with
+# Ghostex-owned runtime fixes use first-party fork branches so Actions can
+# reproduce the exact source committed here.
 [submodule ".dependencies/zed"]
 	path = .dependencies/zed
-	url = https://github.com/zed-industries/zed.git
+	url = https://github.com/maddada/zed.git
+	branch = ghostex
 	ignore = dirty
 [submodule ".dependencies/cef-rs"]
 	path = .dependencies/cef-rs
@@ -33,9 +31,12 @@
 	ignore = dirty
 [submodule ".dependencies/gpui-component"]
 	path = .dependencies/gpui-component
-	url = https://github.com/longbridge/gpui-component.git
+	url = https://github.com/maddada/gpui-component.git
+	branch = ghostex
 	ignore = dirty
+# Beads is retained as a source reference at the official v1.1.2 tag. Ghostex
+# packaging consumes the checksum-verified release archives, not this checkout.
 [submodule ".dependencies/beads"]
 	path = .dependencies/beads
-	url = https://github.com/steveyegge/beads.git
+	url = https://github.com/gastownhall/beads.git
 	ignore = dirty

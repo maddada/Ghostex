@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ghostex Find Previous Session"
+  short_description: "Find and resume previous agent sessions"
+  default_prompt: "Use $ghostex-find-prev-session to find and resume a previous agent session with Ghostex and Zehn."

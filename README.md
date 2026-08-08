@@ -26,19 +26,19 @@ The Homebrew cask installs the Apple Silicon build automatically.
 brew trust maddada/tap && brew install --cask maddada/tap/ghostex
 ```
 
-Latest download: [macOS Apple Silicon DMG](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.2.0-arm64.dmg).
+Latest download: [macOS Apple Silicon DMG](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.4.0-arm64.dmg).
 
 ### Windows (WSL2 beta)
 
 > **The Windows app is a beta intended for WSL2 workflows only and may still have bugs.** Install and use it with an existing WSL2 distribution; native Windows shell workflows are not the intended setup yet. Please report problems on the [Ghostex Discord](https://discord.gg/df7b3G92CS).
 
-Latest downloads: [Windows x64](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.2.0-windows-x64.exe) · [Windows ARM64](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.2.0-windows-arm64.exe). Ghostex manages its terminals, gxserver, Source editor, and T3 Code runtime inside the selected WSL2 distribution.
+Latest downloads: [Windows x64](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.4.0-windows-x64.exe) · [Windows ARM64](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.4.0-windows-arm64.exe). Ghostex manages its terminals, gxserver, Source editor, and T3 Code runtime inside the selected WSL2 distribution.
 
 Starting with 7.0.0, Windows installations receive automatic updates from GitHub Releases. If you installed a 6.x Windows beta, install the 7.0.0 Setup EXE once to move to the new updater; later releases can be downloaded and applied from inside Ghostex.
 
 ### Linux
 
-Latest downloads: [Linux DEB](https://github.com/maddada/Ghostex/releases/latest/download/ghostex_7.2.0_amd64.deb) · [Linux RPM](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.2.0-1.x86_64.rpm).
+Latest downloads: [Linux DEB](https://github.com/maddada/Ghostex/releases/latest/download/ghostex_7.4.0_amd64.deb) · [Linux RPM](https://github.com/maddada/Ghostex/releases/latest/download/ghostex-7.4.0-1.x86_64.rpm).
 
 ### Android
 

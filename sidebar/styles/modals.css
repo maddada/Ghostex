@@ -534,25 +534,26 @@ html:has(body.app-modal-host-native-window-body) {
    * CDXC:PreviousSessions 2026-06-13-15:59:
    * The close button now follows Rename Session's shadcn Button treatment, while the tag filter moved inside the search field so the browse toolbar keeps equal left and right input edges.
    */
-  --previous-sessions-modal-padding-bottom: 8px;
-  --previous-sessions-modal-padding-top: 14px;
-  --previous-sessions-modal-padding-x: 14px;
+  --previous-sessions-modal-padding-bottom: 4px;
+  --previous-sessions-modal-padding-top: 0px;
+  --previous-sessions-modal-padding-x: 0px;
   --reference-session-agent-icon-size: 13px;
   --reference-session-icon-size: 15px;
   --reference-session-leading-inset: 10px;
   --reference-session-title-inset: 36px;
   --reference-session-trailing-inset: 10px;
   --reference-session-trailing-slot-width: 44px;
-  background: var(--app-background);
-  gap: 10px;
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  gap: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
-  max-height: 80vh;
-  max-width: min(546px, 100%);
+  height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
+  max-width: min(654px, 100%);
   overflow: hidden;
   padding: var(--previous-sessions-modal-padding-top)
     var(--previous-sessions-modal-padding-x)
     var(--previous-sessions-modal-padding-bottom);
-  width: min(546px, 100%);
+  width: min(654px, 100%);
 }
 
 .app-modal-host-body .confirm-modal-root:has(.previous-sessions-modal) {
@@ -578,8 +579,18 @@ html:has(body.app-modal-host-native-window-body) {
    * Widen only enough to support right-side project metadata plus Last Active
    * without turning the picker into a broad management dialog.
    */
-  max-width: min(546px, calc(100vw - 16px));
-  width: min(546px, calc(100vw - 16px));
+  max-width: min(654px, calc(100vw - 16px));
+  width: min(654px, calc(100vw - 16px));
+}
+
+.previous-sessions-modal .quick-access-tabs {
+  margin: 0;
+  width: 100%;
+}
+
+.previous-sessions-modal.quick-access-surface {
+  background: var(--app-dropdown-background, var(--app-modal-background));
+  border: 0;
 }
 
 .app-modal-host-native-window-body .previous-sessions-modal {
@@ -1090,7 +1101,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-toolbar {
   display: grid;
-  gap: 8px;
+  gap: 0;
   /*
    * CDXC:PreviousSessions 2026-06-13-15:59:
    * The tag filter is now the search field's right-side action, replacing the decorative Search icon. Keep the toolbar as one full-width column so the input has equal modal-edge spacing on the left and right.
@@ -1305,26 +1316,30 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-modal-body {
   align-content: start;
+  box-sizing: border-box;
   display: grid;
-  gap: 14px;
+  gap: 0;
   min-height: 0;
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding-right: 0;
+  padding: var(--quick-access-list-padding-y, 4px) var(--quick-access-list-padding-x, 3px);
+  width: 100%;
 }
 
 .previous-sessions-day-group {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
 .previous-sessions-day-label {
-  color: color-mix(in srgb, var(--app-foreground) 76%, var(--app-muted) 24%);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  box-sizing: border-box;
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  min-height: 32px;
+  padding: var(--quick-access-row-padding-y, 8px) var(--quick-access-row-padding-x, 12px);
 }
 
 .previous-sessions-empty-state {
@@ -1332,18 +1347,6 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: 96px;
   padding: 12px;
   text-align: center;
-}
-
-.previous-sessions-loading-more {
-  align-self: center;
-  border: 1px solid color-mix(in srgb, var(--app-foreground) 34%, transparent);
-  border-radius: 999px;
-  border-top-color: transparent;
-  height: 18px;
-  justify-self: center;
-  margin: 2px 0 4px;
-  width: 18px;
-  animation: spin 0.8s linear infinite;
 }
 
 /*
@@ -1356,7 +1359,7 @@ html:has(body.app-modal-host-native-window-body) {
  */
 .recent-projects-modal-list {
   display: grid;
-  gap: 8px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -1366,13 +1369,14 @@ html:has(body.app-modal-host-native-window-body) {
   border: none;
   border-radius: 0;
   box-sizing: border-box;
-  color: inherit;
+  color: var(--quick-access-item-color, var(--foreground, var(--app-foreground)));
   cursor: default;
   display: flex;
-  gap: 6px;
-  min-height: 34px;
+  gap: 8px;
+  height: var(--quick-access-row-height, 36px);
+  min-height: var(--quick-access-row-height, 36px);
   min-width: 0;
-  padding: 5px 10px;
+  padding: var(--quick-access-row-padding-y, 8px) var(--quick-access-row-padding-x, 12px);
   text-align: left;
   transition: background-color 120ms ease;
   width: 100%;
@@ -1380,19 +1384,20 @@ html:has(body.app-modal-host-native-window-body) {
 
 .recent-projects-row:hover,
 .recent-projects-row:focus-visible,
+.recent-projects-row[data-search-selected="true"],
 .recent-projects-row[data-context-menu-open="true"] {
-  background: #202020;
+  background: var(--muted, #202020);
   outline: none;
 }
 
 .recent-projects-row-icon {
   align-items: center;
-  color: var(--app-muted);
+  color: var(--muted-foreground, var(--app-muted));
   display: inline-flex;
   flex: 0 0 auto;
-  height: 20px;
+  height: 16px;
   justify-content: center;
-  width: 20px;
+  width: 16px;
 }
 
 .recent-projects-row-icon-image {
@@ -1402,11 +1407,13 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .recent-projects-row-title {
-  color: var(--app-foreground);
+  color: var(--quick-access-item-color, var(--foreground, var(--app-foreground)));
   flex: 1 1 auto;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 16px;
+  font-family: inherit;
+  font-size: var(--quick-access-item-font-size, 14px);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: var(--quick-access-item-line-height, 20px);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1414,9 +1421,9 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .recent-projects-session-count {
-  color: var(--app-muted);
+  color: var(--muted-foreground, var(--app-muted));
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   padding-left: 4px;
 }

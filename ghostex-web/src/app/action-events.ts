@@ -33,6 +33,7 @@ export interface RunTitlebarActionDetail {
 declare global {
   interface WindowEventMap {
     "ghostex-web:closeAppModal": CustomEvent;
+    "ghostex-web:openSettingsModal": CustomEvent;
     "ghostex-web:openAddProjectModal": CustomEvent<OpenAddProjectModalDetail>;
     "ghostex-web:openCommandPane": CustomEvent;
     "ghostex-web:openDelayedActionsModal": CustomEvent<OpenDelayedActionsModalDetail>;

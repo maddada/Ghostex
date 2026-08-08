@@ -90,6 +90,13 @@ export function dismissAllSidebarContextMenus(): void {
   }
 }
 
+export function registerSidebarContextMenuDismissHandler(dismiss: () => void): () => void {
+  activeDismissHandlers.add(dismiss);
+  return () => {
+    activeDismissHandlers.delete(dismiss);
+  };
+}
+
 function notifySidebarContextMenuOpened(vscode?: WebviewApi): void {
   if (window.__ghostex_NATIVE_SIDEBAR__?.notifySidebarContextMenuOpened) {
     window.__ghostex_NATIVE_SIDEBAR__.notifySidebarContextMenuOpened();
@@ -276,10 +283,7 @@ export function SidebarContextMenuPortal({
   const [viewportClampedMenuStyle, setViewportClampedMenuStyle] = useState<CSSProperties>();
 
   useEffect(() => {
-    activeDismissHandlers.add(onDismiss);
-    return () => {
-      activeDismissHandlers.delete(onDismiss);
-    };
+    return registerSidebarContextMenuDismissHandler(onDismiss);
   }, [onDismiss]);
 
   useLayoutEffect(() => {

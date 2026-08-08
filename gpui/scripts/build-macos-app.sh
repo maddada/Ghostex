@@ -138,6 +138,7 @@ bundled_cli_skill_assets=(
 	ghostex-computer-use
 	ghostex-agent-orchestration
 	ghostex-fable-5.6-orchestration
+	ghostex-find-prev-session
 	ghostex-auto-rename-session
 	ghostex-manage-beads
 	ghostex-move-codex-session
@@ -629,6 +630,8 @@ stage_on_demand_remote_gxserver_manifest() {
 		manifest_args+=(--component-manifest "$component_manifest")
 	fi
 	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" "${manifest_args[@]}"
+	node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
+		--manifest "$WEB_DIR/on-demand-resources.json"
 	rm -rf "$WEB_DIR/gxserver-linux-x64" "$WEB_DIR/gxserver-linux-arm64" "$WEB_DIR/gxserver-linux-amd64" "$WEB_DIR/gxserver-linux-aarch64"
 }
 

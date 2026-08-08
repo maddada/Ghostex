@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import "../sidebar/styles.css";
+import "./session-chat.css";
 import {
   resolveSessionChatTranscriptAgent,
   type GxserverReadSessionChatImageResult,

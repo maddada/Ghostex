@@ -47,6 +47,11 @@ function handleAppModalHostMessage(message: unknown): void {
     return;
   }
 
+  if (message.type === "open" && message.modal === "settings") {
+    window.dispatchEvent(new CustomEvent("ghostex-web:openSettingsModal"));
+    return;
+  }
+
   if (message.type !== "open" || message.modal !== "recentProjects") {
     console.warn(
       `[ghostex-web] Ignoring unsupported app modal: ${String(message.modal ?? "unknown")}.`,

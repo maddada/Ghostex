@@ -15,6 +15,7 @@ import {
   IconSearch,
   IconTrash,
   IconUnlink,
+  IconUser,
   IconX,
 } from "@tabler/icons-react";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
@@ -73,7 +74,10 @@ import {
 } from "@/components/ui/tooltip";
 import {
   BOARD_COLUMNS,
+  BOARD_SORT_OPTIONS,
+  DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   PRIORITY_OPTIONS,
+  PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   TSHIRT_OPTIONS,
   appendImageMarkdownToDescription,
   beadsErrorMessage,
@@ -81,6 +85,9 @@ import {
   boardStatusBeadsValue,
   boardStatusLabel,
   buildAgentWorkPrompt,
+  conversationLinkActionKind,
+  conversationLinkLabel,
+  conversationLinkStatusText,
   ensureIssuePrefix,
   ensureWorkflowStatuses,
   extractDescriptionImageReferences,
@@ -90,9 +97,11 @@ import {
   formatShortDate,
   getBlockedByIds,
   getBlockingIds,
+  isUsableConversationLink,
   normalizeBeadsPayload,
   normalizeDisplayIssueKey,
   normalizeIssuePrefix,
+  normalizeProjectBoardViewPreferences,
   parseProjectBoardCommentText,
   parseBeadsJson,
   priorityLabel,
@@ -101,6 +110,8 @@ import {
   removeDescriptionImageReference,
   resolveAssignedAgentId,
   isDescriptionImageSource,
+  sortBoardTickets,
+  ticketCreatorName,
   tshirtToEstimate,
   toBoardTickets,
   estimateToTshirt,
@@ -108,7 +119,9 @@ import {
   type BeadsBridgeResponse,
   type BoardEstimateFilter,
   type BoardPriorityFilter,
+  type BoardSortOption,
   type ProjectBoardCommentMetadata,
+  type ProjectBoardViewPreferences,
   type BeadsIssue,
   type BoardStatusKey,
   type BoardTicket,
@@ -116,6 +129,8 @@ import {
   type TshirtSize,
 } from "./project-board-shared";
 import {
+  indexBeadConversationLinksByBead,
+  selectBeadConversationLinks,
   type ProjectBoardAgentOption,
   type ProjectBoardBridgeRequest,
   type ProjectBoardBridgeResponse,
@@ -259,6 +274,16 @@ function readExperimentalFeaturesEnabled(searchParams: URLSearchParams): boolean
   return DEFAULT_ghostex_SETTINGS.showBetaFeatures;
 }
 
+function readProjectBoardViewPreferences(): ProjectBoardViewPreferences {
+  try {
+    return normalizeProjectBoardViewPreferences(
+      JSON.parse(window.localStorage.getItem(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY) || "null"),
+    );
+  } catch {
+    return DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES;
+  }
+}
+
 const PROJECT_BOARD_START_LOCATION_SELECT_ITEMS: ReadonlyArray<{
   label: string;
   value: ProjectBoardStartLocation;
@@ -286,6 +311,8 @@ const PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS: Array<{ label: string; value: 
   { label: "All estimates", value: "all" },
   ...PROJECT_BOARD_TSHIRT_SELECT_ITEMS,
 ];
+const PROJECT_BOARD_SORT_SELECT_ITEMS: Array<{ label: string; value: BoardSortOption }> =
+  BOARD_SORT_OPTIONS.map((option) => ({ label: option.label, value: option.value }));
 const PROJECT_AUTOMATION_TRIAGE_RECENT_COMPLETED_LIMIT = 5;
 
 type BoardRefreshMode = "background" | "initial" | "manual" | "mutation";
@@ -568,8 +595,14 @@ function ProjectBoardApp() {
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [priorityFilter, setPriorityFilter] = useState<BoardPriorityFilter>("all");
-  const [estimateFilter, setEstimateFilter] = useState<BoardEstimateFilter>("all");
+  const storedViewPreferences = useMemo(() => readProjectBoardViewPreferences(), []);
+  const [priorityFilter, setPriorityFilter] = useState<BoardPriorityFilter>(
+    storedViewPreferences.priorityFilter,
+  );
+  const [estimateFilter, setEstimateFilter] = useState<BoardEstimateFilter>(
+    storedViewPreferences.estimateFilter,
+  );
+  const [sortOption, setSortOption] = useState<BoardSortOption>(storedViewPreferences.sortOption);
   const [detail, setDetail] = useState<DetailDraft>(createEmptyDetailDraft);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [newTicket, setNewTicket] = useState<TicketFormDraft>(createEmptyTicketFormDraft);
@@ -815,6 +848,17 @@ function ProjectBoardApp() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
+        JSON.stringify({ estimateFilter, priorityFilter, sortOption }),
+      );
+    } catch {
+      // Keep the current in-memory preferences when localStorage is unavailable.
+    }
+  }, [estimateFilter, priorityFilter, sortOption]);
 
   const openNewTicket = useCallback((status: BoardStatusKey = "todo") => {
     setNewTicket((current) => ({ ...current, status }));
@@ -1266,25 +1310,26 @@ function ProjectBoardApp() {
   const ticketsByColumn = useMemo(() => {
     return BOARD_COLUMNS.reduce<Record<BoardStatusKey, BoardTicket[]>>(
       (result, column) => {
-        result[column.key] = filteredTickets.filter((ticket) => ticket.boardStatus === column.key);
+        result[column.key] = sortBoardTickets(
+          filteredTickets.filter((ticket) => ticket.boardStatus === column.key),
+          sortOption,
+          column.key,
+        );
         return result;
       },
       { backlog: [], done: [], in_progress: [], review: [], test: [], todo: [] },
     );
-  }, [filteredTickets]);
+  }, [filteredTickets, sortOption]);
   const showInitialBoardLoadingOverlay =
     activeSurfaceTab === "board" && loadState === "loading" && !hasCompletedInitialBoardLoad;
 
-  const linksByBeadId = useMemo(() => {
-    const result = new Map<string, ProjectBoardConversationLinkView[]>();
-    const newestFirstLinks = [...conversationState.links].sort(compareConversationLinksNewestFirst);
-    for (const link of newestFirstLinks) {
-      const current = result.get(link.beadId) ?? [];
-      current.push(link);
-      result.set(link.beadId, current);
-    }
-    return result;
-  }, [conversationState.links]);
+  const linksByBeadKey = useMemo(
+    () =>
+      indexBeadConversationLinksByBead(
+        [...conversationState.links].sort(compareConversationLinksNewestFirst),
+      ),
+    [conversationState.links],
+  );
 
   const ticketOptions = useMemo(
     () =>
@@ -2266,14 +2311,21 @@ function ProjectBoardApp() {
     }
   };
 
-  const detailConversationLinks = detail.ticket ? (linksByBeadId.get(detail.ticket.id) ?? []) : [];
+  const detailConversationLinks = detail.ticket
+    ? selectBeadConversationLinks(linksByBeadKey, detail.ticket.id)
+    : [];
   const detailPrimaryConversationLink = getPrimaryUsableConversationLink(detailConversationLinks);
   const detailCommentMetadataLink = detailPrimaryConversationLink ?? detailConversationLinks[0];
+  const detailPrimaryActionKind = conversationLinkActionKind(detailPrimaryConversationLink);
   const detailPrimaryActionLabel =
     conversationAction?.kind === "jump" && conversationAction.linkId === detailPrimaryConversationLink?.id
-      ? "Opening"
+      ? detailPrimaryActionKind === "resume"
+        ? "Resuming"
+        : "Opening"
       : detailPrimaryConversationLink
-        ? "Go to Session"
+        ? detailPrimaryActionKind === "resume"
+          ? "Resume Session"
+          : "Go to Session"
         : conversationAction?.kind === "start" && conversationAction.beadId === detail.ticket?.id
           ? "Starting"
           : "Start work";
@@ -2349,9 +2401,13 @@ function ProjectBoardApp() {
     ? tickets.find((ticket) => ticket.id === ticketContextMenu.ticketId)
     : undefined;
   const contextMenuPrimaryLink = contextMenuTicket
-    ? getPrimaryUsableConversationLink(linksByBeadId.get(contextMenuTicket.id) ?? [])
+    ? getPrimaryUsableConversationLink(selectBeadConversationLinks(linksByBeadKey, contextMenuTicket.id))
     : undefined;
-  const contextMenuPrimaryActionLabel = contextMenuPrimaryLink ? "Go to Session" : "Start work";
+  const contextMenuPrimaryActionLabel = contextMenuPrimaryLink
+    ? conversationLinkActionKind(contextMenuPrimaryLink) === "resume"
+      ? "Resume Session"
+      : "Go to Session"
+    : "Start work";
   const contextMenuPrimaryActionDisabled =
     Boolean(conversationAction) || (!contextMenuPrimaryLink && conversationState.agents.length === 0);
 
@@ -2530,6 +2586,21 @@ function ProjectBoardApp() {
               ))}
             </SelectContent>
           </Select>
+          <select
+            aria-label="Sort tickets"
+            className="project-board-filter-select project-board-native-filter-select"
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSortOption(value as BoardSortOption);
+            }}
+            value={sortOption}
+          >
+            {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </section>
       ) : null}
 
@@ -2702,6 +2773,11 @@ function ProjectBoardApp() {
                 scrollers. Apply the shared Codex-style masks to the scroll
                 containers themselves so lane headers and custom scrollbars stay
                 crisp while overflowing cards fade at the edges.
+
+                CDXC:BoardScrollbars 2026-08-07:
+                Both bars are now the browser's own scrollbars on those same
+                masked scrollers, so their ends fade with the content instead of
+                staying crisp.
               */}
               <section className="project-board-lanes horizontal-scroll-fade-mask" aria-label="Project issue board">
                 {BOARD_COLUMNS.map((column) => (
@@ -2709,7 +2785,7 @@ function ProjectBoardApp() {
                     column={column}
                     conversationAction={conversationAction}
                     key={column.key}
-                    linksByBeadId={linksByBeadId}
+                    linksByBeadKey={linksByBeadKey}
                     onAddTicket={openNewTicket}
                     onJumpToConversation={jumpToConversation}
                     onOpenContextMenu={(ticket, point) =>
@@ -3085,8 +3161,10 @@ function ProjectBoardApp() {
             onKeyDown={(event) => handleCmdEnter(event, () => void saveTicketDetail())}
           >
             <TicketMetaFields
+              assignee={detail.ticket?.assignee}
               blockedByIds={detail.blockedByIds}
               blockingIds={detail.blockingIds}
+              createdBy={detail.ticket?.created_by}
               knownLabels={knownLabels}
               labels={detail.labels}
               onBlockedByChange={(blockedByIds) =>
@@ -3273,7 +3351,11 @@ function ProjectBoardApp() {
                 variant="outline"
               >
                 {detailPrimaryConversationLink ? (
-                  <IconExternalLink data-icon="inline-start" />
+                  detailPrimaryActionKind === "resume" ? (
+                    <IconPlayerPlay data-icon="inline-start" />
+                  ) : (
+                    <IconExternalLink data-icon="inline-start" />
+                  )
                 ) : (
                   <IconLink data-icon="inline-start" />
                 )}
@@ -3472,8 +3554,10 @@ function ProjectBoardApp() {
 }
 
 function TicketMetaFields({
+  assignee,
   blockedByIds,
   blockingIds,
+  createdBy,
   knownLabels,
   labels,
   onBlockedByChange,
@@ -3488,8 +3572,10 @@ function TicketMetaFields({
   ticketOptions,
   tshirt,
 }: {
+  assignee?: string;
   blockedByIds: string[];
   blockingIds: string[];
+  createdBy?: string;
   knownLabels: string[];
   labels: string[];
   onBlockedByChange: (ids: string[]) => void;
@@ -3506,6 +3592,7 @@ function TicketMetaFields({
 }) {
   const [labelDraft, setLabelDraft] = useState("");
   const labelSuggestions = knownLabels.filter((label) => !labels.includes(label));
+  const creator = ticketCreatorName(createdBy, assignee);
 
   return (
     <div className="project-ticket-meta-grid">
@@ -3641,6 +3728,23 @@ function TicketMetaFields({
         selectedIds={blockedByIds}
         ticketOptions={ticketOptions}
       />
+      {creator ? (
+        <div className="project-ticket-field project-ticket-field-inline">
+          <span>Created by</span>
+          <div className="project-ticket-creator-value" title={creator}>
+            {creator}
+          </div>
+        </div>
+      ) : null}
+      {assignee ? (
+        <div className="project-ticket-field project-ticket-field-inline">
+          <span>Assignee</span>
+          <div className="project-ticket-assignee-value" title={assignee}>
+            <IconUser aria-hidden="true" />
+            <span className="project-ticket-assignee-name">{assignee}</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3863,7 +3967,7 @@ function ConversationSection({
   );
   return (
     <section className="project-ticket-conversations" aria-label="Linked conversations">
-      <div className="project-ticket-section-title">Conversation</div>
+      <div className="project-ticket-section-title">Start work with</div>
       <div className="project-ticket-conversation-controls">
         <Select
           disabled={agents.length === 0}
@@ -3898,6 +4002,7 @@ function ConversationSection({
           <div className="project-ticket-conversation-list">
             {links.map((link) => {
               const label = conversationLinkLabel(link);
+              const actionKind = conversationLinkActionKind(link);
               return (
                 <div className="project-ticket-conversation-row" key={link.id}>
                   <div className="project-ticket-conversation-main">
@@ -3911,14 +4016,18 @@ function ConversationSection({
                   </div>
                   <div className="project-ticket-conversation-actions">
                     <Button
-                      aria-label="Jump to linked conversation"
-                      disabled={!isUsableConversationLink(link) || hasActiveConversationAction}
+                      aria-label={
+                        actionKind === "resume"
+                          ? "Resume linked conversation"
+                          : "Jump to linked conversation"
+                      }
+                      disabled={actionKind === "none" || hasActiveConversationAction}
                       onClick={() => onJumpToConversation(link)}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
                     >
-                      <IconExternalLink />
+                      {actionKind === "resume" ? <IconPlayerPlay /> : <IconExternalLink />}
                     </Button>
                     <Button
                       aria-label="Unlink conversation"
@@ -3943,14 +4052,6 @@ function ConversationSection({
   );
 }
 
-function conversationLinkLabel(link: ProjectBoardConversationLinkView): string {
-  return link.sessionTitle || link.agentName || link.agentId || link.agentSessionId || "Agent session";
-}
-
-function isUsableConversationLink(link: ProjectBoardConversationLinkView | undefined): boolean {
-  return Boolean(link?.isLive || link?.isRestorable);
-}
-
 function getPrimaryUsableConversationLink(
   links: ProjectBoardConversationLinkView[],
 ): ProjectBoardConversationLinkView | undefined {
@@ -3970,18 +4071,6 @@ function ConversationLinkName({
       <TooltipContent side="bottom">{label}</TooltipContent>
     </Tooltip>
   );
-}
-
-function conversationLinkStatusText(link: ProjectBoardConversationLinkView): string {
-  const sessionStatus = link.isSleeping
-    ? "Sleeping"
-    : link.isLive
-      ? "Live"
-      : link.isRestorable
-        ? "Restorable"
-        : "Unavailable";
-  const agentSessionPreview = link.agentSessionId ? ` · ${link.agentSessionId.slice(0, 8)}` : "";
-  return `${sessionStatus}${agentSessionPreview}`;
 }
 
 function projectBoardCommentMetadataFromLink(
@@ -4066,7 +4155,7 @@ function automationTriageStatusWeight(status: AutomationRun["status"]): number {
 function BoardLane({
   column,
   conversationAction,
-  linksByBeadId,
+  linksByBeadKey,
   onAddTicket,
   onJumpToConversation,
   onOpenContextMenu,
@@ -4075,7 +4164,7 @@ function BoardLane({
 }: {
   column: (typeof BOARD_COLUMNS)[number];
   conversationAction: ConversationActionState;
-  linksByBeadId: Map<string, ProjectBoardConversationLinkView[]>;
+  linksByBeadKey: Map<string, ProjectBoardConversationLinkView[]>;
   onAddTicket: (status: BoardStatusKey) => void;
   onJumpToConversation: (link: ProjectBoardConversationLinkView) => void;
   onOpenContextMenu: (ticket: BoardTicket, point: { x: number; y: number }) => void;
@@ -4089,62 +4178,6 @@ function BoardLane({
   });
   const visibleTickets = tickets.slice(0, PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN);
   const hiddenTicketCount = tickets.length - visibleTickets.length;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollThumb, setScrollThumb] = useState({ height: 0, top: 0, visible: false });
-  const updateScrollThumb = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    const maxScrollTop = element.scrollHeight - element.clientHeight;
-    if (maxScrollTop <= 1) {
-      setScrollThumb((current) =>
-        current.visible || current.height !== 0 || current.top !== 0
-          ? { height: 0, top: 0, visible: false }
-          : current,
-      );
-      return;
-    }
-    const height = Math.max(24, (element.clientHeight / element.scrollHeight) * element.clientHeight);
-    const top = (element.scrollTop / maxScrollTop) * (element.clientHeight - height);
-    setScrollThumb((current) => {
-      const next = {
-        height: Math.round(height),
-        top: Math.round(top),
-        visible: true,
-      };
-      return current.height === next.height && current.top === next.top && current.visible === next.visible
-        ? current
-        : next;
-    });
-  }, []);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    updateScrollThumb();
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? undefined
-        : new ResizeObserver(() => updateScrollThumb());
-    if (resizeObserver) {
-      resizeObserver.observe(element);
-      if (element.firstElementChild) {
-        resizeObserver.observe(element.firstElementChild);
-      }
-    } else {
-      window.addEventListener("resize", updateScrollThumb);
-    }
-    return () => {
-      resizeObserver?.disconnect();
-      if (!resizeObserver) {
-        window.removeEventListener("resize", updateScrollThumb);
-      }
-    };
-  }, [hiddenTicketCount, updateScrollThumb, visibleTickets.length]);
-
   return (
     <section
       className="project-board-lane"
@@ -4171,17 +4204,13 @@ function BoardLane({
           </Button>
         </div>
       </header>
-      <div
-        className="project-board-lane-scroll vertical-scroll-fade-mask"
-        onScroll={updateScrollThumb}
-        ref={scrollRef}
-      >
+      <div className="project-board-lane-scroll vertical-scroll-fade-mask">
         <div className="project-board-card-stack">
           {visibleTickets.map((ticket) => (
             <TicketCard
               conversationAction={conversationAction}
               key={ticket.id}
-              links={linksByBeadId.get(ticket.id) ?? []}
+              links={selectBeadConversationLinks(linksByBeadKey, ticket.id)}
               onJumpToConversation={onJumpToConversation}
               onOpenContextMenu={onOpenContextMenu}
               onOpenTicket={onOpenTicket}
@@ -4194,19 +4223,6 @@ function BoardLane({
             </div>
           ) : null}
         </div>
-      </div>
-      <div
-        aria-hidden="true"
-        className="project-board-lane-scrollbar"
-        data-visible={String(scrollThumb.visible)}
-      >
-        <div
-          className="project-board-lane-scrollbar-thumb"
-          style={{
-            height: `${scrollThumb.height}px`,
-            transform: `translateY(${scrollThumb.top}px)`,
-          }}
-        />
       </div>
     </section>
   );
@@ -4234,12 +4250,12 @@ function TicketCard({
   });
   const blockedByCount = ticket.dependency_count ?? getBlockedByIds(ticket).length;
   const blockingCount = ticket.dependent_count ?? 0;
+  const creator = ticketCreatorName(ticket.created_by, ticket.assignee);
   const primaryLink = getPrimaryUsableConversationLink(links) ?? links[0];
   const additionalLinkCount = primaryLink ? links.length - 1 : 0;
   const primaryLinkLabel = primaryLink ? conversationLinkLabel(primaryLink) : "";
-  const jumpDisabled =
-    !isUsableConversationLink(primaryLink) ||
-    Boolean(conversationAction);
+  const primaryLinkActionKind = conversationLinkActionKind(primaryLink);
+  const jumpDisabled = primaryLinkActionKind === "none" || Boolean(conversationAction);
 
   return (
     <Card
@@ -4290,6 +4306,17 @@ function TicketCard({
           ) : null}
           {blockedByCount > 0 ? <span>{blockedByCount} blocked</span> : null}
           {blockingCount > 0 ? <span>{blockingCount} blocking</span> : null}
+          {creator ? (
+            <span className="project-board-card-creator" title={`Created by ${creator}`}>
+              by {creator}
+            </span>
+          ) : null}
+          {ticket.assignee ? (
+            <span className="project-board-card-assignee" title={`Assigned to ${ticket.assignee}`}>
+              <IconUser />
+              <span className="project-board-card-assignee-name">{ticket.assignee}</span>
+            </span>
+          ) : null}
           <span className="project-board-comments">
             <IconMessageCircle />
             {ticket.comment_count ?? ticket.comments?.length ?? 0}
@@ -4312,7 +4339,11 @@ function TicketCard({
               </span>
             </TooltipProvider>
             <Button
-              aria-label="Jump to linked conversation"
+              aria-label={
+                primaryLinkActionKind === "resume"
+                  ? "Resume linked conversation"
+                  : "Jump to linked conversation"
+              }
               disabled={jumpDisabled}
               onClick={(event) => {
                 event.stopPropagation();
@@ -4322,7 +4353,7 @@ function TicketCard({
               type="button"
               variant="ghost"
             >
-              <IconExternalLink />
+              {primaryLinkActionKind === "resume" ? <IconPlayerPlay /> : <IconExternalLink />}
             </Button>
           </div>
         ) : null}
@@ -5108,7 +5139,17 @@ function AutomationRunDetail({
 }
 
 function ProjectBoardNotice({ message }: { message: string }) {
-  const isMissingProject = /not initialized|no storage|not a beads|bd init|database|\.beads/i.test(message);
+  /*
+   * CDXC:ProjectBoardBeadsSchema 2026-08-08:
+   * A database/schema failure proves that Beads found a workspace, so generic
+   * words such as "database" or ".beads" must never turn it into a `bd init`
+   * instruction. Only Beads' explicit missing-workspace messages belong to the
+   * initialization notice.
+   */
+  const isMissingProject =
+    /not initialized|no storage|not a beads(?: workspace| project| repository)|no beads database found|run ['"]?bd init['"]?/i.test(
+      message,
+    );
   const isMissingBeads =
     !isMissingProject &&
     /bd was not found|bundled bd|beads cli|executable|command not found|not found: bd|bd: not found|env: bd: no such file|cannot find/i.test(message);
@@ -6014,33 +6055,53 @@ styleElement.textContent = `
     outline: none;
   }
 
-  .project-board-lanes,
-  .project-board-lane-scroll,
-  .project-ticket-dialog-body,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"] {
     scrollbar-color: transparent transparent;
     scrollbar-width: none;
   }
 
-  .project-ticket-dialog-body:hover,
-  .project-ticket-dialog-body:focus-within,
   .project-ticket-comment-list:hover [data-slot="scroll-area-viewport"],
   .project-ticket-comment-list:focus-within [data-slot="scroll-area-viewport"] {
     scrollbar-color: var(--project-board-scrollbar) transparent;
   }
 
-  .project-board-lanes::-webkit-scrollbar,
-  .project-board-lane-scroll::-webkit-scrollbar,
-  .project-ticket-dialog-body::-webkit-scrollbar,
-  .project-ticket-comment-list [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
-    height: 0;
-    width: 0;
-  }
-
-  .project-ticket-dialog-body::-webkit-scrollbar,
   .project-ticket-comment-list [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
     height: 2px;
     width: 2px;
+  }
+
+  /*
+   * CDXC:BoardScrollbars 2026-08-07:
+   * The board strip and every lane body keep the browser's own scrollbar so the
+   * bar stays clickable and draggable instead of wheel-only. Chromium paints
+   * ::-webkit-scrollbar geometry only while the scroller keeps scrollbar-width
+   * at auto and leaves scrollbar-color unset; either one hands rendering to the
+   * standard scrollbar and collapses the gutter to 0px, which is why these two
+   * scrollers stay out of the hidden-scrollbar rules above. The 8px box is the
+   * mouse target and the thumb's transparent borders keep the painted rail at
+   * the board's 2px width.
+   *
+   * CDXC:DialogScrollbar 2026-08-07:
+   * The ticket dialog body sat in the hidden-scrollbar rules above, and
+   * measuring it in Chromium showed the same wheel-only failure the board had:
+   * a 0px gutter, and no scroll from a track click or a thumb drag at any x
+   * offset along its right edge. It joins the real-scrollbar rules here. The
+   * comment list stays hidden above because its Radix ScrollArea paints its own
+   * interactable bar.
+   */
+  .project-board-lanes,
+  .project-board-lane-scroll,
+  .project-ticket-dialog-body {
+    scrollbar-width: auto;
+  }
+
+  .project-board-lanes::-webkit-scrollbar,
+  .project-board-lane-scroll::-webkit-scrollbar,
+  .project-ticket-dialog-body::-webkit-scrollbar {
+    background: transparent;
+    display: block;
+    height: 8px;
+    width: 8px;
   }
 
   .project-board-lanes::-webkit-scrollbar-track,
@@ -6057,11 +6118,31 @@ styleElement.textContent = `
     background: transparent;
   }
 
-  .project-ticket-dialog-body:hover::-webkit-scrollbar-thumb,
-  .project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb,
   .project-ticket-comment-list:hover [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb,
   .project-ticket-comment-list:focus-within [data-slot="scroll-area-viewport"]::-webkit-scrollbar-thumb {
     background: var(--project-board-scrollbar);
+  }
+
+  .project-board-lanes::-webkit-scrollbar-thumb {
+    background-clip: content-box;
+    border-bottom: 3px solid transparent;
+    border-top: 3px solid transparent;
+  }
+
+  .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body::-webkit-scrollbar-thumb {
+    background-clip: content-box;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+  }
+
+  .project-board-lanes:hover::-webkit-scrollbar-thumb,
+  .project-board-lanes:focus-within::-webkit-scrollbar-thumb,
+  .project-board-lane:hover .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-board-lane:focus-within .project-board-lane-scroll::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body:hover::-webkit-scrollbar-thumb,
+  .project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb {
+    background-color: var(--project-board-scrollbar);
   }
 
   .project-ticket-comment-list [data-slot="scroll-area-scrollbar"] {
@@ -6933,6 +7014,13 @@ styleElement.textContent = `
     min-width: 124px;
   }
 
+  .project-board-native-filter-select {
+    appearance: auto;
+    color: var(--foreground);
+    font: inherit;
+    padding: 0 8px;
+  }
+
   .project-board-ticket-button {
     min-width: 0;
   }
@@ -6980,6 +7068,11 @@ styleElement.textContent = `
      * sidebar scroll surface. The board strip owns the horizontal fade while
      * each lane body owns its vertical fade, leaving lane headers and custom
      * scrollbars unmasked.
+     *
+     * CDXC:BoardScrollbars 2026-08-07:
+     * The lane bar is the scroller's own scrollbar now, so it lives inside the
+     * mask and fades at the very ends of its travel like the ticket dialog's
+     * scrollbar already does.
      */
     --edge-fade-distance: 18px;
     gap: 0;
@@ -7100,28 +7193,6 @@ styleElement.textContent = `
     padding-right: 0;
   }
 
-  .project-board-lane-scrollbar {
-    bottom: 0;
-    opacity: 0;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    top: 44px;
-    transition: opacity 120ms ease;
-    width: 2px;
-    z-index: 4;
-  }
-
-  .project-board-lane:hover .project-board-lane-scrollbar[data-visible="true"],
-  .project-board-lane:focus-within .project-board-lane-scrollbar[data-visible="true"] {
-    opacity: 1;
-  }
-
-  .project-board-lane-scrollbar-thumb {
-    background: var(--project-board-scrollbar);
-    width: 2px;
-  }
-
   .project-board-card-stack {
     display: flex;
     flex-direction: column;
@@ -7227,6 +7298,35 @@ styleElement.textContent = `
   .project-board-priority {
     color: rgba(244, 244, 245, 0.72);
     font-weight: 680;
+  }
+
+  .project-board-card-creator {
+    max-width: 45%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-board-card-assignee {
+    align-items: center;
+    color: rgba(244, 244, 245, 0.72);
+    display: inline-flex;
+    gap: 4px;
+    max-width: 50%;
+    min-width: 0;
+  }
+
+  .project-board-card-assignee svg {
+    flex: none;
+    height: 13px;
+    width: 13px;
+  }
+
+  .project-board-card-assignee-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .project-board-comments {
@@ -7534,6 +7634,36 @@ styleElement.textContent = `
 
   .project-ticket-field-inline {
     gap: 6px;
+  }
+
+  .project-ticket-creator-value {
+    color: rgba(250, 250, 250, 0.68);
+    font-weight: 500;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-ticket-assignee-value {
+    align-items: center;
+    color: rgba(250, 250, 250, 0.92);
+    display: flex;
+    font-weight: 500;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .project-ticket-assignee-value svg {
+    flex: none;
+    height: 14px;
+    width: 14px;
+  }
+
+  .project-ticket-assignee-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .project-ticket-field textarea,

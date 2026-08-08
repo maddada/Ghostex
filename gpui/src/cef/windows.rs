@@ -65,10 +65,14 @@ pub(super) fn load_cef_runtime() -> Result<PlatformCefRuntime> {
     if !library.is_file() {
         anyhow::bail!("verified CEF runtime is missing {}", library.display());
     }
-    eprintln!(
-        "Ghostex CEF runtime: verified Windows component {}",
-        runtime_dir.display()
-    );
+    if crate::shared_settings::shared_sidebar_settings_snapshot().debugging_mode()
+        && crate::support_logs::scenario_id_enabled("native.host.lifecycle")
+    {
+        eprintln!(
+            "Ghostex CEF runtime: verified Windows component {}",
+            runtime_dir.display()
+        );
+    }
     Ok(PlatformCefRuntime)
 }
 

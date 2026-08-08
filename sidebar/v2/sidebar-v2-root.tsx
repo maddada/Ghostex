@@ -36,7 +36,7 @@ import {
 import { buildSidebarSessionDetailsClipboardText } from "../../shared/session-details-copy";
 import { openAppModal } from "../app-modal-host-bridge";
 import type { SidebarV2GroupOrderRow } from "../../shared/sidebar-v2-group-order";
-import type { SidebarGroupDropTarget } from "../sidebar-dnd";
+import type { SidebarGroupDropTarget, SidebarSessionDropTarget } from "../sidebar-dnd";
 import type { SidebarGroupRecord } from "../sidebar-store";
 /*
  * CDXC:SidebarV2ContextMenuParity 2026-07-30:
@@ -167,6 +167,8 @@ export type SidebarV2RootProps = {
   groupDropIndicator?: SidebarGroupDropTarget;
   /** Mirrors V1's `draggingDisabled`: no manual sort mode, no reorder. */
   isGroupReorderDisabled?: boolean;
+  /** Search and other transient filtering disable pinned-row reordering. */
+  isPinnedSessionReorderDisabled?: boolean;
   /** Display-ordered group ids after V1 search and tag filtering. */
   groupIds: readonly string[];
   /** Group metadata without session payloads, exactly as the store holds it. */
@@ -251,6 +253,8 @@ export type SidebarV2RootProps = {
   ) => void;
   /** Return to the classic sidebar from inside V2's own chrome. */
   onSetSidebarVersion: (sidebarVersion: SidebarVersion) => void;
+  /** Pointer-resolved insertion boundary from SidebarApp's shared DnD pipeline. */
+  pinnedSessionDropIndicator?: SidebarSessionDropTarget;
   /**
    * CDXC:SidebarV2Worktree 2026-07-29:
    * Start an instant session with `agent`, in `groupId` when the click came
@@ -336,6 +340,7 @@ export function SidebarV2Root({
   groupsById,
   hostEmptyState,
   isGroupReorderDisabled = false,
+  isPinnedSessionReorderDisabled = false,
   isSearchFiltering,
   layout,
   lifecycleCapabilities,
@@ -350,6 +355,7 @@ export function SidebarV2Root({
   onSetNewSessionsDefaultEnvMode,
   onSetProjectGroupingOverrides,
   onSetSidebarVersion,
+  pinnedSessionDropIndicator,
   onRunAgent,
   primaryAgentId,
   searchQuery,
@@ -630,6 +636,7 @@ export function SidebarV2Root({
   }, [viewModel.nextWakeAtMs]);
 
   const useColoredAgentIcons = settings.useColoredSessionAgentIcons === true;
+  const showProjectIcons = settings.showProjectIcons;
 
   /*
    * CDXC:SidebarV2 2026-07-29:
@@ -1059,8 +1066,20 @@ export function SidebarV2Root({
       return null;
     }
     const isBrowser = item.kind === "browser" || item.sessionKind === "browser";
+    const dragGroupId = session.projectId;
     return (
       <SidebarV2SessionRow
+        dragGroupId={dragGroupId}
+        dragIndex={
+          dragGroupId ? (sessionIdsByGroup[dragGroupId] ?? []).indexOf(session.sessionId) : 0
+        }
+        dropPosition={
+          pinnedSessionDropIndicator?.kind === "session" &&
+          pinnedSessionDropIndicator.groupId === dragGroupId &&
+          pinnedSessionDropIndicator.sessionId === session.sessionId
+            ? pinnedSessionDropIndicator.position
+            : undefined
+        }
         /*
          * CDXC:SidebarV2Git 2026-07-29:
          * Capability is applied HERE, not in the row: an un-upgraded daemon's
@@ -1098,8 +1117,12 @@ export function SidebarV2Root({
         }}
         onRenameStart={() => setRenamingSessionId(session.sessionId)}
         onTogglePinned={(pinned) => postSidebarV2SetSessionPinned(vscode, session.sessionId, pinned)}
+        pinnedReorderEnabled={
+          options.shelf === undefined && !isPinnedSessionReorderDisabled
+        }
         project={options.project}
         session={item}
+        showProjectIcons={showProjectIcons}
         slimLabel={options.slimLabel}
         status={resolveStatus(session)}
         useColoredAgentIcons={useColoredAgentIcons}
@@ -1415,6 +1438,7 @@ export function SidebarV2Root({
             onSelectScope={setScopeId}
             options={viewModel.scopeOptions}
             scopeId={scopeId}
+            showProjectIcons={showProjectIcons}
             vscode={vscode}
           />
         ) : (
@@ -1563,8 +1587,19 @@ export function SidebarV2Root({
                   ) : null
                 }
                 index={groupIndex}
-                isActive={groupsById[group.groupId]?.isActive === true}
+                isActive={group.memberGroupIds.some(
+                  (memberGroupId) => groupsById[memberGroupId]?.isActive === true,
+                )}
                 isCollapsed={isCollapsed}
+                containsActiveSession={
+                  activeSessionId !== undefined &&
+                  [
+                    ...group.browserSessions,
+                    ...group.partition.active,
+                    ...group.partition.settled,
+                    ...group.partition.snoozed,
+                  ].some((session) => session.sessionId === activeSessionId)
+                }
                 /*
                  * The Quick collection has no persisted project order to write,
                  * and a sidebar that is not manually sorted must not offer
@@ -1604,14 +1639,14 @@ export function SidebarV2Root({
                     ? groupsById[group.groupId]?.projectContext?.path
                     : undefined
                 }
+                showProjectIcons={showProjectIcons}
                 projectPathState={
                   groupsById[group.groupId]?.remoteMachineContext === undefined
                     ? groupsById[group.groupId]?.projectContext?.pathState
                     : undefined
                 }
               >
-                {isCollapsed ? null : (
-                  <ul className="sidebar-v2-list" role="list">
+                <ul className="sidebar-v2-list" role="list">
                     {/*
                      * CDXC:ProjectBrowserTabs 2026-05-16-12:59 (V1 parity):
                      * Browser rows stay above the agent/terminal rows inside a
@@ -1623,8 +1658,7 @@ export function SidebarV2Root({
                       renderRow(session, { variant: "card" }),
                     )}
                     {renderProjectShelf(group)}
-                  </ul>
-                )}
+                </ul>
               </SidebarV2ProjectGroupSection>
             );
           })}

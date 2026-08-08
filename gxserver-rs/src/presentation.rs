@@ -27,8 +27,8 @@ two different rules.
 */
 /*
 CDXC:SidebarV2DataGate 2026-07-29:
-`sidebar_v2_selected` is the same `sidebarVersion` gate the git-status,
-`origin`-remote, and project-icon passes run under, threaded in for the same
+`sidebar_v2_selected` is the same `sidebarVersion` gate the git-status and
+`origin`-remote passes run under, threaded in for the same
 reason and from the same place as the window above (callers must resolve it with
 `session_lifecycle::read_sidebar_v2_selected`, off the presentation sequencer).
 It decides ONE thing in the snapshot: the `sessionGitStatus` capability, so a
@@ -558,6 +558,13 @@ fn project_presentation_session(
             attention_state(session, generated_at),
         );
     }
+    /*
+    CDXC:WebCommandPaneActions 2026-08-08:
+    Command-pane clients need the stable saved Action id to find the daemon
+    session that already owns that Action. Publish only that identifier;
+    command text and launch settings remain outside presentation snapshots.
+    */
+    insert_optional_string(&mut output, "commandId", string_field(session, "commandId"));
     output.insert("createdAt".to_string(), value_field(session, "createdAt"));
     insert_optional_js_truthy_value(&mut output, "cwd", session.get("cwd").cloned());
     /*
@@ -2737,6 +2744,7 @@ mod tests {
             missing.get("providerSessionState").and_then(Value::as_str),
             Some("missing")
         );
+        assert_eq!(missing.get("commandId").and_then(Value::as_str), Some("build"));
         assert_eq!(
             missing
                 .get("sessionPersistenceProvider")

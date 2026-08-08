@@ -16,38 +16,35 @@ function sourceBetween(source: string, start: string, end: string): string {
 }
 
 describe("watch ghostex video modal source", () => {
-  test("copies the highlighted-feature shell but renders one filling Loom video", () => {
+  test("copies the highlighted-feature shell but renders one filling walkthrough video", () => {
     /*
      * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
      * The tutorial video modal should be a one-page copy of the Highlighted
      * Features shell. It must show the supplied video walkthrough, fill the
      * modal below the required title, and remove screenshot carousel behavior.
      *
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:35:
-     * Third-party video embeds should keep strict-origin-when-cross-origin
-     * referrer policy so the native HTTPS modal-host base URL can be used.
-     *
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:49:
-     * The walkthrough should use the editable Loom embed and the exact Ghostty
-     * title requested for the single-page video modal.
+     * CDXC:GhostexTutorialVideo 2026-08-08:
+     * YouTube owns the encoded walkthrough so the app bundle does not carry a
+     * large duplicate video asset.
      */
     expect(watchModalSource).toContain("Ghostex Features Walkthrough");
     expect(watchModalSource).toContain(
-      "https://www.loom.com/embed/84a08f60871a4c57a589c057335ac25b",
+      "https://www.youtube.com/embed/APdP-j5n4Mw?playsinline=1&rel=0",
     );
     expect(watchModalSource).toContain(
-      "https://www.loom.com/share/84a08f60871a4c57a589c057335ac25b",
+      "https://www.youtube.com/watch?v=APdP-j5n4Mw",
     );
+    expect(watchModalSource).toContain("<iframe");
     expect(watchModalSource).toContain('frameBorder="0"');
     expect(watchModalSource).toContain('referrerPolicy="strict-origin-when-cross-origin"');
-    expect(watchModalSource).not.toContain("youtube");
-    expect(watchModalSource).not.toContain("YouTube");
-    expect(watchModalSource).not.toContain("Fnd1rwn0Ow4");
+    expect(watchModalSource).toContain("allowFullScreen");
+    expect(watchModalSource).not.toContain("<video");
+    expect(watchModalSource).not.toContain("ghostex-features-walkthrough.webm");
+    expect(watchModalSource).not.toContain("loom.com");
     expect(watchModalSource).toContain("disablePointerDismissal");
     expect(watchModalSource).toContain("showCloseButton={false}");
     expect(watchModalSource).toContain("watch-ghostex-video-modal-dialog");
     expect(watchModalSource).toContain("watch-ghostex-video-frame");
-    expect(watchModalSource).toContain("allowFullScreen");
     expect(watchModalSource).not.toContain("<img");
     expect(watchModalSource).not.toContain("IconChevronLeft");
     expect(watchModalSource).not.toContain("IconChevronRight");

@@ -637,6 +637,8 @@ export interface GxserverStashedPrompt {
   /** Origin project's identity icon, shaped for `WorkspaceProjectIconSource`. */
   projectIcon?: unknown;
   projectIconDataUrl?: string | null;
+  /** Repository icon discovered by gxserver, matching the active sidebar project icon. */
+  projectDiscoveredIconDataUrl?: string | null;
   projectId: string | null;
   projectName: string | null;
   promptId: string;
@@ -647,6 +649,8 @@ export interface GxserverStashedPrompt {
 export interface GxserverSaveStashedPromptParams {
   content: string;
   cwd?: string;
+  /** When present, updates this saved prompt in place. */
+  promptId?: string;
   projectId?: string;
   sessionId?: string;
 }
@@ -2073,6 +2077,8 @@ export interface GxserverPresentationSession {
   agentName?: string;
   agentSessionId?: string;
   agentSessionPath?: string;
+  /** Stable Action identity used to reuse an existing command-surface session. */
+  commandId?: string;
   attention?: GxserverPresentationAttentionState;
   createdAt: string;
   cwd?: string;
@@ -2383,7 +2389,7 @@ export interface GxserverSessionRenameRequestResult {
 }
 
 export interface GxserverAttachSessionMetadataParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "monaco";
+  promptEditor?: "code-server" | "monaco";
   startupText?: string;
 }
 
@@ -2542,7 +2548,7 @@ export type GxserverTerminalWsControlMessage =
   | GxserverTerminalWsServerControlMessage;
 
 export interface GxserverStartSessionProviderParams extends GxserverSessionLifecycleParams {
-  promptEditor?: "monaco";
+  promptEditor?: "code-server" | "monaco";
   startupText?: string;
 }
 
@@ -2627,6 +2633,20 @@ export type GxserverEvent =
       serverId: GxserverServerId;
       sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
       type: "sidebarProjectCollectionsChanged";
+    }
+  /*
+   * CDXC:GlobalActions 2026-08-07:
+   * A Global Action write is not a project write, so it produces no
+   * presentation delta and live surfaces would otherwise keep a stale list.
+   * The event announces the change and bumps the presentation revision; it
+   * carries no commands, because `/api/readSidebarHud` stays the single
+   * projection of the Global Actions list.
+   */
+  | {
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      type: "globalSidebarCommandsChanged";
     }
   | GxserverSessionChatSnapshotEvent
   | GxserverSessionChatAppendedEvent

@@ -141,12 +141,43 @@ pub fn fork_session_command(args: &[String]) -> CliResult<()> {
 pub fn focus_smart_session_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = parsed.flags;
-    let selector_text = match flags.text("sessionId") {
-        Some(value) => value,
-        None => parsed.rest.join(" ").trim().to_string(),
-    };
     let list = sessions::fetch_session_list(&flags, false)?;
-    let session = resolve_one_listed_session(&selector_text, &list, &flags)?;
+    /*
+    CDXC:AgentHistoryFocus 2026-08-07-09:18:
+    Zehn owns agent-history selection while Ghostex owns live workspace identity. Let `ghostex focus` resolve an exact agent conversation id to its live Ghostex session, and give `--if-running` a distinct exit code so Zehn resumes only when no live owner exists—not when focus delivery itself fails.
+    */
+    let session = if let Some(agent_session_id) = flags.text("agentSessionId") {
+        match resolve_live_agent_session_owner(
+            &agent_session_id,
+            flags.text("agent").as_deref(),
+            &list,
+        )? {
+            Some(session) => session,
+            None if flags.truthy("ifRunning") => {
+                if flags.truthy("json") {
+                    print_json(&json!({
+                        "agentSessionId": agent_session_id,
+                        "focused": false,
+                        "ok": true,
+                        "reason": "notRunning",
+                    }));
+                }
+                crate::ghostex_cli::set_exit_code(3);
+                return Ok(());
+            }
+            None => {
+                return Err(CliError::Other(format!(
+                    "No live Ghostex session owns agent session \"{agent_session_id}\"."
+                )));
+            }
+        }
+    } else {
+        let selector_text = match flags.text("sessionId") {
+            Some(value) => value,
+            None => parsed.rest.join(" ").trim().to_string(),
+        };
+        resolve_one_listed_session(&selector_text, &list, &flags)?
+    };
     let mut payload = Map::new();
     insert_session_field(&mut payload, "projectId", &session);
     insert_session_field(&mut payload, "sessionId", &session);
@@ -174,6 +205,49 @@ pub fn focus_smart_session_command(args: &[String]) -> CliResult<()> {
         js_display(session.get("title"))
     );
     Ok(())
+}
+
+fn resolve_live_agent_session_owner(
+    agent_session_id: &str,
+    agent: Option<&str>,
+    sessions_list: &[Value],
+) -> CliResult<Option<Value>> {
+    let normalized_id = agent_session_id.trim();
+    if normalized_id.is_empty() {
+        return Err(CliError::Other(
+            "--agent-session-id requires a non-empty value.".to_string(),
+        ));
+    }
+    let normalized_agent = agent.map(|value| value.trim().to_lowercase());
+    let matches: Vec<&Value> = sessions_list
+        .iter()
+        .filter(|session| {
+            session.get("agentSessionId").and_then(Value::as_str) == Some(normalized_id)
+        })
+        .filter(|session| session.get("isLive").and_then(Value::as_bool) == Some(true))
+        .filter(|session| {
+            let Some(expected_agent) = normalized_agent.as_deref() else {
+                return true;
+            };
+            ["agentId", "agent"]
+                .iter()
+                .filter_map(|key| session.get(*key).and_then(Value::as_str))
+                .any(|value| value.eq_ignore_ascii_case(expected_agent))
+        })
+        .collect();
+    match matches.as_slice() {
+        [] => Ok(None),
+        [session] => Ok(Some((*session).clone())),
+        _ => Err(CliError::Other(format!(
+            "Multiple live Ghostex sessions own agent session \"{normalized_id}\":\n{}",
+            format_session_matches(
+                &matches
+                    .iter()
+                    .map(|session| (*session).clone())
+                    .collect::<Vec<_>>()
+            )
+        ))),
+    }
 }
 
 pub fn read_session_text_command(args: &[String]) -> CliResult<()> {
@@ -1685,6 +1759,69 @@ mod tests {
                 "title": "Port CLI",
             }),
         ]
+    }
+
+    #[test]
+    fn live_agent_session_owner_requires_matching_agent_and_live_session() {
+        let supported_agents = ["claude", "codex", "pi", "opencode", "cursor", "grok"];
+        let mut sessions_list = supported_agents
+            .iter()
+            .enumerate()
+            .map(|(index, agent)| {
+                json!({
+                    "agent": agent,
+                    "agentId": agent,
+                    "agentSessionId": format!("conversation-{agent}"),
+                    "alias": index + 1,
+                    "isLive": true,
+                    "projectName": "Ghostex",
+                    "sessionId": format!("session-{agent}"),
+                    "title": format!("Live {agent}"),
+                })
+            })
+            .collect::<Vec<_>>();
+        sessions_list.push(json!({
+            "agent": "codex",
+            "agentId": "codex",
+            "agentSessionId": "conversation-stopped",
+            "alias": supported_agents.len() + 1,
+            "isLive": false,
+            "projectName": "Ghostex",
+            "sessionId": "session-stopped",
+            "title": "Stopped Codex",
+        }));
+
+        for agent in supported_agents {
+            let conversation_id = format!("conversation-{agent}");
+            let live = resolve_live_agent_session_owner(
+                &conversation_id,
+                Some(&agent.to_uppercase()),
+                &sessions_list,
+            )
+            .unwrap()
+            .expect("live owner");
+            assert_eq!(live["sessionId"], json!(format!("session-{agent}")));
+        }
+        assert!(resolve_live_agent_session_owner(
+            "conversation-codex",
+            Some("claude"),
+            &sessions_list,
+        )
+        .unwrap()
+        .is_none());
+        assert!(resolve_live_agent_session_owner(
+            "conversation-stopped",
+            Some("codex"),
+            &sessions_list,
+        )
+        .unwrap()
+        .is_none());
+        assert!(
+            resolve_live_agent_session_owner("missing", None, &sessions_list)
+                .unwrap()
+                .is_none()
+        );
+        assert!(resolve_live_agent_session_owner("  ", None, &sessions_list).is_err());
     }
 
     #[test]

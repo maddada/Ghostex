@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, OnceLock,
     },
     thread,
     time::{Duration, Instant},
@@ -18,6 +18,8 @@ use crate::{
     agents::{apply_created_session_identity, get_agent_startup_text_for_session},
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::{read_project_id, read_session_id, DomainRepository, DomainStateError},
+    logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, LogLevel},
+    paths::get_gxserver_paths,
     platform::shell::{command_shell, user_login_shell_exec_command},
     session_status::compute_activity_update,
     toolchain::{require_bundled_zmx, GxserverResolvedTool},
@@ -29,6 +31,71 @@ pub const GXSERVER_ZMX_COMMAND_STDERR_LIMIT_BYTES: usize = 64 * 1024;
 pub const GXSERVER_ZMX_HISTORY_STDOUT_LIMIT_BYTES: usize = 256 * 1024;
 pub const GXSERVER_ZMX_PROCESS_SNAPSHOT_STDOUT_LIMIT_BYTES: usize = 1024 * 1024;
 pub const GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES: usize = 512 * 1024;
+
+static TEMPORARY_TERMINAL_INPUT_LOGGER: OnceLock<GxserverLogger> = OnceLock::new();
+
+/*
+Temporary cross-session interruption diagnosis (2026-08-07): record only
+control-byte classifications and stable session identities at the last
+gxserver boundary before `zmx send`. Never persist terminal text. Title-flow
+writes are included even when they contain no control bytes so a future report
+can prove which exact session every command/submit step targeted.
+*/
+pub(crate) fn log_temporary_zmx_input_write(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    operation: &str,
+    source: &str,
+    payload: &str,
+) {
+    let bytes = payload.as_bytes();
+    let mut controls = Vec::new();
+    if payload.contains("\u{1b}[27u") {
+        controls.push("kitty-escape");
+    } else if bytes == [0x1b] {
+        controls.push("raw-escape");
+    }
+    for (byte, label) in [
+        (0x03, "ctrl-c"),
+        (0x04, "ctrl-d"),
+        (0x15, "ctrl-u"),
+        (0x19, "ctrl-y"),
+        (0x1a, "ctrl-z"),
+        (0x1c, "ctrl-backslash"),
+    ] {
+        if bytes.contains(&byte) {
+            controls.push(label);
+        }
+    }
+    let title_flow = source.contains("title");
+    if controls.is_empty() && !title_flow {
+        return;
+    }
+    let paths = get_gxserver_paths(None);
+    let logger = TEMPORARY_TERMINAL_INPUT_LOGGER.get_or_init(|| GxserverLogger::new(paths));
+    let _ = logger.log_routine(
+        DiagnosticLogScenario::TerminalFocus,
+        GxserverLogInput {
+            level: LogLevel::Debug,
+            event: "temporaryTerminalInputWrite".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({
+                "byteLength": bytes.len(),
+                "controls": controls,
+                "operation": operation.trim_start_matches("/api/"),
+                "projectId": project_id,
+                "providerSessionId": zmx_name,
+                "sessionId": session_id,
+                "source": source,
+            })),
+        },
+    );
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZmxProcessIdentity {
@@ -156,16 +223,7 @@ pub(crate) fn create_started_workspace_terminal(
         )
         .into());
     }
-    let prompt_editor = match params.get("promptEditor") {
-        None => None,
-        Some(Value::String(value)) if value == "monaco" => Some(value.clone()),
-        Some(_) => {
-            return Err(DomainStateError::bad_request(
-                "createWorkspaceTerminal promptEditor must be monaco when provided.",
-            )
-            .into())
-        }
-    };
+    let prompt_editor = prompt_editor_mode_from_params(params)?;
     let project_id = read_project_id(params)?;
     let project = repository.get_project(&project_id)?.ok_or_else(|| {
         DomainStateError::not_found(format!("Project {project_id} does not exist."))
@@ -249,7 +307,7 @@ pub(crate) fn create_started_workspace_terminal(
         session_name: zmx_name.clone(),
         zmx_executable_path: zmx.executable_path.clone(),
     });
-    if let Err(error) = run_zmx_interaction_command(start_command, ZmxCommandOptions::default()) {
+    if let Err(error) = run_zmx_start_command(&zmx_name, &zmx.executable_path, start_command) {
         return Err(workspace_terminal_failure_with_cleanup(
             error,
             compensate_created_workspace_terminal(repository, &created_identity),
@@ -577,6 +635,12 @@ pub fn dispatch_zmx_session_interaction_endpoint(
     let lifecycle = read_lifecycle_params(params)?;
     let session = require_session(repository, &lifecycle)?;
     let zmx_name = provider_zmx_session_name(&session)?;
+    let diagnostic_source = params
+        .get("diagnosticInputSource")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("external-api");
     match endpoint_path {
         "/api/readSessionText" => {
             let result = run_zmx_interaction_command(
@@ -612,6 +676,14 @@ pub fn dispatch_zmx_session_interaction_endpoint(
         }
         "/api/sendSessionText" => {
             let text = read_interaction_text(params.get("text"), "sendSessionText")?;
+            log_temporary_zmx_input_write(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                &zmx_name,
+                endpoint_path,
+                diagnostic_source,
+                &text,
+            );
             let result = run_zmx_interaction_command(
                 build_zmx_send_command(&zmx_name, &zmx.executable_path),
                 ZmxCommandOptions {
@@ -628,6 +700,14 @@ pub fn dispatch_zmx_session_interaction_endpoint(
             ))
         }
         "/api/sendSessionEnter" => {
+            log_temporary_zmx_input_write(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                &zmx_name,
+                endpoint_path,
+                diagnostic_source,
+                "\r",
+            );
             let result = run_zmx_interaction_command(
                 build_zmx_send_command(&zmx_name, &zmx.executable_path),
                 ZmxCommandOptions {
@@ -655,6 +735,14 @@ pub fn dispatch_zmx_session_interaction_endpoint(
             instead of submitted. `sendDelayMs` lets callers widen the settle
             window; the clamp keeps a bad value from stalling the endpoint.
             */
+            log_temporary_zmx_input_write(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                &zmx_name,
+                endpoint_path,
+                diagnostic_source,
+                &text,
+            );
             let result = run_zmx_interaction_command(
                 build_zmx_send_command(&zmx_name, &zmx.executable_path),
                 ZmxCommandOptions {
@@ -671,6 +759,14 @@ pub fn dispatch_zmx_session_interaction_endpoint(
                 if send_delay_ms > 0 {
                     thread::sleep(Duration::from_millis(send_delay_ms));
                 }
+                log_temporary_zmx_input_write(
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                    &zmx_name,
+                    "sendSessionMessageSubmit",
+                    diagnostic_source,
+                    "\r",
+                );
                 run_zmx_interaction_command(
                     build_zmx_send_command(&zmx_name, &zmx.executable_path),
                     ZmxCommandOptions {
@@ -825,8 +921,7 @@ fn create_attach_session_metadata(
         gxserver_auth_token_file: Some(context.auth_token_file.clone()),
         gxserver_base_url: Some(context.base_url.clone()),
         gxserver_protocol_version: Some(GXSERVER_PROTOCOL_VERSION),
-        prompt_editor: (params.get("promptEditor").and_then(Value::as_str) == Some("monaco"))
-            .then_some("monaco".to_string()),
+        prompt_editor: prompt_editor_mode_from_params(params)?,
         session_name: zmx_name.clone(),
         title: string_field(&session_for_attach, "title"),
         zmx_executable_path: zmx.executable_path,
@@ -923,11 +1018,10 @@ fn start_session_provider(
             gxserver_auth_token_file: Some(context.auth_token_file.clone()),
             gxserver_base_url: Some(context.base_url.clone()),
             gxserver_protocol_version: Some(GXSERVER_PROTOCOL_VERSION),
-            prompt_editor: (params.get("promptEditor").and_then(Value::as_str) == Some("monaco"))
-                .then_some("monaco".to_string()),
+            prompt_editor: prompt_editor_mode_from_params(params)?,
             session_name: zmx_name.clone(),
             startup_text: startup_text.unwrap_or_default(),
-            zmx_executable_path: zmx.executable_path,
+            zmx_executable_path: zmx.executable_path.clone(),
         })
     } else {
         build_zmx_shell_provider_command(ZmxShellProviderCommandInput {
@@ -936,13 +1030,12 @@ fn start_session_provider(
             gxserver_auth_token_file: Some(context.auth_token_file.clone()),
             gxserver_base_url: Some(context.base_url.clone()),
             gxserver_protocol_version: Some(GXSERVER_PROTOCOL_VERSION),
-            prompt_editor: (params.get("promptEditor").and_then(Value::as_str) == Some("monaco"))
-                .then_some("monaco".to_string()),
+            prompt_editor: prompt_editor_mode_from_params(params)?,
             session_name: zmx_name.clone(),
-            zmx_executable_path: zmx.executable_path,
+            zmx_executable_path: zmx.executable_path.clone(),
         })
     };
-    let result = run_zmx_interaction_command(command, ZmxCommandOptions::default())?;
+    let result = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;
     let provider_state = ProviderProbe {
         error: None,
         lifecycle_state: "exists".to_string(),
@@ -1116,6 +1209,8 @@ fn kill_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderKi
         build_zmx_kill_command(session_name, zmx_executable_path),
         ZmxCommandOptions::default(),
     );
+    #[cfg(target_os = "macos")]
+    cleanup_macos_zmx_launchd_job(session_name);
     let result = match result {
         Ok(result) => result,
         Err(error) => {
@@ -1878,6 +1973,348 @@ fn run_zmx_interaction_command(
     Ok(result)
 }
 
+#[cfg(not(target_os = "macos"))]
+fn run_zmx_start_command(
+    _session_name: &str,
+    _zmx_executable_path: &str,
+    script: String,
+) -> ZmxEndpointResult<ZmxCommandResult> {
+    run_zmx_interaction_command(script, ZmxCommandOptions::default())
+}
+
+/*
+CDXC:ZmxLaunchdPersistence 2026-08-07:
+The macOS app and gxserver each have launchd/Background Task Management
+lifecycles that may be replaced during a development rebuild. A detached zmx
+daemon otherwise inherits gxserver's resource coalition, so macOS later kills
+the terminal session while cleaning up the old gxserver job. Give every zmx
+session its own launchd job whose long-lived shell supervisor remains active
+until the exact zmx session disappears. The job runs /bin/zsh rather than an
+executable inside Ghostex.app so an app-bundle replacement cannot re-associate
+the session with the retiring app coalition.
+
+The generated launch script is private and deletes itself as soon as launchd
+starts it because startup text can contain user-authored terminal input and
+the inherited terminal environment can contain secrets. The plist contains
+only hashed identity and runtime paths.
+*/
+#[cfg(target_os = "macos")]
+fn run_zmx_start_command(
+    session_name: &str,
+    zmx_executable_path: &str,
+    script: String,
+) -> ZmxEndpointResult<ZmxCommandResult> {
+    let job = MacosZmxLaunchdJob::new(session_name)?;
+    job.prepare(&script)?;
+
+    let bootstrap = job.launchctl(&["bootstrap", &job.domain_target, &job.plist_path_string]);
+    if !bootstrap.success {
+        if macos_zmx_session_exists(session_name, zmx_executable_path) {
+            job.remove_private_launch_script();
+            return Ok(zmx_start_success_result());
+        }
+        let _ = job.launchctl(&["bootout", &job.job_target]);
+        let retry = job.launchctl(&["bootstrap", &job.domain_target, &job.plist_path_string]);
+        if !retry.success {
+            job.remove_private_launch_script();
+            return Err(ZmxEndpointError::DependencyUnavailable(format!(
+                "zmx launchd bootstrap failed: {}",
+                retry.message()
+            )));
+        }
+    }
+
+    let kickstart = job.launchctl(&["kickstart", &job.job_target]);
+    if !kickstart.success && !macos_zmx_session_exists(session_name, zmx_executable_path) {
+        job.cleanup();
+        return Err(ZmxEndpointError::DependencyUnavailable(format!(
+            "zmx launchd kickstart failed: {}",
+            kickstart.message()
+        )));
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS);
+    while Instant::now() < deadline {
+        if macos_zmx_session_exists(session_name, zmx_executable_path) {
+            return Ok(zmx_start_success_result());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    let launch_log = fs::read_to_string(&job.log_path)
+        .ok()
+        .map(|text| text.trim().chars().rev().take(4_096).collect::<String>())
+        .map(|text| text.chars().rev().collect::<String>())
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| "the per-session launch job produced no error output".to_string());
+    job.cleanup();
+    Err(ZmxEndpointError::DependencyUnavailable(format!(
+        "zmx session did not become ready: {launch_log}"
+    )))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_zmx_session_exists(session_name: &str, zmx_executable_path: &str) -> bool {
+    run_zsh_script(
+        build_zmx_exists_command(session_name, zmx_executable_path),
+        ZmxCommandOptions {
+            timeout_ms: Some(1_000),
+            ..ZmxCommandOptions::default()
+        },
+    )
+    .map(|result| result.exit_code == 0)
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn zmx_start_success_result() -> ZmxCommandResult {
+    ZmxCommandResult {
+        exit_code: 0,
+        stderr: String::new(),
+        stdout: String::new(),
+        stdout_truncated: false,
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct MacosLaunchctlResult {
+    success: bool,
+    stderr: String,
+    stdout: String,
+}
+
+#[cfg(target_os = "macos")]
+impl MacosLaunchctlResult {
+    fn message(&self) -> String {
+        if !self.stderr.trim().is_empty() {
+            self.stderr.trim().to_string()
+        } else if !self.stdout.trim().is_empty() {
+            self.stdout.trim().to_string()
+        } else {
+            "launchctl exited without an error message".to_string()
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct MacosZmxLaunchdJob {
+    domain_target: String,
+    job_target: String,
+    label: String,
+    launch_script_path: PathBuf,
+    log_path: PathBuf,
+    plist_path: PathBuf,
+    plist_path_string: String,
+    socket_path: PathBuf,
+}
+
+#[cfg(target_os = "macos")]
+impl MacosZmxLaunchdJob {
+    fn new(session_name: &str) -> ZmxEndpointResult<Self> {
+        let uid = unsafe { libc::getuid() };
+        let key = macos_zmx_launchd_session_key(session_name);
+        let label = format!("com.madda.ghostex.zmx.{key}");
+        let runtime_dir = get_gxserver_paths(None).runtime_dir.join("zmx-launchd");
+        fs::create_dir_all(&runtime_dir).map_err(|error| {
+            ZmxEndpointError::DependencyUnavailable(format!(
+                "create zmx launchd runtime directory failed: {error}"
+            ))
+        })?;
+        let plist_path = runtime_dir.join(format!("{key}.plist"));
+        let plist_path_string = plist_path.to_string_lossy().to_string();
+        Ok(Self {
+            domain_target: format!("gui/{uid}"),
+            job_target: format!("gui/{uid}/{label}"),
+            label,
+            launch_script_path: runtime_dir.join(format!("{key}.sh")),
+            log_path: runtime_dir.join(format!("{key}.log")),
+            plist_path,
+            plist_path_string,
+            socket_path: macos_zmx_socket_path(session_name, uid),
+        })
+    }
+
+    fn prepare(&self, start_script: &str) -> ZmxEndpointResult<()> {
+        let _ = fs::remove_file(&self.log_path);
+        let environment_exports = macos_zmx_launchd_environment_exports();
+        let supervisor_script = format!(
+            r#"#!/bin/zsh
+/bin/rm -f {}
+{}
+(
+{}
+)
+zmx_start_status=$?
+if [ "$zmx_start_status" -ne 0 ]; then
+  exit "$zmx_start_status"
+fi
+zmx_socket={}
+zmx_absent_checks=0
+zmodload zsh/zselect
+while [ "$zmx_absent_checks" -lt 3 ]; do
+  if [ ! -S "$zmx_socket" ]; then
+    zmx_absent_checks=$((zmx_absent_checks + 1))
+  else
+    zmx_absent_checks=0
+  fi
+  zselect -t 200
+done
+"#,
+            shell_quote(&self.launch_script_path.to_string_lossy()),
+            environment_exports,
+            start_script,
+            shell_quote(&self.socket_path.to_string_lossy()),
+        );
+        write_private_macos_launchd_file(&self.launch_script_path, &supervisor_script)?;
+
+        let plist = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>{launch_script}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>{launch_log}</string>
+  <key>StandardErrorPath</key>
+  <string>{launch_log}</string>
+</dict>
+</plist>
+"#,
+            label = macos_launchd_xml_escape(&self.label),
+            launch_script = macos_launchd_xml_escape(&self.launch_script_path.to_string_lossy()),
+            launch_log = macos_launchd_xml_escape(&self.log_path.to_string_lossy()),
+        );
+        write_private_macos_launchd_file(&self.plist_path, &plist)
+    }
+
+    fn launchctl(&self, arguments: &[&str]) -> MacosLaunchctlResult {
+        match Command::new("/bin/launchctl")
+            .args(arguments)
+            .stdin(Stdio::null())
+            .output()
+        {
+            Ok(output) => MacosLaunchctlResult {
+                success: output.status.success(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            },
+            Err(error) => MacosLaunchctlResult {
+                success: false,
+                stderr: error.to_string(),
+                stdout: String::new(),
+            },
+        }
+    }
+
+    fn remove_private_launch_script(&self) {
+        let _ = fs::remove_file(&self.launch_script_path);
+    }
+
+    fn cleanup(&self) {
+        let _ = self.launchctl(&["bootout", &self.job_target]);
+        self.remove_private_launch_script();
+        let _ = fs::remove_file(&self.plist_path);
+        let _ = fs::remove_file(&self.log_path);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_zmx_launchd_environment_exports() -> String {
+    let mut environment = build_gxserver_zmx_child_environment()
+        .into_iter()
+        .filter(|(key, _)| is_shell_environment_name(key))
+        .collect::<Vec<_>>();
+    environment.sort_by(|left, right| left.0.cmp(&right.0));
+    environment
+        .into_iter()
+        .map(|(key, value)| format!("export {key}={}\n", shell_quote(&value)))
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_zmx_socket_path(session_name: &str, uid: u32) -> PathBuf {
+    let socket_directory = if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
+        PathBuf::from(zmx_dir)
+    } else if let Some(xdg_runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") {
+        PathBuf::from(xdg_runtime_dir).join("zmx")
+    } else {
+        let temporary_directory = std::env::var("TMPDIR")
+            .unwrap_or_else(|_| "/tmp".to_string())
+            .trim_end_matches('/')
+            .to_string();
+        PathBuf::from(format!("{temporary_directory}/zmx-{uid}"))
+    };
+    socket_directory.join(session_name)
+}
+
+#[cfg(target_os = "macos")]
+fn is_shell_environment_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
+}
+
+#[cfg(target_os = "macos")]
+fn macos_zmx_launchd_session_key(session_name: &str) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in session_name.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+#[cfg(target_os = "macos")]
+fn macos_launchd_xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+#[cfg(target_os = "macos")]
+fn write_private_macos_launchd_file(path: &Path, contents: &str) -> ZmxEndpointResult<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|error| {
+            ZmxEndpointError::DependencyUnavailable(format!(
+                "write {} failed: {error}",
+                path.display()
+            ))
+        })?;
+    file.write_all(contents.as_bytes()).map_err(|error| {
+        ZmxEndpointError::DependencyUnavailable(format!("write {} failed: {error}", path.display()))
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn cleanup_macos_zmx_launchd_job(session_name: &str) {
+    if let Ok(job) = MacosZmxLaunchdJob::new(session_name) {
+        job.cleanup();
+    }
+}
+
 fn run_zsh_script(script: String, options: ZmxCommandOptions) -> Result<ZmxCommandResult, String> {
     run_zsh_script_blocking(&script, options)
 }
@@ -2075,11 +2512,7 @@ fn build_zmx_attach_command(input: ZmxAttachCommandInput) -> String {
     behavior or the per-client prompt-editor capability decision.
     */
     let shell = command_shell();
-    let prompt_editor_attach_args = if input.prompt_editor.as_deref() == Some("monaco") {
-        "--prompt-editor=monaco"
-    } else {
-        ""
-    };
+    let prompt_editor_attach_args = zmx_prompt_editor_attach_args(input.prompt_editor.as_deref());
     let script = format!(
         r#"
 zmx_session={}
@@ -2160,11 +2593,7 @@ fn build_started_zmx_attach_command(input: ZmxAttachCommandInput) -> String {
     through build_zmx_attach_command and retain their canonical probe path.
     */
     let shell = command_shell();
-    let prompt_editor_attach_args = if input.prompt_editor.as_deref() == Some("monaco") {
-        "--prompt-editor=monaco"
-    } else {
-        ""
-    };
+    let prompt_editor_attach_args = zmx_prompt_editor_attach_args(input.prompt_editor.as_deref());
     let script = format!(
         r#"
 zmx_session={}
@@ -2478,6 +2907,14 @@ export VISUAL="$ghostex_prompt_editor_wrapper"
     script
 }
 
+fn zmx_prompt_editor_attach_args(prompt_editor: Option<&str>) -> &'static str {
+    match prompt_editor {
+        Some("monaco") => "--prompt-editor=monaco",
+        Some("code-server") => "--prompt-editor=code-server",
+        _ => "",
+    }
+}
+
 fn zmx_session_identity_reset_shell_command() -> String {
     format!("unset {}", session_identity_environment_keys().join(" "))
 }
@@ -2519,6 +2956,20 @@ fn read_lifecycle_params(params: &Map<String, Value>) -> Result<LifecycleParams,
         project_id: read_project_id(params)?,
         session_id: read_session_id(params)?,
     })
+}
+
+fn prompt_editor_mode_from_params(
+    params: &Map<String, Value>,
+) -> Result<Option<String>, DomainStateError> {
+    match params.get("promptEditor") {
+        None => Ok(None),
+        Some(Value::String(value)) if matches!(value.as_str(), "monaco" | "code-server") => {
+            Ok(Some(value.clone()))
+        }
+        Some(_) => Err(DomainStateError::bad_request(
+            "promptEditor must be monaco or code-server when provided.",
+        )),
+    }
 }
 
 fn js_string(value: Option<&Value>) -> String {
@@ -3003,6 +3454,22 @@ mod tests {
         });
         assert_eq!(command.matches("attach --require-existing").count(), 2);
         assert!(command.contains("--prompt-editor=monaco"));
+
+        let remote_command = build_zmx_attach_command(ZmxAttachCommandInput {
+            prompt_editor: Some("code-server".to_string()),
+            ..ZmxAttachCommandInput {
+                cwd: "/srv/project".to_string(),
+                global_session_ref: Some("S7k:P100:G100".to_string()),
+                gxserver_auth_token_file: Some("/tmp/ghostex/token".to_string()),
+                gxserver_base_url: Some("http://127.0.0.1:58744".to_string()),
+                gxserver_protocol_version: Some(1),
+                prompt_editor: None,
+                session_name: "S7k-P100-G100".to_string(),
+                title: Some("Remote terminal".to_string()),
+                zmx_executable_path: "/srv/ghostex/zmx".to_string(),
+            }
+        });
+        assert!(remote_command.contains("--prompt-editor=code-server"));
     }
 
     #[test]

@@ -21,12 +21,14 @@ import { Button } from "../../components/ui/button";
 import {
   Attachment,
   AttachmentContent,
-  AttachmentGroup,
   AttachmentMedia,
   AttachmentTitle,
   AttachmentTrigger,
 } from "../../components/ui/attachment";
-import { useSessionChatImageViewer } from "./session-chat-image-viewer";
+import {
+  SessionChatInlineImage,
+  useSessionChatImageViewer,
+} from "./session-chat-image-viewer";
 import { normalizeSessionChatImageTranscriptMessages } from "./session-chat-image-transcript-markers";
 import { Bubble, BubbleContent } from "../../components/ui/bubble";
 import { Marker, MarkerContent } from "../../components/ui/marker";
@@ -105,34 +107,47 @@ function ImageAttachments({
   if (blocks.length === 0) {
     return null;
   }
+  /*
+  A picture shared in the conversation shows as the picture. The named chip
+  stays as the honest stand-in for one that cannot be read here — a host with
+  no image transport, or a file that has since gone — so a turn never renders
+  a broken image well.
+  */
   return (
-    <AttachmentGroup className={className}>
+    <div className={cn("flex min-w-0 flex-wrap gap-2 py-1", className)}>
       {blocks.map((block, index) => {
         const target = {
           ...(block.path !== undefined ? { path: block.path } : {}),
           ...(block.url !== undefined ? { url: block.url } : {}),
           ...(block.alt !== undefined ? { alt: block.alt } : {}),
         };
-        const openable = viewer?.canOpen(target) === true;
-        return (
-          <Attachment key={index} size="xs">
+        const label = imageChipLabel(block);
+        const chip = (
+          <Attachment size="xs">
             <AttachmentMedia>
               <IconPhoto aria-hidden="true" stroke={1.8} />
             </AttachmentMedia>
             <AttachmentContent>
-              <AttachmentTitle>{imageChipLabel(block)}</AttachmentTitle>
+              <AttachmentTitle>{label}</AttachmentTitle>
             </AttachmentContent>
-            {openable ? (
+            {viewer?.canOpen(target) === true ? (
               <AttachmentTrigger
-                aria-label={`View ${imageChipLabel(block)}`}
+                aria-label={`View ${label}`}
                 className="cursor-zoom-in"
                 onClick={() => viewer?.open(target)}
               />
             ) : null}
           </Attachment>
         );
+        return (
+          <SessionChatInlineImage
+            fallback={chip}
+            key={index}
+            target={{ ...target, alt: target.alt ?? label }}
+          />
+        );
       })}
-    </AttachmentGroup>
+    </div>
   );
 }
 
@@ -228,7 +243,8 @@ function MessageRow({
     return (
       <Message align="end" data-role="user">
         <MessageContent>
-          <ImageAttachments blocks={images} className="self-end" />
+          {/* justify-end keeps wrapped rows against the user's side. */}
+          <ImageAttachments blocks={images} className="self-end justify-end" />
           {markdown.length > 0 ? (
             <Bubble
               align="end"
@@ -347,19 +363,19 @@ export function SessionChatMessageList({
           onScroll={handleScroll}
           preserveScrollOnPrepend
         >
+          {hasMore ? (
+            <div className="flex justify-center px-4 pt-2 [direction:ltr]">
+              <Button
+                disabled={loadingEarlier}
+                onClick={onLoadEarlier}
+                size="sm"
+                variant="ghost"
+              >
+                {loadingEarlier ? "Loading…" : "Load earlier messages"}
+              </Button>
+            </div>
+          ) : null}
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-5 px-4 pt-8 pb-4 [direction:ltr]">
-            {hasMore ? (
-              <div className="flex justify-center">
-                <Button
-                  disabled={loadingEarlier}
-                  onClick={onLoadEarlier}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {loadingEarlier ? "Loading…" : "Load earlier messages"}
-                </Button>
-              </div>
-            ) : null}
             {rendered.map((message) => (
               <MessageScrollerItem
                 key={message.id}
