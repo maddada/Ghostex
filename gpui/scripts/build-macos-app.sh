@@ -269,6 +269,61 @@ validate_local_gxserver_runtime_resources() {
 	fi
 }
 
+# CDXC:GPUILocalToolchainValidation 2026-08-10:
+# Local cargo builds invoke cef-dll-sys, whose CMake setup selects the Ninja
+# generator unconditionally but reports a generic "build program not found"
+# error that is easy to misread as a compiler or CEF issue. Fail up front with
+# an actionable message instead of letting the Cargo build stall and fail.
+validate_build_toolchain_dependencies() {
+	local missing=0
+
+	if ! command -v ninja >/dev/null 2>&1; then
+		echo "Required build tool 'ninja' was not found on PATH." >&2
+		echo "The cef-dll-sys crate drives CMake with the Ninja generator; without it the CEF build fails late." >&2
+		echo "Install it with: brew install ninja" >&2
+		missing=1
+	fi
+	if ! command -v cmake >/dev/null 2>&1; then
+		echo "Required build tool 'cmake' was not found on PATH." >&2
+		echo "The cef-dll-sys crate requires CMake to configure the bundled CEF sources." >&2
+		echo "Install it with: brew install cmake" >&2
+		missing=1
+	fi
+
+	if [[ "$missing" == "1" ]]; then
+		exit 1
+	fi
+
+	# The CEF build script compiles Metal shaders, so the Metal toolchain must
+	# be present even for host-only local builds.
+	if ! xcrun --sdk macosx --find metal >/dev/null 2>&1; then
+		echo "The macOS Metal toolchain is not installed; the CEF build cannot compile its shaders." >&2
+		echo "Install it with: xcodebuild -downloadComponent MetalToolchain" >&2
+		exit 1
+	fi
+}
+
+# CDXC:GPUIGhosttyKitLocalPrereq 2026-08-10:
+# gpui/build.rs links the repo-local GhosttyKit static archive by exact path
+# (gpui/build.rs links ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
+# The dev path never builds it; the release pipeline does. Detecting the absence
+# up front avoids a long Rust compile that only fails at link time.
+validate_ghosttykit_archive() {
+	local ghostty_kit="$REPO_ROOT/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
+	if [[ ! -f "$ghostty_kit/ghostty-internal.a" || ! -f "$ghostty_kit/Headers/ghostty.h" ]]; then
+		echo "Missing repo-local GhosttyKit static archive: $ghostty_kit" >&2
+		echo "gpui/build.rs links this archive by exact path; the dev build does not build it." >&2
+		echo "Build it from the vendored Ghostty source with:" >&2
+		echo "  (cd \"$REPO_ROOT/ghostty\" && ZIG=\${ZIG:-\$(command -v zig)} && \\" >&2
+		echo "     env DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
+		echo "       SDKROOT=\"\$(DEVELOPER_DIR=\"\$(xcode-select -p)\" xcrun --sdk macosx --show-sdk-path)\" \\" >&2
+		echo "       GHOSTTY_METAL_DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
+		echo "       \"\$ZIG\" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false)" >&2
+		echo "Requires Zig 0.15.2 (\`brew install zig@0.15\`) and the Metal toolchain." >&2
+		exit 1
+	fi
+}
+
 run_developer_xcrun() {
 	local developer_dir="$1"
 	shift
@@ -905,6 +960,8 @@ validate_completion_sound_assets
 validate_cli_resources
 validate_portless_admin_runtime_resources
 validate_local_gxserver_runtime_resources
+validate_build_toolchain_dependencies
+validate_ghosttykit_archive
 
 (
 	cd "$REPO_ROOT"
