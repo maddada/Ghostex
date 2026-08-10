@@ -539,12 +539,14 @@ function clampContextMenuPosition(
 export function getGroupContextMenuItemCount({
   canCreateSessionGroup = false,
   canFullReloadGroup,
+  canHideGroup = false,
   hasProjectContext,
   isWorktreeProject,
   projectCollectionsEnabled = false,
 }: {
   canCreateSessionGroup?: boolean;
   canFullReloadGroup: boolean;
+  canHideGroup?: boolean;
   hasProjectContext: boolean;
   isWorktreeProject: boolean;
   projectCollectionsEnabled?: boolean;
@@ -557,11 +559,23 @@ export function getGroupContextMenuItemCount({
    * Rename Worktree replaced the dead label-only Rename on worktree rows rather
    * than joining it, so the count is unchanged. It drives viewport clamping, so
    * it has to move with the menu or the last item opens off-screen.
+   *
+   * CDXC:SidebarContextMenu 2026-08-10:
+   * Hide/Unhide renders in both project menus whenever `onHideGroup` is supplied
+   * — which the sidebar always does — and was never counted, so every project
+   * menu was measured one row short and the last item could open off-screen. It
+   * is not part of the group menu, so only the project branches take it.
    */
   if (hasProjectContext) {
-    return isWorktreeProject
-      ? 5 + Number(projectCollectionsEnabled)
-      : 5 + Number(canFullReloadGroup) + Number(canCreateSessionGroup) + Number(projectCollectionsEnabled);
+    return (
+      Number(canHideGroup) +
+      (isWorktreeProject
+        ? 5 + Number(projectCollectionsEnabled)
+        : 5 +
+          Number(canFullReloadGroup) +
+          Number(canCreateSessionGroup) +
+          Number(projectCollectionsEnabled))
+    );
   }
 
   return 3 + Number(canFullReloadGroup);
@@ -1907,6 +1921,7 @@ export function SessionGroupSection({
         getGroupContextMenuItemCount({
           canCreateSessionGroup: group.canCreateSessionGroup === true,
           canFullReloadGroup,
+          canHideGroup: Boolean(onHideGroup),
           hasProjectContext: Boolean(projectContext),
           isWorktreeProject: Boolean(projectContext?.worktree),
           projectCollectionsEnabled: Boolean(onCreateProjectCollection && onMoveProjectToCollection),

@@ -323,12 +323,13 @@ pub fn plan_worktree_branch_rename(session: &Value) -> Option<WorktreeBranchRena
     })
 }
 
-/// The session's runtime settings with the marker's branch replaced and the
-/// rename stamped, ready to hand to `update_session`.
-pub fn runtime_settings_with_renamed_worktree_branch(
+/// The session's runtime settings with `mutate` applied to its V2 worktree
+/// marker, ready to hand to `update_session`. `None` when the session carries no
+/// marker, which is the signal that it is not a worktree session at all — the
+/// one shape both marker rewrites below share.
+fn runtime_settings_with_mutated_worktree_marker(
     session: &Value,
-    branch: &str,
-    renamed_at: &str,
+    mutate: impl FnOnce(&mut Map<String, Value>),
 ) -> Option<Map<String, Value>> {
     let mut runtime_settings = session
         .get("runtimeSettings")
@@ -339,13 +340,25 @@ pub fn runtime_settings_with_renamed_worktree_branch(
         .get(WORKTREE_SESSION_RUNTIME_KEY)
         .and_then(Value::as_object)
         .cloned()?;
-    marker.insert("branch".to_string(), json!(branch));
-    marker.insert("renamedAt".to_string(), json!(renamed_at));
+    mutate(&mut marker);
     runtime_settings.insert(
         WORKTREE_SESSION_RUNTIME_KEY.to_string(),
         Value::Object(marker),
     );
     Some(runtime_settings)
+}
+
+/// The session's runtime settings with the marker's branch replaced and the
+/// rename stamped, ready to hand to `update_session`.
+pub fn runtime_settings_with_renamed_worktree_branch(
+    session: &Value,
+    branch: &str,
+    renamed_at: &str,
+) -> Option<Map<String, Value>> {
+    runtime_settings_with_mutated_worktree_marker(session, |marker| {
+        marker.insert("branch".to_string(), json!(branch));
+        marker.insert("renamedAt".to_string(), json!(renamed_at));
+    })
 }
 
 /*
@@ -363,24 +376,12 @@ pub fn runtime_settings_with_moved_worktree_path(
     path: &str,
     branch: Option<&str>,
 ) -> Option<Map<String, Value>> {
-    let mut runtime_settings = session
-        .get("runtimeSettings")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let mut marker = runtime_settings
-        .get(WORKTREE_SESSION_RUNTIME_KEY)
-        .and_then(Value::as_object)
-        .cloned()?;
-    marker.insert("path".to_string(), json!(path));
-    if let Some(branch) = branch {
-        marker.insert("branch".to_string(), json!(branch));
-    }
-    runtime_settings.insert(
-        WORKTREE_SESSION_RUNTIME_KEY.to_string(),
-        Value::Object(marker),
-    );
-    Some(runtime_settings)
+    runtime_settings_with_mutated_worktree_marker(session, |marker| {
+        marker.insert("path".to_string(), json!(path));
+        if let Some(branch) = branch {
+            marker.insert("branch".to_string(), json!(branch));
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -561,8 +562,10 @@ CDXC:WorktreeRename 2026-08-09-18:40:
 `fatal: cannot move a locked working tree`, and the override is `move -f -f`,
 which this feature deliberately does not offer — a lock is someone saying "do not
 touch this checkout". Read the lock straight off `worktree list --porcelain`,
-whose per-worktree block carries a bare `locked` line (or `locked <reason>`), so
-the refusal can name the actual reason instead of forwarding git's stderr.
+whose per-worktree block carries a bare `locked` line (or `locked <reason>`),
+rather than forwarding git's stderr — which typed-operation results do not carry
+to the user anyway. The reason itself is deliberately dropped: the caller's
+refusal is a fixed sentence, so this answers only whether a lock is there.
 */
 pub fn worktree_is_locked(repository_path: &str, worktree_path: &str) -> bool {
     let Some(listing) = run_worktree_git(
@@ -704,6 +707,9 @@ mod tests {
         assert_eq!(worktree_rename_folder_slug("feat/UI-Polish"), "feat-UI-Polish");
         assert_eq!(worktree_rename_folder_slug("a-b_c.d"), "a-b_c.d");
         assert_eq!(worktree_rename_folder_slug("  feat/x  "), "feat-x");
+        // The empty result is load-bearing: `worktree_rename_destination_path`
+        // reads it as "this name cannot become a folder" and refuses the rename.
+        assert_eq!(worktree_rename_folder_slug("🎉🎉"), "");
         let long = worktree_rename_folder_slug(
             "rewrite-the-entire-presentation-snapshot-projection-pipeline-for-sidebar",
         );

@@ -167,7 +167,6 @@ export function WorktreeRenameModal({
               <Field>
                 <FieldLabel htmlFor={nameInputId}>Name</FieldLabel>
                 <Input
-                  aria-label="Worktree name"
                   autoComplete="off"
                   className="worktree-rename-name-input"
                   id={nameInputId}
@@ -291,11 +290,20 @@ function resolveWorktreeRenameCollisionError({
   return undefined;
 }
 
+/*
+ * CDXC:WorktreeRename 2026-08-10:
+ * The draft carries the project path exactly as it is registered, and on Windows
+ * that is `C:\Users\me\repo`. Splitting on "/" alone found no separator there and
+ * produced `/feat-name`, which matches no main checkout and no registered
+ * project, so both live collision checks went quiet until the daemon refused the
+ * submit. Take whichever separator the path actually uses and keep it.
+ */
 function joinRenameParentDirectory(parentProjectPath: string, folderName: string): string {
-  const trimmed = parentProjectPath.replace(/\/+$/, "");
-  const separatorIndex = trimmed.lastIndexOf("/");
+  const trimmed = parentProjectPath.replace(/[/\\]+$/, "");
+  const separatorIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const separator = separatorIndex >= 0 ? trimmed[separatorIndex] : "/";
   const familyRoot = separatorIndex > 0 ? trimmed.slice(0, separatorIndex) : "";
-  return `${familyRoot}/${folderName}`;
+  return `${familyRoot}${separator}${folderName}`;
 }
 
 function getSidebarThemeVariant(theme: SidebarTheme): "dark" | "light" {

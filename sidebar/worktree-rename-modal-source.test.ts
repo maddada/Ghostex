@@ -39,7 +39,10 @@ describe("worktree rename modal draft", () => {
 
 describe("worktree rename modal submit", () => {
   test("sends the shared confirmRenameWorktree fields and nothing else", () => {
-    const submit = sourceBetween("const submitRename = (", "};");
+    // Anchored on the function's own closing brace, not the first `};` after
+    // it: a nested object literal inside submitRename would otherwise truncate
+    // the slice before the onRename call and fail for the wrong reason.
+    const submit = sourceBetween("const submitRename = (", "\n  };");
 
     expect(submit).toContain("onRename(draft.projectId, { name: trimmedName, renameBranch })");
     expect(submit).toContain("if (!canSubmit)");

@@ -7917,7 +7917,7 @@ async fn remove_worktree_checkout(
     let mut remove =
         run_delete_worktree_action(&plan.projects, "remove", &plan.parent_path, extra).await?;
     let mut retried_for_submodules = false;
-    if exit_code(&remove) != 0 && !force_initial_remove && is_submodule_removal_refusal(&remove) {
+    if exit_code(&remove) != 0 && !force_initial_remove && is_submodule_worktree_refusal(&remove) {
         retried_for_submodules = true;
         let mut retry_extra = Map::new();
         retry_extra.insert(
@@ -8110,6 +8110,20 @@ struct RenameWorktreeProjectPlan {
     projects: Vec<Value>,
     worktree_branch: Option<String>,
     worktree_path: String,
+    /*
+    CDXC:WorktreeRename 2026-08-10:
+    The same folder can be spelled two ways on macOS — `/tmp/rt-old` and
+    `/private/tmp/rt-old` — and nothing forces a session's stored `cwd` to use
+    the spelling the project row happens to carry. Rebasing compares strings, so
+    a session recorded through the other spelling matched no prefix, kept an
+    absolute path into a folder that had just moved, and broke on its next cold
+    start (`start_session_provider` bakes the cwd into the run script).
+
+    Resolve the alias here, at plan time, because it is the last moment the old
+    folder still exists to resolve. `None` when it cannot be resolved or adds
+    nothing, so the lexical comparison stays the only one that runs.
+    */
+    worktree_path_resolved: Option<String>,
 }
 
 enum RenameWorktreeProjectError {
@@ -8330,6 +8344,19 @@ fn prepare_rename_worktree_project_plan(
             )
             .into());
         }
+        /*
+        CDXC:WorktreeRename 2026-08-10:
+        These two probes exist to refuse early, with a sentence the user can act
+        on, and they are not authoritative. `worktree_is_locked` matches
+        `worktree_path` against what `git worktree list --porcelain` prints, and
+        git prints the symlink-resolved path while `normalize_existing_directory_path`
+        deliberately does not resolve one — a worktree registered through an
+        alias that still sits lexically inside the family root passes the guard
+        above and then reads as "not locked" here. A submodule can also be
+        initialised between this check and the move. `move_worktree_project_checkout`
+        re-classifies both refusals off git's own output and produces the same
+        sentences, so it, not this, is what actually enforces them.
+        */
         if worktree_sessions::worktree_has_populated_submodules(&worktree_path) {
             return Err(DomainStateError::bad_request(
                 "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
@@ -8344,6 +8371,11 @@ fn prepare_rename_worktree_project_plan(
         }
     }
 
+    let worktree_path_resolved = std::fs::canonicalize(&worktree_path)
+        .ok()
+        .map(|path| path_to_string(&path))
+        .filter(|resolved| resolved != &worktree_path);
+
     Ok(RenameWorktreeProjectPlan {
         destination_path,
         moves_folder,
@@ -8353,6 +8385,7 @@ fn prepare_rename_worktree_project_plan(
         projects,
         worktree_branch: worktree.branch,
         worktree_path,
+        worktree_path_resolved,
     })
 }
 
@@ -8410,13 +8443,41 @@ async fn rename_worktree_project_from_plan(
             branch was renamed anyway.
             */
             if let (Some(from), Some(to)) = (current_branch.as_deref(), renamed_branch.as_deref()) {
-                let _ = run_rename_worktree_action(
+                /*
+                CDXC:WorktreeRename 2026-08-10:
+                The undo is the only thing standing between the user and the
+                state the comment above forbids, so a failed undo is exactly the
+                case worth recording. Dropping it left the branch renamed, the
+                request reporting the move error, and nothing anywhere saying
+                the two had diverged. The user still gets the move error — the
+                rename genuinely did not happen — but support can now see it.
+                */
+                let rollback = run_rename_worktree_action(
                     &plan.projects,
                     "renameBranch",
                     &plan.parent_path,
                     rename_branch_params(to, from),
                 )
                 .await;
+                let rollback_failure = match &rollback {
+                    Err(_) => Some("branch rollback dispatch failed".to_string()),
+                    Ok(result) if exit_code(result) != 0 => {
+                        Some(format!("git exited {}", exit_code(result)))
+                    }
+                    Ok(_) => None,
+                };
+                if let Some(reason) = rollback_failure {
+                    let _ = state.logger.log(GxserverLogInput {
+                        level: LogLevel::Warn,
+                        event: "worktreeRenameBranchRollbackFailed".to_string(),
+                        server_id: Some(state.metadata.server_id.clone()),
+                        request_id: None,
+                        client: None,
+                        duration_ms: None,
+                        error: Some(reason),
+                        details: Some(json!({ "projectId": plan.params.project_id })),
+                    });
+                }
             }
             return Err(error);
         }
@@ -8522,7 +8583,7 @@ async fn move_worktree_project_checkout(
     a plain sentence for everything else. Submodules are re-checked here as well
     as in the pre-flight because one can be initialised between the two.
     */
-    if is_submodule_removal_refusal(&result) {
+    if is_submodule_worktree_refusal(&result) {
         return Err(DomainStateError::bad_request(
             "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
         )
@@ -8597,11 +8658,83 @@ fn apply_renamed_worktree_project_state(
     plan: &RenameWorktreeProjectPlan,
     renamed_branch: Option<&str>,
 ) -> std::result::Result<Value, RenameWorktreeProjectError> {
-    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("SQLite gxserver state error: {error}"),
-    })?;
+    /*
+    The busy handler is the point of this entry point: the transaction below
+    reserves the writer, and the daemon has other writers (lifecycle sweeps,
+    session updates). Without lock waiting, a concurrent write would fail this
+    one outright — after the folder has already moved, which is the one moment
+    there is nothing to retry.
+    */
+    let db = open_gxserver_database_with_busy_timeout(&state.paths, Duration::from_secs(10))
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+    let project_id = plan.params.project_id.as_str();
+    /*
+    CDXC:WorktreeRename 2026-08-10:
+    The folder has already moved by the time any of this runs, so these rows are
+    the only remaining description of where it went — and the list above only has
+    value whole. Written one statement at a time, a session write that failed
+    halfway left the project row pointing at the new folder while the sessions
+    behind it still named the old one: a state no later request can tell apart
+    from a rename that worked. One transaction makes the failure mean "the
+    database still describes the old folder", which the returned error then says.
+    Following `create_session_transactional`: IMMEDIATE so the writer reservation
+    is held before the first read the writes depend on.
+    */
+    let transaction =
+        rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(|error| DomainStateError {
+                code: "internalError",
+                message: format!("SQLite gxserver state error: {error}"),
+            })?;
+    let project = {
+        let repository = DomainRepository::new(&transaction, state.metadata.server_id.as_str());
+        write_renamed_worktree_project_state(&repository, plan, renamed_branch)
+            .map_err(|error| unrecorded_worktree_rename_error(plan, error))?
+    };
+    transaction
+        .commit()
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })
+        .map_err(|error| unrecorded_worktree_rename_error(plan, error.into()))?;
+
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    schedule_presentation_project_delta(state, &db, &repository, project_id, "projectUpdated")?;
+    Ok(project)
+}
+
+/// The transaction rolled back, so the database still describes the old folder
+/// while the filesystem no longer has one there. Say both halves: without the
+/// paths, "SQLite error" gives nobody enough to put the two back in step.
+fn unrecorded_worktree_rename_error(
+    plan: &RenameWorktreeProjectPlan,
+    error: RenameWorktreeProjectError,
+) -> RenameWorktreeProjectError {
+    if !plan.moves_folder {
+        return error;
+    }
+    let RenameWorktreeProjectError::Domain(domain) = error else {
+        return error;
+    };
+    DomainStateError {
+        code: domain.code,
+        message: format!(
+            "The worktree folder moved to \"{}\", but Ghostex could not record it and still points at \"{}\". Nothing else was changed. ({})",
+            plan.destination_path, plan.worktree_path, domain.message
+        ),
+    }
+    .into()
+}
+
+fn write_renamed_worktree_project_state(
+    repository: &DomainRepository<'_>,
+    plan: &RenameWorktreeProjectPlan,
+    renamed_branch: Option<&str>,
+) -> std::result::Result<Value, RenameWorktreeProjectError> {
     let project_id = plan.params.project_id.as_str();
 
     if plan.moves_folder {
@@ -8698,7 +8831,6 @@ fn apply_renamed_worktree_project_state(
         }
     }
 
-    schedule_presentation_project_delta(state, &db, &repository, project_id, "projectUpdated")?;
     Ok(project)
 }
 
@@ -8739,15 +8871,21 @@ fn renamed_worktree_board_config(
 }
 
 /// `<old worktree>/x` becomes `<new worktree>/x`; anything outside the moved
-/// folder is left exactly as it is.
+/// folder is left exactly as it is. The old folder is recognised through either
+/// spelling it had before the move — see `worktree_path_resolved`.
 fn rebase_renamed_worktree_path(path: &str, plan: &RenameWorktreeProjectPlan) -> Option<String> {
     let normalized = path_to_string(&resolve_path_syntax(PathBuf::from(path)));
-    if normalized == plan.worktree_path {
-        return Some(plan.destination_path.clone());
+    let roots =
+        std::iter::once(plan.worktree_path.as_str()).chain(plan.worktree_path_resolved.as_deref());
+    for root in roots {
+        if normalized == root {
+            return Some(plan.destination_path.clone());
+        }
+        if let Some(rest) = normalized.strip_prefix(&format!("{root}/")) {
+            return Some(format!("{}/{rest}", plan.destination_path));
+        }
     }
-    let prefix = format!("{}/", plan.worktree_path);
-    let rest = normalized.strip_prefix(&prefix)?;
-    Some(format!("{}/{rest}", plan.destination_path))
+    None
 }
 
 fn rename_worktree_project_error_response(
@@ -8791,7 +8929,9 @@ fn has_porcelain_status_changes(stdout: &str) -> bool {
     })
 }
 
-fn is_submodule_removal_refusal(result: &Value) -> bool {
+/// git refuses `worktree remove` and `worktree move` on a checkout with
+/// initialised submodules through the same message, so both verbs classify here.
+fn is_submodule_worktree_refusal(result: &Value) -> bool {
     let text = format!(
         "{}\n{}",
         result
@@ -15150,6 +15290,61 @@ mod tests {
         assert_eq!(moved_marker["initialTitle"], json!("Codex Session"));
     }
 
+    #[test]
+    fn a_session_cwd_recorded_through_the_resolved_path_form_still_follows_the_move() {
+        /*
+        CDXC:WorktreeRename 2026-08-10:
+        Nothing forces a session's stored `cwd` to use the same spelling of a
+        folder that the project row happens to carry, and on macOS every path
+        under `/tmp` or `/var` has two: `/tmp/rt-old` and `/private/tmp/rt-old`.
+        Compared lexically against the project row's spelling alone, a cwd
+        recorded through the other one matched no prefix, was left untouched, and
+        pointed into a folder that had just moved — which breaks that session's
+        next cold start, because `start_session_provider` bakes the cwd into the
+        generated run script. Both spellings of the old folder rebase; anything
+        genuinely outside it still does not.
+        */
+        let plan = RenameWorktreeProjectPlan {
+            destination_path: "/tmp/rt-new".to_string(),
+            moves_folder: true,
+            params: RenameWorktreeProjectParams {
+                name: "new".to_string(),
+                project_id: "project-1".to_string(),
+                rename_branch: false,
+            },
+            parent_path: "/tmp/rt".to_string(),
+            parent_project_name: "Parent".to_string(),
+            projects: Vec::new(),
+            worktree_branch: None,
+            worktree_path: "/tmp/rt-old".to_string(),
+            worktree_path_resolved: Some("/private/tmp/rt-old".to_string()),
+        };
+
+        assert_eq!(
+            rebase_renamed_worktree_path("/tmp/rt-old/packages/app", &plan).as_deref(),
+            Some("/tmp/rt-new/packages/app"),
+            "the spelling the project row carries"
+        );
+        assert_eq!(
+            rebase_renamed_worktree_path("/private/tmp/rt-old/packages/app", &plan).as_deref(),
+            Some("/tmp/rt-new/packages/app"),
+            "the spelling the filesystem resolves to"
+        );
+        assert_eq!(
+            rebase_renamed_worktree_path("/private/tmp/rt-old", &plan).as_deref(),
+            Some("/tmp/rt-new")
+        );
+        assert_eq!(
+            rebase_renamed_worktree_path("/private/tmp/rt-older/src", &plan),
+            None,
+            "a sibling that merely shares a prefix is not inside the moved folder"
+        );
+        assert_eq!(
+            rebase_renamed_worktree_path("/tmp/somewhere-else", &plan),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn renaming_a_worktree_refuses_a_taken_folder_and_a_taken_branch() {
         /*
@@ -15290,6 +15485,9 @@ mod tests {
         assert_eq!(body["message"], json!("Nothing to rename."));
     }
 
+    // Symlinks are the whole subject of this test, and `std::os::unix::fs` does
+    // not exist off unix — without the gate the module stops compiling there.
+    #[cfg(unix)]
     #[tokio::test]
     async fn renaming_explains_a_worktree_registered_through_a_different_path_form() {
         /*
