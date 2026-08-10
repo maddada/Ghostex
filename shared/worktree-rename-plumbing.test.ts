@@ -120,11 +120,13 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
 
   test("translates an out-of-date daemon into something the user can act on", () => {
     /*
-     * A gxserver that predates this feature answers with
-     * `"/api/renameWorktreeProject is not a gxserver HTTP endpoint."` — true,
-     * and useless to whoever just clicked Rename. It happens for real whenever a
-     * freshly built app attaches to a daemon the previously installed app left
-     * running, so the one recoverable case gets a recoverable sentence.
+     * Verified live against a stale daemon: it answers
+     * `notFound: "No gxserver endpoint for POST /api/renameWorktreeProject."`.
+     * gxserver has more than one phrasing for an unroutable path, so the match
+     * is on the ENDPOINT PATH, not on a sentence — an earlier version of this
+     * guard keyed off one phrasing and silently failed to fire against the real
+     * daemon. An error naming this route is always the daemon being older than
+     * the app, never anything the user did.
      */
     const reader = sourceBetweenIn(
       gpuiRuntimeSource,
@@ -132,7 +134,7 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
       "\n}",
     );
 
-    expect(reader).toContain("is not a gxserver HTTP endpoint");
+    expect(reader).toContain('message.includes("/api/renameWorktreeProject")');
     expect(reader).toContain("Quit Ghostex fully, reopen it, and try again.");
   });
 });

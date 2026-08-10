@@ -16627,14 +16627,18 @@ function gpuiWorktreeRenameUserVisibleErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message.trim() : "";
   /*
   CDXC:WorktreeRename 2026-08-09-18:40:
-  A daemon older than this feature answers the rename endpoint with
-  `notFound: "/api/renameWorktreeProject is not a gxserver HTTP endpoint."`.
-  That sentence is true and completely useless to the person who just clicked
-  Rename, so translate the one condition they can actually act on. This happens
-  for real whenever a freshly built app attaches to a gxserver left running by
-  the previously installed one.
+  A daemon older than this feature cannot route the rename endpoint at all, and
+  says so by naming the path back at the user — verified live as
+  `notFound: "No gxserver endpoint for POST /api/renameWorktreeProject."`, though
+  gxserver has more than one phrasing for it. Match on the endpoint path instead
+  of on any one sentence: an error that names this route is always the daemon
+  being older than the app, never anything the user did to their worktree.
+
+  This is not hypothetical. A freshly built app attaches to whatever gxserver is
+  already listening on 127.0.0.1:58744, which is normally the daemon the
+  installed app started — so the very first run of a new build hits it.
   */
-  if (message.includes("is not a gxserver HTTP endpoint")) {
+  if (message.includes("/api/renameWorktreeProject")) {
     return "This Ghostex build's background service is out of date. Quit Ghostex fully, reopen it, and try again.";
   }
   if (message && !message.includes("\\") && !message.includes("\n") && message.length <= 200) {
