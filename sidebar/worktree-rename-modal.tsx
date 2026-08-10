@@ -74,7 +74,8 @@ export function WorktreeRenameModal({
   onRename,
   theme = "dark-1",
 }: WorktreeRenameModalProps) {
-  const [name, setName] = useState(draft.currentName);
+  const initialName = resolveWorktreeRenameInitialName(draft);
+  const [name, setName] = useState(initialName);
   const [renameBranch, setRenameBranch] = useState(draft.renameBranchDefault);
   const nameInputId = useId();
   const branchCheckboxId = useId();
@@ -85,9 +86,9 @@ export function WorktreeRenameModal({
     if (!isOpen) {
       return;
     }
-    setName(draft.currentName);
+    setName(initialName);
     setRenameBranch(draft.renameBranchDefault);
-  }, [draft.currentName, draft.projectId, draft.renameBranchDefault, isOpen]);
+  }, [draft.projectId, draft.renameBranchDefault, initialName, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -114,7 +115,7 @@ export function WorktreeRenameModal({
   );
 
   const validationError = worktreeRenameNameError(name);
-  const unchanged = trimmedName === draft.currentName;
+  const unchanged = trimmedName === initialName;
   const collisionError = resolveWorktreeRenameCollisionError({
     draft,
     nextFolderName,
@@ -237,6 +238,26 @@ export function WorktreeRenameModal({
       </DialogContent>
     </Dialog>
   );
+}
+
+/*
+ * CDXC:WorktreeRename 2026-08-10:
+ * Reopening the dialog must be lossless. The folder can only ever hold the
+ * slugged name, so a worktree on `feat/kanban-assignee` lives in
+ * `<Parent>-feat-kanban-assignee` — and prefilling from the FOLDER handed back
+ * `feat-kanban-assignee`. Pressing Rename without touching anything then
+ * "renamed" the branch from `feat/kanban-assignee` to `feat-kanban-assignee`
+ * and silently ate the slash. Caught in manual testing, reflog and all.
+ *
+ * So when the current branch slugs down to exactly the current folder suffix,
+ * the branch IS the name the user typed last time, with the detail the folder
+ * had to drop. Prefill that instead, and reopening becomes a no-op.
+ */
+function resolveWorktreeRenameInitialName(draft: WorktreeRenameModalDraft): string {
+  const branch = draft.branch?.trim();
+  return branch && worktreeRenameFolderSlug(branch) === draft.currentName
+    ? branch
+    : draft.currentName;
 }
 
 /*

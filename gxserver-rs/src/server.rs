@@ -8384,6 +8384,21 @@ async fn rename_worktree_project_from_plan(
     plan: RenameWorktreeProjectPlan,
 ) -> std::result::Result<Value, RenameWorktreeProjectError> {
     let current_branch = resolve_renamed_worktree_branch_name(&plan).await?;
+    /*
+    CDXC:WorktreeRename 2026-08-10:
+    "Nothing to rename" cannot be decided from the checkbox alone. Asking to
+    rename the branch to the name it already has, on a folder that is already
+    correct, is a request to change nothing — and reporting success for that
+    tells the user something happened when it did not. The plan-time check
+    catches the checkbox-off case; this catches the one that needs git.
+    */
+    if !plan.moves_folder
+        && current_branch
+            .as_deref()
+            .is_some_and(|branch| branch == plan.params.name)
+    {
+        return Err(DomainStateError::bad_request("Nothing to rename.").into());
+    }
     let renamed_branch = rename_worktree_project_branch(&plan, current_branch.as_deref()).await?;
     if plan.moves_folder {
         if let Err(error) = move_worktree_project_checkout(&plan).await {
@@ -15228,7 +15243,7 @@ mod tests {
         );
 
         let nothing = route_http(
-            state,
+            state.clone(),
             rpc_request(
                 "/api/renameWorktreeProject",
                 &token,
@@ -15244,6 +15259,34 @@ mod tests {
         .await;
         assert_eq!(nothing.response.status(), StatusCode::BAD_REQUEST);
         let body = response_json(nothing.response).await;
+        assert_eq!(body["message"], json!("Nothing to rename."));
+
+        /*
+        CDXC:WorktreeRename 2026-08-10:
+        Asking to rename the branch to the name it already carries, on a folder
+        that is already correct, changes nothing — and reporting success for it
+        tells the user something happened. The checkbox being ticked is not
+        enough to call it a rename.
+        */
+        run_git_for_server_test(&parent, &["branch", "-m", "ghostex/0123abcd", "old"]);
+        let no_op_branch = route_http(
+            state,
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "old",
+                        "projectId": worktree_project["projectId"],
+                        "renameBranch": true
+                    }
+                }),
+            ),
+            "request-rename-noop-branch".to_string(),
+        )
+        .await;
+        assert_eq!(no_op_branch.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(no_op_branch.response).await;
         assert_eq!(body["message"], json!("Nothing to rename."));
     }
 

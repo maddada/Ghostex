@@ -54,6 +54,23 @@ describe("worktree rename modal submit", () => {
     expect(worktreeRenameModalSource).toContain("worktreeRenameNameError(name)");
   });
 
+  test("prefills the branch when the folder is only its slugged form", () => {
+    /*
+     * CDXC:WorktreeRename 2026-08-10:
+     * The bug this exists to stop, caught in manual testing: a worktree on
+     * `feat/kanban-assignee` lives in `<Parent>-feat-kanban-assignee`, so
+     * prefilling from the folder handed back `feat-kanban-assignee`. Reopening
+     * and pressing Rename then flattened the branch's slash without the user
+     * changing a character. Reopening has to be a no-op.
+     */
+    const resolver = sourceBetween("function resolveWorktreeRenameInitialName(", "\n}");
+
+    expect(resolver).toContain("worktreeRenameFolderSlug(branch) === draft.currentName");
+    expect(resolver).toContain("? branch");
+    expect(worktreeRenameModalSource).toContain("const [name, setName] = useState(initialName)");
+    expect(worktreeRenameModalSource).toContain("const unchanged = trimmedName === initialName");
+  });
+
   test("previews the folder slug and the verbatim branch separately", () => {
     /*
      * CDXC:WorktreeRename 2026-08-09-18:40:
