@@ -198,6 +198,17 @@ validate_portless_admin_runtime_resources() {
 			echo "Missing sealed GPUI on-demand component manifest: $WEB_SOURCE_DIR/on-demand-resources.json" >&2
 			missing=1
 		fi
+	elif [[ "${GHOSTEX_LOCAL_START:-0}" == "1" && ! -f "$WEB_SOURCE_DIR/code-server/out/node/entry.js" ]]; then
+		# CDXC:LocalStartSourceOptional 2026-08-09:
+		# prepare-macos-runtime.sh already treats a missing code-server checkout
+		# as an optional skip for local starts ("Skipping optional Source
+		# editor"), so failing here on the runtime it deliberately did not stage
+		# made a local dev build impossible without a full VS Code build. The
+		# Source tab is the only thing absent from such a build.
+		# Keyed on the entrypoint, not the directory: prepare stages the bundled
+		# Node runtime into code-server/lib/node even when no checkout exists,
+		# so the directory is always present and proves nothing.
+		echo "Local start without a staged Source runtime: skipping Source validation." >&2
 	else
 		# Development/bundled builds retain the complete self-contained Source
 		# runtime and validate its own lib/node beside the entrypoint.
