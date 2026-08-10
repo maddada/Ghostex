@@ -424,6 +424,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/removeProject"
         | "/api/deleteWorktreeProject"
         /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        Renaming a worktree is remote-allowed for the same reason deleting one
+        is: a GPUI sidebar showing a remote machine's projects has to be able to
+        rename a worktree there. `projectId` is an opaque selector and `name` is
+        validated against the daemon's own ref policy before it reaches git; the
+        destination folder is computed by the daemon, never named by the caller.
+        */
+        | "/api/renameWorktreeProject"
+        /*
         CDXC:SidebarV2Worktrees 2026-07-29-00:00:
         Worktree sessions are remote-allowed for the same reason the other
         worktree RPCs are: a GPUI sidebar showing a remote machine's projects has

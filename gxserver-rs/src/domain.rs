@@ -1428,7 +1428,7 @@ fn run_git_worktree_topology_probe(project_path: &str) -> Option<GitWorktreeTopo
     })
 }
 
-fn detect_registered_git_worktree_metadata(
+pub(crate) fn detect_registered_git_worktree_metadata(
     projects: &[Value],
     project_path: &str,
     project_name: &str,

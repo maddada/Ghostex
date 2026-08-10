@@ -470,6 +470,43 @@ async fn run_worktree_action(
     if action == "ensureBeadsHooks" {
         return ensure_beads_git_hooks(context).await;
     }
+    if action == "hasPopulatedSubmodules" {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        `git worktree move` hard-refuses a worktree with populated submodules,
+        and the only honest answer is to say so before the user names a folder.
+        This probe stays worktree-scoped (it only ever inspects a path already
+        proven to be inside the caller's worktree family) instead of widening
+        the git action list with a general `submodule` primitive. It follows
+        `pathExists`'s convention: exit code 0 means "yes".
+        */
+        let worktree_path = normalize_existing_worktree_path(params.get("worktreePath"), context)?;
+        let populated = crate::worktree_sessions::worktree_has_populated_submodules(&worktree_path);
+        return Ok(json!({
+            "action": action,
+            "exitCode": if populated { 0 } else { 1 },
+            "stderr": "",
+            "stdout": if populated { "true" } else { "false" },
+        }));
+    }
+    if action == "renameBranch" {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        `refs/heads/<x>` cannot exist while `refs/heads/<x>/…` does, in either
+        direction, and `git branch -m` reports that as a bare
+        `fatal: branch rename failed`. Probe both directions here, before the
+        command is built, so the caller gets a sentence naming the ref that is
+        in the way instead of a raw git failure.
+        */
+        let new_branch = normalize_git_ref(params.get("newBranch"), "newBranch")?;
+        if let Some(blocker) =
+            crate::worktree_sessions::worktree_branch_namespace_blocker(&context.cwd, &new_branch)
+        {
+            return Err(TypedOperationError::bad_request(format!(
+                "Git cannot use that branch name: \"{blocker}\" already exists."
+            )));
+        }
+    }
     let command = build_worktree_command(&action, params, context)?;
     let output = run_process_command(&command, context).await?;
     let mut result = typed_result(&action, &command, output);
@@ -1129,6 +1166,23 @@ fn build_worktree_command(
             ProcessCommand::new("git", args, cwd)
         }
         "list" => ProcessCommand::new("git", vec!["worktree", "list", "--porcelain"], cwd),
+        "move" => {
+            let worktree_path =
+                normalize_existing_worktree_path(params.get("worktreePath"), context)?;
+            let destination_path =
+                normalize_worktree_destination_path(params.get("destinationPath"), context)?;
+            ProcessCommand::new(
+                "git",
+                vec![
+                    "worktree".to_string(),
+                    "move".to_string(),
+                    "--".to_string(),
+                    worktree_path,
+                    destination_path,
+                ],
+                cwd,
+            )
+        }
         "prune" => ProcessCommand::new("git", vec!["worktree", "prune"], cwd),
         "remove" => {
             let worktree_path =
@@ -1139,6 +1193,28 @@ fn build_worktree_command(
             }
             args.extend(["--".to_string(), worktree_path]);
             ProcessCommand::new("git", args, cwd)
+        }
+        "renameBranch" => {
+            /*
+            CDXC:WorktreeRename 2026-08-09-18:40:
+            `-m`, never `-M`. Force does not help with the ref-namespace
+            collision this operation actually hits, and it would let a rename
+            silently clobber an existing branch — losing commits, not saving a
+            click.
+            */
+            let branch = normalize_git_ref(params.get("branch"), "branch")?;
+            let new_branch = normalize_git_ref(params.get("newBranch"), "newBranch")?;
+            ProcessCommand::new(
+                "git",
+                vec![
+                    "branch".to_string(),
+                    "-m".to_string(),
+                    "--".to_string(),
+                    branch,
+                    new_branch,
+                ],
+                cwd,
+            )
         }
         "switch" => ProcessCommand::new(
             "git",
@@ -2189,25 +2265,55 @@ fn normalize_worktree_target_path(
     input: Option<&Value>,
     context: &TypedOperationContext,
 ) -> Result<String, TypedOperationError> {
-    let worktree_path = normalize_absolute_path(input, "worktreePath")?;
+    normalize_worktree_family_path(input, "worktreePath", context)
+}
+
+fn normalize_worktree_family_path(
+    input: Option<&Value>,
+    field: &str,
+    context: &TypedOperationContext,
+) -> Result<String, TypedOperationError> {
+    let worktree_path = normalize_absolute_path(input, field)?;
     let family_root = Path::new(&context.cwd)
         .parent()
         .unwrap_or_else(|| Path::new(&context.cwd))
         .to_string_lossy()
         .to_string();
     if !is_path_inside(&family_root, &worktree_path) {
-        return Err(TypedOperationError::forbidden(
-            "worktreePath must stay inside the source project worktree family directory.",
-        ));
+        return Err(TypedOperationError::forbidden(format!(
+            "{field} must stay inside the source project worktree family directory."
+        )));
     }
     if normalize_path_string(PathBuf::from(&worktree_path))
         == normalize_path_string(PathBuf::from(&context.cwd))
     {
-        return Err(TypedOperationError::forbidden(
-            "worktreePath cannot be the source project directory.",
-        ));
+        return Err(TypedOperationError::forbidden(format!(
+            "{field} cannot be the source project directory."
+        )));
     }
     Ok(worktree_path)
+}
+
+fn normalize_worktree_destination_path(
+    input: Option<&Value>,
+    context: &TypedOperationContext,
+) -> Result<String, TypedOperationError> {
+    let destination_path = normalize_worktree_family_path(input, "destinationPath", context)?;
+    /*
+    CDXC:WorktreeRename 2026-08-09-18:40:
+    `git worktree move A B` with B already present is NOT an error: git moves the
+    worktree to B/A and exits 0, so the checkout silently lands one level deeper
+    than anyone asked for and the registered project path becomes wrong — a
+    "successful" rename that leaves the sidebar pointing at a directory that is
+    not a worktree. Refusing an existing destination outright is the only way to
+    keep "exit 0" meaning "the worktree is exactly where we said".
+    */
+    if Path::new(&destination_path).exists() {
+        return Err(TypedOperationError::bad_request(
+            "destinationPath already exists.",
+        ));
+    }
+    Ok(destination_path)
 }
 
 fn normalize_existing_worktree_path(
@@ -2421,9 +2527,16 @@ fn normalize_github_action(input: Option<&Value>) -> Result<String, TypedOperati
 fn normalize_worktree_action(input: Option<&Value>) -> Result<String, TypedOperationError> {
     let action = input.and_then(Value::as_str).unwrap_or("undefined");
     match action {
-        "create" | "ensureBeadsHooks" | "list" | "pathExists" | "prune" | "remove" | "switch" => {
-            Ok(action.to_string())
-        }
+        "create"
+        | "ensureBeadsHooks"
+        | "hasPopulatedSubmodules"
+        | "list"
+        | "move"
+        | "pathExists"
+        | "prune"
+        | "remove"
+        | "renameBranch"
+        | "switch" => Ok(action.to_string()),
         _ => Err(TypedOperationError::bad_request(format!(
             "Unsupported worktree action: {}",
             display_unknown_value(input)
@@ -3406,6 +3519,157 @@ bad branch\trefs/heads/bad branch\t\n",
                 .code,
             "forbidden"
         );
+    }
+
+    #[test]
+    fn worktree_move_builds_a_git_worktree_move_command() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("repo");
+        let worktree = dir.path().join("repo-old");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&worktree).unwrap();
+        let destination = dir.path().join("repo-new");
+        let ctx = context(&source);
+        let mut params = Map::new();
+        params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+        params.insert(
+            "destinationPath".to_string(),
+            json!(destination.to_string_lossy()),
+        );
+
+        let command = build_worktree_command("move", &params, &ctx).unwrap();
+
+        assert_eq!(command.executable, "git");
+        assert_eq!(
+            command.args,
+            vec![
+                "worktree".to_string(),
+                "move".to_string(),
+                "--".to_string(),
+                normalize_path_string(worktree.clone()),
+                normalize_path_string(destination),
+            ]
+        );
+        assert_eq!(command.cwd, source.to_string_lossy());
+    }
+
+    #[test]
+    fn worktree_move_rejects_an_existing_destination() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        This is the regression test for the worst failure mode in the rename
+        feature. `git worktree move A B` with B already present exits 0 and
+        nests the worktree at B/A, so the operation "succeeds" while the folder
+        lands somewhere nobody asked for and the registered project path becomes
+        wrong. The guard has to refuse before git runs; reading the result back
+        is too late.
+        */
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("repo");
+        let worktree = dir.path().join("repo-old");
+        let destination = dir.path().join("repo-taken");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&worktree).unwrap();
+        fs::create_dir(&destination).unwrap();
+        let ctx = context(&source);
+        let mut params = Map::new();
+        params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+        params.insert(
+            "destinationPath".to_string(),
+            json!(destination.to_string_lossy()),
+        );
+
+        let error = build_worktree_command("move", &params, &ctx).unwrap_err();
+
+        assert_eq!(error.code, "badRequest");
+        assert_eq!(error.message, "destinationPath already exists.");
+    }
+
+    #[test]
+    fn worktree_move_rejects_a_destination_outside_the_family_directory() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("repo");
+        let worktree = dir.path().join("repo-old");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&worktree).unwrap();
+        let ctx = context(&source);
+        let mut params = Map::new();
+        params.insert("worktreePath".to_string(), json!(worktree.to_string_lossy()));
+        params.insert(
+            "destinationPath".to_string(),
+            json!("/tmp/outside-worktree-family-rename"),
+        );
+
+        let error = build_worktree_command("move", &params, &ctx).unwrap_err();
+
+        assert_eq!(error.code, "forbidden");
+        assert!(error.message.contains("destinationPath"));
+
+        params.insert(
+            "destinationPath".to_string(),
+            json!(source.to_string_lossy()),
+        );
+        assert_eq!(
+            build_worktree_command("move", &params, &ctx)
+                .unwrap_err()
+                .code,
+            "forbidden",
+            "the main checkout is never a destination"
+        );
+    }
+
+    #[test]
+    fn worktree_rename_branch_builds_a_git_branch_dash_m_command() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("repo");
+        fs::create_dir(&source).unwrap();
+        let ctx = context(&source);
+        let mut params = Map::new();
+        params.insert("branch".to_string(), json!("ghostex/0123abcd"));
+        params.insert("newBranch".to_string(), json!("feat/kanban-assignee"));
+
+        let command = build_worktree_command("renameBranch", &params, &ctx).unwrap();
+
+        assert_eq!(command.executable, "git");
+        assert_eq!(
+            command.args,
+            vec![
+                "branch".to_string(),
+                "-m".to_string(),
+                "--".to_string(),
+                "ghostex/0123abcd".to_string(),
+                "feat/kanban-assignee".to_string(),
+            ]
+        );
+        assert!(
+            !command.args.iter().any(|arg| arg == "-M"),
+            "force rename would clobber an existing branch and does not help with namespace collisions"
+        );
+    }
+
+    #[test]
+    fn unsupported_worktree_actions_are_still_rejected() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        The rename feature widened the worktree allowlist. Prove it is still an
+        allowlist and did not become a wildcard.
+        */
+        for action in ["remove-branch", "moveAll", "renameBranchForce", "submodule"] {
+            let error = normalize_worktree_action(Some(&json!(action))).unwrap_err();
+            assert_eq!(error.code, "badRequest", "{action}");
+        }
+        for action in [
+            "create",
+            "hasPopulatedSubmodules",
+            "move",
+            "renameBranch",
+            "remove",
+        ] {
+            assert_eq!(
+                normalize_worktree_action(Some(&json!(action))).unwrap(),
+                action
+            );
+        }
     }
 
     #[test]

@@ -2003,6 +2003,9 @@ async fn route_http(
         "/api/deleteWorktreeProject" => {
             handle_delete_worktree_project_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/renameWorktreeProject" => {
+            handle_rename_worktree_project_http(&state, endpoint.path, request_id, &body_json).await
+        }
         /*
         CDXC:SidebarV2Worktrees 2026-07-29-00:00:
         Sidebar V2's worktree flow. Unlike `createProjectWorktree`, these
@@ -8071,6 +8074,654 @@ fn delete_worktree_project_error_response(
             project_path_error_response(endpoint_path, request_id, error)
         }
         DeleteWorktreeProjectError::Typed(error) => {
+            typed_operation_error_response(endpoint_path, request_id, error)
+        }
+    }
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+Renaming a worktree is a multi-step git + database mutation, so it lives behind
+ONE endpoint for exactly the reason `deleteWorktreeProject` does: the rollback
+must not depend on a renderer that may not survive the operation. The order is
+pre-flight, branch, folder, database, delta — every step checked, and everything
+reversible until the folder actually moves. If the branch rename lands and the
+move then fails, this rolls the branch back before returning, so a failed rename
+leaves nothing half-applied.
+
+The caller sends a NAME, never a path. The daemon slugs it into
+`<ParentFolder>-<slug>` next to the parent checkout itself, which is what keeps a
+renderer from pointing the move at a directory the user never named, and what
+keeps the typed operation's family-root guard meaningful.
+*/
+#[derive(Clone)]
+struct RenameWorktreeProjectParams {
+    name: String,
+    project_id: String,
+    rename_branch: bool,
+}
+
+struct RenameWorktreeProjectPlan {
+    destination_path: String,
+    moves_folder: bool,
+    params: RenameWorktreeProjectParams,
+    parent_path: String,
+    parent_project_name: String,
+    projects: Vec<Value>,
+    worktree_branch: Option<String>,
+    worktree_path: String,
+}
+
+enum RenameWorktreeProjectError {
+    Domain(DomainStateError),
+    ProjectPath(ProjectPathHttpError),
+    Typed(TypedOperationError),
+}
+
+impl From<DomainStateError> for RenameWorktreeProjectError {
+    fn from(error: DomainStateError) -> Self {
+        Self::Domain(error)
+    }
+}
+
+impl From<ProjectPathHttpError> for RenameWorktreeProjectError {
+    fn from(error: ProjectPathHttpError) -> Self {
+        Self::ProjectPath(error)
+    }
+}
+
+impl From<TypedOperationError> for RenameWorktreeProjectError {
+    fn from(error: TypedOperationError) -> Self {
+        Self::Typed(error)
+    }
+}
+
+async fn handle_rename_worktree_project_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let result = match prepare_rename_worktree_project_plan(state, &params) {
+        Ok(plan) => rename_worktree_project_from_plan(state, plan).await,
+        Err(error) => Err(error),
+    };
+    match result {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(error) => rename_worktree_project_error_response(endpoint_path, request_id, error),
+    }
+}
+
+fn normalize_rename_worktree_project_params(
+    params: &Map<String, Value>,
+) -> std::result::Result<RenameWorktreeProjectParams, DomainStateError> {
+    let project_id = read_project_id(params)?;
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    if let Some(error) = worktree_rename_name_error(&name) {
+        return Err(DomainStateError::bad_request(error));
+    }
+    Ok(RenameWorktreeProjectParams {
+        name,
+        project_id,
+        rename_branch: params.get("renameBranch").and_then(Value::as_bool) == Some(true),
+    })
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+The daemon re-validates the typed name with the same nine rules the sidebar field
+enforces (`shared/worktree-rename-name.ts`), because the field is a courtesy and
+this is the boundary. Rules 1-6 are gxserver's existing ref policy; 7-9 are the
+shapes git refuses that the character allowlist alone would let through.
+*/
+fn worktree_rename_name_error(name: &str) -> Option<&'static str> {
+    const CHARACTER_ERROR: &str =
+        "Use letters, numbers, and . _ / - only, starting with a letter or number.";
+    const SEPARATOR_ERROR: &str = "Names cannot contain \"..\", \"//\", or end with \"/\".";
+    if name.chars().count() > 200 {
+        return Some("Name is too long (200 characters max).");
+    }
+    if !name
+        .chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_alphanumeric())
+        || !name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '/' | '-'))
+        || name.ends_with('.')
+        || name
+            .split('/')
+            .any(|component| component.starts_with('.') || component.ends_with(".lock"))
+    {
+        return Some(CHARACTER_ERROR);
+    }
+    if name.contains("..") || name.contains("//") || name.ends_with('/') {
+        return Some(SEPARATOR_ERROR);
+    }
+    None
+}
+
+fn prepare_rename_worktree_project_plan(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> std::result::Result<RenameWorktreeProjectPlan, RenameWorktreeProjectError> {
+    let params = normalize_rename_worktree_project_params(params)?;
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let projects = repository.list_projects()?;
+    let worktree_project = repository.get_project(&params.project_id)?.ok_or_else(|| {
+        DomainStateError::not_found(format!("Project {} does not exist.", params.project_id))
+    })?;
+    let worktree_project_path = worktree_project
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| DomainStateError::bad_request("Worktree project has no filesystem path."))?;
+    let worktree = normalize_worktree_metadata(worktree_project.get("worktree"))
+        .ok_or_else(|| DomainStateError::bad_request("Only worktree projects can be renamed."))?;
+    let parent_project = resolve_worktree_parent_project(&projects, &worktree)?;
+    let parent_project_path = parent_project
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| {
+            DomainStateError::not_found(format!(
+                "Parent project {} does not exist.",
+                worktree.parent_project_id
+            ))
+        })?;
+    let parent_project_name = parent_project
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let worktree_path_value = Value::String(worktree_project_path.to_string());
+    let parent_path_value = Value::String(parent_project_path.to_string());
+    let worktree_path = normalize_existing_directory_path(
+        Some(&worktree_path_value),
+        "project.path",
+        &state.paths.home_dir,
+    )?;
+    let parent_path = normalize_existing_directory_path(
+        Some(&parent_path_value),
+        "parentProject.path",
+        &state.paths.home_dir,
+    )?;
+
+    let destination_path = worktree_rename_destination_path(&parent_path, &params.name)
+        .ok_or_else(|| {
+            DomainStateError::bad_request(
+                "Use letters, numbers, and . _ / - only, starting with a letter or number.",
+            )
+        })?;
+    let moves_folder = destination_path != worktree_path;
+    if !moves_folder && !params.rename_branch {
+        return Err(DomainStateError::bad_request("Nothing to rename.").into());
+    }
+    if moves_folder {
+        if destination_path == parent_path {
+            return Err(
+                DomainStateError::bad_request("That name would collide with the main checkout.")
+                    .into(),
+            );
+        }
+        if Path::new(&destination_path).exists() {
+            return Err(DomainStateError::bad_request(format!(
+                "A folder named \"{}\" already exists next to the project.",
+                path_file_name_for_rename(&destination_path)
+            ))
+            .into());
+        }
+        if projects.iter().any(|project| {
+            project.get("projectId").and_then(Value::as_str) != Some(params.project_id.as_str())
+                && project
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map(|path| {
+                        path_to_string(&resolve_path_syntax(PathBuf::from(path)))
+                            == destination_path
+                    })
+                    .unwrap_or(false)
+        }) {
+            return Err(DomainStateError::bad_request(
+                "Another project is already registered at that folder.",
+            )
+            .into());
+        }
+        if worktree_sessions::worktree_has_populated_submodules(&worktree_path) {
+            return Err(DomainStateError::bad_request(
+                "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
+            )
+            .into());
+        }
+        if worktree_sessions::worktree_is_locked(&parent_path, &worktree_path) {
+            return Err(DomainStateError::bad_request(
+                "This worktree is locked. Unlock it before renaming.",
+            )
+            .into());
+        }
+    }
+
+    Ok(RenameWorktreeProjectPlan {
+        destination_path,
+        moves_folder,
+        params,
+        parent_path,
+        parent_project_name,
+        projects,
+        worktree_branch: worktree.branch,
+        worktree_path,
+    })
+}
+
+/// `<dirname(parent)>/<basename(parent)>-<slug(name)>`. Worktrees stay siblings
+/// of the parent checkout because the typed operation's family-root guard is
+/// written in those terms; a destination anywhere else could not pass it.
+fn worktree_rename_destination_path(parent_path: &str, name: &str) -> Option<String> {
+    let slug = worktree_sessions::worktree_rename_folder_slug(name);
+    if slug.is_empty() {
+        return None;
+    }
+    let parent = Path::new(parent_path);
+    let folder = parent.file_name()?.to_string_lossy().to_string();
+    let family_root = parent.parent()?;
+    Some(path_to_string(
+        &family_root.join(format!("{folder}-{slug}")),
+    ))
+}
+
+fn path_file_name_for_rename(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string())
+}
+
+async fn rename_worktree_project_from_plan(
+    state: &AppState,
+    plan: RenameWorktreeProjectPlan,
+) -> std::result::Result<Value, RenameWorktreeProjectError> {
+    let current_branch = resolve_renamed_worktree_branch_name(&plan).await?;
+    let renamed_branch = rename_worktree_project_branch(&plan, current_branch.as_deref()).await?;
+    if plan.moves_folder {
+        if let Err(error) = move_worktree_project_checkout(&plan).await {
+            /*
+            CDXC:WorktreeRename 2026-08-09-18:40:
+            The branch rename is the only step that already landed, and it is
+            trivially reversible, so undo it before reporting the move failure.
+            A user who sees "could not rename" must not then discover their
+            branch was renamed anyway.
+            */
+            if let (Some(from), Some(to)) = (current_branch.as_deref(), renamed_branch.as_deref()) {
+                let _ = run_rename_worktree_action(
+                    &plan.projects,
+                    "renameBranch",
+                    &plan.parent_path,
+                    rename_branch_params(to, from),
+                )
+                .await;
+            }
+            return Err(error);
+        }
+    }
+    let project = apply_renamed_worktree_project_state(state, &plan, renamed_branch.as_deref())?;
+    Ok(json!({
+        "movedFolder": plan.moves_folder,
+        "project": project,
+        "renamedBranch": renamed_branch,
+    }))
+}
+
+async fn resolve_renamed_worktree_branch_name(
+    plan: &RenameWorktreeProjectPlan,
+) -> std::result::Result<Option<String>, RenameWorktreeProjectError> {
+    let mut extra = Map::new();
+    extra.insert("action".to_string(), Value::String("branch".to_string()));
+    extra.insert(
+        "projectPath".to_string(),
+        Value::String(plan.worktree_path.clone()),
+    );
+    let branch = dispatch_typed_operation_endpoint("/api/runGitAction", &extra, plan.projects.clone())
+        .await?;
+    if exit_code(&branch) == 0 {
+        if let Some(branch_name) = branch
+            .get("stdout")
+            .and_then(Value::as_str)
+            .and_then(normalize_branch_name)
+        {
+            return Ok(Some(branch_name));
+        }
+    }
+    Ok(plan.worktree_branch.clone())
+}
+
+async fn rename_worktree_project_branch(
+    plan: &RenameWorktreeProjectPlan,
+    current_branch: Option<&str>,
+) -> std::result::Result<Option<String>, RenameWorktreeProjectError> {
+    if !plan.params.rename_branch {
+        return Ok(None);
+    }
+    let Some(current_branch) = current_branch else {
+        return Err(DomainStateError::bad_request(
+            "This worktree has no branch checked out, so there is no branch to rename.",
+        )
+        .into());
+    };
+    if current_branch == plan.params.name {
+        return Ok(None);
+    }
+    if worktree_sessions::worktree_branch_exists(&plan.parent_path, &plan.params.name) {
+        return Err(DomainStateError::bad_request(format!(
+            "Branch \"{}\" already exists.",
+            plan.params.name
+        ))
+        .into());
+    }
+    let result = run_rename_worktree_action(
+        &plan.projects,
+        "renameBranch",
+        &plan.parent_path,
+        rename_branch_params(current_branch, &plan.params.name),
+    )
+    .await?;
+    if exit_code(&result) != 0 {
+        return Err(DomainStateError::bad_request("Could not rename the branch.").into());
+    }
+    Ok(Some(plan.params.name.clone()))
+}
+
+fn rename_branch_params(branch: &str, new_branch: &str) -> Map<String, Value> {
+    let mut params = Map::new();
+    params.insert("branch".to_string(), Value::String(branch.to_string()));
+    params.insert(
+        "newBranch".to_string(),
+        Value::String(new_branch.to_string()),
+    );
+    params
+}
+
+async fn move_worktree_project_checkout(
+    plan: &RenameWorktreeProjectPlan,
+) -> std::result::Result<(), RenameWorktreeProjectError> {
+    let mut extra = Map::new();
+    extra.insert(
+        "worktreePath".to_string(),
+        Value::String(plan.worktree_path.clone()),
+    );
+    extra.insert(
+        "destinationPath".to_string(),
+        Value::String(plan.destination_path.clone()),
+    );
+    let result =
+        run_rename_worktree_action(&plan.projects, "move", &plan.parent_path, extra).await?;
+    if exit_code(&result) == 0 {
+        return Ok(());
+    }
+    /*
+    CDXC:WorktreeRename 2026-08-09-18:40:
+    git's stderr never reaches the user (typed-operation results are bounded by
+    contract), so translate the two refusals that are actionable and fall back to
+    a plain sentence for everything else. Submodules are re-checked here as well
+    as in the pre-flight because one can be initialised between the two.
+    */
+    if is_submodule_removal_refusal(&result) {
+        return Err(DomainStateError::bad_request(
+            "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
+        )
+        .into());
+    }
+    if is_locked_worktree_refusal(&result) {
+        return Err(DomainStateError::bad_request(
+            "This worktree is locked. Unlock it before renaming.",
+        )
+        .into());
+    }
+    Err(DomainStateError::bad_request("Could not move the worktree folder.").into())
+}
+
+async fn run_rename_worktree_action(
+    projects: &[Value],
+    action: &str,
+    project_path: &str,
+    mut extra_params: Map<String, Value>,
+) -> std::result::Result<Value, RenameWorktreeProjectError> {
+    extra_params.insert("action".to_string(), Value::String(action.to_string()));
+    extra_params.insert(
+        "projectPath".to_string(),
+        Value::String(project_path.to_string()),
+    );
+    dispatch_typed_operation_endpoint("/api/runWorktreeAction", &extra_params, projects.to_vec())
+        .await
+        .map_err(Into::into)
+}
+
+fn is_locked_worktree_refusal(result: &Value) -> bool {
+    let text = format!(
+        "{}\n{}",
+        result
+            .get("stderr")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        result
+            .get("stdout")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    );
+    text.to_lowercase()
+        .contains("cannot move a locked working tree")
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+Everything that mirrors the worktree's location has to move with it in one pass,
+because the alternative is a sidebar row pointing at a folder that no longer
+exists — worse than not having the feature. The full list, each traced rather
+than guessed:
+
+- `projects.path`, through `relocate_project` so the destination is validated and
+  a collision with another registered project is still refused;
+- `projects.name`, the derived `<ParentProjectName>-<slug>` label;
+- `projects.worktreeJson`, re-detected from git at the new path (its `name` and
+  `branch` are stamped once at registration and never recomputed otherwise);
+- every `sessions.cwd` under the old folder — V2 worktree sessions store an
+  absolute cwd, and `start_session_provider` bakes that cwd into the generated
+  run script, so a stale one breaks the next cold start;
+- the V2 worktree session marker's `path`, which is the only authority the
+  branch auto-rename trusts and silently no-ops when it points nowhere;
+- `projectBoardConfig.beadsDirectory`, but only when it is an absolute path
+  inside the worktree; it defaults to the project path, which the relocate fixes.
+
+Caches are deliberately absent: the git-status cache, the worktree-topology probe
+(60s TTL), and the project-icon cache are all keyed by path and self-heal.
+*/
+fn apply_renamed_worktree_project_state(
+    state: &AppState,
+    plan: &RenameWorktreeProjectPlan,
+    renamed_branch: Option<&str>,
+) -> std::result::Result<Value, RenameWorktreeProjectError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let project_id = plan.params.project_id.as_str();
+
+    if plan.moves_folder {
+        let mut relocate = Map::new();
+        relocate.insert("projectId".to_string(), json!(project_id));
+        relocate.insert("path".to_string(), json!(plan.destination_path.clone()));
+        repository.relocate_project(&relocate)?;
+    }
+
+    let projects = repository.list_projects()?;
+    let project_name = renamed_worktree_project_name(plan);
+    let mut update = Map::new();
+    update.insert("projectId".to_string(), json!(project_id));
+    update.insert("name".to_string(), json!(project_name.clone()));
+    if let Some(worktree) = crate::domain::detect_registered_git_worktree_metadata(
+        &projects,
+        &plan.destination_path,
+        &project_name,
+    ) {
+        let mut worktree = worktree;
+        /*
+        The worktree's `createdAt` records when the checkout was made, so keep
+        the registered value instead of stamping the rename as a creation.
+        */
+        if let Some(created_at) = projects
+            .iter()
+            .find(|candidate| candidate.get("projectId").and_then(Value::as_str) == Some(project_id))
+            .and_then(|candidate| candidate.get("worktree"))
+            .and_then(Value::as_object)
+            .and_then(|current| current.get("createdAt"))
+            .cloned()
+        {
+            worktree.insert("createdAt".to_string(), created_at);
+        }
+        update.insert("worktree".to_string(), Value::Object(worktree));
+    }
+    if let Some(board_config) = renamed_worktree_board_config(&projects, plan) {
+        update.insert("projectBoardConfig".to_string(), Value::Object(board_config));
+    }
+    let project = repository.update_project(&update)?;
+
+    if plan.moves_folder {
+        for session in repository.list_sessions(Some(project_id))? {
+            let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
+                continue;
+            };
+            let mut session_update = Map::new();
+            let moved_cwd = session
+                .get("cwd")
+                .and_then(Value::as_str)
+                .and_then(|cwd| rebase_renamed_worktree_path(cwd, plan));
+            if let Some(cwd) = moved_cwd {
+                session_update.insert("cwd".to_string(), json!(cwd));
+            }
+            if let Some(runtime_settings) =
+                worktree_sessions::runtime_settings_with_moved_worktree_path(
+                    &session,
+                    &plan.destination_path,
+                    renamed_branch,
+                )
+            {
+                session_update.insert(
+                    "runtimeSettings".to_string(),
+                    Value::Object(runtime_settings),
+                );
+            }
+            if session_update.is_empty() {
+                continue;
+            }
+            session_update.insert("projectId".to_string(), json!(project_id));
+            session_update.insert("sessionId".to_string(), json!(session_id));
+            repository.update_session(&session_update)?;
+        }
+    } else if let Some(branch) = renamed_branch {
+        for session in repository.list_sessions(Some(project_id))? {
+            let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(runtime_settings) = worktree_sessions::runtime_settings_with_moved_worktree_path(
+                &session,
+                &plan.worktree_path,
+                Some(branch),
+            ) else {
+                continue;
+            };
+            let mut session_update = Map::new();
+            session_update.insert("projectId".to_string(), json!(project_id));
+            session_update.insert("sessionId".to_string(), json!(session_id));
+            session_update.insert(
+                "runtimeSettings".to_string(),
+                Value::Object(runtime_settings),
+            );
+            repository.update_session(&session_update)?;
+        }
+    }
+
+    schedule_presentation_project_delta(state, &db, &repository, project_id, "projectUpdated")?;
+    Ok(project)
+}
+
+fn renamed_worktree_project_name(plan: &RenameWorktreeProjectPlan) -> String {
+    let suffix = path_file_name_for_rename(&plan.destination_path);
+    let parent_folder = path_file_name_for_rename(&plan.parent_path);
+    let slug = suffix
+        .strip_prefix(&format!("{parent_folder}-"))
+        .unwrap_or(&suffix);
+    let parent_label = if plan.parent_project_name.trim().is_empty() {
+        parent_folder.as_str()
+    } else {
+        plan.parent_project_name.trim()
+    };
+    format!("{parent_label}-{slug}")
+}
+
+fn renamed_worktree_board_config(
+    projects: &[Value],
+    plan: &RenameWorktreeProjectPlan,
+) -> Option<Map<String, Value>> {
+    if !plan.moves_folder {
+        return None;
+    }
+    let mut board_config = projects
+        .iter()
+        .find(|candidate| {
+            candidate.get("projectId").and_then(Value::as_str)
+                == Some(plan.params.project_id.as_str())
+        })?
+        .get("projectBoardConfig")
+        .and_then(Value::as_object)
+        .cloned()?;
+    let directory = board_config.get("beadsDirectory").and_then(Value::as_str)?;
+    let moved = rebase_renamed_worktree_path(directory, plan)?;
+    board_config.insert("beadsDirectory".to_string(), json!(moved));
+    Some(board_config)
+}
+
+/// `<old worktree>/x` becomes `<new worktree>/x`; anything outside the moved
+/// folder is left exactly as it is.
+fn rebase_renamed_worktree_path(path: &str, plan: &RenameWorktreeProjectPlan) -> Option<String> {
+    let normalized = path_to_string(&resolve_path_syntax(PathBuf::from(path)));
+    if normalized == plan.worktree_path {
+        return Some(plan.destination_path.clone());
+    }
+    let prefix = format!("{}/", plan.worktree_path);
+    let rest = normalized.strip_prefix(&prefix)?;
+    Some(format!("{}/{rest}", plan.destination_path))
+}
+
+fn rename_worktree_project_error_response(
+    endpoint_path: String,
+    request_id: String,
+    error: RenameWorktreeProjectError,
+) -> RoutedResponse {
+    match error {
+        RenameWorktreeProjectError::Domain(error) => {
+            domain_error_response(endpoint_path, request_id, error)
+        }
+        RenameWorktreeProjectError::ProjectPath(error) => {
+            project_path_error_response(endpoint_path, request_id, error)
+        }
+        RenameWorktreeProjectError::Typed(error) => {
             typed_operation_error_response(endpoint_path, request_id, error)
         }
     }
@@ -14305,6 +14956,269 @@ mod tests {
             .unwrap()
             .iter()
             .any(|project| project["projectId"] == worktree_project["projectId"]));
+    }
+
+    #[tokio::test]
+    async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        The lockstep contract. A rename that moves the folder but leaves the
+        database describing the old one is worse than no feature: the sidebar row
+        points at a dead path, `start_session_provider` refuses to start anything
+        there, and the V2 worktree marker silently stops being renameable. Assert
+        the whole set in one pass — project path, derived label, re-detected
+        worktree metadata, every session cwd, and the marker path — because they
+        only have value together.
+        */
+        if !git_available() {
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let state = test_app_state(paths.clone());
+        let token = state.auth_token.clone();
+        let parent = paths.root_dir.join("rename-worktree-parent");
+        let worktree = paths.root_dir.join("rename-worktree-parent-old");
+        create_git_repository_for_server_test(&parent);
+        run_git_for_server_test(&parent, &["branch", "ghostex/0123abcd"]);
+        run_git_for_server_test(
+            &parent,
+            &[
+                "worktree",
+                "add",
+                path_to_string(&worktree).as_str(),
+                "ghostex/0123abcd",
+            ],
+        );
+
+        let parent_project =
+            add_project_path_for_server_test(state.clone(), &token, &parent, Some("Parent")).await;
+        let worktree_project =
+            add_project_path_for_server_test(state.clone(), &token, &worktree, None).await;
+        assert_eq!(
+            worktree_project["worktree"]["parentProjectId"],
+            parent_project["projectId"]
+        );
+
+        let marker = worktree_sessions::worktree_session_marker_value(
+            "ghostex/0123abcd",
+            &path_to_string(&worktree),
+            "Codex Session",
+            "2026-07-29T00:00:00.000Z",
+        );
+        let created = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/createSession",
+                &token,
+                json!({
+                    "params": {
+                        "cwd": path_to_string(&worktree.join("packages/app")),
+                        "kind": "terminal",
+                        "projectId": worktree_project["projectId"],
+                        "runtimeSettings": {
+                            worktree_sessions::WORKTREE_SESSION_RUNTIME_KEY: marker,
+                        },
+                        "title": "Codex Session",
+                    }
+                }),
+            ),
+            "request-create-rename-session".to_string(),
+        )
+        .await;
+        assert_eq!(created.response.status(), StatusCode::OK);
+        let session = response_json(created.response).await["result"]["session"].clone();
+
+        let response = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "feat/kanban-assignee",
+                        "projectId": worktree_project["projectId"],
+                        "renameBranch": true
+                    }
+                }),
+            ),
+            "request-rename-worktree".to_string(),
+        )
+        .await;
+        assert_eq!(response.response.status(), StatusCode::OK);
+        let body = response_json(response.response).await;
+        let renamed = paths
+            .root_dir
+            .join("rename-worktree-parent-feat-kanban-assignee");
+
+        assert_eq!(body["result"]["movedFolder"], json!(true));
+        assert_eq!(body["result"]["renamedBranch"], json!("feat/kanban-assignee"));
+        assert_eq!(body["result"]["project"]["path"], json!(path_to_string(&renamed)));
+        assert_eq!(
+            body["result"]["project"]["name"],
+            json!("Parent-feat-kanban-assignee")
+        );
+        assert_eq!(
+            body["result"]["project"]["worktree"]["name"],
+            json!("rename-worktree-parent-feat-kanban-assignee")
+        );
+        assert_eq!(
+            body["result"]["project"]["worktree"]["branch"],
+            json!("feat/kanban-assignee")
+        );
+        assert_eq!(
+            body["result"]["project"]["worktree"]["createdAt"],
+            worktree_project["worktree"]["createdAt"],
+            "a rename is not a new checkout"
+        );
+        assert!(renamed.is_dir());
+        assert!(!worktree.exists());
+        assert_eq!(
+            run_git_for_server_test(&renamed, &["branch", "--show-current"]).trim(),
+            "feat/kanban-assignee"
+        );
+
+        let sessions = route_http(
+            state,
+            rpc_request(
+                "/api/listSessions",
+                &token,
+                json!({ "params": { "projectId": worktree_project["projectId"] } }),
+            ),
+            "request-list-renamed-sessions".to_string(),
+        )
+        .await;
+        let sessions = response_json(sessions.response).await;
+        let moved = sessions["result"]["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .find(|candidate| candidate["sessionId"] == session["sessionId"])
+            .cloned()
+            .expect("renamed session");
+        assert_eq!(
+            moved["cwd"],
+            json!(path_to_string(&renamed.join("packages/app"))),
+            "a cwd inside the moved folder follows it"
+        );
+        let moved_marker =
+            &moved["runtimeSettings"][worktree_sessions::WORKTREE_SESSION_RUNTIME_KEY];
+        assert_eq!(moved_marker["path"], json!(path_to_string(&renamed)));
+        assert_eq!(moved_marker["branch"], json!("feat/kanban-assignee"));
+        assert_eq!(moved_marker["initialTitle"], json!("Codex Session"));
+    }
+
+    #[tokio::test]
+    async fn renaming_a_worktree_refuses_a_taken_folder_and_a_taken_branch() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        Both refusals must land BEFORE anything is touched, and both must say
+        which name is in the way. The folder case is the important one: with the
+        destination already present, `git worktree move` exits 0 and nests the
+        checkout one level deeper, so "no error" would otherwise mean "the folder
+        is somewhere nobody asked for".
+        */
+        if !git_available() {
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let state = test_app_state(paths.clone());
+        let token = state.auth_token.clone();
+        let parent = paths.root_dir.join("rename-guard-parent");
+        let worktree = paths.root_dir.join("rename-guard-parent-old");
+        create_git_repository_for_server_test(&parent);
+        run_git_for_server_test(&parent, &["branch", "ghostex/0123abcd"]);
+        run_git_for_server_test(&parent, &["branch", "feat/taken"]);
+        run_git_for_server_test(
+            &parent,
+            &[
+                "worktree",
+                "add",
+                path_to_string(&worktree).as_str(),
+                "ghostex/0123abcd",
+            ],
+        );
+        fs::create_dir_all(paths.root_dir.join("rename-guard-parent-busy")).expect("busy dir");
+
+        add_project_path_for_server_test(state.clone(), &token, &parent, Some("Parent")).await;
+        let worktree_project =
+            add_project_path_for_server_test(state.clone(), &token, &worktree, None).await;
+
+        let taken_folder = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "busy",
+                        "projectId": worktree_project["projectId"]
+                    }
+                }),
+            ),
+            "request-rename-taken-folder".to_string(),
+        )
+        .await;
+        assert_eq!(taken_folder.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(taken_folder.response).await;
+        assert_eq!(
+            body["message"],
+            json!("A folder named \"rename-guard-parent-busy\" already exists next to the project.")
+        );
+        assert!(worktree.is_dir(), "the worktree never moved");
+
+        let taken_branch = route_http(
+            state.clone(),
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "feat/taken",
+                        "projectId": worktree_project["projectId"],
+                        "renameBranch": true
+                    }
+                }),
+            ),
+            "request-rename-taken-branch".to_string(),
+        )
+        .await;
+        assert_eq!(taken_branch.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(taken_branch.response).await;
+        assert_eq!(
+            body["message"],
+            json!("Branch \"feat/taken\" already exists.")
+        );
+        assert!(
+            worktree.is_dir(),
+            "a refused branch rename never moves the folder"
+        );
+        assert_eq!(
+            run_git_for_server_test(&worktree, &["branch", "--show-current"]).trim(),
+            "ghostex/0123abcd"
+        );
+
+        let nothing = route_http(
+            state,
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "old",
+                        "projectId": worktree_project["projectId"]
+                    }
+                }),
+            ),
+            "request-rename-nothing".to_string(),
+        )
+        .await;
+        assert_eq!(nothing.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(nothing.response).await;
+        assert_eq!(body["message"], json!("Nothing to rename."));
     }
 
     #[tokio::test]

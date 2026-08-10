@@ -49,6 +49,10 @@ import {
   WorktreeDeleteModal,
   type WorktreeDeleteModalDraft,
 } from "../../sidebar/worktree-delete-modal";
+import {
+  WorktreeRenameModal,
+  type WorktreeRenameModalDraft,
+} from "../../sidebar/worktree-rename-modal";
 import { WorktreeCreateModal } from "../../sidebar/worktree-create-modal";
 import {
   normalizeAppToastDescription,
@@ -108,6 +112,7 @@ type AppModalKind =
   | "gitCommit"
   | "gitFileDiff"
   | "deleteWorktree"
+  | "renameWorktree"
   | "openTargets"
   | "pinnedPrompts"
   | "portlessSetup"
@@ -154,6 +159,7 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
   remoteGxserverInstall: ".remote-gxserver-install-modal",
   remoteProjectPicker: ".remote-project-picker-dialog",
   renameSession: ".session-rename-modal-shadcn",
+  renameWorktree: ".worktree-rename-modal-shadcn",
   worktree: ".worktree-create-modal-shadcn",
   updateAvailable: ".update-available-modal",
 };
@@ -231,6 +237,7 @@ type AppModalHostMessage =
       gitCommitDraft?: GitCommitModalDraft;
       gitFileDiff?: GitFileDiffModalDraft;
       worktreeDeleteDraft?: WorktreeDeleteModalDraft;
+      worktreeRenameDraft?: WorktreeRenameModalDraft;
       initialRemoteMachineId?: string;
       initialSection?: MainSettingsInitialSectionId;
       initialSearchQuery?: string;
@@ -932,6 +939,7 @@ function AppModalHost() {
     gitCommit,
     gitFileDiff,
     worktreeDelete,
+    worktreeRename,
     missingProjectFolder,
     commandPaletteInitialQuery,
     commandPaletteOpenRequestSequence,
@@ -1043,6 +1051,7 @@ function AppModalHost() {
     gitCommit,
     gitFileDiff,
     worktreeDelete,
+    worktreeRename,
     missingProjectFolder,
     remoteGxserverInstall,
     remoteProjectPicker,
@@ -1869,6 +1878,31 @@ function AppModalHost() {
         }}
         theme={theme}
       />
+      <WorktreeRenameModal
+        draft={
+          worktreeRename ?? {
+            currentName: "",
+            currentPath: "",
+            parentFolderName: "",
+            parentProjectPath: "",
+            projectId: "",
+            renameBranchDefault: false,
+            worktreeName: "worktree",
+          }
+        }
+        isOpen={activeModal === "renameWorktree" && worktreeRename !== undefined}
+        onCancel={closeModal}
+        onRename={(projectId, options) => {
+          vscode.postMessage({
+            name: options.name,
+            projectId,
+            renameBranch: options.renameBranch,
+            type: "confirmRenameWorktree",
+          });
+          closeModal();
+        }}
+        theme={theme}
+      />
       {/*
        * CDXC:Worktrees 2026-06-02-13:41:
        * Creating a project worktree is a full-window modal flow because macOS
@@ -2377,6 +2411,7 @@ function useModalStateFromNative() {
   const [gitCommit, setGitCommit] = useState<GitCommitModalDraft>();
   const [gitFileDiff, setGitFileDiff] = useState<GitFileDiffModalDraft>();
   const [worktreeDelete, setWorktreeDelete] = useState<WorktreeDeleteModalDraft>();
+  const [worktreeRename, setWorktreeRename] = useState<WorktreeRenameModalDraft>();
   const [missingProjectFolder, setMissingProjectFolder] =
     useState<MissingProjectFolderModalState>();
   const [remoteGxserverInstall, setRemoteGxserverInstall] =
@@ -2417,6 +2452,7 @@ function useModalStateFromNative() {
     setGitCommit(undefined);
     setGitFileDiff(undefined);
     setWorktreeDelete(undefined);
+    setWorktreeRename(undefined);
     setMissingProjectFolder(undefined);
     setRemoteGxserverInstall(undefined);
     setRemoteProjectPicker(undefined);
@@ -2619,6 +2655,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "renameSession") {
             if (!message.sessionId) {
               throw new Error("Rename modal request is missing sessionId.");
@@ -2639,6 +2676,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "firstUserMessage") {
             if (typeof message.message !== "string" || !message.message.trim()) {
               throw new Error("First message modal request is missing message text.");
@@ -2655,6 +2693,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "remoteGxserverInstall") {
             if (
               typeof message.remoteMachineId !== "string" ||
@@ -2683,6 +2722,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "remoteProjectPicker") {
             if (
               typeof message.remoteMachineId !== "string" ||
@@ -2713,6 +2753,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "delayedSend") {
             if (!message.sessionId) {
               throw new Error("Delayed Actions modal request is missing sessionId.");
@@ -2748,6 +2789,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "worktree") {
             setWorktree({
               projectId: typeof message.projectId === "string" ? message.projectId : undefined,
@@ -2765,6 +2807,7 @@ function useModalStateFromNative() {
             setGitCommit(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "portlessSetup") {
             if (
               message.mode !== "firstSetup" &&
@@ -2785,11 +2828,28 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setGitCommit(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "deleteWorktree") {
             if (!message.worktreeDeleteDraft) {
               throw new Error("Delete worktree modal request is missing worktreeDeleteDraft.");
             }
             setWorktreeDelete(message.worktreeDeleteDraft);
+            setWorktreeRename(undefined);
+            setConfig({});
+            setDelayedSend(undefined);
+            setFirstUserMessage(undefined);
+                    setRemoteGxserverInstall(undefined);
+            setRemoteProjectPicker(undefined);
+            setRenameSession(undefined);
+            setWorktree(undefined);
+            setPortlessSetup(undefined);
+            setGitCommit(undefined);
+          } else if (message.modal === "renameWorktree") {
+            if (!message.worktreeRenameDraft) {
+              throw new Error("Rename worktree modal request is missing worktreeRenameDraft.");
+            }
+            setWorktreeRename(message.worktreeRenameDraft);
+            setWorktreeDelete(undefined);
             setConfig({});
             setDelayedSend(undefined);
             setFirstUserMessage(undefined);
@@ -2813,6 +2873,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else if (message.modal === "gitFileDiff") {
             if (!message.gitFileDiff) {
               throw new Error("Git file diff modal request is missing gitFileDiff.");
@@ -2832,6 +2893,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           } else {
             setConfig({});
             setDelayedSend(undefined);
@@ -2842,6 +2904,7 @@ function useModalStateFromNative() {
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
           }
           if (message.modal === "settings") {
             setGhostexFolderStats(undefined);
@@ -3108,6 +3171,7 @@ function useModalStateFromNative() {
     gitCommit,
     gitFileDiff,
     worktreeDelete,
+    worktreeRename,
     missingProjectFolder,
     commandPaletteInitialQuery,
     commandPaletteOpenRequestSequence,
@@ -3273,6 +3337,7 @@ function isModalRenderable({
   gitCommit,
   gitFileDiff,
   worktreeDelete,
+  worktreeRename,
   missingProjectFolder,
   recentProjects,
   remoteProjectPicker,
@@ -3292,6 +3357,7 @@ function isModalRenderable({
   gitCommit: GitCommitModalDraft | undefined;
   gitFileDiff: GitFileDiffModalDraft | undefined;
   worktreeDelete: WorktreeDeleteModalDraft | undefined;
+  worktreeRename: WorktreeRenameModalDraft | undefined;
   missingProjectFolder: MissingProjectFolderModalState | undefined;
   recentProjects: RecentProjectsModalState | undefined;
   remoteProjectPicker: RemoteProjectPickerState | undefined;
@@ -3327,6 +3393,8 @@ function isModalRenderable({
       return missingProjectFolder !== undefined;
     case "deleteWorktree":
       return worktreeDelete !== undefined;
+    case "renameWorktree":
+      return worktreeRename !== undefined;
     case "recentProjects":
       return recentProjects !== undefined;
     case "remoteProjectPicker":

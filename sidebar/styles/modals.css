@@ -2472,6 +2472,160 @@ html:has(body.app-modal-host-native-window-body) {
   min-width: 112px;
 }
 
+.worktree-rename-modal-shadcn {
+  /**
+   * CDXC:WorktreeRename 2026-08-09-18:40:
+   * Rename Worktree is a compact one-field dialog in the same app-modal family
+   * as Delete Worktree, so it shares that surface but sizes to its own content:
+   * a name field, a live folder/branch preview, one checkbox, and however many
+   * warnings the checkout actually has.
+   */
+  height: auto;
+  max-height: min(560px, calc(100vh - 2rem));
+  max-width: min(640px, calc(100vw - 2rem));
+  width: min(640px, calc(100vw - 2rem));
+}
+
+.worktree-rename-modal-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.worktree-rename-modal-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  gap: 4px;
+  padding: 20px;
+}
+
+.worktree-rename-modal-subject {
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-rename-modal-body {
+  display: grid;
+  gap: 16px;
+  max-height: min(380px, calc(100vh - 180px));
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+}
+
+.worktree-rename-modal-path {
+  color: color-mix(in srgb, var(--muted-foreground) 92%, transparent);
+  font-family: var(--app-monospace-font, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-rename-field-group {
+  gap: 10px;
+}
+
+.worktree-rename-preview {
+  display: grid;
+  gap: 3px;
+}
+
+.worktree-rename-preview-line code {
+  color: color-mix(in srgb, var(--foreground) 94%, var(--muted-foreground) 6%);
+  font-family: var(--app-monospace-font, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.worktree-rename-branch-option {
+  align-items: flex-start;
+  border: 1px solid color-mix(in srgb, var(--input) 62%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.worktree-rename-branch-checkbox {
+  appearance: none;
+  background: color-mix(in srgb, var(--input) 30%, transparent);
+  border: 1px solid var(--input);
+  border-radius: 0;
+  flex: none;
+  height: 16px;
+  margin: 2px 0 0;
+  position: relative;
+  width: 16px;
+}
+
+.worktree-rename-branch-checkbox:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.worktree-rename-branch-checkbox:checked::after {
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  content: "";
+  height: 8px;
+  left: 5px;
+  position: absolute;
+  top: 2px;
+  transform: rotate(45deg);
+  width: 4px;
+}
+
+.worktree-rename-branch-option-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.worktree-rename-branch-option-label {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.worktree-rename-branch-option-help {
+  color: color-mix(in srgb, var(--muted-foreground) 92%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.worktree-rename-message {
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.worktree-rename-message-blocking {
+  color: var(--destructive);
+}
+
+.worktree-rename-modal-actions {
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 20px 20px;
+}
+
+.worktree-rename-modal-button {
+  min-width: 112px;
+}
+
 .git-file-diff-modal-shadcn {
   /*
    * CDXC:TitlebarGit 2026-05-25-10:16:

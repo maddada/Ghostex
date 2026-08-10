@@ -2913,6 +2913,7 @@ enum GpuiAppModalKind {
     RemoteProjectPicker,
     Worktree,
     DeleteWorktree,
+    RenameWorktree,
     GitCommit,
     GitFileDiff,
     PortlessSetup,
@@ -2947,6 +2948,7 @@ impl GpuiAppModalKind {
             "remoteProjectPicker" => Some(Self::RemoteProjectPicker),
             "worktree" => Some(Self::Worktree),
             "deleteWorktree" => Some(Self::DeleteWorktree),
+            "renameWorktree" => Some(Self::RenameWorktree),
             "gitCommit" => Some(Self::GitCommit),
             "gitFileDiff" => Some(Self::GitFileDiff),
             "portlessSetup" => Some(Self::PortlessSetup),
@@ -2982,6 +2984,7 @@ impl GpuiAppModalKind {
             Self::RemoteProjectPicker => "remoteProjectPicker",
             Self::Worktree => "worktree",
             Self::DeleteWorktree => "deleteWorktree",
+            Self::RenameWorktree => "renameWorktree",
             Self::GitCommit => "gitCommit",
             Self::GitFileDiff => "gitFileDiff",
             Self::PortlessSetup => "portlessSetup",
@@ -3016,6 +3019,7 @@ impl GpuiAppModalKind {
             Self::RemoteProjectPicker => "Ghostex Remote Project",
             Self::Worktree => "Ghostex Add Worktree",
             Self::DeleteWorktree => "Ghostex Delete Worktree",
+            Self::RenameWorktree => "Ghostex Rename Worktree",
             Self::GitCommit => "Ghostex Commit Changes",
             Self::GitFileDiff => "Ghostex File Diff",
             Self::PortlessSetup => "Ghostex Portless Setup",
@@ -3096,6 +3100,17 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT),
             ),
+            /*
+            CDXC:WorktreeRename 2026-08-09-18:40:
+            Rename Worktree is one field, a preview, a checkbox, and however many
+            warnings the checkout has, so it opens on the same compact frame as
+            Delete Worktree and the one-shot fit-height pass sizes it down to
+            whatever it actually rendered.
+            */
+            Self::RenameWorktree => size(
+                px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
+                px(APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT),
+            ),
             Self::PortlessSetup => size(
                 px(APP_MODAL_HOST_PORTLESS_SETUP_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_PORTLESS_SETUP_WINDOW_HEIGHT),
@@ -3156,6 +3171,7 @@ impl GpuiAppModalKind {
                 | Self::RenameSession
                 | Self::Worktree
                 | Self::DeleteWorktree
+                | Self::RenameWorktree
                 | Self::GitCommit
                 | Self::GitFileDiff
                 | Self::PortlessSetup
@@ -3225,6 +3241,7 @@ impl GpuiAppModalKind {
             // open message is the menu-path shape.
             Self::Worktree
             | Self::DeleteWorktree
+            | Self::RenameWorktree
             | Self::GitCommit
             | Self::GitFileDiff
             | Self::PortlessSetup
@@ -27452,6 +27469,16 @@ impl GhostexGpuiApp {
                 "remoteMachineId",
             ],
             "confirmDeleteWorktree" => &["projectId"],
+            /*
+            CDXC:WorktreeRename 2026-08-09-18:40:
+            The rename confirmation carries the typed name across the modal
+            boundary. It is NOT a path: the runtime revalidates the project and
+            gxserver derives the destination folder from the name itself, so this
+            forward can never point a move at a directory of the caller's
+            choosing. `renameBranch` is a boolean and needs the explicit block
+            below — the string loop would drop it silently.
+            */
+            "confirmRenameWorktree" => &["projectId", "name"],
             "commitWorktreeBeforeDelete" => &["groupId"],
             _ => return false,
         };
@@ -27467,6 +27494,14 @@ impl GhostexGpuiApp {
                 if let Some(value) = command.get(field).and_then(serde_json::Value::as_bool) {
                     message.insert(field.to_string(), serde_json::json!(value));
                 }
+            }
+        }
+        if command_type == "confirmRenameWorktree" {
+            if let Some(value) = command
+                .get("renameBranch")
+                .and_then(serde_json::Value::as_bool)
+            {
+                message.insert("renameBranch".to_string(), serde_json::json!(value));
             }
         }
         let Some(sidebar) = self.sidebar.clone() else {
@@ -40155,6 +40190,7 @@ impl GhostexGpuiApp {
             "requestProjectWorktrees"
             | "createProjectWorktree"
             | "confirmDeleteWorktree"
+            | "confirmRenameWorktree"
             | "commitWorktreeBeforeDelete" => {
                 self.forward_gpui_worktree_modal_command_to_sidebar(command_type, command, cx);
             }

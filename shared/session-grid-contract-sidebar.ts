@@ -2170,6 +2170,19 @@ export type SidebarToExtensionMessage =
       groupId: string;
     }
   | {
+      /**
+       * CDXC:WorktreeRename 2026-08-09-18:40:
+       * Rename Worktree collects the worktree's git state — populated
+       * submodules, lock, pushed branch, uncommitted changes, live sessions —
+       * before the native modal opens, because those answers decide whether the
+       * rename can happen at all and the modal has no way to ask for them
+       * itself. This is separate from the label-only `Rename` above it, which
+       * changes the project row's title and nothing on disk.
+       */
+      type: "promptRenameWorktreeForGroup";
+      groupId: string;
+    }
+  | {
       type: "closeGroup";
       groupId: string;
     }
@@ -2640,6 +2653,19 @@ export type SidebarToExtensionMessage =
   | {
       groupId: string;
       type: "commitWorktreeBeforeDelete";
+    }
+  | {
+      /**
+       * CDXC:WorktreeRename 2026-08-09-18:40:
+       * One typed name plus one boolean. gxserver derives the destination folder
+       * (`<ParentFolder>-<slug>`) and the project label from it, so the modal
+       * never names a path; `renameBranch` stays opt-in because renaming a
+       * pushed branch breaks the user's next push.
+       */
+      name: string;
+      projectId: string;
+      renameBranch?: boolean;
+      type: "confirmRenameWorktree";
     }
   | {
       type: "saveSidebarCommand";

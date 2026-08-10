@@ -1420,6 +1420,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "remove the project";
     case "/api/deleteWorktreeProject":
       return "delete the worktree project";
+    case "/api/renameWorktreeProject":
+      return "rename the worktree project";
     case "/api/updateSession":
       return "update the session";
     case "/api/updateSessionOrder":

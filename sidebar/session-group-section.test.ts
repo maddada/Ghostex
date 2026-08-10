@@ -382,7 +382,30 @@ describe("getGroupContextMenuItemCount", () => {
         hasProjectContext: true,
         isWorktreeProject: true,
       }),
-    ).toBe(5);
+    ).toBe(6);
+  });
+
+  test("places Rename Worktree between the label rename and the collection action", () => {
+    /*
+     * CDXC:WorktreeRename 2026-08-09-18:40:
+     * getGroupContextMenuItemCount counts the items between these two anchors,
+     * and that count drives viewport clamping. Anchoring on POSITION rather than
+     * mere presence is the point: a test that only checked the item exists would
+     * still pass while the count silently drifted and the last menu item opened
+     * off-screen.
+     */
+    const menuStart = sessionGroupSectionSource.indexOf("CDXC:WorktreeDelete 2026-05-28-07:46");
+    const menuEnd = sessionGroupSectionSource.indexOf("Add to project group", menuStart);
+    expect(menuStart).toBeGreaterThanOrEqual(0);
+    expect(menuEnd).toBeGreaterThan(menuStart);
+    const worktreeMenuSource = sessionGroupSectionSource.slice(menuStart, menuEnd);
+
+    expect(worktreeMenuSource).toContain("Rename Worktree");
+    expect(worktreeMenuSource).toContain("promptRenameWorktree");
+    expect(worktreeMenuSource.indexOf("Rename Worktree")).toBeGreaterThan(
+      worktreeMenuSource.indexOf("IconPencil"),
+    );
+    expect(sessionGroupSectionSource).toContain('type: "promptRenameWorktreeForGroup"');
   });
 
   test("counts normal project and group actions separately", () => {

@@ -5042,6 +5042,9 @@ class GpuiSidebarRuntime {
       case "confirmDeleteWorktree":
         void this.confirmDeleteWorktree(message);
         return;
+      case "confirmRenameWorktree":
+        void this.confirmRenameWorktree(message);
+        return;
       case "commitWorktreeBeforeDelete":
         void this.runSidebarGitAction({
           action: "commit",
@@ -6271,6 +6274,12 @@ class GpuiSidebarRuntime {
         return;
       case "confirmDeleteWorktree":
         await this.confirmDeleteWorktree(message);
+        return;
+      case "promptRenameWorktreeForGroup":
+        await this.promptRenameWorktreeForGroup(message.groupId);
+        return;
+      case "confirmRenameWorktree":
+        await this.confirmRenameWorktree(message);
         return;
       case "updateSettingsPatch":
         this.saveSidebarSettingsPatch(message);
@@ -11684,6 +11693,204 @@ class GpuiSidebarRuntime {
     }
   }
 
+  /*
+  CDXC:WorktreeRename 2026-08-09-18:40:
+  Everything the modal needs to decide whether a rename can happen is gathered
+  HERE, before the native child window opens, because that window has no channel
+  to ask gxserver anything once it is up. The split is deliberate:
+
+  - answers that do not depend on the typed name (submodules, lock, pushed
+    branch, uncommitted changes, live sessions, agent history) ride the draft;
+  - answers that are pure computation over draft data (a folder that collides
+    with the main checkout or with another registered project) are recomputed
+    live in the modal as the user types;
+  - answers that need git or the filesystem for a name nobody has typed yet (the
+    destination already existing, the branch already existing, a ref-namespace
+    collision) are enforced by gxserver at submit and surface as the error toast.
+
+  Remote worktrees are out: the rename endpoint is remote-allowed, but the
+  presentation-project indirection the remote delete flow needs has no rename
+  counterpart yet, so a remote row gets an honest refusal instead of a modal that
+  cannot submit.
+  */
+  private async promptRenameWorktreeForGroup(groupId: string): Promise<void> {
+    if (parseGpuiRemotePresentationGroupId(groupId)) {
+      this.postWorktreeToast("warning", "Not available for remote worktrees", {
+        description: "Rename a remote worktree from the machine that owns it.",
+      });
+      return;
+    }
+    const projectId = parseGxserverPresentationProjectGroupId(groupId);
+    const project = projectId ? this.domainProjectById(projectId) : undefined;
+    const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
+    const projectPath = normalizeGpuiProjectPath(project?.path);
+    if (!project || !worktree || !projectPath) {
+      this.postWorktreeToast("warning", "Not a worktree", {
+        description: "Only worktree projects can be renamed.",
+      });
+      return;
+    }
+    const parentProject = this.domainProjectById(worktree.parentProjectId);
+    const parentProjectPath = normalizeGpuiProjectPath(parentProject?.path);
+    if (!parentProject || !parentProjectPath) {
+      this.postWorktreeToast("warning", "Parent project unavailable", {
+        description: "The worktree's parent project is not registered.",
+      });
+      return;
+    }
+
+    try {
+      const [branch, status, submodules] = await Promise.all([
+        this.runGitAction(project, { action: "branch" }),
+        this.runGitAction(project, { action: "status" }),
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        The submodule probe is an early warning, not the guard. A daemon that
+        does not know the action rejects it, and that must not cost the user the
+        whole dialog — gxserver re-checks submodules inside the rename itself and
+        refuses with the same sentence. Degrade to that refusal instead.
+        */
+        this.runWorktreeAction(parentProject, {
+          action: "hasPopulatedSubmodules",
+          worktreePath: projectPath,
+        }).catch(() => undefined),
+      ]);
+      if (branch.exitCode !== 0 || status.exitCode !== 0) {
+        throw new Error("Could not read worktree status.");
+      }
+      const branchName = normalizeGpuiWorktreeDeleteBranchName(branch.stdout, worktree.branch);
+      const branchMetadata = await resolveGpuiWorktreeDeleteBranchMetadata(
+        branchName,
+        (remoteName, remoteBranchName) =>
+          this.runGitAction(project, {
+            action: "remoteBranchExists",
+            branch: remoteBranchName,
+            remoteName,
+          }),
+      );
+      const parentFolderName = gpuiProjectNameFromPath(parentProjectPath);
+      const currentFolderName = gpuiProjectNameFromPath(projectPath);
+      const sessions = (this.presentation?.sessions ?? []).filter(
+        (session) => session.projectId === project.projectId,
+      );
+      const runningSessionCount = sessions.filter(
+        (session) => session.lifecycleState === "running",
+      ).length;
+      const warnings: string[] = [];
+      if (branchMetadata.remoteBranchExists && branchName) {
+        warnings.push(
+          `Renaming here only renames the local branch. ${branchMetadata.remoteName}/${branchName} keeps its old name, and your next push will be rejected until you set a new upstream.`,
+        );
+      }
+      if (hasGpuiGitShortStatusChanges(status.stdout)) {
+        warnings.push(
+          "This worktree has uncommitted changes. They move with the folder and are not touched.",
+        );
+      }
+      if (runningSessionCount > 0) {
+        warnings.push(
+          `${runningSessionCount} running session(s) will keep working, but their shell still thinks it is in the old folder until you cd or restart them.`,
+        );
+      }
+      if (sessions.some((session) => Boolean(session.agentId))) {
+        warnings.push(
+          "Agent history (Claude/Cursor) is filed under the old folder path and will not follow the rename.",
+        );
+      }
+
+      postAppModalHostMessage(
+        {
+          modal: "renameWorktree",
+          type: "open",
+          worktreeRenameDraft: {
+            ...(submodules?.exitCode === 0
+              ? {
+                  blockingReason:
+                    "This worktree has initialised submodules, and git cannot move those. Remove them (git submodule deinit --all) or move the folder yourself.",
+                }
+              : {}),
+            ...(branchName ? { branch: branchName } : {}),
+            currentName: gpuiWorktreeFolderSuffix(currentFolderName, parentFolderName),
+            currentPath: projectPath,
+            parentFolderName,
+            parentProjectPath,
+            projectId: project.projectId,
+            registeredProjectPaths: this.domainProjects
+              .filter((candidate) => candidate.projectId !== project.projectId)
+              .map((candidate) => normalizeGpuiProjectPath(candidate.path))
+              .filter((path): path is string => Boolean(path)),
+            renameBranchDefault: isGpuiManagedWorktreeBranch(branchName),
+            warnings,
+            worktreeName: project.name || worktree.name || currentFolderName,
+          },
+        },
+        "AppModals:gpuiRenameWorktree",
+      );
+    } catch (error) {
+      this.postWorktreeToast("error", "Could not inspect worktree", {
+        description: error instanceof Error ? error.message : "git status failed.",
+      });
+    }
+  }
+
+  private async confirmRenameWorktree(
+    message: Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>,
+  ): Promise<void> {
+    const project = this.domainProjectById(message.projectId);
+    const worktree = normalizeGpuiWorktreeMetadata(project?.worktree);
+    if (!project || !worktree || !this.client) {
+      this.postWorktreeToast("warning", "Worktree unavailable", {
+        description: "The selected worktree no longer exists.",
+      });
+      return;
+    }
+    const parentProject = this.domainProjectById(worktree.parentProjectId);
+    const toastId = createGpuiWorktreeToastId();
+    this.postWorktreeToast("info", "Renaming worktree", {
+      description: project.name,
+      persistent: true,
+      toastId,
+    });
+    /*
+    CDXC:SidebarGitMemo 2026-07-29 (extended for rename):
+    Same reasoning as `confirmDeleteWorktree`: the rename is a git write that
+    does not go through the `runGitAction` chokepoint — gxserver moves the
+    checkout and can rename the branch in the parent repo — so a memoized state
+    taken before the write would otherwise be republished for the rest of the
+    TTL, describing a branch and a path that no longer exist.
+    */
+    if (parentProject) {
+      this.gitStateMemoByProjectId.delete(parentProject.projectId);
+    }
+    this.gitStateMemoByProjectId.delete(project.projectId);
+    this.gitHubStateMemoByProjectId.delete(project.projectId);
+    try {
+      const result = await this.client.rpc<{ project?: GxserverProjectDomainState }>(
+        "/api/renameWorktreeProject",
+        {
+          name: message.name,
+          projectId: project.projectId,
+          renameBranch: message.renameBranch === true,
+        },
+      );
+      if (result.project) {
+        this.upsertDomainProject(result.project);
+      }
+      await this.refreshDomainPresentationFromClient("patch").catch(() => {
+        this.publishHudPatch();
+      });
+      this.postWorktreeToast("success", "Worktree renamed", {
+        description: result.project?.name ?? project.name,
+        toastId,
+      });
+    } catch (error) {
+      this.postWorktreeToast("error", "Could not rename worktree", {
+        description: gpuiWorktreeRenameUserVisibleErrorMessage(error),
+        toastId,
+      });
+    }
+  }
+
   private async promptDeleteRemoteWorktreeForGroup(groupId: string): Promise<boolean> {
     if (!parseGpuiRemotePresentationGroupId(groupId)) {
       return false;
@@ -12975,6 +13182,27 @@ class GpuiSidebarRuntime {
         projectId: remoteScope.projectId,
       },
     );
+  }
+
+  /*
+  CDXC:WorktreeRename 2026-08-09-18:40:
+  Worktree actions scope to the PARENT project, not the worktree's own row: the
+  typed operation derives the worktree family root from the parent of its cwd and
+  then refuses a path equal to that cwd, so passing the worktree's id makes the
+  operation refuse to act on itself. `createProjectWorktree` already sends the
+  parent for the same reason.
+  */
+  private async runWorktreeAction(
+    parentProject: GxserverProjectDomainState,
+    params: Record<string, unknown>,
+  ): Promise<GxserverTypedOperationResult> {
+    if (!this.client) {
+      throw new Error("gxserver is unavailable.");
+    }
+    return this.client.rpc<GxserverTypedOperationResult>("/api/runWorktreeAction", {
+      ...params,
+      projectId: parentProject.projectId,
+    });
   }
 
   private async runGitHubAction(
@@ -16356,6 +16584,53 @@ async function resolveGpuiWorktreeDeleteBranchMetadata(
   };
 }
 
+/**
+ * The field's prefill: the folder's own name with the `<ParentFolder>-` prefix
+ * stripped, because that prefix is re-applied on submit and showing it would
+ * invite the user to type it twice.
+ */
+function gpuiWorktreeFolderSuffix(folderName: string, parentFolderName: string): string {
+  const prefix = `${parentFolderName}-`;
+  return parentFolderName && folderName.startsWith(prefix)
+    ? folderName.slice(prefix.length)
+    : folderName;
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+The branch checkbox defaults on only for a branch gxserver minted or manages —
+`ghostex/<8hex>` or `ghostex/<slug>`, mirroring `is_worktree_temp_branch` and
+`is_managed_worktree_branch` in `gxserver-rs/src/worktree_sessions.rs`. A branch
+the user named is theirs and stays put unless they say otherwise; a branch
+Ghostex named is Ghostex's to keep in step with the folder. Getting this backwards
+would silently rename branches people had pushed.
+*/
+function isGpuiManagedWorktreeBranch(branch: string | undefined): boolean {
+  const slug = branch?.startsWith("ghostex/") ? branch.slice("ghostex/".length) : undefined;
+  return Boolean(
+    slug &&
+      slug !== "automation" &&
+      !slug.startsWith("automation/") &&
+      /^[a-z0-9-]+$/.test(slug),
+  );
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+`gpuiWorktreeUserVisibleErrorMessage` drops any message containing `/`, which
+would swallow every rename refusal that names a branch — `Branch "feat/x" already
+exists.` is exactly the sentence the user needs. gxserver's rename errors are
+bounded strings by contract (never git stderr), so this keeps the slash and
+guards the shape instead: single line, no backslashes, bounded length.
+*/
+function gpuiWorktreeRenameUserVisibleErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (message && !message.includes("\\") && !message.includes("\n") && message.length <= 200) {
+    return message;
+  }
+  return "The gxserver worktree rename failed.";
+}
+
 function hasGpuiGitShortStatusChanges(stdout: string): boolean {
   return stdout.split("\n").some((line) => {
     const trimmed = line.trim();
@@ -16367,6 +16642,7 @@ type GpuiWorktreeModalCommand =
   | Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>
   | Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>
   | Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>
+  | Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>
   | Extract<SidebarToExtensionMessage, { type: "commitWorktreeBeforeDelete" }>;
 
 type GpuiGitCommitModalCommand =
@@ -16482,6 +16758,26 @@ function parseGpuiWorktreeModalCommand(payload: unknown): GpuiWorktreeModalComma
         deleteRemoteBranch: record.deleteRemoteBranch === true,
         projectId,
         type: "confirmDeleteWorktree",
+      };
+    }
+    case "confirmRenameWorktree": {
+      /*
+      CDXC:WorktreeRename 2026-08-09-18:40:
+      `name` crosses this boundary as bounded text, never as a path: gxserver
+      derives the destination folder from it and re-validates it against the
+      daemon's own ref policy, so nothing here can name a directory. The 200-char
+      cap matches the shared validator's.
+      */
+      const projectId = stringField("projectId", 300);
+      const name = stringField("name", 200);
+      if (!projectId || !name) {
+        return undefined;
+      }
+      return {
+        name,
+        projectId,
+        renameBranch: record.renameBranch === true,
+        type: "confirmRenameWorktree",
       };
     }
     case "commitWorktreeBeforeDelete": {

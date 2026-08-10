@@ -111,6 +111,39 @@ pub fn worktree_directory_name(project_folder_name: &str, suffix: &str) -> Strin
     }
 }
 
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+Renaming a worktree types ONE name that becomes two things: the branch keeps it
+verbatim (so `feat/kanban-assignee` is possible) while the folder gets this slug,
+because `/` cannot be part of a directory name. This mirrors
+`worktreeRenameFolderSlug` in `shared/worktree-rename-name.ts` — the daemon slugs
+the name itself rather than accepting a destination path from a renderer, so a
+client can never point the move at a directory the user did not name. Case is
+preserved on purpose: `slugify_branch_title` above lowercases because it slugs a
+sentence, and lowercasing a name the user typed would rename their folder to
+something they did not ask for.
+*/
+pub fn worktree_rename_folder_slug(name: &str) -> String {
+    let mut slug = String::new();
+    for character in name.trim().chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+            slug.push(character);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.len() <= RENAMED_BRANCH_SLUG_MAX_CHARS {
+        return slug;
+    }
+    let cut = &slug[..RENAMED_BRANCH_SLUG_MAX_CHARS];
+    let truncated = match cut.rfind('-') {
+        Some(boundary) if boundary > 0 => &cut[..boundary],
+        _ => cut,
+    };
+    truncated.trim_end_matches('-').to_string()
+}
+
 /// `origin/main`, `refs/remotes/origin/main` and `main` all name the same branch
 /// on the remote; `startFromOrigin` needs the bare name to look it up.
 pub fn base_branch_short_name(base_ref: &str) -> String {
@@ -315,6 +348,41 @@ pub fn runtime_settings_with_renamed_worktree_branch(
     Some(runtime_settings)
 }
 
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+A moved worktree leaves the marker's `path` pointing at a folder that no longer
+exists, and `run_worktree_git` no-ops on a non-directory cwd — so a stale marker
+silently disables that session's auto-rename forever, and `remove_session_worktree`
+rejects the published path and strands the checkout. Rewrite `path` (and `branch`
+in the same pass when the rename covered the branch too, so the caller writes one
+`update_session` per session instead of two) and leave every other marker field
+alone: `initialTitle`, `createdAt`, and `renamedAt` still mean what they meant.
+*/
+pub fn runtime_settings_with_moved_worktree_path(
+    session: &Value,
+    path: &str,
+    branch: Option<&str>,
+) -> Option<Map<String, Value>> {
+    let mut runtime_settings = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let mut marker = runtime_settings
+        .get(WORKTREE_SESSION_RUNTIME_KEY)
+        .and_then(Value::as_object)
+        .cloned()?;
+    marker.insert("path".to_string(), json!(path));
+    if let Some(branch) = branch {
+        marker.insert("branch".to_string(), json!(branch));
+    }
+    runtime_settings.insert(
+        WORKTREE_SESSION_RUNTIME_KEY.to_string(),
+        Value::Object(marker),
+    );
+    Some(runtime_settings)
+}
+
 // ---------------------------------------------------------------------------
 // git plumbing
 // ---------------------------------------------------------------------------
@@ -396,6 +464,126 @@ pub fn worktree_branch_exists(repository_path: &str, branch: &str) -> bool {
     )
     .map(|value| !value.trim().is_empty())
     .unwrap_or(false)
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+`refs/heads/<x>` cannot be a ref while `refs/heads/<x>/…` holds refs, and vice
+versa: with `test/board-batch` present, `git branch -m test/other test` fails with
+`error: 'refs/heads/test/board-batch' exists; cannot create 'refs/heads/test'`
+even though `git check-ref-format` passes `test` and no branch called `test`
+exists. `-M` does not help — force cannot dissolve a ref namespace. So the only
+way to give the user a sentence instead of a raw git failure is to probe both
+directions before running the rename: does the target name have refs *under* it,
+and is any *ancestor* of the target already a leaf ref. Returns the first
+blocking refname with `refs/heads/` stripped.
+
+The probe deliberately lives here rather than as a new `for-each-ref` git action:
+that would be a general ref-listing primitive on the typed-operation surface, and
+this needs exactly two bounded lookups.
+*/
+pub fn worktree_branch_namespace_blocker(repository_path: &str, branch: &str) -> Option<String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return None;
+    }
+    if let Some(found) = run_worktree_git(
+        repository_path,
+        &[
+            "for-each-ref",
+            "--count=1",
+            "--format=%(refname)",
+            &format!("refs/heads/{branch}/**"),
+        ],
+        WORKTREE_GIT_COMMAND_TIMEOUT,
+    ) {
+        let found = found.trim();
+        if !found.is_empty() {
+            return Some(
+                found
+                    .strip_prefix("refs/heads/")
+                    .unwrap_or(found)
+                    .to_string(),
+            );
+        }
+    }
+    /*
+    The ancestor direction cannot reuse `for-each-ref`: git matches a pattern
+    "completely or from the beginning up to a slash", so `refs/heads/test`
+    happily returns `refs/heads/test/board-batch` and every namespaced name
+    would report itself as its own blocker. Resolve each ancestor exactly.
+    */
+    let mut prefix = String::new();
+    for component in branch.split('/').filter(|component| !component.is_empty()) {
+        if prefix.is_empty() {
+            prefix = component.to_string();
+        } else {
+            prefix = format!("{prefix}/{component}");
+        }
+        if prefix == branch {
+            break;
+        }
+        if worktree_branch_exists(repository_path, &prefix) {
+            return Some(prefix);
+        }
+    }
+    None
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+`git worktree move` hard-refuses a worktree with POPULATED submodules
+(`fatal: working trees containing submodules cannot be moved or removed`); an
+uninitialised gitlink is fine. `mv` plus `git worktree repair` is not a
+workaround — the top level repairs and the submodules do not, leaving a checkout
+whose `git status` fails in a way the user will not notice for days. So detect
+the condition and refuse with a sentence naming the fix. `submodule status`
+prints one line per gitlink and prefixes uninitialised ones with `-`, which is
+exactly the populated/not-populated split git itself refuses on.
+*/
+pub fn worktree_has_populated_submodules(worktree_path: &str) -> bool {
+    let Some(status) = run_worktree_git(
+        worktree_path,
+        &["submodule", "status", "--recursive"],
+        WORKTREE_GIT_COMMAND_TIMEOUT,
+    ) else {
+        return false;
+    };
+    status
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .any(|line| !line.starts_with('-'))
+}
+
+/*
+CDXC:WorktreeRename 2026-08-09-18:40:
+`git worktree move` refuses a locked worktree with
+`fatal: cannot move a locked working tree`, and the override is `move -f -f`,
+which this feature deliberately does not offer — a lock is someone saying "do not
+touch this checkout". Read the lock straight off `worktree list --porcelain`,
+whose per-worktree block carries a bare `locked` line (or `locked <reason>`), so
+the refusal can name the actual reason instead of forwarding git's stderr.
+*/
+pub fn worktree_is_locked(repository_path: &str, worktree_path: &str) -> bool {
+    let Some(listing) = run_worktree_git(
+        repository_path,
+        &["worktree", "list", "--porcelain"],
+        WORKTREE_GIT_COMMAND_TIMEOUT,
+    ) else {
+        return false;
+    };
+    let target = worktree_path.trim_end_matches('/');
+    let mut in_target_block = false;
+    for line in listing.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            in_target_block = path.trim().trim_end_matches('/') == target;
+            continue;
+        }
+        if in_target_block && (line == "locked" || line.starts_with("locked ")) {
+            return true;
+        }
+    }
+    false
 }
 
 pub fn current_worktree_branch(worktree_path: &str) -> Option<String> {
@@ -499,6 +687,29 @@ mod tests {
             worktree_directory_name("  ", "0123abcd"),
             "worktree-0123abcd"
         );
+    }
+
+    #[test]
+    fn rename_folder_slugs_fold_separators_without_lowercasing() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        Same table as `shared/worktree-rename-name.test.ts`. The daemon computes
+        the destination folder itself, so if these two rules ever drift the
+        modal's live preview stops describing the folder the user actually gets.
+        */
+        assert_eq!(
+            worktree_rename_folder_slug("feat/kanban-assignee"),
+            "feat-kanban-assignee"
+        );
+        assert_eq!(worktree_rename_folder_slug("feat/UI-Polish"), "feat-UI-Polish");
+        assert_eq!(worktree_rename_folder_slug("a-b_c.d"), "a-b_c.d");
+        assert_eq!(worktree_rename_folder_slug("  feat/x  "), "feat-x");
+        let long = worktree_rename_folder_slug(
+            "rewrite-the-entire-presentation-snapshot-projection-pipeline-for-sidebar",
+        );
+        assert!(long.len() <= RENAMED_BRANCH_SLUG_MAX_CHARS);
+        assert!(!long.ends_with('-'));
+        assert!(long.starts_with("rewrite-the-entire-presentation-snapshot"));
     }
 
     #[test]
@@ -679,6 +890,107 @@ mod tests {
         );
     }
 
+    #[test]
+    fn moving_a_worktree_marker_keeps_every_other_field() {
+        let session = worktree_session("Fix login", temp_marker(), "generated");
+        let runtime_settings =
+            runtime_settings_with_moved_worktree_path(&session, "/repos/project-renamed", None)
+                .expect("runtime settings");
+        let marker = runtime_settings
+            .get(WORKTREE_SESSION_RUNTIME_KEY)
+            .and_then(Value::as_object)
+            .expect("marker");
+        assert_eq!(marker.get("path"), Some(&json!("/repos/project-renamed")));
+        assert_eq!(marker.get("branch"), Some(&json!("ghostex/0123abcd")));
+        assert_eq!(marker.get("initialTitle"), Some(&json!("Codex Session")));
+        assert_eq!(
+            marker.get("createdAt"),
+            Some(&json!("2026-07-29T00:00:00.000Z"))
+        );
+        assert_eq!(
+            runtime_settings.get("titleSource"),
+            Some(&json!("generated")),
+            "unrelated runtime settings survive"
+        );
+        assert_eq!(
+            runtime_settings_with_moved_worktree_path(
+                &json!({ "runtimeSettings": { "titleSource": "generated" } }),
+                "/repos/project-renamed",
+                None
+            ),
+            None,
+            "a session without the marker has nothing to move"
+        );
+    }
+
+    #[test]
+    fn moving_a_marker_can_carry_the_branch_rename_in_the_same_pass() {
+        let session = worktree_session("Fix login", temp_marker(), "generated");
+        let runtime_settings = runtime_settings_with_moved_worktree_path(
+            &session,
+            "/repos/project-renamed",
+            Some("feat/login"),
+        )
+        .expect("runtime settings");
+        let marker = runtime_settings
+            .get(WORKTREE_SESSION_RUNTIME_KEY)
+            .and_then(Value::as_object)
+            .expect("marker");
+        assert_eq!(marker.get("path"), Some(&json!("/repos/project-renamed")));
+        assert_eq!(marker.get("branch"), Some(&json!("feat/login")));
+        assert_eq!(marker.get("initialTitle"), Some(&json!("Codex Session")));
+    }
+
+    #[test]
+    fn a_moved_marker_still_plans_no_rename_for_a_human_branch() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        Moving a worktree must not hand the auto-rename sweep a branch it never
+        minted. A marker whose branch the user renamed by hand stays finished
+        business after the move, and a marker moved onto a temp branch is still
+        only due a rename because of the title, never because it moved.
+        */
+        let human_branch = worktree_session_marker_value(
+            "feature/login",
+            "/repos/project-0123abcd",
+            "Codex Session",
+            "2026-07-29T00:00:00.000Z",
+        );
+        let session = worktree_session("Fix login", human_branch, "generated");
+        let runtime_settings =
+            runtime_settings_with_moved_worktree_path(&session, "/repos/project-renamed", None)
+                .expect("runtime settings");
+        assert_eq!(
+            plan_worktree_branch_rename(&json!({
+                "projectId": "P1ab",
+                "runtimeSettings": Value::Object(runtime_settings),
+                "sessionId": "G1ab",
+                "title": "Fix login",
+            })),
+            None,
+            "only branches gxserver minted are renamed"
+        );
+
+        let temp_session = worktree_session("Fix login", temp_marker(), "generated");
+        let moved = runtime_settings_with_moved_worktree_path(
+            &temp_session,
+            "/repos/project-renamed",
+            None,
+        )
+        .expect("runtime settings");
+        let plan = plan_worktree_branch_rename(&json!({
+            "projectId": "P1ab",
+            "runtimeSettings": Value::Object(moved),
+            "sessionId": "G1ab",
+            "title": "Fix login",
+        }))
+        .expect("plan");
+        assert_eq!(
+            plan.worktree_path, "/repos/project-renamed",
+            "the sweep follows the worktree to its new folder"
+        );
+    }
+
     fn git_available() -> bool {
         Command::new("git")
             .arg("--version")
@@ -753,6 +1065,58 @@ mod tests {
                 WORKTREE_GIT_COMMAND_TIMEOUT
             ),
             None
+        );
+    }
+
+    #[test]
+    fn ref_namespace_collisions_are_detected_in_both_directions() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        This is the failure that produces a raw `fatal: branch rename failed`
+        with no explanation: `test` is a legal ref name and no branch called
+        `test` exists, yet git still refuses while `test/board-batch` does,
+        because a ref cannot be both a leaf and a namespace. Both directions are
+        checked here because both happen in practice.
+        */
+        if !git_available() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path().join("repo");
+        std::fs::create_dir_all(&root).expect("repo dir");
+        git(&root, &["init", "--quiet", "-b", "main"]);
+        git(&root, &["config", "user.email", "tests@example.invalid"]);
+        git(&root, &["config", "user.name", "Ghostex Tests"]);
+        std::fs::write(root.join("README.md"), "hello\n").expect("readme");
+        git(&root, &["add", "README.md"]);
+        git(&root, &["commit", "--quiet", "-m", "initial"]);
+        git(&root, &["branch", "test/board-batch"]);
+        git(&root, &["branch", "leaf"]);
+
+        let root_path = root.to_string_lossy().to_string();
+        assert_eq!(
+            worktree_branch_namespace_blocker(&root_path, "test").as_deref(),
+            Some("test/board-batch"),
+            "an existing ref under the target name blocks it"
+        );
+        assert_eq!(
+            worktree_branch_namespace_blocker(&root_path, "leaf/child").as_deref(),
+            Some("leaf"),
+            "an ancestor that is already a leaf ref blocks it"
+        );
+        assert_eq!(
+            worktree_branch_namespace_blocker(&root_path, "feat/login"),
+            None,
+            "an unrelated name is not blocked"
+        );
+        assert_eq!(
+            worktree_branch_namespace_blocker(&root_path, "test/board-batch"),
+            None,
+            "the branch's own name is not its own blocker"
+        );
+        assert!(
+            !worktree_has_populated_submodules(&root_path),
+            "a repository with no gitlinks has nothing populated"
         );
     }
 }
