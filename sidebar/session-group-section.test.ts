@@ -382,17 +382,23 @@ describe("getGroupContextMenuItemCount", () => {
         hasProjectContext: true,
         isWorktreeProject: true,
       }),
-    ).toBe(6);
+    ).toBe(5);
   });
 
-  test("places Rename Worktree between the label rename and the collection action", () => {
+  test("worktree rows offer Rename Worktree and not the dead label-only Rename", () => {
     /*
-     * CDXC:WorktreeRename 2026-08-09-18:40:
-     * getGroupContextMenuItemCount counts the items between these two anchors,
-     * and that count drives viewport clamping. Anchoring on POSITION rather than
-     * mere presence is the point: a test that only checked the item exists would
-     * still pass while the count silently drifted and the last menu item opened
-     * off-screen.
+     * CDXC:WorktreeRename 2026-08-10:
+     * Two invariants in one place, because they are the same mistake.
+     *
+     * The label-only Rename posts `renameWorkspaceProjectForGroup`, which the
+     * GPUI runtime has no case for — on the desktop app it did nothing, sitting
+     * directly above a Rename Worktree that does. It must not come back for
+     * worktree rows, while ordinary project rows keep theirs.
+     *
+     * And getGroupContextMenuItemCount counts the items between these anchors,
+     * which drives viewport clamping. Anchoring on POSITION rather than mere
+     * presence is the point: a test that only checked the item exists would pass
+     * while the count drifted and the last menu item opened off-screen.
      */
     const menuStart = sessionGroupSectionSource.indexOf("CDXC:WorktreeDelete 2026-05-28-07:46");
     const menuEnd = sessionGroupSectionSource.indexOf("Add to project group", menuStart);
@@ -402,10 +408,11 @@ describe("getGroupContextMenuItemCount", () => {
 
     expect(worktreeMenuSource).toContain("Rename Worktree");
     expect(worktreeMenuSource).toContain("promptRenameWorktree");
-    expect(worktreeMenuSource.indexOf("Rename Worktree")).toBeGreaterThan(
-      worktreeMenuSource.indexOf("IconPencil"),
-    );
+    expect(worktreeMenuSource).not.toContain("IconPencil");
+    expect(worktreeMenuSource).not.toContain("setIsEditing(true)");
     expect(sessionGroupSectionSource).toContain('type: "promptRenameWorktreeForGroup"');
+    // Ordinary project rows are untouched — they still rename their label.
+    expect(sessionGroupSectionSource.slice(menuEnd)).toContain("IconPencil");
   });
 
   test("counts normal project and group actions separately", () => {

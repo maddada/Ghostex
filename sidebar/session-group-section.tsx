@@ -553,13 +553,14 @@ export function getGroupContextMenuItemCount({
    * CDXC:ProjectGroups 2026-06-08-09:19:
    * Worktree project headings should expose Copy Path but omit the IDE Open action in their compact context menu. Keep the root context-menu item count explicit by project kind so viewport clamping stays aligned with the visible worktree and repository menu actions.
    *
-   * CDXC:WorktreeRename 2026-08-09-18:40:
-   * Rename Worktree added a sixth worktree action. This count drives viewport
-   * clamping, so it has to move with the menu or the last item opens off-screen.
+   * CDXC:WorktreeRename 2026-08-10:
+   * Rename Worktree replaced the dead label-only Rename on worktree rows rather
+   * than joining it, so the count is unchanged. It drives viewport clamping, so
+   * it has to move with the menu or the last item opens off-screen.
    */
   if (hasProjectContext) {
     return isWorktreeProject
-      ? 6 + Number(projectCollectionsEnabled)
+      ? 5 + Number(projectCollectionsEnabled)
       : 5 + Number(canFullReloadGroup) + Number(canCreateSessionGroup) + Number(projectCollectionsEnabled);
   }
 
@@ -2978,29 +2979,16 @@ export function SessionGroupSection({
                       />
                       Open Folder
                     </button>
-                    <button
-                      className="session-context-menu-item"
-                      onClick={() => {
-                        setContextMenuPosition(undefined);
-                        setIsEditing(true);
-                      }}
-                      role="menuitem"
-                      type="button"
-                    >
-                      <IconPencil
-                        aria-hidden="true"
-                        className="session-context-menu-icon"
-                        size={14}
-                      />
-                      Rename
-                    </button>
                     {/*
-                     * CDXC:WorktreeRename 2026-08-09-18:40:
-                     * Rename above only retitles the project row. This one moves
-                     * the checkout on disk to `<ParentFolder>-<name>` and can
-                     * rename the git branch with it, so it is a separate action
-                     * with its own confirmation rather than a change in what the
-                     * label rename does.
+                     * CDXC:WorktreeRename 2026-08-10:
+                     * Worktree rows deliberately do NOT offer the label-only
+                     * Rename. It posts `renameWorkspaceProjectForGroup`, which
+                     * the GPUI runtime has no case for, so on the desktop app it
+                     * was a menu item that did nothing at all — and sat directly
+                     * above a Rename Worktree that does, which is worse than
+                     * absent. Renaming a worktree means moving the checkout, so
+                     * the action below is the whole story for these rows.
+                     * Ordinary project rows keep their label rename unchanged.
                      */}
                     <button
                       className="session-context-menu-item"
