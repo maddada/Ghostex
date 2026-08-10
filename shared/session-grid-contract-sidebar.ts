@@ -717,6 +717,16 @@ export type SidebarProjectWorktree = {
 export type SidebarProjectSettingsItem = {
   beadsDirectory?: string;
   beadsDisplayKey?: string;
+  /**
+   * CDXC:DocsRootDirectory 2026-08-09:
+   * Absolute folder this project's Docs surface shows IN ADDITION to the
+   * project's own docs. Absent/blank means the project inherits the Docs
+   * directory Global Default, and an unset global adds nothing.
+   *
+   * CDXC:DocsRootAdditive 2026-08-09: it never replaces the project's own
+   * README.md, CLAUDE.md, docs/, or configured Docs folders.
+   */
+  docsDirectory?: string;
   name: string;
   path: string;
   projectId: string;
@@ -2814,6 +2824,17 @@ export type SidebarToExtensionMessage =
     }
   | {
       type: "setProjectBeadsDirectory";
+      directory: string;
+      projectId: string;
+    }
+  | {
+      /*
+       * CDXC:DocsRootDirectory 2026-08-09:
+       * Absolute folder this project's Docs surface shows in addition to the
+       * project's own docs. Blank clears the override so the project inherits
+       * the Docs directory Global Default.
+       */
+      type: "setProjectDocsDirectory";
       directory: string;
       projectId: string;
     }

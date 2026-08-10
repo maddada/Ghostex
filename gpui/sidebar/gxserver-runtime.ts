@@ -6524,6 +6524,9 @@ class GpuiSidebarRuntime {
       case "setProjectBeadsDirectory":
         await this.updateProjectBeadsDirectory(message.projectId, message.directory);
         return;
+      case "setProjectDocsDirectory":
+        await this.updateProjectDocsDirectory(message.projectId, message.directory);
+        return;
       case "refreshGitState":
         await this.refreshGitStateForMessage(message);
         return;
@@ -10395,6 +10398,27 @@ class GpuiSidebarRuntime {
       projectBoardConfig: {
         ...project.projectBoardConfig,
         beadsDirectory: normalizedDirectory || null,
+      },
+    });
+  }
+
+  /*
+  CDXC:DocsRootDirectory 2026-08-09:
+  The Docs root override rides in the same per-project config object the Beads
+  directory already uses, so Settings -> Projects keeps one storage seam and
+  needs no new domain field, column, or migration. A blank value clears the
+  override so the project falls back to the Global Default, then the repo root.
+  */
+  private async updateProjectDocsDirectory(projectId: string, directory: string): Promise<void> {
+    const project = this.domainProjectById(projectId);
+    if (!project || !this.client) {
+      return;
+    }
+    const normalizedDirectory = directory.trim();
+    await this.updateProjectDomainState(project.projectId, {
+      projectBoardConfig: {
+        ...project.projectBoardConfig,
+        docsDirectory: normalizedDirectory || null,
       },
     });
   }
@@ -18762,6 +18786,10 @@ function createGpuiProjectSettingsProjects(
             "beadsDisplayKey",
             stringFromRecord(project.projectBoardConfig, "beadsDisplayKey") ??
               stringFromRecord(project.gitConfig, "beadsDisplayKey"),
+          ),
+          ...optionalGpuiProjectSettingsString(
+            "docsDirectory",
+            stringFromRecord(project.projectBoardConfig, "docsDirectory"),
           ),
           name: project.name,
           path,

@@ -1184,11 +1184,39 @@ const MANAGE_DOCS_RESOURCE_BASE_URL: &str = PROJECT_WORKAREA_MANAGE_DOCS_RESOURC
 
 type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
 
+/*
+CDXC:DocsRootDirectory 2026-08-09:
+The local Docs root is a configurable folder now, and resolving it reads the
+project's Docs directory from the daemon. That resolution must not run on the
+main thread while a CEF surface is being created, so the scope carries a
+resolver that runs on the same blocking-capable worker sequence as the file
+open, memoized so one document's images cost one lookup.
+
+CDXC:DocsRootAdditive 2026-08-09: Docs serves TWO roots — the project's own and
+the mounted Docs directory — so the resolver answers with every mount, each
+carrying the path segment that addresses it and the relative roots a resource
+may live under inside it. Which mounts exist and what they allow both come out
+of the same daemon lookup, so neither can be answered before it.
+*/
+type ManageDocsLocalRootResolver =
+    Arc<dyn Fn() -> Option<Vec<ManageDocsResourceRoot>> + Send + Sync>;
+
+/// One mounted Docs root as the resource scope sees it: the reserved first path
+/// segment that addresses it (empty for the project root, which owns bare
+/// paths), the root itself, and the relative roots inside it a resource may
+/// live under. An empty relative root means the whole tree.
+#[derive(Clone)]
+pub struct ManageDocsResourceRoot {
+    pub allowed_relative_roots: Vec<String>,
+    pub mount_segment: String,
+    pub path: PathBuf,
+}
+
 #[derive(Clone)]
 enum ManageDocsResourceSource {
     Local {
-        project_root: PathBuf,
-        allowed_relative_roots: Vec<String>,
+        resolve_root: ManageDocsLocalRootResolver,
+        resolved_root: Arc<OnceLock<Option<Vec<ManageDocsResourceRoot>>>>,
     },
     Remote {
         loader: ManageDocsRemoteResourceLoader,
@@ -1201,11 +1229,11 @@ pub struct ManageDocsResourceScope {
 }
 
 impl ManageDocsResourceScope {
-    pub fn new(project_root: PathBuf, allowed_relative_roots: Vec<String>) -> Self {
+    pub fn new(resolve_root: ManageDocsLocalRootResolver) -> Self {
         Self {
             source: ManageDocsResourceSource::Local {
-                project_root,
-                allowed_relative_roots,
+                resolve_root,
+                resolved_root: Arc::new(OnceLock::new()),
             },
         }
     }
@@ -1265,24 +1293,50 @@ fn open_manage_docs_resource(
 ) -> Option<ManageDocsResourceBody> {
     match source {
         ManageDocsResourceSource::Local {
-            project_root,
-            allowed_relative_roots,
+            resolve_root,
+            resolved_root,
         } => {
-            let project_root = std::fs::canonicalize(project_root).ok()?;
+            /*
+            CDXC:DocsRootAdditive 2026-08-09:
+            The requested path names its own root through the reserved mount
+            segment, exactly as the Docs bridge routes it, so an image beside a
+            note in the mounted Docs directory resolves there and a path can
+            never be resolved against the root it did not name.
+            */
+            let mounts = resolved_root.get_or_init(|| resolve_root()).clone()?;
+            // A named mount claims its own segment first; the project root owns
+            // every path no mount claimed.
+            let (mount, relative_path) = mounts
+                .iter()
+                .filter(|mount| !mount.mount_segment.is_empty())
+                .find_map(|mount| {
+                    relative_path
+                        .strip_prefix(&format!("{}/", mount.mount_segment))
+                        .map(|inner| (mount, inner))
+                })
+                .or_else(|| {
+                    mounts
+                        .iter()
+                        .find(|mount| mount.mount_segment.is_empty())
+                        .map(|mount| (mount, relative_path))
+                })?;
+            let root = std::fs::canonicalize(&mount.path).ok()?;
             let candidate = std::fs::canonicalize(
                 relative_path
                     .split('/')
-                    .fold(project_root.clone(), |path, component| path.join(component)),
+                    .fold(root.clone(), |path, component| path.join(component)),
             )
             .ok()?;
-            if !candidate.is_file() || !candidate.starts_with(&project_root) {
+            if !candidate.is_file() || !candidate.starts_with(&root) {
                 return None;
             }
-            let allowed = allowed_relative_roots.iter().any(|relative_root| {
-                let root = project_root.join(relative_root);
-                std::fs::canonicalize(root).ok().is_some_and(|root| {
-                    root.starts_with(&project_root) && candidate.starts_with(root)
-                })
+            let allowed = mount.allowed_relative_roots.iter().any(|relative_root| {
+                let allowed_root = root.join(relative_root);
+                std::fs::canonicalize(allowed_root)
+                    .ok()
+                    .is_some_and(|allowed_root| {
+                        allowed_root.starts_with(&root) && candidate.starts_with(allowed_root)
+                    })
             });
             if !allowed {
                 return None;

@@ -12,12 +12,31 @@ use uuid::Uuid;
 
 const FILE_LIST_MAX_ENTRIES: usize = 1_200;
 const FILE_LIST_MAX_DEPTH: usize = 8;
+/*
+CDXC:DocsRootRecursive 2026-08-09:
+A mounted Docs directory is a notes tree, not a repo, so it gets its own far
+larger bounds. They are still bounds: a directory pointed at a home folder must
+fail loudly naming the cap instead of walking forever or returning a tree that
+silently stops.
+*/
+const DOCS_TREE_MAX_ENTRIES: usize = 20_000;
+const DOCS_TREE_MAX_DEPTH: usize = 12;
 const FILE_PREVIEW_MAX_BYTES: u64 = 2_000_000;
 pub const FILE_SAVE_MAX_BYTES: usize = 2_000_000;
 const GIT_BASELINE_MAX_BYTES: usize = 1024 * 1024;
 const RESOURCE_MAX_BYTES: u64 = 12 * 1024 * 1024;
 const SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 const DOCS_RELATIVE_PATH: &str = "docs";
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+The reserved first path segment that addresses the mounted Docs directory.
+Every other Docs path is project-relative, so one relative path can only ever
+mean one root and no read, save, rename, delete, move, or reveal can resolve
+out of the root it was addressed to. The cost of that guarantee is that a
+project folder with this exact name is not reachable from Docs, which is a
+better trade than a vault named `docs` quietly shadowing the repo's own.
+*/
+const EXTRA_ROOT_MOUNT_SEGMENT: &str = ".ghostex-docs-root";
 const ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str = ".ghostex/manage-annotations.json";
 const ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
     "excalidraw",
@@ -65,11 +84,11 @@ gxserver resolves and canonicalizes its own project root, applies one bounded
 allowlist to every read/write operation, and returns the existing Docs bridge
 response shape without exposing a generic filesystem API.
 */
-pub fn run_project_docs_action(project_root: &Path, params: &Map<String, Value>) -> Value {
+pub fn run_project_docs_action(root: &ProjectDocsRoot, params: &Map<String, Value>) -> Value {
     let action = string_param(params, "action").unwrap_or_default();
     let request_id = string_param(params, "requestId").unwrap_or_default();
     let additional_docs_folders = string_param(params, "additionalDocsFolders").unwrap_or_default();
-    let result = run_action(project_root, params, &additional_docs_folders);
+    let result = run_action(root, params, &additional_docs_folders);
     match result {
         Ok(response) => response,
         Err(error) => json!({
@@ -80,12 +99,206 @@ pub fn run_project_docs_action(project_root: &Path, params: &Map<String, Value>)
     }
 }
 
+/*
+CDXC:DocsRootDirectory 2026-08-09:
+The Docs directory is the project's own, then the Docs directory Global Default,
+then none at all. Callers resolve it here so the daemon and its remote clients
+agree on one cascade, and so `run_project_docs_action` keeps taking a plain root.
+
+CDXC:DocsRootAdditive 2026-08-09:
+A configured directory is mounted IN ADDITION to the project root rather than
+replacing it, so a path that cannot be opened no longer fails the whole panel.
+It becomes an unavailable mount instead: the project's own docs still list and
+the mount node names the path that failed. That is still not a silent fallback —
+a silent revert reads exactly like "my vault is empty" and hides the typo that
+caused it.
+*/
+pub fn resolve_project_docs_root(project: &Value, project_path: &str) -> ProjectDocsRoot {
+    let configured = crate::global_project_defaults::resolve_with_global_default(
+        project
+            .get("projectBoardConfig")
+            .and_then(Value::as_object)
+            .and_then(|config| config.get("docsDirectory"))
+            .and_then(Value::as_str),
+        &crate::global_project_defaults::read_global_project_defaults().docs_directory,
+    );
+    ProjectDocsRoot {
+        project_path: PathBuf::from(project_path),
+        extra: configured
+            .as_deref()
+            .map(resolve_project_docs_extra_root),
+    }
+}
+
+/// Absolute (after expanding a leading `~`) and an existing folder. A failure
+/// is carried, not raised: it labels this one mount and leaves the project's
+/// own docs listing.
+fn resolve_project_docs_extra_root(configured: &str) -> ProjectDocsExtraRoot {
+    let path = expanded_docs_directory_path(configured);
+    let error = if !path.is_absolute() {
+        Some(format!(
+            "Docs directory must be an absolute path: {configured}"
+        ))
+    } else {
+        match fs::metadata(&path) {
+            Err(_) => Some(format!("Docs directory does not exist: {}", path.display())),
+            Ok(metadata) if !metadata.is_dir() => {
+                Some(format!("Docs directory is not a folder: {}", path.display()))
+            }
+            Ok(_) => None,
+        }
+    };
+    ProjectDocsExtraRoot { path, error }
+}
+
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Docs mounts two roots, never one. The project root is always present and keeps
+the docs/-plus-root-artifacts discovery it has always had; a configured Docs
+directory is mounted in addition, as a single top-level folder named after
+itself that expands to its whole recursive tree. Pointing Docs at a vault
+therefore ADDS the vault to the panel instead of hiding the repo's own
+CLAUDE.md.
+*/
+pub struct ProjectDocsRoot {
+    pub project_path: PathBuf,
+    pub extra: Option<ProjectDocsExtraRoot>,
+}
+
+/// A configured Docs directory. `error` is set when the folder could not be
+/// used, which labels its mount node instead of failing the whole listing.
+pub struct ProjectDocsExtraRoot {
+    pub path: PathBuf,
+    pub error: Option<String>,
+}
+
+/// The two mounted roots as one request sees them, canonicalized.
+struct DocsRoots {
+    project: PathBuf,
+    extra: Option<DocsExtraMount>,
+}
+
+/// The mounted Docs directory: what the tree calls it, and either where it is
+/// or why it could not be opened.
+struct DocsExtraMount {
+    location: Result<PathBuf, String>,
+    name: String,
+}
+
+/// Everything a Docs operation needs: both mounted roots, and the project's
+/// configured Docs folders. Carried together so no operation can resolve
+/// against one root while validating against the other.
+#[derive(Clone, Copy)]
+struct DocsContext<'a> {
+    additional_docs_folders: &'a str,
+    roots: &'a DocsRoots,
+}
+
+/// A Docs path that has been routed to its root. `outer` is what the Docs page
+/// addresses, `inner` is what the filesystem under `root` sees, and `extra`
+/// records which root answered.
+struct DocsPath<'a> {
+    extra: bool,
+    inner: String,
+    outer: String,
+    root: &'a Path,
+}
+
+impl DocsPath<'_> {
+    /// What a human is shown: the mount's own name, never the reserved segment.
+    fn display(&self, context: DocsContext<'_>) -> String {
+        let Some(mount) = context.roots.extra.as_ref().filter(|_| self.extra) else {
+            return self.outer.clone();
+        };
+        if self.inner.is_empty() {
+            mount.name.clone()
+        } else {
+            format!("{}/{}", mount.name, self.inner)
+        }
+    }
+}
+
+fn docs_roots(root: &ProjectDocsRoot) -> Result<DocsRoots, String> {
+    Ok(DocsRoots {
+        project: project_root(&root.project_path)?,
+        extra: root.extra.as_ref().map(docs_extra_mount),
+    })
+}
+
+fn docs_extra_mount(extra: &ProjectDocsExtraRoot) -> DocsExtraMount {
+    let name = extra
+        .path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| extra.path.to_string_lossy().into_owned());
+    let location = match &extra.error {
+        Some(error) => Err(error.clone()),
+        None => fs::canonicalize(&extra.path)
+            .map_err(|_| format!("Docs directory is unavailable: {}", extra.path.display())),
+    };
+    DocsExtraMount { location, name }
+}
+
+/// Route a Docs path to the root it names. The reserved mount segment is the
+/// whole routing vocabulary; anything else is project-relative.
+fn docs_path<'a>(context: DocsContext<'a>, path: Option<&str>) -> Result<DocsPath<'a>, String> {
+    let outer = normalized_relative_path(path)?;
+    let Some(inner) = extra_root_relative_path(&outer) else {
+        return Ok(DocsPath {
+            extra: false,
+            inner: outer.clone(),
+            outer,
+            root: context.roots.project.as_path(),
+        });
+    };
+    let mount = context
+        .roots
+        .extra
+        .as_ref()
+        .ok_or_else(|| "No Docs directory is configured.".to_string())?;
+    let root = mount.location.as_deref().map_err(|error| error.clone())?;
+    Ok(DocsPath {
+        extra: true,
+        inner,
+        outer,
+        root,
+    })
+}
+
+/// `Some(inner path)` when the path addresses the mounted Docs directory.
+fn extra_root_relative_path(outer: &str) -> Option<String> {
+    if outer == EXTRA_ROOT_MOUNT_SEGMENT {
+        return Some(String::new());
+    }
+    outer
+        .strip_prefix(&format!("{EXTRA_ROOT_MOUNT_SEGMENT}/"))
+        .map(str::to_string)
+}
+
+fn expanded_docs_directory_path(configured: &str) -> PathBuf {
+    let Some(rest) = configured.strip_prefix('~') else {
+        return PathBuf::from(configured);
+    };
+    let home = crate::paths::get_gxserver_paths(None).home_dir.clone();
+    let rest = rest.trim_start_matches(['/', '\\']);
+    if rest.is_empty() {
+        home
+    } else {
+        home.join(rest)
+    }
+}
+
 fn run_action(
-    project_root_path: &Path,
+    root: &ProjectDocsRoot,
     params: &Map<String, Value>,
     additional_docs_folders: &str,
 ) -> Result<Value, String> {
-    let root = project_root(project_root_path)?;
+    let roots = docs_roots(root)?;
+    let context = DocsContext {
+        additional_docs_folders,
+        roots: &roots,
+    };
     let action = string_param(params, "action").unwrap_or_default();
     let request_id = string_param(params, "requestId").unwrap_or_default();
     let response = |file: Option<Value>, entries: Option<Vec<Value>>| {
@@ -107,83 +320,65 @@ fn run_action(
     };
 
     match action.as_str() {
-        "list" => Ok(response(
-            None,
-            Some(project_file_entries(&root, additional_docs_folders)?),
-        )),
+        "list" => Ok(response(None, Some(project_file_entries(context)?))),
         "read" => Ok(response(
             Some(project_file_preview(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
-                additional_docs_folders,
             )?),
             None,
         )),
         "stat" => Ok(response(
             Some(project_file_metadata(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
-                additional_docs_folders,
             )?),
             None,
         )),
         "save" => Ok(response(
             Some(save_project_file(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
                 string_param(params, "content").as_deref(),
-                additional_docs_folders,
             )?),
             None,
         )),
         "rename" => Ok(response(
             rename_project_file(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
                 string_param(params, "newPath").as_deref(),
-                additional_docs_folders,
             )?,
             None,
         )),
         "duplicate" => Ok(response(
             Some(duplicate_project_file(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
                 string_param(params, "newPath").as_deref(),
-                additional_docs_folders,
             )?),
             None,
         )),
         "delete" => {
-            delete_project_file(
-                &root,
-                string_param(params, "path").as_deref(),
-                additional_docs_folders,
-            )?;
+            delete_project_file(context, string_param(params, "path").as_deref())?;
             Ok(response(None, None))
         }
         "createFolder" => {
-            create_project_folder(
-                &root,
-                string_param(params, "path").as_deref(),
-                additional_docs_folders,
-            )?;
+            create_project_folder(context, string_param(params, "path").as_deref())?;
             Ok(response(None, None))
         }
         "move" => Ok(response(
             move_project_item(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
                 string_param(params, "newPath").as_deref(),
-                additional_docs_folders,
             )?,
             None,
         )),
         "copyFullPath" => {
             let full_path = docs_action_item_path(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
-                additional_docs_folders,
                 "Select an item to copy its full path.",
             )?;
             Ok(json!({
@@ -196,20 +391,19 @@ fn run_action(
         "addToSessionContext" => Ok(json!({
             "action": action,
             "contextPrompt": session_context_prompt(
-                &root,
+                context,
                 string_param(params, "path").as_deref(),
-                additional_docs_folders,
             )?,
             "requestId": request_id,
             "rootName": DOCS_RELATIVE_PATH,
         })),
         "readResource" => {
-            let (target, relative_path) =
-                existing_path(&root, string_param(params, "path").as_deref())?;
-            if relative_path.is_empty() {
+            let path = docs_path(context, string_param(params, "path").as_deref())?;
+            if path.inner.is_empty() {
                 return Err("Select a Docs resource to read.".to_string());
             }
-            validate_accessible_path(&relative_path, additional_docs_folders)?;
+            let target = existing_path(&path)?;
+            validate_accessible_path(&path, context)?;
             let metadata =
                 fs::metadata(&target).map_err(|_| "Docs resource is unavailable.".to_string())?;
             if !metadata.is_file() || metadata.len() > RESOURCE_MAX_BYTES {
@@ -226,40 +420,40 @@ fn run_action(
     }
 }
 
-fn docs_action_item(
-    root: &Path,
+fn docs_action_item<'a>(
+    context: DocsContext<'a>,
     path: Option<&str>,
-    additional_docs_folders: &str,
     unavailable_message: &str,
-) -> Result<(PathBuf, String, fs::Metadata), String> {
-    let (target, relative_path) = operation_path(root, path)?;
-    if relative_path.is_empty() {
+) -> Result<(PathBuf, DocsPath<'a>, fs::Metadata), String> {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err(unavailable_message.to_string());
     }
-    validate_action_path(&relative_path, additional_docs_folders)?;
+    let target = operation_path(&path)?;
+    validate_action_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable_message.to_string())?;
-    Ok((target, relative_path, metadata))
+    Ok((target, path, metadata))
 }
 
 fn docs_action_item_path(
-    root: &Path,
+    context: DocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders: &str,
     unavailable_message: &str,
 ) -> Result<String, String> {
-    let (target, _, _) =
-        docs_action_item(root, path, additional_docs_folders, unavailable_message)?;
+    let (target, _, _) = docs_action_item(context, path, unavailable_message)?;
     Ok(target.to_string_lossy().into_owned())
 }
 
-fn session_context_prompt(
-    root: &Path,
-    path: Option<&str>,
-    additional_docs_folders: &str,
-) -> Result<String, String> {
+fn session_context_prompt(context: DocsContext<'_>, path: Option<&str>) -> Result<String, String> {
     let unavailable = "Select a file to add to session context.";
-    let (target, relative_path, metadata) =
-        docs_action_item(root, path, additional_docs_folders, unavailable)?;
+    let (target, path, metadata) = docs_action_item(context, path, unavailable)?;
+    /*
+    CDXC:DocsRootAdditive 2026-08-09:
+    The prompt names the file the way the Docs tree does — the mount's own name,
+    not the reserved routing segment — because this text is read by a human and
+    by the agent in the terminal it is pasted into.
+    */
+    let relative_path = path.display(context);
     if !metadata.is_file() {
         return Err(unavailable.to_string());
     }
@@ -327,7 +521,14 @@ fn project_root(path: &Path) -> Result<PathBuf, String> {
     fs::canonicalize(path).map_err(|_| "The active project root is unavailable.".to_string())
 }
 
-fn additional_docs_folder_relative_paths(value: &str) -> Vec<String> {
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Docs folders is project-root-relative again, the meaning it had before a custom
+root ever existed. Round 2 made it narrow the custom root instead; with additive
+mounting that is no longer coherent, because the mounted Docs directory always
+shows its whole tree.
+*/
+fn additional_docs_folder_relative_paths(value: &str, docs_is_implicit_root: bool) -> Vec<String> {
     let mut folders = Vec::new();
     let mut seen = HashSet::new();
     for raw_folder in value.split(',') {
@@ -345,17 +546,22 @@ fn additional_docs_folder_relative_paths(value: &str) -> Vec<String> {
             continue;
         }
         let folder = parts.join("/");
-        if folder != DOCS_RELATIVE_PATH && seen.insert(folder.to_lowercase()) {
+        if docs_is_implicit_root && folder == DOCS_RELATIVE_PATH {
+            continue;
+        }
+        if seen.insert(folder.to_lowercase()) {
             folders.push(folder);
         }
     }
     folders
 }
 
+/// The project root's scan roots: `docs` plus each configured Docs folder.
 fn scan_roots(additional_docs_folders: &str) -> Vec<String> {
     let mut roots = vec![DOCS_RELATIVE_PATH.to_string()];
     roots.extend(additional_docs_folder_relative_paths(
         additional_docs_folders,
+        true,
     ));
     roots
 }
@@ -372,41 +578,60 @@ fn path_is_scan_root(relative_path: &str, additional_docs_folders: &str) -> bool
         .any(|root| relative_path == root)
 }
 
+/// The nodes no operation may rename, move, or delete: the project root's scan
+/// roots, and the mounted Docs directory itself.
+fn path_is_docs_root_node(path: &DocsPath<'_>, context: DocsContext<'_>) -> bool {
+    if path.extra {
+        return path.inner.is_empty();
+    }
+    path_is_scan_root(&path.inner, context.additional_docs_folders)
+}
+
+/// The extensions the Docs surface renders. One list for root artifacts and for
+/// custom-root tree discovery, so the two can never drift apart.
+fn has_docs_artifact_extension(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        ROOT_ARTIFACT_FILE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    })
+}
+
 fn is_root_artifact(relative_path: &str) -> bool {
     if relative_path.is_empty() || relative_path.contains('/') {
         return false;
     }
-    relative_path
-        .rsplit_once('.')
-        .is_some_and(|(_, extension)| {
-            ROOT_ARTIFACT_FILE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-        })
+    has_docs_artifact_extension(relative_path)
 }
 
-fn validate_accessible_path(
-    relative_path: &str,
-    additional_docs_folders: &str,
-) -> Result<(), String> {
-    if relative_path == ANNOTATIONS_SIDECAR_RELATIVE_PATH
-        || path_is_in_scan_root(relative_path, additional_docs_folders)
-        || is_root_artifact(relative_path)
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+The mounted Docs directory serves its whole tree, so a path that routed there
+needs no further allowlist: it was already confined to that root by
+canonicalization. Project-root paths keep exactly the allowlist they have
+always had.
+*/
+fn validate_accessible_path(path: &DocsPath<'_>, context: DocsContext<'_>) -> Result<(), String> {
+    if path.extra
+        || path.inner == ANNOTATIONS_SIDECAR_RELATIVE_PATH
+        || path_is_in_scan_root(&path.inner, context.additional_docs_folders)
+        || is_root_artifact(&path.inner)
     {
         return Ok(());
     }
     Err("Docs files must be inside configured Docs folders or be root Markdown, HTML, or Excalidraw files.".to_string())
 }
 
-fn validate_tree_path(relative_path: &str, additional_docs_folders: &str) -> Result<(), String> {
-    if path_is_in_scan_root(relative_path, additional_docs_folders) {
+fn validate_tree_path(path: &DocsPath<'_>, context: DocsContext<'_>) -> Result<(), String> {
+    if path.extra || path_is_in_scan_root(&path.inner, context.additional_docs_folders) {
         Ok(())
     } else {
         Err("Docs items must be inside configured Docs folders.".to_string())
     }
 }
 
-fn validate_action_path(relative_path: &str, additional_docs_folders: &str) -> Result<(), String> {
-    if path_is_in_scan_root(relative_path, additional_docs_folders)
-        || is_root_artifact(relative_path)
+fn validate_action_path(path: &DocsPath<'_>, context: DocsContext<'_>) -> Result<(), String> {
+    if path.extra
+        || path_is_in_scan_root(&path.inner, context.additional_docs_folders)
+        || is_root_artifact(&path.inner)
     {
         Ok(())
     } else {
@@ -414,10 +639,37 @@ fn validate_action_path(relative_path: &str, additional_docs_folders: &str) -> R
     }
 }
 
-fn project_file_entries(root: &Path, additional_docs_folders: &str) -> Result<Vec<Value>, String> {
+/// Two operations must never straddle the mount: a rename, duplicate, or move
+/// that crosses roots is refused rather than silently rewriting one root's file
+/// into the other.
+fn require_same_root(source: &DocsPath<'_>, destination: &DocsPath<'_>) -> Result<(), String> {
+    if source.extra == destination.extra {
+        return Ok(());
+    }
+    Err("Docs cannot move items between the project and the Docs directory.".to_string())
+}
+
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+The project's own entries come first and are discovered exactly as they have
+always been, so setting a Docs directory can never take the repo's README.md,
+CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
+*/
+fn project_file_entries(context: DocsContext<'_>) -> Result<Vec<Value>, String> {
+    let mut entries = project_root_file_entries(context.roots.project.as_path(), context)?;
+    if let Some(mount) = context.roots.extra.as_ref() {
+        append_extra_root_entries(&mut entries, mount);
+    }
+    Ok(entries)
+}
+
+fn project_root_file_entries(
+    root: &Path,
+    context: DocsContext<'_>,
+) -> Result<Vec<Value>, String> {
     let mut entries = Vec::new();
     let mut scanned_directory_entries = 0;
-    let roots = scan_roots(additional_docs_folders);
+    let roots = scan_roots(context.additional_docs_folders);
     for relative_path in &roots {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
             break;
@@ -457,6 +709,162 @@ fn project_file_entries(root: &Path, additional_docs_folders: &str) -> Result<Ve
     Ok(entries)
 }
 
+/*
+CDXC:DocsRootRecursive 2026-08-09:
+Whole-tree discovery for the mounted Docs directory: it is walked to the bottom
+so a note nested five folders deep in a vault is listed like any other. Files
+are narrowed to the extensions Docs actually renders, because a vault's image
+and attachment folders are not documents.
+
+CDXC:DocsRootAdditive 2026-08-09:
+The mount is one top-level folder named after the directory, and every failure
+lands on that node's label instead of on the listing: an unopenable directory,
+and the entry and depth caps alike. Losing the whole panel — including the
+project's own README.md — because a vault is too deep is the one thing this
+must not do, and a tree that silently stopped at 20,000 entries reads exactly
+like a vault that only has that many, so the cap is named on the node.
+*/
+fn append_extra_root_entries(entries: &mut Vec<Value>, mount: &DocsExtraMount) {
+    let root = match mount.location.as_deref() {
+        Ok(root) => root,
+        Err(error) => {
+            entries.push(unavailable_extra_root_entry(&mount.name, error));
+            return;
+        }
+    };
+    let mut tree = Vec::new();
+    let mut scanned_directory_entries = 0;
+    if let Err(error) = append_docs_tree_entries(
+        &mut tree,
+        root,
+        root,
+        EXTRA_ROOT_MOUNT_SEGMENT,
+        1,
+        &mut scanned_directory_entries,
+    ) {
+        entries.push(unavailable_extra_root_entry(&mount.name, &error));
+        return;
+    }
+    let metadata = fs::metadata(root).ok();
+    entries.push(json!({
+        "depth": 0,
+        "kind": "directory",
+        "modifiedAt": metadata.as_ref().and_then(modified_at),
+        "name": mount.name,
+        "path": EXTRA_ROOT_MOUNT_SEGMENT,
+        "size": Value::Null,
+    }));
+    entries.append(&mut tree);
+}
+
+/// The mount still shows when its folder does not, carrying the reason in the
+/// only field the Docs tree renders. A missing vault must look missing, not
+/// look empty.
+fn unavailable_extra_root_entry(name: &str, error: &str) -> Value {
+    json!({
+        "depth": 0,
+        "kind": "directory",
+        "modifiedAt": Value::Null,
+        "name": format!("{name} — {error}"),
+        "path": EXTRA_ROOT_MOUNT_SEGMENT,
+        "size": Value::Null,
+    })
+}
+
+fn append_docs_tree_entries(
+    entries: &mut Vec<Value>,
+    root: &Path,
+    directory: &Path,
+    relative_directory: &str,
+    depth: usize,
+    scanned_directory_entries: &mut usize,
+) -> Result<(), String> {
+    if depth > DOCS_TREE_MAX_DEPTH {
+        return Err(docs_tree_depth_cap_error());
+    }
+    let mut children = bounded_directory_entries(
+        directory,
+        scanned_directory_entries,
+        DOCS_TREE_MAX_ENTRIES,
+        docs_tree_entry_cap_error,
+    )?;
+    children.sort_by(|left, right| {
+        let left_is_dir = left.metadata().is_ok_and(|metadata| metadata.is_dir());
+        let right_is_dir = right.metadata().is_ok_and(|metadata| metadata.is_dir());
+        right_is_dir
+            .cmp(&left_is_dir)
+            .then_with(|| left.file_name().cmp(&right.file_name()))
+    });
+
+    let mut directories = Vec::new();
+    for child in children {
+        if entries.len() >= DOCS_TREE_MAX_ENTRIES {
+            return Err(docs_tree_entry_cap_error());
+        }
+        let name = child.file_name().to_string_lossy().to_string();
+        let Ok(metadata) = child.metadata() else {
+            continue;
+        };
+        let is_directory = metadata.is_dir();
+        if is_directory {
+            if name.starts_with('.') || IGNORED_DIRECTORY_NAMES.contains(&name.as_str()) {
+                continue;
+            }
+        } else if !has_docs_artifact_extension(&name) {
+            continue;
+        }
+        // Confinement, and the reason an outward symlink never joins the tree.
+        let Ok(resolved) = fs::canonicalize(child.path()) else {
+            continue;
+        };
+        if !resolved.starts_with(root) {
+            continue;
+        }
+        let relative_path = format!("{relative_directory}/{name}");
+        entries.push(file_entry(
+            depth,
+            if is_directory { "directory" } else { "file" },
+            &name,
+            &relative_path,
+            &metadata,
+        ));
+        if is_directory
+            && !child
+                .file_type()
+                .is_ok_and(|file_type| file_type.is_symlink())
+        {
+            directories.push((child.path(), relative_path));
+        }
+    }
+    for (directory, relative_path) in directories {
+        append_docs_tree_entries(
+            entries,
+            root,
+            &directory,
+            &relative_path,
+            depth + 1,
+            scanned_directory_entries,
+        )?;
+    }
+    Ok(())
+}
+
+fn docs_scan_cap_error() -> String {
+    "Docs contains too many directory entries to list safely.".to_string()
+}
+
+fn docs_tree_entry_cap_error() -> String {
+    format!(
+        "Docs directory holds more than {DOCS_TREE_MAX_ENTRIES} files and folders. Point it at a smaller folder in Settings > Projects."
+    )
+}
+
+fn docs_tree_depth_cap_error() -> String {
+    format!(
+        "Docs directory nests deeper than {DOCS_TREE_MAX_DEPTH} folders. Point it at a smaller folder in Settings > Projects."
+    )
+}
+
 fn project_directory(root: &Path, relative_path: &str) -> Option<PathBuf> {
     let directory = root.join(relative_path);
     if !fs::metadata(&directory).ok()?.is_dir() {
@@ -469,13 +877,15 @@ fn project_directory(root: &Path, relative_path: &str) -> Option<PathBuf> {
 fn bounded_directory_entries(
     directory: &Path,
     scanned_directory_entries: &mut usize,
+    limit: usize,
+    limit_error: fn() -> String,
 ) -> Result<Vec<fs::DirEntry>, String> {
     let mut children = Vec::new();
     let directory =
         fs::read_dir(directory).map_err(|_| "Could not list project files.".to_string())?;
     for child in directory {
-        if *scanned_directory_entries >= FILE_LIST_MAX_ENTRIES {
-            return Err("Docs contains too many directory entries to list safely.".to_string());
+        if *scanned_directory_entries >= limit {
+            return Err(limit_error());
         }
         *scanned_directory_entries += 1;
         if let Ok(child) = child {
@@ -490,7 +900,12 @@ fn append_root_artifacts(
     root: &Path,
     scanned_directory_entries: &mut usize,
 ) -> Result<(), String> {
-    let mut children = bounded_directory_entries(root, scanned_directory_entries)?;
+    let mut children = bounded_directory_entries(
+        root,
+        scanned_directory_entries,
+        FILE_LIST_MAX_ENTRIES,
+        docs_scan_cap_error,
+    )?;
     children.sort_by_key(|child| child.file_name());
     for child in children {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
@@ -531,7 +946,12 @@ fn append_file_entries(
     {
         return Ok(());
     }
-    let mut children = bounded_directory_entries(directory, scanned_directory_entries)?;
+    let mut children = bounded_directory_entries(
+        directory,
+        scanned_directory_entries,
+        FILE_LIST_MAX_ENTRIES,
+        docs_scan_cap_error,
+    )?;
     children.sort_by(|left, right| {
         let left_is_dir = left.metadata().is_ok_and(|metadata| metadata.is_dir());
         let right_is_dir = right.metadata().is_ok_and(|metadata| metadata.is_dir());
@@ -609,16 +1029,20 @@ fn file_entry(
     })
 }
 
-fn project_file_preview(
-    root: &Path,
-    path: Option<&str>,
-    additional_docs_folders: &str,
-) -> Result<Value, String> {
-    let (target, relative_path) = existing_path(root, path)?;
-    if relative_path.is_empty() {
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Every response carries the path the Docs page addressed, mount segment
+included, never the path relative to whichever root answered. A preview that
+answered with a bare inner path would hand the page an address that means the
+project root next time it is used.
+*/
+fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<Value, String> {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to preview.".to_string());
     }
-    validate_accessible_path(&relative_path, additional_docs_folders)?;
+    let target = existing_path(&path)?;
+    validate_accessible_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to preview.".to_string())?;
     if metadata.is_dir() {
         return Err("Select a file to preview.".to_string());
@@ -631,7 +1055,7 @@ fn project_file_preview(
         return Ok(unsupported_preview(
             "File is too large to preview.",
             name,
-            &relative_path,
+            &path.outer,
             &metadata,
         ));
     }
@@ -640,7 +1064,7 @@ fn project_file_preview(
         return Ok(unsupported_preview(
             "Binary files are not previewed.",
             name,
-            &relative_path,
+            &path.outer,
             &metadata,
         ));
     }
@@ -648,31 +1072,28 @@ fn project_file_preview(
         return Ok(unsupported_preview(
             "This file is not valid UTF-8 text.",
             name,
-            &relative_path,
+            &path.outer,
             &metadata,
         ));
     };
     Ok(json!({
         "content": content,
-        "gitBaseline": git_baseline(root, &target, &relative_path),
+        "gitBaseline": git_baseline(path.root, &target, &path.inner),
         "kind": "text",
         "modifiedAt": modified_at(&metadata),
         "name": name,
-        "path": relative_path,
+        "path": path.outer,
         "size": metadata.len(),
     }))
 }
 
-fn project_file_metadata(
-    root: &Path,
-    path: Option<&str>,
-    additional_docs_folders: &str,
-) -> Result<Value, String> {
-    let (target, relative_path) = existing_path(root, path)?;
-    if relative_path.is_empty() {
+fn project_file_metadata(context: DocsContext<'_>, path: Option<&str>) -> Result<Value, String> {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to inspect.".to_string());
     }
-    validate_accessible_path(&relative_path, additional_docs_folders)?;
+    let target = existing_path(&path)?;
+    validate_accessible_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to inspect.".to_string())?;
     if metadata.is_dir() {
         return Err("Select a file to inspect.".to_string());
@@ -681,7 +1102,7 @@ fn project_file_metadata(
         "kind": "text",
         "modifiedAt": modified_at(&metadata),
         "name": target.file_name().and_then(|name| name.to_str()).unwrap_or(""),
-        "path": relative_path,
+        "path": path.outer,
         "size": metadata.len(),
     }))
 }
@@ -698,20 +1119,20 @@ fn unsupported_preview(error: &str, name: &str, path: &str, metadata: &fs::Metad
 }
 
 fn save_project_file(
-    root: &Path,
+    context: DocsContext<'_>,
     path: Option<&str>,
     content: Option<&str>,
-    additional_docs_folders: &str,
 ) -> Result<Value, String> {
     let content = content.ok_or_else(|| "No file content was provided.".to_string())?;
     if content.len() > FILE_SAVE_MAX_BYTES {
         return Err("File is too large to save from Docs.".to_string());
     }
-    let (target, relative_path) = writable_path(root, path)?;
-    if relative_path.is_empty() {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to save.".to_string());
     }
-    validate_accessible_path(&relative_path, additional_docs_folders)?;
+    let target = writable_path(&path)?;
+    validate_accessible_path(&path, context)?;
     if fs::metadata(&target).is_ok_and(|metadata| metadata.is_dir()) {
         return Err("Select a file to save.".to_string());
     }
@@ -722,41 +1143,43 @@ fn save_project_file(
     let temp = parent.join(format!(".ghostex-docs-save-{}.tmp", Uuid::new_v4()));
     fs::write(&temp, content).map_err(|_| "Could not save project file.".to_string())?;
     fs::rename(&temp, &target).map_err(|_| "Could not save project file.".to_string())?;
-    project_file_preview(root, Some(&relative_path), additional_docs_folders)
+    project_file_preview(context, Some(&path.outer))
 }
 
 fn rename_project_file(
-    root: &Path,
+    context: DocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders: &str,
 ) -> Result<Option<Value>, String> {
-    let (source, source_relative) = operation_path(root, path)?;
-    let (destination, destination_relative) = operation_path(root, new_path)?;
-    if source_relative.is_empty()
-        || destination_relative.is_empty()
-        || path_is_scan_root(&source_relative, additional_docs_folders)
-        || path_is_scan_root(&destination_relative, additional_docs_folders)
+    let source_path = docs_path(context, path)?;
+    let destination_path = docs_path(context, new_path)?;
+    require_same_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || path_is_docs_root_node(&source_path, context)
+        || path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select an item to rename.".to_string());
     }
-    validate_action_path(&source_relative, additional_docs_folders)?;
-    validate_action_path(&destination_relative, additional_docs_folders)?;
-    if parent_relative_path(&source_relative) != parent_relative_path(&destination_relative) {
+    let source = operation_path(&source_path)?;
+    let destination = operation_path(&destination_path)?;
+    validate_action_path(&source_path, context)?;
+    validate_action_path(&destination_path, context)?;
+    if parent_relative_path(&source_path.inner) != parent_relative_path(&destination_path.inner) {
         return Err("Docs rename cannot move items.".to_string());
     }
     let metadata = fs::metadata(&source).map_err(|_| "Select an item to rename.".to_string())?;
-    if is_root_artifact(&source_relative) && metadata.is_dir() {
+    if !source_path.extra && is_root_artifact(&source_path.inner) && metadata.is_dir() {
         return Err("Select a file to rename.".to_string());
     }
-    if source_relative == destination_relative {
+    if source_path.outer == destination_path.outer {
         return if metadata.is_dir() {
             Ok(None)
         } else {
-            project_file_preview(root, Some(&source_relative), additional_docs_folders).map(Some)
+            project_file_preview(context, Some(&source_path.outer)).map(Some)
         };
     }
-    require_existing_parent(root, &destination)
+    require_existing_parent(source_path.root, &destination)
         .map_err(|_| "Docs rename target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -765,22 +1188,19 @@ fn rename_project_file(
     if metadata.is_dir() {
         Ok(None)
     } else {
-        project_file_preview(root, Some(&destination_relative), additional_docs_folders).map(Some)
+        project_file_preview(context, Some(&destination_path.outer)).map(Some)
     }
 }
 
-fn delete_project_file(
-    root: &Path,
-    path: Option<&str>,
-    additional_docs_folders: &str,
-) -> Result<(), String> {
-    let (target, relative_path) = operation_path(root, path)?;
-    if relative_path.is_empty() || path_is_scan_root(&relative_path, additional_docs_folders) {
+fn delete_project_file(context: DocsContext<'_>, path: Option<&str>) -> Result<(), String> {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() || path_is_docs_root_node(&path, context) {
         return Err("Select an item to delete.".to_string());
     }
-    validate_action_path(&relative_path, additional_docs_folders)?;
+    let target = operation_path(&path)?;
+    validate_action_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select an item to delete.".to_string())?;
-    if is_root_artifact(&relative_path) && metadata.is_dir() {
+    if !path.extra && is_root_artifact(&path.inner) && metadata.is_dir() {
         return Err("Select a file to delete.".to_string());
     }
     if metadata.is_dir() {
@@ -792,23 +1212,25 @@ fn delete_project_file(
 }
 
 fn duplicate_project_file(
-    root: &Path,
+    context: DocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders: &str,
 ) -> Result<Value, String> {
-    let (source, source_relative) = operation_path(root, path)?;
-    let (destination, destination_relative) = operation_path(root, new_path)?;
-    if source_relative.is_empty()
-        || destination_relative.is_empty()
-        || path_is_scan_root(&source_relative, additional_docs_folders)
-        || path_is_scan_root(&destination_relative, additional_docs_folders)
+    let source_path = docs_path(context, path)?;
+    let destination_path = docs_path(context, new_path)?;
+    require_same_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || path_is_docs_root_node(&source_path, context)
+        || path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select a file to duplicate.".to_string());
     }
-    validate_action_path(&source_relative, additional_docs_folders)?;
-    validate_action_path(&destination_relative, additional_docs_folders)?;
-    if parent_relative_path(&source_relative) != parent_relative_path(&destination_relative) {
+    let source = operation_path(&source_path)?;
+    let destination = operation_path(&destination_path)?;
+    validate_action_path(&source_path, context)?;
+    validate_action_path(&destination_path, context)?;
+    if parent_relative_path(&source_path.inner) != parent_relative_path(&destination_path.inner) {
         return Err("Docs duplicate cannot move files.".to_string());
     }
     if fs::metadata(&source)
@@ -817,30 +1239,27 @@ fn duplicate_project_file(
     {
         return Err("Select a file to duplicate.".to_string());
     }
-    require_existing_parent(root, &destination)
+    require_existing_parent(source_path.root, &destination)
         .map_err(|_| "Duplicate target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file with that name already exists.".to_string());
     }
     fs::copy(source, destination).map_err(|_| "Could not duplicate file.".to_string())?;
-    project_file_preview(root, Some(&destination_relative), additional_docs_folders)
+    project_file_preview(context, Some(&destination_path.outer))
 }
 
-fn create_project_folder(
-    root: &Path,
-    path: Option<&str>,
-    additional_docs_folders: &str,
-) -> Result<(), String> {
-    let (target, relative_path) = operation_path(root, path)?;
-    if relative_path.is_empty() || path_is_scan_root(&relative_path, additional_docs_folders) {
+fn create_project_folder(context: DocsContext<'_>, path: Option<&str>) -> Result<(), String> {
+    let path = docs_path(context, path)?;
+    if path.inner.is_empty() || path_is_docs_root_node(&path, context) {
         return Err("Select a folder to create.".to_string());
     }
-    validate_tree_path(&relative_path, additional_docs_folders)?;
-    if relative_path.starts_with(&format!("{DOCS_RELATIVE_PATH}/")) {
-        fs::create_dir_all(root.join(DOCS_RELATIVE_PATH))
+    let target = operation_path(&path)?;
+    validate_tree_path(&path, context)?;
+    if !path.extra && path.inner.starts_with(&format!("{DOCS_RELATIVE_PATH}/")) {
+        fs::create_dir_all(path.root.join(DOCS_RELATIVE_PATH))
             .map_err(|_| "Could not create folder.".to_string())?;
     }
-    require_existing_parent(root, &target)
+    require_existing_parent(path.root, &target)
         .map_err(|_| "Folder parent is unavailable.".to_string())?;
     if target.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -849,37 +1268,43 @@ fn create_project_folder(
 }
 
 fn move_project_item(
-    root: &Path,
+    context: DocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders: &str,
 ) -> Result<Option<Value>, String> {
-    let (source, source_relative) = operation_path(root, path)?;
-    let (destination, destination_relative) = operation_path(root, new_path)?;
-    if source_relative.is_empty()
-        || destination_relative.is_empty()
-        || path_is_scan_root(&source_relative, additional_docs_folders)
-        || path_is_scan_root(&destination_relative, additional_docs_folders)
+    let source_path = docs_path(context, path)?;
+    let destination_path = docs_path(context, new_path)?;
+    require_same_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || path_is_docs_root_node(&source_path, context)
+        || path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select an item to move.".to_string());
     }
-    validate_action_path(&source_relative, additional_docs_folders)?;
-    validate_tree_path(&destination_relative, additional_docs_folders)?;
-    if source_relative == destination_relative {
+    let source = operation_path(&source_path)?;
+    let destination = operation_path(&destination_path)?;
+    validate_action_path(&source_path, context)?;
+    validate_tree_path(&destination_path, context)?;
+    if source_path.outer == destination_path.outer {
         return if fs::metadata(&source).is_ok_and(|metadata| metadata.is_dir()) {
             Ok(None)
         } else {
-            project_file_preview(root, Some(&source_relative), additional_docs_folders).map(Some)
+            project_file_preview(context, Some(&source_path.outer)).map(Some)
         };
     }
     let metadata = fs::metadata(&source).map_err(|_| "Select an item to move.".to_string())?;
-    if is_root_artifact(&source_relative) && metadata.is_dir() {
+    if !source_path.extra && is_root_artifact(&source_path.inner) && metadata.is_dir() {
         return Err("Select a file to move.".to_string());
     }
-    if metadata.is_dir() && destination_relative.starts_with(&format!("{source_relative}/")) {
+    if metadata.is_dir()
+        && destination_path
+            .inner
+            .starts_with(&format!("{}/", source_path.inner))
+    {
         return Err("Folders cannot be moved inside themselves.".to_string());
     }
-    require_existing_parent(root, &destination)
+    require_existing_parent(source_path.root, &destination)
         .map_err(|_| "Move target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -888,7 +1313,7 @@ fn move_project_item(
     if metadata.is_dir() {
         Ok(None)
     } else {
-        project_file_preview(root, Some(&destination_relative), additional_docs_folders).map(Some)
+        project_file_preview(context, Some(&destination_path.outer)).map(Some)
     }
 }
 
@@ -913,20 +1338,23 @@ fn normalized_relative_path(path: Option<&str>) -> Result<String, String> {
     Ok(components.join("/"))
 }
 
-fn existing_path(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = normalized_relative_path(path)?;
-    let target = root.join(&relative_path);
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Confinement is per root and it is the root the path was ROUTED to, so a `..`
+chain or an outward symlink under one mount can never surface inside the other.
+*/
+fn existing_path(path: &DocsPath<'_>) -> Result<PathBuf, String> {
+    let target = path.root.join(&path.inner);
     let resolved = fs::canonicalize(target)
         .map_err(|_| "Docs paths must stay inside the project.".to_string())?;
-    if !resolved.starts_with(root) {
+    if !resolved.starts_with(path.root) {
         return Err("Docs paths must stay inside the project.".to_string());
     }
-    Ok((resolved, relative_path))
+    Ok(resolved)
 }
 
-fn writable_path(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = normalized_relative_path(path)?;
-    let target = root.join(&relative_path);
+fn writable_path(path: &DocsPath<'_>) -> Result<PathBuf, String> {
+    let target = path.root.join(&path.inner);
     let parent = target
         .parent()
         .ok_or_else(|| "Select a project file to save.".to_string())?;
@@ -934,17 +1362,16 @@ fn writable_path(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), S
         .ok_or_else(|| "Docs paths must stay inside the project.".to_string())?;
     let resolved = fs::canonicalize(ancestor)
         .map_err(|_| "Docs paths must stay inside the project.".to_string())?;
-    if !resolved.starts_with(root) {
+    if !resolved.starts_with(path.root) {
         return Err("Docs paths must stay inside the project.".to_string());
     }
-    Ok((target, relative_path))
+    Ok(target)
 }
 
-fn operation_path(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = normalized_relative_path(path)?;
-    let target = root.join(&relative_path);
+fn operation_path(path: &DocsPath<'_>) -> Result<PathBuf, String> {
+    let target = path.root.join(&path.inner);
     if let Ok(resolved) = fs::canonicalize(&target) {
-        if !resolved.starts_with(root) {
+        if !resolved.starts_with(path.root) {
             return Err("Docs paths must stay inside the project.".to_string());
         }
     } else {
@@ -955,11 +1382,11 @@ fn operation_path(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), 
             .ok_or_else(|| "Docs paths must stay inside the project.".to_string())?;
         let resolved = fs::canonicalize(ancestor)
             .map_err(|_| "Docs paths must stay inside the project.".to_string())?;
-        if !resolved.starts_with(root) {
+        if !resolved.starts_with(path.root) {
             return Err("Docs paths must stay inside the project.".to_string());
         }
     }
-    Ok((target, relative_path))
+    Ok(target)
 }
 
 fn nearest_existing_ancestor(path: &Path) -> Option<&Path> {

@@ -26356,14 +26356,50 @@ impl GhostexGpuiApp {
                     },
                 )))
             } else {
+                /*
+                CDXC:DocsRootDirectory 2026-08-09:
+                Docs resources resolve against the same configurable roots the
+                Docs bridge uses, through the one shared resolver. The lookup is
+                deferred into the scope's resolver because reading the project's
+                Docs directory talks to the daemon, which must never run on the
+                main thread while a CEF surface is being created.
+
+                CDXC:DocsRootAdditive 2026-08-09: both mounts come out of that
+                same deferred lookup — the project root serving docs/ and the
+                configured Docs folders, and the mounted Docs directory serving
+                its whole tree behind its reserved path segment.
+                */
                 let project_root = snapshot.in_memory_project_path.clone()?;
+                let project_id = active_project_id.to_string();
                 let docs_folders = gpui_manage_additional_docs_folders_text(
                     &self.sidebar_runtime_settings_snapshot,
                 );
-                Some(cef::ManageDocsResourceScope::new(
-                    project_root,
-                    manage_docs_scan_root_relative_paths(&docs_folders),
-                ))
+                let global_docs_directory =
+                    gpui_global_docs_directory_text(&self.sidebar_runtime_settings_snapshot);
+                Some(cef::ManageDocsResourceScope::new(Arc::new(move || {
+                    let roots = manage_docs_root(
+                        Some(project_id.as_str()),
+                        Some(project_root.as_path()),
+                        global_docs_directory.as_str(),
+                    )
+                    .ok()?;
+                    let mut mounts = vec![cef::ManageDocsResourceRoot {
+                        allowed_relative_roots: manage_docs_scan_root_relative_paths(
+                            docs_folders.as_str(),
+                        ),
+                        mount_segment: String::new(),
+                        path: roots.project,
+                    }];
+                    if let Some(path) = roots.extra.and_then(|mount| mount.location.ok()) {
+                        mounts.push(cef::ManageDocsResourceRoot {
+                            // The whole tree, matching what the mount lists.
+                            allowed_relative_roots: vec![String::new()],
+                            mount_segment: MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT.to_string(),
+                            path,
+                        });
+                    }
+                    Some(mounts)
+                })))
             }
         } else {
             None
@@ -40850,6 +40886,29 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "setProjectDocsDirectory" => {
+                let Some(project_id) = command
+                    .get("projectId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                else {
+                    return;
+                };
+                let Some(directory) = command
+                    .get("directory")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                else {
+                    return;
+                };
+                self.update_gpui_project_settings_metadata_in_background(
+                    GpuiProjectSettingsMetadataUpdate::DocsDirectory {
+                        project_id,
+                        directory,
+                    },
+                    cx,
+                );
+            }
             "requestPreviousSessions" => {
                 let request = gpui_previous_sessions_request_from_command(command);
                 let remote_sources = self.connected_gpui_remote_previous_session_sources();
@@ -41277,6 +41336,8 @@ impl GhostexGpuiApp {
                 let additional_docs_folders_text = gpui_manage_additional_docs_folders_text(
                     &self.sidebar_runtime_settings_snapshot,
                 );
+                let global_docs_directory_text =
+                    gpui_global_docs_directory_text(&self.sidebar_runtime_settings_snapshot);
                 let remote_context = snapshot
                     .as_ref()
                     .and_then(|snapshot| snapshot.active_project_id.as_ref())
@@ -41307,6 +41368,7 @@ impl GhostexGpuiApp {
                                     &payload,
                                     snapshot.as_ref(),
                                     &additional_docs_folders_text,
+                                    &global_docs_directory_text,
                                 ),
                             }
                         })
@@ -85632,6 +85694,15 @@ fn file_url(path: &std::path::Path) -> String {
 
 const MANAGE_FILE_LIST_MAX_ENTRIES: usize = 1_200;
 const MANAGE_FILE_LIST_MAX_DEPTH: usize = 8;
+/*
+CDXC:DocsRootRecursive 2026-08-09:
+Mirrors `gxserver-rs/src/project_docs.rs`: a mounted Docs directory is a notes
+tree, not a repo, so it gets its own far larger bounds. They are still bounds,
+and hitting one labels that mount with the cap instead of returning a tree that
+silently stopped.
+*/
+const MANAGE_DOCS_TREE_MAX_ENTRIES: usize = 20_000;
+const MANAGE_DOCS_TREE_MAX_DEPTH: usize = 12;
 const MANAGE_FILE_PREVIEW_MAX_BYTES: u64 = 2_000_000;
 const MANAGE_FILE_SAVE_MAX_BYTES: usize = 2_000_000;
 const MANAGE_GIT_BASELINE_MAX_BYTES: usize = 1024 * 1024;
@@ -85639,6 +85710,15 @@ const MANAGE_REMOTE_RESOURCE_MAX_BYTES: usize = 12 * 1024 * 1024;
 const MANAGE_SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 static MANAGE_REMOTE_RESOURCE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 const MANAGE_DOCS_RELATIVE_PATH: &str = "docs";
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `gxserver-rs/src/project_docs.rs`: the
+reserved first path segment that addresses the mounted Docs directory. Every
+other Docs path is project-relative, so one relative path can only ever mean one
+root and no read, save, rename, delete, move, or reveal can resolve out of the
+root it was addressed to.
+*/
+const MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT: &str = ".ghostex-docs-root";
 const MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH: &str = ".ghostex/manage-annotations.json";
 const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
     "excalidraw",
@@ -99929,6 +100009,10 @@ enum GpuiProjectSettingsMetadataUpdate {
         project_id: String,
         directory: String,
     },
+    DocsDirectory {
+        project_id: String,
+        directory: String,
+    },
     SidebarCommands {
         project_id: String,
         commands: Vec<GpuiStoredSidebarCommand>,
@@ -99943,6 +100027,7 @@ impl GpuiProjectSettingsMetadataUpdate {
             Self::WorktreeCommand { project_id, .. }
             | Self::BeadsDisplayKey { project_id, .. }
             | Self::BeadsDirectory { project_id, .. }
+            | Self::DocsDirectory { project_id, .. }
             | Self::SidebarCommands { project_id, .. } => project_id,
         }
     }
@@ -100289,6 +100374,18 @@ fn gpui_project_settings_project_from_domain_project(
         project_board_config
             .and_then(|config| gpui_trimmed_json_string_field(config, "beadsDirectory")),
     );
+    /*
+    CDXC:DocsRootDirectory 2026-08-09:
+    The per-project Docs root rides in the same per-project config object the
+    Beads directory already uses, so Settings -> Projects keeps one storage seam
+    and the feature needs no new domain field, column, or migration.
+    */
+    gpui_insert_optional_nonempty_string(
+        &mut item,
+        "docsDirectory",
+        project_board_config
+            .and_then(|config| gpui_trimmed_json_string_field(config, "docsDirectory")),
+    );
     Some(serde_json::Value::Object(item))
 }
 
@@ -100370,6 +100467,18 @@ fn gpui_update_project_settings_metadata(
                 gpui_clone_json_object_field(&project, "projectBoardConfig");
             project_board_config.insert(
                 "beadsDirectory".to_string(),
+                gpui_settings_metadata_string_or_null(&directory),
+            );
+            params.insert(
+                "projectBoardConfig".to_string(),
+                serde_json::Value::Object(project_board_config),
+            );
+        }
+        GpuiProjectSettingsMetadataUpdate::DocsDirectory { directory, .. } => {
+            let mut project_board_config =
+                gpui_clone_json_object_field(&project, "projectBoardConfig");
+            project_board_config.insert(
+                "docsDirectory".to_string(),
                 gpui_settings_metadata_string_or_null(&directory),
             );
             params.insert(
@@ -108956,6 +109065,18 @@ fn gpui_manage_additional_docs_folders_text(
         .unwrap_or_default()
 }
 
+fn gpui_global_docs_directory_text(settings: &cef::SidebarRuntimeSettingsSnapshot) -> String {
+    serde_json::from_str::<serde_json::Value>(&settings.saved_settings_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("globalDocsDirectory")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default()
+}
+
 enum ManageFilesBridgeSideEffect {
     AddToSessionContext(String),
     CopyFullPath(String),
@@ -109010,6 +109131,7 @@ fn run_manage_files_bridge_request_for_project_snapshot(
     payload: &str,
     snapshot: Option<&GpuiProjectSnapshot>,
     additional_docs_folders_text: &str,
+    global_docs_directory_text: &str,
 ) -> ManageFilesBridgeOutcome {
     let request = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
     let action = request
@@ -109026,7 +109148,12 @@ fn run_manage_files_bridge_request_for_project_snapshot(
     manage_files_bridge_outcome(
         action,
         request_id,
-        manage_files_bridge_result(&request, snapshot, additional_docs_folders_text),
+        manage_files_bridge_result(
+            &request,
+            snapshot,
+            additional_docs_folders_text,
+            global_docs_directory_text,
+        ),
     )
 }
 
@@ -109162,35 +109289,46 @@ fn manage_files_bridge_result(
     request: &serde_json::Value,
     snapshot: Option<&GpuiProjectSnapshot>,
     additional_docs_folders_text: &str,
+    global_docs_directory_text: &str,
 ) -> Result<serde_json::Value, String> {
     /*
     macOS `runManageFilesBridgeRequest` parity: the bridge is DOCS-scoped, not
-    a general project browser. Listing walks the docs/ folder, configured
-    additional Docs folders, and root Markdown/HTML/Excalidraw artifacts;
+    a general project browser. The project root's listing walks the docs/
+    folder, configured additional Docs folders, and root
+    Markdown/HTML/Excalidraw artifacts; a configured Docs directory is mounted
+    ALONGSIDE it and walks its whole tree (CDXC:DocsRootAdditive,
+    CDXC:DocsRootRecursive). Either way
     read/stat/save/rename/duplicate/delete/createFolder/move all validate against
-    the same allowlist, and text previews carry the Git HEAD baseline for
-    meo's gutter. Every response's rootName is the fixed docs scope name.
+    the allowlist of the root the path was routed to, and text previews carry the
+    Git HEAD baseline for meo's gutter. Every response's rootName is the fixed
+    docs scope name.
     */
     let action = manage_request_string(request, "action").unwrap_or_default();
     let request_id = manage_request_string(request, "requestId").unwrap_or_default();
     let snapshot = snapshot.ok_or_else(|| "No active project root is available.".to_string())?;
-    let root = manage_project_root(snapshot)?;
+    let roots = manage_docs_root(
+        snapshot.active_project_id.as_ref().map(|id| id.0.as_str()),
+        snapshot.in_memory_project_path.as_deref(),
+        global_docs_directory_text,
+    )?;
     manage_validate_request_identity(request, snapshot)?;
-    let docs_folders = additional_docs_folders_text;
+    let context = ManageDocsContext {
+        additional_docs_folders_text,
+        roots: &roots,
+    };
 
     match action.as_str() {
         "list" => Ok(serde_json::json!({
             "action": action,
-            "entries": manage_project_file_entries(&root, docs_folders)?,
+            "entries": manage_project_file_entries(context)?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
         })),
         "read" => Ok(serde_json::json!({
             "action": action,
             "file": manage_project_file_preview(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109198,9 +109336,8 @@ fn manage_files_bridge_result(
         "stat" => Ok(serde_json::json!({
             "action": action,
             "file": manage_project_file_metadata(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109208,10 +109345,9 @@ fn manage_files_bridge_result(
         "save" => Ok(serde_json::json!({
             "action": action,
             "file": manage_save_project_file(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
                 manage_request_string(request, "content").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109219,10 +109355,9 @@ fn manage_files_bridge_result(
         "rename" => Ok(serde_json::json!({
             "action": action,
             "file": manage_rename_project_file(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
                 manage_request_string(request, "newPath").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109230,19 +109365,17 @@ fn manage_files_bridge_result(
         "duplicate" => Ok(serde_json::json!({
             "action": action,
             "file": manage_duplicate_project_file(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
                 manage_request_string(request, "newPath").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
         })),
         "delete" => {
             manage_delete_project_file(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
             )?;
             Ok(serde_json::json!({
                 "action": action,
@@ -109252,9 +109385,8 @@ fn manage_files_bridge_result(
         }
         "createFolder" => {
             manage_create_project_folder(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
             )?;
             Ok(serde_json::json!({
                 "action": action,
@@ -109265,10 +109397,9 @@ fn manage_files_bridge_result(
         "move" => Ok(serde_json::json!({
             "action": action,
             "file": manage_move_project_item(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
                 manage_request_string(request, "newPath").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109277,9 +109408,8 @@ fn manage_files_bridge_result(
             "action": action,
             "requestId": request_id,
             "revealPath": manage_docs_action_item_path(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
                 "Select an item to reveal.",
             )?,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109287,9 +109417,8 @@ fn manage_files_bridge_result(
         "copyFullPath" => Ok(serde_json::json!({
             "action": action,
             "fullPath": manage_docs_action_item_path(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
                 "Select an item to copy its full path.",
             )?,
             "requestId": request_id,
@@ -109298,9 +109427,8 @@ fn manage_files_bridge_result(
         "addToSessionContext" => Ok(serde_json::json!({
             "action": action,
             "contextPrompt": manage_session_context_prompt(
-                &root,
+                context,
                 manage_request_string(request, "path").as_deref(),
-                docs_folders,
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,
@@ -109309,40 +109437,33 @@ fn manage_files_bridge_result(
     }
 }
 
-fn manage_docs_action_item(
-    root: &Path,
+fn manage_docs_action_item<'a>(
+    context: ManageDocsContext<'a>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
     unavailable_message: &str,
-) -> Result<(PathBuf, String, fs::Metadata), String> {
-    let (target, relative_path) = manage_operation_url(root, path)?;
-    if relative_path.is_empty() {
+) -> Result<(PathBuf, ManageDocsPath<'a>, fs::Metadata), String> {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err(unavailable_message.to_string());
     }
-    manage_validate_docs_action_relative_path(&relative_path, additional_docs_folders_text)?;
+    let target = manage_operation_url(&path)?;
+    manage_validate_docs_action_relative_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable_message.to_string())?;
-    Ok((target, relative_path, metadata))
+    Ok((target, path, metadata))
 }
 
 fn manage_docs_action_item_path(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
     unavailable_message: &str,
 ) -> Result<String, String> {
-    let (target, _, _) = manage_docs_action_item(
-        root,
-        path,
-        additional_docs_folders_text,
-        unavailable_message,
-    )?;
+    let (target, _, _) = manage_docs_action_item(context, path, unavailable_message)?;
     Ok(target.to_string_lossy().into_owned())
 }
 
 fn manage_session_context_prompt(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<String, String> {
     /*
     CDXC:ManageFileActions 2026-08-08:
@@ -109352,12 +109473,14 @@ fn manage_session_context_prompt(
     dispatch; only the selected live agent terminal receives it.
     */
     let unavailable = "Select a file to add to session context.";
-    let (target, relative_path, metadata) = manage_docs_action_item(
-        root,
-        path,
-        additional_docs_folders_text,
-        unavailable,
-    )?;
+    let (target, path, metadata) = manage_docs_action_item(context, path, unavailable)?;
+    /*
+    CDXC:DocsRootAdditive 2026-08-09:
+    The prompt names the file the way the Docs tree does — the mount's own name,
+    not the reserved routing segment — because this text is read by a human and
+    by the agent in the terminal it is pasted into.
+    */
+    let relative_path = path.display(context);
     if !metadata.is_file() {
         return Err(unavailable.to_string());
     }
@@ -109412,7 +109535,86 @@ fn manage_session_context_language(relative_path: &str) -> &'static str {
     }
 }
 
-fn manage_additional_docs_folder_relative_paths(additional_docs_folders_text: &str) -> Vec<String> {
+/// Mirrors `gxserver-rs/src/project_docs.rs` `DocsContext`: both mounted roots
+/// plus the project's configured Docs folders, carried as one value so no
+/// operation can resolve against one root while validating against the other.
+#[derive(Clone, Copy)]
+struct ManageDocsContext<'a> {
+    additional_docs_folders_text: &'a str,
+    roots: &'a ManageDocsRoots,
+}
+
+/// Mirrors `DocsPath`: a Docs path routed to its root. `outer` is what the Docs
+/// page addresses, `inner` is what the filesystem under `root` sees.
+struct ManageDocsPath<'a> {
+    extra: bool,
+    inner: String,
+    outer: String,
+    root: &'a Path,
+}
+
+impl ManageDocsPath<'_> {
+    /// What a human is shown: the mount's own name, never the reserved segment.
+    fn display(&self, context: ManageDocsContext<'_>) -> String {
+        let Some(mount) = context.roots.extra.as_ref().filter(|_| self.extra) else {
+            return self.outer.clone();
+        };
+        if self.inner.is_empty() {
+            mount.name.clone()
+        } else {
+            format!("{}/{}", mount.name, self.inner)
+        }
+    }
+}
+
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Mirrors `docs_path` in `gxserver-rs/src/project_docs.rs`. The reserved mount
+segment is the whole routing vocabulary: a path that starts with it belongs to
+the mounted Docs directory, anything else is project-relative. One relative path
+can therefore only ever mean one root.
+*/
+fn manage_docs_path<'a>(
+    context: ManageDocsContext<'a>,
+    path: Option<&str>,
+) -> Result<ManageDocsPath<'a>, String> {
+    let outer = manage_normalized_relative_path(path)?;
+    let Some(inner) = manage_extra_root_relative_path(&outer) else {
+        return Ok(ManageDocsPath {
+            extra: false,
+            inner: outer.clone(),
+            outer,
+            root: context.roots.project.as_path(),
+        });
+    };
+    let mount = context
+        .roots
+        .extra
+        .as_ref()
+        .ok_or_else(|| "No Docs directory is configured.".to_string())?;
+    let root = mount.location.as_deref().map_err(|error| error.clone())?;
+    Ok(ManageDocsPath {
+        extra: true,
+        inner,
+        outer,
+        root,
+    })
+}
+
+/// `Some(inner path)` when the path addresses the mounted Docs directory.
+fn manage_extra_root_relative_path(outer: &str) -> Option<String> {
+    if outer == MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT {
+        return Some(String::new());
+    }
+    outer
+        .strip_prefix(&format!("{MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT}/"))
+        .map(str::to_string)
+}
+
+fn manage_additional_docs_folder_relative_paths(
+    additional_docs_folders_text: &str,
+    docs_is_implicit_root: bool,
+) -> Vec<String> {
     let mut folders = Vec::new();
     let mut seen = HashSet::new();
     for raw_folder in additional_docs_folders_text.split(',') {
@@ -109432,7 +109634,7 @@ fn manage_additional_docs_folder_relative_paths(additional_docs_folders_text: &s
         }
         let folder = parts.join("/");
         let key = folder.to_lowercase();
-        if folder == MANAGE_DOCS_RELATIVE_PATH || !seen.insert(key) {
+        if (docs_is_implicit_root && folder == MANAGE_DOCS_RELATIVE_PATH) || !seen.insert(key) {
             continue;
         }
         folders.push(folder);
@@ -109440,10 +109642,19 @@ fn manage_additional_docs_folder_relative_paths(additional_docs_folders_text: &s
     folders
 }
 
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Mirrors `scan_roots` in `gxserver-rs/src/project_docs.rs`. Docs folders is
+project-root-relative again, the meaning it had before a custom root existed:
+`docs` plus each configured folder. Round 2 made it narrow the custom root
+instead; with additive mounting that is no longer coherent, because the mounted
+Docs directory always shows its whole tree.
+*/
 fn manage_docs_scan_root_relative_paths(additional_docs_folders_text: &str) -> Vec<String> {
     let mut roots = vec![MANAGE_DOCS_RELATIVE_PATH.to_string()];
     roots.extend(manage_additional_docs_folder_relative_paths(
         additional_docs_folders_text,
+        true,
     ));
     roots
 }
@@ -109463,14 +109674,31 @@ fn manage_path_is_docs_scan_root(relative_path: &str, additional_docs_folders_te
         .any(|root| relative_path == root)
 }
 
+/// The nodes no operation may rename, move, or delete: the project root's scan
+/// roots, and the mounted Docs directory itself.
+fn manage_path_is_docs_root_node(
+    path: &ManageDocsPath<'_>,
+    context: ManageDocsContext<'_>,
+) -> bool {
+    if path.extra {
+        return path.inner.is_empty();
+    }
+    manage_path_is_docs_scan_root(&path.inner, context.additional_docs_folders_text)
+}
+
+/// The extensions the Docs surface renders. One list for root artifacts and for
+/// custom-root tree discovery, so the two can never drift apart.
+fn manage_has_docs_artifact_extension(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    })
+}
+
 fn manage_is_root_artifact_file_relative_path(relative_path: &str) -> bool {
     if relative_path.is_empty() || relative_path.contains('/') {
         return false;
     }
-    let Some((_, extension)) = relative_path.rsplit_once('.') else {
-        return false;
-    };
-    MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    manage_has_docs_artifact_extension(relative_path)
 }
 
 /*
@@ -109484,23 +109712,29 @@ fn session_chat_file_opens_in_docs(
     relative_path: &str,
     additional_docs_folders_text: &str,
 ) -> bool {
-    let Some((_, extension)) = relative_path.rsplit_once('.') else {
-        return false;
-    };
-    if !MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()) {
+    if !manage_has_docs_artifact_extension(relative_path) {
         return false;
     }
+    // A chat link is a path inside the project, so it is tested against the
+    // project root's own allowlist, never the mounted Docs directory's.
     manage_path_is_in_docs_scan_root(relative_path, additional_docs_folders_text)
         || manage_is_root_artifact_file_relative_path(relative_path)
 }
 
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+The mounted Docs directory serves its whole tree, so a path that routed there
+needs no further allowlist: canonicalization already confined it to that root.
+Project-root paths keep exactly the allowlist they have always had.
+*/
 fn manage_validate_accessible_relative_path(
-    relative_path: &str,
-    additional_docs_folders_text: &str,
+    path: &ManageDocsPath<'_>,
+    context: ManageDocsContext<'_>,
 ) -> Result<(), String> {
-    if relative_path == MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH
-        || manage_path_is_in_docs_scan_root(relative_path, additional_docs_folders_text)
-        || manage_is_root_artifact_file_relative_path(relative_path)
+    if path.extra
+        || path.inner == MANAGE_ANNOTATIONS_SIDECAR_RELATIVE_PATH
+        || manage_path_is_in_docs_scan_root(&path.inner, context.additional_docs_folders_text)
+        || manage_is_root_artifact_file_relative_path(&path.inner)
     {
         return Ok(());
     }
@@ -109511,21 +109745,24 @@ fn manage_validate_accessible_relative_path(
 }
 
 fn manage_validate_docs_tree_relative_path(
-    relative_path: &str,
-    additional_docs_folders_text: &str,
+    path: &ManageDocsPath<'_>,
+    context: ManageDocsContext<'_>,
 ) -> Result<(), String> {
-    if manage_path_is_in_docs_scan_root(relative_path, additional_docs_folders_text) {
+    if path.extra
+        || manage_path_is_in_docs_scan_root(&path.inner, context.additional_docs_folders_text)
+    {
         return Ok(());
     }
     Err("Docs items must be inside configured Docs folders.".to_string())
 }
 
 fn manage_validate_docs_action_relative_path(
-    relative_path: &str,
-    additional_docs_folders_text: &str,
+    path: &ManageDocsPath<'_>,
+    context: ManageDocsContext<'_>,
 ) -> Result<(), String> {
-    if manage_path_is_in_docs_scan_root(relative_path, additional_docs_folders_text)
-        || manage_is_root_artifact_file_relative_path(relative_path)
+    if path.extra
+        || manage_path_is_in_docs_scan_root(&path.inner, context.additional_docs_folders_text)
+        || manage_is_root_artifact_file_relative_path(&path.inner)
     {
         return Ok(());
     }
@@ -109533,6 +109770,19 @@ fn manage_validate_docs_action_relative_path(
         "Docs items must be inside configured Docs folders or be root Markdown, HTML, or Excalidraw files."
             .to_string(),
     )
+}
+
+/// Two operations must never straddle the mount: a rename, duplicate, or move
+/// that crosses roots is refused rather than silently rewriting one root's file
+/// into the other.
+fn manage_require_same_docs_root(
+    source: &ManageDocsPath<'_>,
+    destination: &ManageDocsPath<'_>,
+) -> Result<(), String> {
+    if source.extra == destination.extra {
+        return Ok(());
+    }
+    Err("Docs cannot move items between the project and the Docs directory.".to_string())
 }
 
 fn manage_parent_relative_path(relative_path: &str) -> String {
@@ -109583,11 +109833,121 @@ fn manage_validate_request_identity(
     Ok(())
 }
 
-fn manage_project_root(snapshot: &GpuiProjectSnapshot) -> Result<PathBuf, String> {
-    let path = snapshot
-        .in_memory_project_path
-        .as_ref()
-        .ok_or_else(|| "No active project root is available.".to_string())?;
+/*
+CDXC:DocsRootDirectory 2026-08-09:
+The ONE place the local Docs roots are resolved: the project's own Docs
+directory, then the Docs directory Global Default. Every local Docs caller (the
+CEF files bridge and the Docs resource scope) goes through here, so the cascade
+exists once.
+
+CDXC:DocsRootAdditive 2026-08-09:
+The project root is ALWAYS mounted; a configured Docs directory is mounted in
+addition to it, never instead of it. Blank is the only value that inherits, and
+a configured path that is missing, is not a folder, or is not absolute is
+carried as an unavailable mount rather than failing the panel: the project's own
+docs keep listing and the mount node names the path that failed. That is still
+not a silent fallback — a silent revert reads exactly like "my vault is empty"
+and hides the typo that caused it.
+*/
+fn manage_docs_root(
+    project_id: Option<&str>,
+    in_memory_project_path: Option<&Path>,
+    global_docs_directory: &str,
+) -> Result<ManageDocsRoots, String> {
+    let configured = match manage_project_docs_directory(project_id)? {
+        Some(directory) => directory,
+        None => global_docs_directory.trim().to_string(),
+    };
+    let project = manage_in_memory_project_root(in_memory_project_path)?;
+    if configured.is_empty() {
+        return Ok(ManageDocsRoots {
+            project,
+            extra: None,
+        });
+    }
+    Ok(ManageDocsRoots {
+        project,
+        extra: Some(ManageDocsExtraMount {
+            location: manage_configured_docs_root(&configured),
+            name: manage_docs_extra_root_name(&configured),
+        }),
+    })
+}
+
+/// The mount's label: the configured folder's own basename, so a vault at
+/// `/Users/sven/vault` shows up as a top-level `vault` folder.
+fn manage_docs_extra_root_name(configured: &str) -> String {
+    let path = manage_expanded_docs_directory_path(configured);
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Mirrors `DocsRoots` in `gxserver-rs/src/project_docs.rs`: the two roots one Docs
+request sees, canonicalized. The mount carries either where its folder is or why
+it could not be opened, because that failure belongs on one tree node instead of
+on the whole listing.
+*/
+struct ManageDocsRoots {
+    extra: Option<ManageDocsExtraMount>,
+    project: PathBuf,
+}
+
+struct ManageDocsExtraMount {
+    location: Result<PathBuf, String>,
+    name: String,
+}
+
+/// The project's own Docs directory, or `None` when it stores none. An
+/// unreadable project row is an error, never "no override": answering "no
+/// override" would silently point Docs at the wrong folder.
+fn manage_project_docs_directory(project_id: Option<&str>) -> Result<Option<String>, String> {
+    let Some(project_id) = gpui_trimmed_nonempty_str(project_id) else {
+        return Ok(None);
+    };
+    let project = gpui_find_gxserver_project_by_id(project_id)
+        .map_err(|_| "Ghostex could not read this project's Docs directory setting.".to_string())?;
+    Ok(project
+        .get("projectBoardConfig")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|config| gpui_trimmed_json_string_field(config, "docsDirectory"))
+        .map(str::to_string))
+}
+
+/// Validate a configured Docs directory: absolute (after expanding a leading
+/// `~`) and an existing folder.
+fn manage_configured_docs_root(configured: &str) -> Result<PathBuf, String> {
+    let path = manage_expanded_docs_directory_path(configured);
+    if !path.is_absolute() {
+        return Err(format!("Docs directory must be an absolute path: {configured}"));
+    }
+    let metadata = fs::metadata(&path)
+        .map_err(|_| format!("Docs directory does not exist: {}", path.display()))?;
+    if !metadata.is_dir() {
+        return Err(format!("Docs directory is not a folder: {}", path.display()));
+    }
+    fs::canonicalize(&path)
+        .map_err(|_| format!("Docs directory is unavailable: {}", path.display()))
+}
+
+fn manage_expanded_docs_directory_path(configured: &str) -> PathBuf {
+    let Some(rest) = configured.strip_prefix('~') else {
+        return PathBuf::from(configured);
+    };
+    let home = shared_settings::ghostex_storage_paths().home_dir.clone();
+    let rest = rest.trim_start_matches(['/', '\\']);
+    if rest.is_empty() {
+        home
+    } else {
+        home.join(rest)
+    }
+}
+
+fn manage_in_memory_project_root(path: Option<&Path>) -> Result<PathBuf, String> {
+    let path = path.ok_or_else(|| "No active project root is available.".to_string())?;
     #[cfg(target_os = "windows")]
     let path = windows_terminal_backend::windows_path_for_wsl_path(path)
         .map_err(|_| "The active project root is unavailable.".to_string())?;
@@ -109613,9 +109973,25 @@ fn manage_files_bridge_error_response(
     })
 }
 
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+The project's own entries come first and are discovered exactly as they have
+always been, so setting a Docs directory can never take the repo's README.md,
+CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
+*/
 fn manage_project_file_entries(
+    context: ManageDocsContext<'_>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut entries = manage_project_root_file_entries(context.roots.project.as_path(), context)?;
+    if let Some(mount) = context.roots.extra.as_ref() {
+        manage_append_docs_extra_root_entries(&mut entries, mount);
+    }
+    Ok(entries)
+}
+
+fn manage_project_root_file_entries(
     root: &Path,
-    additional_docs_folders_text: &str,
+    context: ManageDocsContext<'_>,
 ) -> Result<Vec<serde_json::Value>, String> {
     /*
     macOS `manageProjectFileEntries` parity: docs/ and each configured Docs
@@ -109624,7 +110000,8 @@ fn manage_project_file_entries(
     walked (bounded), so the Docs sidebar never becomes a broad repo browser.
     */
     let mut entries = Vec::new();
-    let scan_roots = manage_docs_scan_root_relative_paths(additional_docs_folders_text);
+    let scan_roots =
+        manage_docs_scan_root_relative_paths(context.additional_docs_folders_text);
     for relative_path in &scan_roots {
         let Some(directory) = manage_project_directory(root, relative_path) else {
             continue;
@@ -109663,6 +110040,187 @@ fn manage_project_directory(root: &Path, relative_path: &str) -> Option<PathBuf>
     }
     let resolved = fs::canonicalize(&directory).ok()?;
     path_is_inside_or_equal(&resolved, root).then_some(resolved)
+}
+
+/*
+CDXC:DocsRootRecursive 2026-08-09:
+Mirrors `append_extra_root_entries` in `gxserver-rs/src/project_docs.rs`, so the
+local Docs pane and a remote project's Docs pane list the same tree. The mounted
+Docs directory is walked to the bottom and files are narrowed to the extensions
+Docs renders.
+
+CDXC:DocsRootAdditive 2026-08-09: every failure lands on the mount node's label
+instead of on the listing — an unopenable directory, and the entry and depth caps
+alike. Losing the whole panel, including the project's own README.md, because a
+vault is too deep is the one thing this must not do, and a tree that silently
+stopped at 20,000 entries reads exactly like a vault that only has that many.
+*/
+fn manage_append_docs_extra_root_entries(
+    entries: &mut Vec<serde_json::Value>,
+    mount: &ManageDocsExtraMount,
+) {
+    let root = match mount.location.as_deref() {
+        Ok(root) => root,
+        Err(error) => {
+            entries.push(manage_unavailable_docs_extra_root_entry(&mount.name, error));
+            return;
+        }
+    };
+    let mut tree = Vec::new();
+    let mut scanned_directory_entries = 0;
+    if let Err(error) = manage_append_docs_tree_entries(
+        &mut tree,
+        root,
+        root,
+        MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT,
+        1,
+        &mut scanned_directory_entries,
+    ) {
+        entries.push(manage_unavailable_docs_extra_root_entry(&mount.name, &error));
+        return;
+    }
+    let modified_at = fs::metadata(root)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .map(gpui_iso8601_utc);
+    entries.push(serde_json::json!({
+        "depth": 0,
+        "kind": "directory",
+        "modifiedAt": modified_at,
+        "name": mount.name,
+        "path": MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT,
+        "size": serde_json::Value::Null,
+    }));
+    entries.append(&mut tree);
+}
+
+/// The mount still shows when its folder does not, carrying the reason in the
+/// only field the Docs tree renders. A missing vault must look missing, not
+/// look empty.
+fn manage_unavailable_docs_extra_root_entry(name: &str, error: &str) -> serde_json::Value {
+    serde_json::json!({
+        "depth": 0,
+        "kind": "directory",
+        "modifiedAt": serde_json::Value::Null,
+        "name": format!("{name} — {error}"),
+        "path": MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT,
+        "size": serde_json::Value::Null,
+    })
+}
+
+/// The scan budget the gxserver walk enforces, so a folder full of files Docs
+/// does not render costs the same on both sides instead of being free here.
+fn manage_bounded_docs_tree_children(
+    directory: &Path,
+    scanned_directory_entries: &mut usize,
+) -> Result<Vec<fs::DirEntry>, String> {
+    let mut children = Vec::new();
+    for child in fs::read_dir(directory).map_err(|_| "Could not list project files.".to_string())? {
+        if *scanned_directory_entries >= MANAGE_DOCS_TREE_MAX_ENTRIES {
+            return Err(manage_docs_tree_entry_cap_error());
+        }
+        *scanned_directory_entries += 1;
+        if let Ok(child) = child {
+            children.push(child);
+        }
+    }
+    Ok(children)
+}
+
+fn manage_append_docs_tree_entries(
+    entries: &mut Vec<serde_json::Value>,
+    root: &Path,
+    directory: &Path,
+    relative_directory_path: &str,
+    depth: usize,
+    scanned_directory_entries: &mut usize,
+) -> Result<(), String> {
+    if depth > MANAGE_DOCS_TREE_MAX_DEPTH {
+        return Err(manage_docs_tree_depth_cap_error());
+    }
+    let mut children = manage_bounded_docs_tree_children(directory, scanned_directory_entries)?;
+    children.sort_by(|left, right| {
+        let left_is_dir = left
+            .metadata()
+            .map(|metadata| metadata.is_dir())
+            .unwrap_or(false);
+        let right_is_dir = right
+            .metadata()
+            .map(|metadata| metadata.is_dir())
+            .unwrap_or(false);
+        right_is_dir
+            .cmp(&left_is_dir)
+            .then_with(|| left.file_name().cmp(&right.file_name()))
+    });
+
+    let mut directories = Vec::new();
+    for child in children {
+        if entries.len() >= MANAGE_DOCS_TREE_MAX_ENTRIES {
+            return Err(manage_docs_tree_entry_cap_error());
+        }
+        let name = child.file_name().to_string_lossy().to_string();
+        let metadata = match child.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+        let is_directory = metadata.is_dir();
+        if is_directory {
+            if name.starts_with('.') || MANAGE_IGNORED_DIRECTORY_NAMES.contains(&name.as_str()) {
+                continue;
+            }
+        } else if !manage_has_docs_artifact_extension(&name) {
+            continue;
+        }
+        // Confinement, and the reason an outward symlink never joins the tree.
+        let resolved = match fs::canonicalize(child.path()) {
+            Ok(resolved) => resolved,
+            Err(_) => continue,
+        };
+        if !path_is_inside_or_equal(&resolved, root) {
+            continue;
+        }
+        let relative_path = format!("{relative_directory_path}/{name}");
+        entries.push(serde_json::json!({
+            "depth": depth,
+            "kind": if is_directory { "directory" } else { "file" },
+            "modifiedAt": metadata.modified().ok().map(gpui_iso8601_utc),
+            "name": name,
+            "path": relative_path,
+            "size": if is_directory { None } else { Some(metadata.len()) },
+        }));
+        if is_directory
+            && !child
+                .file_type()
+                .map(|file_type| file_type.is_symlink())
+                .unwrap_or(false)
+        {
+            directories.push((child.path(), relative_path));
+        }
+    }
+
+    for (directory, relative_path) in directories {
+        manage_append_docs_tree_entries(
+            entries,
+            root,
+            &directory,
+            &relative_path,
+            depth + 1,
+            scanned_directory_entries,
+        )?;
+    }
+    Ok(())
+}
+
+fn manage_docs_tree_entry_cap_error() -> String {
+    format!(
+        "Docs directory holds more than {MANAGE_DOCS_TREE_MAX_ENTRIES} files and folders. Point it at a smaller folder in Settings > Projects."
+    )
+}
+
+fn manage_docs_tree_depth_cap_error() -> String {
+    format!(
+        "Docs directory nests deeper than {MANAGE_DOCS_TREE_MAX_DEPTH} folders. Point it at a smaller folder in Settings > Projects."
+    )
 }
 
 fn manage_append_project_root_artifact_file_entries(
@@ -109791,16 +110349,23 @@ fn manage_append_project_file_entries(
     Ok(())
 }
 
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Every response carries the path the Docs page addressed, mount segment included,
+never the path relative to whichever root answered. A preview that answered with
+a bare inner path would hand the page an address that means the project root
+next time it is used.
+*/
 fn manage_project_file_preview(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
-    let (target, relative_path) = manage_existing_url(root, path)?;
-    if relative_path.is_empty() {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to preview.".to_string());
     }
-    manage_validate_accessible_relative_path(&relative_path, additional_docs_folders_text)?;
+    let target = manage_existing_url(&path)?;
+    manage_validate_accessible_relative_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to preview.".to_string())?;
     if metadata.is_dir() {
         return Err("Select a file to preview.".to_string());
@@ -109815,7 +110380,7 @@ fn manage_project_file_preview(
         return Ok(manage_unsupported_file_preview(
             "File is too large to preview.",
             &name,
-            &relative_path,
+            &path.outer,
             size,
             &metadata,
         ));
@@ -109825,7 +110390,7 @@ fn manage_project_file_preview(
         return Ok(manage_unsupported_file_preview(
             "Binary files are not previewed.",
             &name,
-            &relative_path,
+            &path.outer,
             size,
             &metadata,
         ));
@@ -109834,32 +110399,32 @@ fn manage_project_file_preview(
         return Ok(manage_unsupported_file_preview(
             "This file is not valid UTF-8 text.",
             &name,
-            &relative_path,
+            &path.outer,
             size,
             &metadata,
         ));
     };
     Ok(serde_json::json!({
         "content": content,
-        "gitBaseline": manage_git_baseline_payload(root, &target, &relative_path),
+        "gitBaseline": manage_git_baseline_payload(path.root, &target, &path.inner),
         "kind": "text",
         "modifiedAt": metadata.modified().ok().map(gpui_iso8601_utc),
         "name": name,
-        "path": relative_path,
+        "path": path.outer,
         "size": size,
     }))
 }
 
 fn manage_project_file_metadata(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
-    let (target, relative_path) = manage_existing_url(root, path)?;
-    if relative_path.is_empty() {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to inspect.".to_string());
     }
-    manage_validate_accessible_relative_path(&relative_path, additional_docs_folders_text)?;
+    let target = manage_existing_url(&path)?;
+    manage_validate_accessible_relative_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to inspect.".to_string())?;
     if metadata.is_dir() {
         return Err("Select a file to inspect.".to_string());
@@ -109873,7 +110438,7 @@ fn manage_project_file_metadata(
         "kind": "text",
         "modifiedAt": metadata.modified().ok().map(gpui_iso8601_utc),
         "name": name,
-        "path": relative_path,
+        "path": path.outer,
         "size": metadata.len(),
     }))
 }
@@ -109896,20 +110461,20 @@ fn manage_unsupported_file_preview(
 }
 
 fn manage_save_project_file(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
     content: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
     let content = content.ok_or_else(|| "No file content was provided.".to_string())?;
     if content.len() > MANAGE_FILE_SAVE_MAX_BYTES {
         return Err("File is too large to save from Docs.".to_string());
     }
-    let (target, relative_path) = manage_writable_url(root, path)?;
-    if relative_path.is_empty() {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() {
         return Err("Select a project file to save.".to_string());
     }
-    manage_validate_accessible_relative_path(&relative_path, additional_docs_folders_text)?;
+    let target = manage_writable_url(&path)?;
+    manage_validate_accessible_relative_path(&path, context)?;
     if fs::metadata(&target)
         .map(|metadata| metadata.is_dir())
         .unwrap_or(false)
@@ -109926,56 +110491,54 @@ fn manage_save_project_file(
     ));
     fs::write(&temp, content).map_err(|_| "Could not save project file.".to_string())?;
     fs::rename(&temp, &target).map_err(|_| "Could not save project file.".to_string())?;
-    manage_project_file_preview(root, Some(&relative_path), additional_docs_folders_text)
+    manage_project_file_preview(context, Some(&path.outer))
 }
 
 fn manage_rename_project_file(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
     /*
     macOS `manageRenameProjectFile` parity: same-parent rename of a Docs file
     or folder (or a root artifact file), never a move API, never an overwrite,
     with sanitized errors only.
     */
-    let (source, source_relative_path) = manage_operation_url(root, path)?;
-    let (destination, destination_relative_path) = manage_operation_url(root, new_path)?;
-    if source_relative_path.is_empty()
-        || destination_relative_path.is_empty()
-        || manage_path_is_docs_scan_root(&source_relative_path, additional_docs_folders_text)
-        || manage_path_is_docs_scan_root(&destination_relative_path, additional_docs_folders_text)
+    let source_path = manage_docs_path(context, path)?;
+    let destination_path = manage_docs_path(context, new_path)?;
+    manage_require_same_docs_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || manage_path_is_docs_root_node(&source_path, context)
+        || manage_path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select an item to rename.".to_string());
     }
-    manage_validate_docs_action_relative_path(&source_relative_path, additional_docs_folders_text)?;
-    manage_validate_docs_action_relative_path(
-        &destination_relative_path,
-        additional_docs_folders_text,
-    )?;
-    if manage_parent_relative_path(&source_relative_path)
-        != manage_parent_relative_path(&destination_relative_path)
+    let source = manage_operation_url(&source_path)?;
+    let destination = manage_operation_url(&destination_path)?;
+    manage_validate_docs_action_relative_path(&source_path, context)?;
+    manage_validate_docs_action_relative_path(&destination_path, context)?;
+    if manage_parent_relative_path(&source_path.inner)
+        != manage_parent_relative_path(&destination_path.inner)
     {
         return Err("Docs rename cannot move items.".to_string());
     }
     let source_metadata =
         fs::metadata(&source).map_err(|_| "Select an item to rename.".to_string())?;
     let source_is_directory = source_metadata.is_dir();
-    if manage_is_root_artifact_file_relative_path(&source_relative_path) && source_is_directory {
+    if !source_path.extra
+        && manage_is_root_artifact_file_relative_path(&source_path.inner)
+        && source_is_directory
+    {
         return Err("Select a file to rename.".to_string());
     }
-    if source_relative_path == destination_relative_path {
+    if source_path.outer == destination_path.outer {
         if !source_is_directory {
-            return manage_project_file_preview(
-                root,
-                Some(&source_relative_path),
-                additional_docs_folders_text,
-            );
+            return manage_project_file_preview(context, Some(&source_path.outer));
         }
         return Ok(serde_json::Value::Null);
     }
-    manage_require_existing_destination_parent(root, &destination)
+    manage_require_existing_destination_parent(source_path.root, &destination)
         .map_err(|_| "Docs rename target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -109984,33 +110547,31 @@ fn manage_rename_project_file(
     if source_is_directory {
         return Ok(serde_json::Value::Null);
     }
-    manage_project_file_preview(
-        root,
-        Some(&destination_relative_path),
-        additional_docs_folders_text,
-    )
+    manage_project_file_preview(context, Some(&destination_path.outer))
 }
 
 fn manage_delete_project_file(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<(), String> {
     /*
     macOS `manageDeleteProjectFile` parity: files or folders inside Docs scan
     roots (recursive for folders) plus root artifact files; the scan roots
-    themselves are never deletable through this path.
+    themselves, and the mounted Docs directory, are never deletable through
+    this path.
     */
-    let (target, relative_path) = manage_operation_url(root, path)?;
-    if relative_path.is_empty()
-        || manage_path_is_docs_scan_root(&relative_path, additional_docs_folders_text)
-    {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() || manage_path_is_docs_root_node(&path, context) {
         return Err("Select an item to delete.".to_string());
     }
-    manage_validate_docs_action_relative_path(&relative_path, additional_docs_folders_text)?;
+    let target = manage_operation_url(&path)?;
+    manage_validate_docs_action_relative_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select an item to delete.".to_string())?;
     let is_directory = metadata.is_dir();
-    if manage_is_root_artifact_file_relative_path(&relative_path) && is_directory {
+    if !path.extra
+        && manage_is_root_artifact_file_relative_path(&path.inner)
+        && is_directory
+    {
         return Err("Select a file to delete.".to_string());
     }
     let removed = if is_directory {
@@ -110022,29 +110583,28 @@ fn manage_delete_project_file(
 }
 
 fn manage_duplicate_project_file(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
     // macOS `manageDuplicateProjectFile` parity: file-only same-folder copy;
     // the page chooses the " (n)" suffix, native rejects overwrites.
-    let (source, source_relative_path) = manage_operation_url(root, path)?;
-    let (destination, destination_relative_path) = manage_operation_url(root, new_path)?;
-    if source_relative_path.is_empty()
-        || destination_relative_path.is_empty()
-        || manage_path_is_docs_scan_root(&source_relative_path, additional_docs_folders_text)
-        || manage_path_is_docs_scan_root(&destination_relative_path, additional_docs_folders_text)
+    let source_path = manage_docs_path(context, path)?;
+    let destination_path = manage_docs_path(context, new_path)?;
+    manage_require_same_docs_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || manage_path_is_docs_root_node(&source_path, context)
+        || manage_path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select a file to duplicate.".to_string());
     }
-    manage_validate_docs_action_relative_path(&source_relative_path, additional_docs_folders_text)?;
-    manage_validate_docs_action_relative_path(
-        &destination_relative_path,
-        additional_docs_folders_text,
-    )?;
-    if manage_parent_relative_path(&source_relative_path)
-        != manage_parent_relative_path(&destination_relative_path)
+    let source = manage_operation_url(&source_path)?;
+    let destination = manage_operation_url(&destination_path)?;
+    manage_validate_docs_action_relative_path(&source_path, context)?;
+    manage_validate_docs_action_relative_path(&destination_path, context)?;
+    if manage_parent_relative_path(&source_path.inner)
+        != manage_parent_relative_path(&destination_path.inner)
     {
         return Err("Docs duplicate cannot move files.".to_string());
     }
@@ -110053,38 +110613,36 @@ fn manage_duplicate_project_file(
     if source_metadata.is_dir() {
         return Err("Select a file to duplicate.".to_string());
     }
-    manage_require_existing_destination_parent(root, &destination)
+    manage_require_existing_destination_parent(source_path.root, &destination)
         .map_err(|_| "Duplicate target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file with that name already exists.".to_string());
     }
     fs::copy(&source, &destination).map_err(|_| "Could not duplicate file.".to_string())?;
-    manage_project_file_preview(
-        root,
-        Some(&destination_relative_path),
-        additional_docs_folders_text,
-    )
+    manage_project_file_preview(context, Some(&destination_path.outer))
 }
 
 fn manage_create_project_folder(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<(), String> {
     // macOS `manageCreateProjectFolder` parity: docs-scoped folder creation;
     // the docs/ root is created on demand, overwrites are rejected.
-    let (target, relative_path) = manage_operation_url(root, path)?;
-    if relative_path.is_empty()
-        || manage_path_is_docs_scan_root(&relative_path, additional_docs_folders_text)
-    {
+    let path = manage_docs_path(context, path)?;
+    if path.inner.is_empty() || manage_path_is_docs_root_node(&path, context) {
         return Err("Select a folder to create.".to_string());
     }
-    manage_validate_docs_tree_relative_path(&relative_path, additional_docs_folders_text)?;
-    if relative_path.starts_with(&format!("{MANAGE_DOCS_RELATIVE_PATH}/")) {
-        let docs = root.join(MANAGE_DOCS_RELATIVE_PATH);
+    let target = manage_operation_url(&path)?;
+    manage_validate_docs_tree_relative_path(&path, context)?;
+    if !path.extra
+        && path
+            .inner
+            .starts_with(&format!("{MANAGE_DOCS_RELATIVE_PATH}/"))
+    {
+        let docs = path.root.join(MANAGE_DOCS_RELATIVE_PATH);
         fs::create_dir_all(&docs).map_err(|_| "Could not create folder.".to_string())?;
     }
-    manage_require_existing_destination_parent(root, &target)
+    manage_require_existing_destination_parent(path.root, &target)
         .map_err(|_| "Folder parent is unavailable.".to_string())?;
     if target.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -110093,55 +110651,55 @@ fn manage_create_project_folder(
 }
 
 fn manage_move_project_item(
-    root: &Path,
+    context: ManageDocsContext<'_>,
     path: Option<&str>,
     new_path: Option<&str>,
-    additional_docs_folders_text: &str,
 ) -> Result<serde_json::Value, String> {
     /*
     macOS `manageMoveProjectItem` parity: drag/drop moves Docs items (and root
     artifact files) into docs-scoped destinations only, rejecting overwrites
     and directory self-nesting.
     */
-    let (source, source_relative_path) = manage_operation_url(root, path)?;
-    let (destination, destination_relative_path) = manage_operation_url(root, new_path)?;
-    if source_relative_path.is_empty()
-        || destination_relative_path.is_empty()
-        || manage_path_is_docs_scan_root(&source_relative_path, additional_docs_folders_text)
-        || manage_path_is_docs_scan_root(&destination_relative_path, additional_docs_folders_text)
+    let source_path = manage_docs_path(context, path)?;
+    let destination_path = manage_docs_path(context, new_path)?;
+    manage_require_same_docs_root(&source_path, &destination_path)?;
+    if source_path.inner.is_empty()
+        || destination_path.inner.is_empty()
+        || manage_path_is_docs_root_node(&source_path, context)
+        || manage_path_is_docs_root_node(&destination_path, context)
     {
         return Err("Select an item to move.".to_string());
     }
-    manage_validate_docs_action_relative_path(&source_relative_path, additional_docs_folders_text)?;
-    manage_validate_docs_tree_relative_path(
-        &destination_relative_path,
-        additional_docs_folders_text,
-    )?;
-    if source_relative_path == destination_relative_path {
+    let source = manage_operation_url(&source_path)?;
+    let destination = manage_operation_url(&destination_path)?;
+    manage_validate_docs_action_relative_path(&source_path, context)?;
+    manage_validate_docs_tree_relative_path(&destination_path, context)?;
+    if source_path.outer == destination_path.outer {
         let is_file = fs::metadata(&source)
             .map(|metadata| !metadata.is_dir())
             .unwrap_or(false);
         if is_file {
-            return manage_project_file_preview(
-                root,
-                Some(&source_relative_path),
-                additional_docs_folders_text,
-            );
+            return manage_project_file_preview(context, Some(&source_path.outer));
         }
         return Ok(serde_json::Value::Null);
     }
     let source_metadata =
         fs::metadata(&source).map_err(|_| "Select an item to move.".to_string())?;
     let source_is_directory = source_metadata.is_dir();
-    if manage_is_root_artifact_file_relative_path(&source_relative_path) && source_is_directory {
+    if !source_path.extra
+        && manage_is_root_artifact_file_relative_path(&source_path.inner)
+        && source_is_directory
+    {
         return Err("Select a file to move.".to_string());
     }
     if source_is_directory
-        && destination_relative_path.starts_with(&format!("{source_relative_path}/"))
+        && destination_path
+            .inner
+            .starts_with(&format!("{}/", source_path.inner))
     {
         return Err("Folders cannot be moved inside themselves.".to_string());
     }
-    manage_require_existing_destination_parent(root, &destination)
+    manage_require_existing_destination_parent(source_path.root, &destination)
         .map_err(|_| "Move target is unavailable.".to_string())?;
     if destination.exists() {
         return Err("A file or folder with that name already exists.".to_string());
@@ -110150,25 +110708,20 @@ fn manage_move_project_item(
     if source_is_directory {
         return Ok(serde_json::Value::Null);
     }
-    manage_project_file_preview(
-        root,
-        Some(&destination_relative_path),
-        additional_docs_folders_text,
-    )
+    manage_project_file_preview(context, Some(&destination_path.outer))
 }
 
-/// macOS `manageFileOperationURL` parity: normalize the relative path, resolve
-/// symlinks for the escape check, but return the UNRESOLVED path so a listed
-/// symlink entry is operated on as the entry itself.
-fn manage_operation_url(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = manage_normalized_relative_path(path)?;
-    let target = if relative_path.is_empty() {
-        root.to_path_buf()
+/// macOS `manageFileOperationURL` parity: resolve symlinks for the escape
+/// check, but return the UNRESOLVED path so a listed symlink entry is operated
+/// on as the entry itself.
+fn manage_operation_url(path: &ManageDocsPath<'_>) -> Result<PathBuf, String> {
+    let target = if path.inner.is_empty() {
+        path.root.to_path_buf()
     } else {
-        root.join(PathBuf::from(&relative_path))
+        path.root.join(PathBuf::from(&path.inner))
     };
     if let Ok(resolved) = fs::canonicalize(&target) {
-        if !path_is_inside_or_equal(&resolved, root) {
+        if !path_is_inside_or_equal(&resolved, path.root) {
             return Err("Docs paths must stay inside the project.".to_string());
         }
     } else {
@@ -110179,11 +110732,11 @@ fn manage_operation_url(root: &Path, path: Option<&str>) -> Result<(PathBuf, Str
             .ok_or_else(|| "Docs paths must stay inside the project.".to_string())?;
         let resolved_parent = fs::canonicalize(nearest_existing_parent)
             .map_err(|_| "Docs paths must stay inside the project.".to_string())?;
-        if !path_is_inside_or_equal(&resolved_parent, root) {
+        if !path_is_inside_or_equal(&resolved_parent, path.root) {
             return Err("Docs paths must stay inside the project.".to_string());
         }
     }
-    Ok((target, relative_path))
+    Ok(target)
 }
 
 fn manage_require_existing_destination_parent(
@@ -110367,24 +110920,27 @@ fn manage_git_baseline_payload(root: &Path, file: &Path, relative_path: &str) ->
     )
 }
 
-fn manage_existing_url(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = manage_normalized_relative_path(path)?;
-    let target = if relative_path.is_empty() {
-        root.to_path_buf()
+/*
+CDXC:DocsRootAdditive 2026-08-09:
+Confinement is per root, and it is the root the path was ROUTED to, so a `..`
+chain or an outward symlink under one mount can never surface inside the other.
+*/
+fn manage_existing_url(path: &ManageDocsPath<'_>) -> Result<PathBuf, String> {
+    let target = if path.inner.is_empty() {
+        path.root.to_path_buf()
     } else {
-        root.join(PathBuf::from(&relative_path))
+        path.root.join(PathBuf::from(&path.inner))
     };
     let resolved = fs::canonicalize(&target)
         .map_err(|_| "Manage paths must stay inside the project.".to_string())?;
-    if !path_is_inside_or_equal(&resolved, root) {
+    if !path_is_inside_or_equal(&resolved, path.root) {
         return Err("Manage paths must stay inside the project.".to_string());
     }
-    Ok((resolved, relative_path))
+    Ok(resolved)
 }
 
-fn manage_writable_url(root: &Path, path: Option<&str>) -> Result<(PathBuf, String), String> {
-    let relative_path = manage_normalized_relative_path(path)?;
-    let target = root.join(PathBuf::from(&relative_path));
+fn manage_writable_url(path: &ManageDocsPath<'_>) -> Result<PathBuf, String> {
+    let target = path.root.join(PathBuf::from(&path.inner));
     let parent = target
         .parent()
         .ok_or_else(|| "Select a project file to save.".to_string())?;
@@ -110392,10 +110948,10 @@ fn manage_writable_url(root: &Path, path: Option<&str>) -> Result<(PathBuf, Stri
         .ok_or_else(|| "Manage paths must stay inside the project.".to_string())?;
     let resolved_parent = fs::canonicalize(nearest_existing_parent)
         .map_err(|_| "Manage paths must stay inside the project.".to_string())?;
-    if !path_is_inside_or_equal(&resolved_parent, root) {
+    if !path_is_inside_or_equal(&resolved_parent, path.root) {
         return Err("Manage paths must stay inside the project.".to_string());
     }
-    Ok((target, relative_path))
+    Ok(target)
 }
 
 fn manage_normalized_relative_path(path: Option<&str>) -> Result<String, String> {

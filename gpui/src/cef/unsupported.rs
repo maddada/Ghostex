@@ -3,6 +3,7 @@ use anyhow::Result;
 use gpui::{Bounds, Pixels};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn prepare_application() {}
 
@@ -136,8 +137,22 @@ pub type AppModalHostBridgeEventHandler = Rc<dyn Fn(AppModalHostBridgeEvent)>;
 #[derive(Clone, Debug)]
 pub struct ManageDocsResourceScope;
 
+/// CDXC:DocsRootDirectory 2026-08-09: parity with the CEF scope, whose mounted
+/// Docs roots and their allowed relative roots are resolved together, lazily,
+/// off the main thread.
+pub type ManageDocsLocalRootResolver =
+    Arc<dyn Fn() -> Option<Vec<ManageDocsResourceRoot>> + Send + Sync>;
+
+/// CDXC:DocsRootAdditive 2026-08-09: parity with the CEF scope's mount record.
+#[derive(Clone)]
+pub struct ManageDocsResourceRoot {
+    pub allowed_relative_roots: Vec<String>,
+    pub mount_segment: String,
+    pub path: PathBuf,
+}
+
 impl ManageDocsResourceScope {
-    pub fn new(_project_root: PathBuf, _allowed_relative_roots: Vec<String>) -> Self {
+    pub fn new(_resolve_root: ManageDocsLocalRootResolver) -> Self {
         Self
     }
 }

@@ -5320,6 +5320,7 @@ export function SettingsModal({
               onGlobalBeadsDisplayKeyChange={(value) =>
                 updateDraft("globalBeadsDisplayKey", value)
               }
+              onGlobalDocsDirectoryChange={(value) => updateDraft("globalDocsDirectory", value)}
               onGlobalWorktreeCommandChange={(value) =>
                 updateDraft("globalWorktreeCommand", value)
               }
@@ -6411,6 +6412,7 @@ function inheritedPlaceholder(projectValue: string, globalValue: string, fallbac
 function ProjectsSettingsPanel({
   onGlobalBeadsDirectoryChange,
   onGlobalBeadsDisplayKeyChange,
+  onGlobalDocsDirectoryChange,
   onGlobalWorktreeCommandChange,
   onManageAdditionalDocsFoldersChange,
   onPortlessEnabledChange,
@@ -6424,6 +6426,7 @@ function ProjectsSettingsPanel({
 }: {
   onGlobalBeadsDirectoryChange: (value: string) => void;
   onGlobalBeadsDisplayKeyChange: (value: string) => void;
+  onGlobalDocsDirectoryChange: (value: string) => void;
   onGlobalWorktreeCommandChange: (value: string) => void;
   onManageAdditionalDocsFoldersChange: (value: string) => void;
   onPortlessEnabledChange: (checked: boolean) => void;
@@ -6445,6 +6448,7 @@ function ProjectsSettingsPanel({
   const [command, setCommand] = useState(selectedProject?.worktreeCommand ?? "");
   const [beadsDisplayKey, setBeadsDisplayKey] = useState(selectedProject?.beadsDisplayKey ?? "");
   const [beadsDirectory, setBeadsDirectory] = useState(selectedProject?.beadsDirectory ?? "");
+  const [docsDirectory, setDocsDirectory] = useState(selectedProject?.docsDirectory ?? "");
   /*
    * CDXC:GlobalProjectDefaults 2026-08-02:
    * Track inheritance against the live draft text rather than the saved project
@@ -6457,6 +6461,8 @@ function ProjectsSettingsPanel({
     beadsDisplayKey.trim().length === 0 && settings.globalBeadsDisplayKey.trim().length > 0;
   const isBeadsDirectoryInherited =
     beadsDirectory.trim().length === 0 && settings.globalBeadsDirectory.trim().length > 0;
+  const isDocsDirectoryInherited =
+    docsDirectory.trim().length === 0 && settings.globalDocsDirectory.trim().length > 0;
 
   useEffect(() => {
     if (!projects.some((project) => project.projectId === selectedProjectId)) {
@@ -6468,9 +6474,11 @@ function ProjectsSettingsPanel({
     setCommand(selectedProject?.worktreeCommand ?? "");
     setBeadsDisplayKey(selectedProject?.beadsDisplayKey ?? "");
     setBeadsDirectory(selectedProject?.beadsDirectory ?? "");
+    setDocsDirectory(selectedProject?.docsDirectory ?? "");
   }, [
     selectedProject?.beadsDirectory,
     selectedProject?.beadsDisplayKey,
+    selectedProject?.docsDirectory,
     selectedProject?.projectId,
     selectedProject?.worktreeCommand,
   ]);
@@ -6544,6 +6552,17 @@ function ProjectsSettingsPanel({
     });
   };
 
+  const saveDocsDirectory = () => {
+    if (!selectedProject) {
+      return;
+    }
+    vscode?.postMessage({
+      directory: docsDirectory,
+      projectId: selectedProject.projectId,
+      type: "setProjectDocsDirectory",
+    });
+  };
+
   return (
     <div className="settings-tab-scroll">
       {/*
@@ -6577,6 +6596,9 @@ function ProjectsSettingsPanel({
               CDXC:DocsSidebar 2026-06-30-11:42:
               Docs folder scanning is a global Projects setting, not selected-project metadata. Keep it above the project selector and accept comma-separated project-relative folder names so entries like "plans, my documents, folders/folder name" scan matching folders under each project root.
               Give this card an explicit Docs title so users coming from the Docs sidebar shortcut know the folder list controls Docs file discovery.
+
+              CDXC:DocsRootAdditive 2026-08-09:
+              This list is project-relative again. A Docs directory adds its own whole tree beside these folders instead of being narrowed by them, so the copy must not imply the two interact.
             */}
             <div className="settings-management-header-text">
               <h3 className="settings-management-heading">Docs</h3>
@@ -6594,7 +6616,7 @@ function ProjectsSettingsPanel({
                   value={settings.manageAdditionalDocsFolders}
                 />
                 <FieldDescription>
-                  Comma-separated project-relative folders to scan recursively in Docs. Spaces around folder names are ignored.
+                  Comma-separated project-relative folders to scan recursively in Docs. Spaces around folder names are ignored. Leave blank to scan docs/ plus root Markdown, HTML, and Excalidraw files. A Docs directory set below adds its whole tree on top of this.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -6659,6 +6681,32 @@ function ProjectsSettingsPanel({
                 />
                 <FieldDescription>
                   Absolute path every Project board reads its Beads workspace (.beads) from unless the project sets its own directory. Leave blank to keep using each project root.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+            {/*
+              CDXC:DocsRootDirectory 2026-08-09:
+              Docs can show any absolute folder, not only the project's own repo
+              folder, so a notes vault is browsable from every project.
+
+              CDXC:DocsRootAdditive 2026-08-09:
+              That folder is ADDED to the project's own docs, never swapped in
+              for them, and the Docs folders list above stays project-relative.
+              Say so here, because "Docs directory" reads like a replacement.
+              A project that sets its own `docsDirectory` overrides this value,
+              with the same additive meaning.
+            */}
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Docs directory</FieldLabel>
+                <SettingsInput
+                  aria-label="Global Docs directory"
+                  onChange={(event) => onGlobalDocsDirectoryChange(event.currentTarget.value)}
+                  placeholder="/Users/you/Documents/vault"
+                  value={settings.globalDocsDirectory}
+                />
+                <FieldDescription>
+                  Extra folder every project's Docs surface shows unless the project sets its own. It is added alongside that project's own README, CLAUDE.md, docs/ and Docs folders — it never replaces them — and appears as one top-level folder named after itself. Leave blank to add nothing.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -6867,6 +6915,45 @@ function ProjectsSettingsPanel({
               </Button>
               <Button onClick={saveBeadsDirectory} type="button">
                 Save Beads Directory
+              </Button>
+            </div>
+            {/*
+              CDXC:DocsRootDirectory 2026-08-09:
+              Projects settings owns this project's `docsDirectory`: the extra
+              folder its Docs surface shows. Leave blank to use the Global
+              Default.
+
+              CDXC:DocsRootAdditive 2026-08-09:
+              This project's own docs list either way, so `docsDirectory` only
+              ever adds a tree beside them — it never replaces them.
+            */}
+            <FieldGroup>
+              <Field>
+                <FieldLabel>
+                  Docs directory
+                  {isDocsDirectoryInherited ? <InheritedSettingBadge /> : null}
+                </FieldLabel>
+                <SettingsInput
+                  aria-label="Docs directory"
+                  onChange={(event) => setDocsDirectory(event.currentTarget.value)}
+                  placeholder={inheritedPlaceholder(
+                    docsDirectory,
+                    settings.globalDocsDirectory,
+                    "/Users/you/Documents/vault",
+                  )}
+                  value={docsDirectory}
+                />
+                <FieldDescription>
+                  Extra folder this project's Docs surface shows, in addition to the project's own docs. Leave blank to use the Global Default.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+            <div className="settings-management-actions">
+              <Button onClick={() => setDocsDirectory("")} type="button" variant="outline">
+                Clear
+              </Button>
+              <Button onClick={saveDocsDirectory} type="button">
+                Save Docs Directory
               </Button>
             </div>
           </CardContent>
@@ -11126,6 +11213,12 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle: "Beads directory every project uses unless it sets its own.",
             title: "Global Beads directory",
           },
+          {
+            key: "globalDocsDirectory",
+            subtitle:
+              "Extra folder Docs shows in every project, alongside that project's own docs.",
+            title: "Global Docs directory",
+          },
         ],
         title: "Global Defaults",
       },
@@ -11149,6 +11242,12 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle:
               "Absolute path the Project board reads its Beads workspace (.beads) from.",
             title: "Beads directory",
+          },
+          {
+            key: "docsDirectory",
+            subtitle:
+              "Extra folder this project's Docs surface shows, in addition to its own docs.",
+            title: "Docs directory",
           },
         ],
         title: "Project settings",

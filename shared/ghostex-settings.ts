@@ -872,6 +872,9 @@ export type ghostexSettings = {
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
    * The Docs sidebar scans ./docs recursively and root artifacts by default, and users can add comma-separated project-relative folder roots from global Projects settings. Trim spaces around each folder name while preserving spaces inside names such as "my documents".
+   *
+   * CDXC:DocsRootAdditive 2026-08-09:
+   * These folders are project-root-relative, always. A configured Docs directory is mounted as an ADDITIONAL top-level folder that always shows its whole tree, so it is never narrowed by this list (round 2 briefly made it a narrowing control for that root; additive mounting replaced that).
    */
   manageAdditionalDocsFolders: string;
   /**
@@ -885,6 +888,20 @@ export type ghostexSettings = {
   globalWorktreeCommand: string;
   globalBeadsDisplayKey: string;
   globalBeadsDirectory: string;
+  /**
+   * CDXC:DocsRootDirectory 2026-08-09:
+   * Absolute folder Docs shows IN ADDITION to the project's own docs when a
+   * project sets no Docs directory of its own.
+   *
+   * CDXC:DocsRootAdditive 2026-08-09:
+   * It never replaces the project's docs — README.md, CLAUDE.md, docs/, and the
+   * configured Docs folders all keep listing, and this folder is added beside
+   * them as one top-level node named after itself. Empty adds nothing.
+   *
+   * A project's own `docsDirectory` takes this one's place in the cascade; it is
+   * likewise an addition to that project's docs, never a replacement for them.
+   */
+  globalDocsDirectory: string;
   showProjectEditorDiffFileCount: boolean;
   showUntrackedProjectDiffWhenNoTrackedChanges: boolean;
   completionBellEnabled: boolean;
@@ -1481,7 +1498,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
     SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats,
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
-   * Additional Docs scan folders are opt-in so existing projects continue to expose only ./docs plus root Markdown, HTML, and Excalidraw artifacts until the user lists more project-relative folders.
+   * Additional Docs scan folders are opt-in so existing projects continue to expose only ./docs plus root Markdown, HTML, and Excalidraw artifacts until the user lists more project-relative folders. A configured Docs directory adds its own tree on top of whatever this lists (CDXC:DocsRootAdditive).
    */
   manageAdditionalDocsFolders: "",
   /**
@@ -1492,6 +1509,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   globalWorktreeCommand: "",
   globalBeadsDisplayKey: "",
   globalBeadsDirectory: "",
+  globalDocsDirectory: "",
   /**
    * CDXC:ProjectDiffStats 2026-05-15-14:33:
    * Project-header git stats should hide the changed-file count by default and
@@ -2498,6 +2516,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     globalBeadsDirectory: normalizeGlobalBeadsDirectory(
       readString(source, "globalBeadsDirectory", DEFAULT_ghostex_SETTINGS.globalBeadsDirectory),
     ),
+    globalDocsDirectory: normalizeGlobalDocsDirectory(
+      readString(source, "globalDocsDirectory", DEFAULT_ghostex_SETTINGS.globalDocsDirectory),
+    ),
     /**
      * CDXC:ProjectDiffStats 2026-05-15-14:33:
      * Missing or invalid older settings must keep project-header git stats in
@@ -3378,6 +3399,15 @@ export function normalizeGlobalBeadsDisplayKey(value: string | undefined): strin
 }
 
 export function normalizeGlobalBeadsDirectory(value: string | undefined): string {
+  return (value ?? "").replace(/\0/gu, "").trim().slice(0, 1_000);
+}
+
+/*
+ * CDXC:DocsRootDirectory 2026-08-09:
+ * The Docs directory normalizes exactly like the Beads directory it sits next
+ * to: one absolute folder path, trimmed, with no embedded NULs.
+ */
+export function normalizeGlobalDocsDirectory(value: string | undefined): string {
   return (value ?? "").replace(/\0/gu, "").trim().slice(0, 1_000);
 }
 

@@ -19,6 +19,12 @@ use serde_json::Value;
 pub struct GlobalProjectDefaults {
     pub beads_directory: String,
     pub beads_display_key: String,
+    /*
+    CDXC:DocsRootDirectory 2026-08-09:
+    Absolute folder the Docs surface reads from when a project stores no Docs
+    directory of its own. Empty keeps Docs on each project's own root.
+    */
+    pub docs_directory: String,
     pub worktree_command: String,
 }
 
@@ -35,6 +41,7 @@ impl GlobalProjectDefaults {
         Self {
             beads_directory: read("globalBeadsDirectory"),
             beads_display_key: read("globalBeadsDisplayKey"),
+            docs_directory: read("globalDocsDirectory"),
             worktree_command: read("globalWorktreeCommand"),
         }
     }
@@ -114,11 +121,13 @@ mod tests {
         let settings = json!({
             "globalBeadsDirectory": " /global/board ",
             "globalBeadsDisplayKey": "AGE",
+            "globalDocsDirectory": " /global/vault ",
             "globalWorktreeCommand": "bun install",
         });
         let defaults = GlobalProjectDefaults::from_settings(Some(&settings));
         assert_eq!(defaults.beads_directory, "/global/board");
         assert_eq!(defaults.beads_display_key, "AGE");
+        assert_eq!(defaults.docs_directory, "/global/vault");
         assert_eq!(defaults.worktree_command, "bun install");
     }
 

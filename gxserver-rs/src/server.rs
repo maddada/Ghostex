@@ -2673,8 +2673,19 @@ async fn route_http(
                     .ok_or_else(|| {
                         DomainStateError::bad_request("Project has no filesystem path.")
                     })?;
+                /*
+                CDXC:DocsRootDirectory 2026-08-09:
+                Docs reads the project's own folder plus its configured Docs
+                directory (then the Global Default). Resolving here keeps
+                `run_project_docs_action` taking a plain root.
+
+                CDXC:DocsRootAdditive 2026-08-09: a bad Docs directory no longer
+                fails the request. It comes back as one unavailable mount inside
+                the listing, so the project's own docs still show and the panel
+                still names the path that could not be opened.
+                */
                 Ok(project_docs::run_project_docs_action(
-                    Path::new(project_path),
+                    &project_docs::resolve_project_docs_root(&project, project_path),
                     params,
                 ))
             },
