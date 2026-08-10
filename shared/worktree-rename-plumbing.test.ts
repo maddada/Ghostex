@@ -117,6 +117,24 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
     expect(confirm).toContain("gpuiWorktreeRenameUserVisibleErrorMessage(error)");
     expect(confirm).not.toContain("gpuiWorktreeUserVisibleErrorMessage(error)");
   });
+
+  test("translates an out-of-date daemon into something the user can act on", () => {
+    /*
+     * A gxserver that predates this feature answers with
+     * `"/api/renameWorktreeProject is not a gxserver HTTP endpoint."` — true,
+     * and useless to whoever just clicked Rename. It happens for real whenever a
+     * freshly built app attaches to a daemon the previously installed app left
+     * running, so the one recoverable case gets a recoverable sentence.
+     */
+    const reader = sourceBetweenIn(
+      gpuiRuntimeSource,
+      "function gpuiWorktreeRenameUserVisibleErrorMessage(",
+      "\n}",
+    );
+
+    expect(reader).toContain("is not a gxserver HTTP endpoint");
+    expect(reader).toContain("Quit Ghostex fully, reopen it, and try again.");
+  });
 });
 
 describe("native/sidebar/modal-host.tsx rename modal", () => {

@@ -16625,6 +16625,18 @@ guards the shape instead: single line, no backslashes, bounded length.
 */
 function gpuiWorktreeRenameUserVisibleErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message.trim() : "";
+  /*
+  CDXC:WorktreeRename 2026-08-09-18:40:
+  A daemon older than this feature answers the rename endpoint with
+  `notFound: "/api/renameWorktreeProject is not a gxserver HTTP endpoint."`.
+  That sentence is true and completely useless to the person who just clicked
+  Rename, so translate the one condition they can actually act on. This happens
+  for real whenever a freshly built app attaches to a gxserver left running by
+  the previously installed one.
+  */
+  if (message.includes("is not a gxserver HTTP endpoint")) {
+    return "This Ghostex build's background service is out of date. Quit Ghostex fully, reopen it, and try again.";
+  }
   if (message && !message.includes("\\") && !message.includes("\n") && message.length <= 200) {
     return message;
   }
