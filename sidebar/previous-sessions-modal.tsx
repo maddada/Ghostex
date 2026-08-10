@@ -1,6 +1,6 @@
 import { IconCheck, IconFilter2 } from '@tabler/icons-react';
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   filterPreviousSessions,
@@ -189,6 +189,7 @@ export function PreviousSessionsModal({
     { mode: PreviousSessionsRequestMode; queryKey: string; requestId: string } | undefined
   >(undefined);
   const pendingSelectionRef = useRef<{ end: number; start: number } | undefined>(undefined);
+  const lastSearchSelectionResetQueryRef = useRef<string | undefined>(undefined);
   const selectedSessionKeyRef = useRef<string | undefined>(undefined);
   const visibleHistoryAnchorRef = useRef(Date.now());
   const lastHistoryWindowRevealAtRef = useRef(0);
@@ -270,6 +271,7 @@ export function PreviousSessionsModal({
     () => groupQuickAccessSessionsByDay(visibleSessionItems),
     [visibleSessionItems]
   );
+
   const hasClosedSessionsResolved = remotePreviousSessions !== undefined || previousSessions.length > 0;
   const currentPreviousSessionsQueryKey = useMemo(
     () => getPreviousSessionsQueryKey(searchQuery, selectedSessionTagFilters),
@@ -289,6 +291,19 @@ export function PreviousSessionsModal({
     hasClosedSessionsResolved &&
     (remotePreviousSessionsCursor === undefined || oldestLoadedSessionClosedAt <= visibleHistoryCutoff);
   const canShowModal = isOpen && (openSessions.length > 0 || hasClosedSessionsResolved);
+
+  useLayoutEffect(() => {
+    if (!canShowModal || lastSearchSelectionResetQueryRef.current === searchQuery) {
+      return;
+    }
+    lastSearchSelectionResetQueryRef.current = searchQuery;
+    const firstSessionKey = visibleSessionItems[0]?.key;
+    selectedSessionKeyRef.current = firstSessionKey;
+    setSelectedSessionKey(firstSessionKey);
+    if (previousSessionsBodyRef.current) {
+      previousSessionsBodyRef.current.scrollTop = 0;
+    }
+  }, [canShowModal, searchQuery, visibleSessionItems]);
 
   const requestPreviousSessionsPage = useCallback(
     (input: { cursor?: string; mode: PreviousSessionsRequestMode }) => {
@@ -602,6 +617,7 @@ export function PreviousSessionsModal({
       setVisibleHistoryWindowCount(1);
       lastHistoryWindowRevealAtRef.current = 0;
       pendingSelectionRef.current = undefined;
+      lastSearchSelectionResetQueryRef.current = undefined;
       selectedSessionKeyRef.current = undefined;
       setSelectedSessionKey(undefined);
     }

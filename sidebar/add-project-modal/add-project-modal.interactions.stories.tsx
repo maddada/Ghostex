@@ -14,7 +14,7 @@ import {
 /*
  * CDXC:AddProject 2026-07-30:
  * Interaction coverage for the shared add-project dialog. These assert the
- * CALLBACK PAYLOADS the dialog would send to gxserver plus the exact t3code
+ * CALLBACK PAYLOADS the dialog would send to gxserver plus the exact
  * keyboard model, because that model is the whole point of the port:
  * nothing is auto-highlighted in path modes, so plain Enter always submits the
  * typed path and only an explicit highlight (arrow keys / hover) turns Enter
@@ -106,7 +106,7 @@ export const BrowsesDescendsAndGoesUp: Story = {
   },
 };
 
-/** 2. With nothing highlighted, Enter submits the typed path (the t3code Enter fix). */
+/** 2. With nothing highlighted, Enter submits the typed path. */
 export const EnterSubmitsTypedPath: Story = {
   args: {},
   play: async ({ canvasElement, step }) => {
@@ -209,7 +209,7 @@ export const SubmitLabelFlipsToCreateAndAdd: Story = {
     await step("an unknown leaf segment flips the label to Create & Add", async () => {
       typeQuery(input, "~/dev/brand-new");
       await waitFor(async () => expect(submit.textContent).toBe("Create & Add"));
-      /* The `..` row still lists, exactly like t3code: a group exists, so no empty state. */
+      /* The `..` row still lists: a group exists, so no empty state. */
       await expect(dialog.querySelector('[data-add-project-field="directoryUp"]')).not.toBeNull();
     });
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { buildBrowseGroups, filterBrowseEntries } from "./t3-command-palette-logic";
+import { buildBrowseGroups, filterBrowseEntries } from "./remote-command-palette-logic";
 
-describe("T3 remote project picker command logic", () => {
+describe("remote project picker command logic", () => {
   const entries = [
     { name: ".config", fullPath: "/home/madda/.config" },
     { name: "ghostex", fullPath: "/home/madda/ghostex" },

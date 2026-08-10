@@ -43,8 +43,7 @@ Endpoints (both **remote-allowed**):
 ```
 
 Array order is always `github, gitlab, bitbucket, azure-devops`. The key is
-`provider` (NOT t3code's `kind`). `status: "unsupported"` is a Ghostex addition
-(t3code has only `available|missing`) and means gxserver has no implementation —
+`provider` rather than `kind`. `status: "unsupported"` means gxserver has no implementation —
 Bitbucket and Azure DevOps always report it and are never probed. Readiness
 mapping per spec §3.3 still works unchanged (`status !== "available"` → not
 ready, hint = `installHint`).
@@ -94,18 +93,18 @@ and the job is left running server-side — the wait NEVER cancels the clone).
    "Workspace root does not exist: …" / "… is not a directory: …", but gxserver's
    whole project API already answers `path does not exist: <p>` /
    `path is not a directory: <p>` and existing tests pin those. Only the new
-   failure mode gets t3code's wording: `Failed to create workspace root: <p>`.
+   failure mode gets the wording: `Failed to create workspace root: <p>`.
    Flag-absent behavior is byte-identical to before.
 2. **Browse parity gaps found and fixed** (spec §6.1): (a) a permission-denied
    `readdir` used to return `notFound`; it now returns an empty entry list with
-   the resolved `parentPath`, matching t3code's silent-empty contract, while
+   the resolved `parentPath`, matching the silent-empty contract, while
    every other read failure still errors; (b) entries were byte-sorted, which
    filed all capitalized folders before lowercase ones; they now sort
    `localeCompare`-style (case-insensitive, raw name as tiebreak). Everything
    else already matched: `~`/bare-`~` expansion, trailing-separator → prefix "",
    case-insensitive prefix, hidden-only-when-`.`-or-separator, `parentPath` =
    server-resolved absolute, dirs only, `cwd` required for explicit relatives.
-3. **Clone gap found and closed.** t3code's `cloneRepository` takes
+3. **Clone gap found and closed.** `cloneRepository` takes
    `{ remoteUrl, destinationPath }`; gxserver only took `parentPath` +
    `destinationFolderName` with an existing parent and refused ANY existing
    destination. Rather than making the dialog split paths client-side (it can't
@@ -131,11 +130,11 @@ and the job is left running server-side — the wait NEVER cancels the clone).
    an existing absolute (or `~/`) directory.
 8. **Timeouts**: 5 s per discovery probe (version and auth are separate probes,
    per spec §6.3), 15 s for a lookup. Clone keeps its existing 30-minute job
-   timeout (NOT t3code's 120 s — gxserver clones large repos as a background job
+   timeout (gxserver clones large repos as a background job
    with cancel, so shortening it would be a regression).
 9. **glab lookup** uses `glab api projects/<percent-encoded path>` and maps
-   `path_with_namespace`/`web_url`/`ssh_url_to_repo`, exactly like t3code.
-10. GitLab auth parsing is a simplification of t3code's per-host block parser:
+   `path_with_namespace`/`web_url`/`ssh_url_to_repo`.
+10. GitLab auth parsing uses a simplified per-host block parser:
     account comes from the first `Logged in to … as <account>` (or
     `account: <x>`) line anywhere in the output, host from the first hostname-ish
     sanitized line. The readiness decision (account present → authenticated) is
@@ -179,7 +178,7 @@ and the job is left running server-side — the wait NEVER cancels the clone).
   handlers are Parts B/C/D. The typed client methods above are the pieces those
   handlers should call.
 - Clone progress is still coarse: the job reports `running` → `completed|failed|canceled`
-  with a `message`, no percentage. That matches t3code (which has no progress UI).
+  with a `message`, no percentage.
 - `/api/previewRepositoryClone` is not required by the dialog — `startRepositoryClone`
   runs the same validation and returns the same preview inside the job — but it is
   available if a step wants to pre-flight a destination without starting anything.
@@ -274,17 +273,17 @@ harness exports `AddProjectStoryHarness`, `getAddProjectStoryMocks`,
    Spec §2.7/gotcha 7 makes `autoHighlight={false}` load-bearing, so the dialog owns
    its highlight state and ArrowUp/ArrowDown/Enter/Backspace handling. It still uses
    the house shell (`CommandDialog`) and input (`InputGroup`/`InputGroupInput`/`Button`)
-   and the shared `sidebar/remote-project-picker/t3-project-paths.ts` +
-   `t3-command-palette-logic.ts` helpers (`filterBrowseEntries` reused verbatim).
+   and the shared `sidebar/remote-project-picker/remote-project-paths.ts` +
+   `remote-command-palette-logic.ts` helpers (`filterBrowseEntries` reused verbatim).
 2. **Submit/action buttons live in the input's `inline-end` addon**, not absolutely
    positioned over it, so they never overlap the house command-input clear button.
-3. **Highlighting `..` counts as a highlighted browse item** (t3code's
+3. **Highlighting `..` counts as a highlighted browse item** (the
    `highlightedEntry` ignores the up-row, which makes Enter submit the typed path
    while `..` is visibly selected). Ghostex treats it as a row: Enter walks up,
    mod+Enter still submits.
 4. **Popping the last view closes the dialog is NOT done** — `canPopView` requires
    `viewStack.length > 1`, so Back/Backspace/clear only pop to a real previous step;
-   Esc is the only way out of the first step (t3code pops into its root palette,
+   Esc is the only way out of the first step,
    which Ghostex does not have here).
 5. **Machine step gating** matches spec §1.5: `initialMachineId` (if it matches an
    option) or exactly one option → straight to Sources; >1 → Machines step; 0 →
@@ -295,11 +294,11 @@ harness exports `AddProjectStoryHarness`, `getAddProjectStoryMocks`,
    adds a `notice` row ("Still working. The machine may be reconnecting.") with a
    Cancel-clone link when a clone job is in flight. The hard timeout stays with the
    host (plan Part C: 60s).
-7. **`onOpenSourceControlSettings` does not close the dialog** (t3code's palette
+7. **`onOpenSourceControlSettings` does not close the dialog** (the palette
    closes and navigates); the host decides, so gpui can open Settings in its own
    window without losing the add-project flow.
 8. **Dialog position/size**: `CommandDialog` + `max-w-xl sm:max-w-xl` (547px measured),
-   keeping the house command-palette `top-1/3` anchor instead of t3code's 10vh.
+   keeping the house command-palette `top-1/3` anchor.
    The body root carries `w-full min-w-0` because `DialogContent` is a grid and a long
    row description would otherwise push the body past the popup's clipped edge.
 9. **Nothing is transport-aware.** `machineId` is the only routing token the dialog
@@ -333,7 +332,7 @@ harness exports `AddProjectStoryHarness`, `getAddProjectStoryMocks`,
   must own the abort (dismissing the dialog unmounts it and abandons the poll, and
   `cancelCloneJob` is optional).
 - Duplicate-project handling is server-side only: the dialog shows whatever
-  `addProject` rejects with. t3code silently opens the existing project instead; if
+  `addProject` rejects with. Existing projects open silently instead; if
   Ghostex wants that, the host should resolve it inside `addProject` and answer with
   `alreadyExists: true` (the field exists on `AddProjectAddResult` but the dialog
   currently only closes on success).
@@ -593,7 +592,7 @@ Copy: `AddProjectCopy` in `mobile/src/copy.ts`.
 4. **Positional CLI arguments starting with `-` are rejected at the builder** — the Rust
    CLI parses argv before gxserver sees it, so such a value would silently become a flag.
 5. **No environment/machine list on the Source screen.** The machine is chosen by the
-   Projects context menu that opens the flow (plan Part E), so t3code's "Connected
+   Projects context menu that opens the flow (plan Part E), so the "Connected
    environments" section has no counterpart; the machine is named in a muted line instead.
 6. **Bitbucket / Azure DevOps rows are never enabled**, even if a future discovery marked
    them available: gxserver's `lookup-repository` only accepts `github|gitlab`. They render
@@ -602,7 +601,7 @@ Copy: `AddProjectCopy` in `mobile/src/copy.ts`.
 7. **Discovery failure disables every provider** and shows an inline `ErrorBanner`; Local
    folder and Git URL stay enabled because neither depends on a hosting CLI. Readiness is
    never guessed from a failed probe.
-8. **Submit label flips `Add project` ↔ `Create & add project`** (t3code's "Create & Add"
+8. **Submit label flips `Add project` ↔ `Create & add project`** (the "Create & Add"
    semantics) with a muted "This folder does not exist yet and will be created." hint. The
    flip is suppressed while a browse is pending or failed, so an unknown state never claims
    the folder is missing.
@@ -882,7 +881,7 @@ spelled (`/api/discoverSourceControl`, `/api/lookupRepository`,
   channel event read per story): all 10 `Modals/Add Project Interactions`
   stories `status: "success"`; all 6 `Modals/Add Project` visual stories render
   the dialog with no error display and no console errors.
-- t3code fidelity spot-checks (live DOM, Sources fixture): source order
+- fidelity spot-checks (live DOM, Sources fixture): source order
   Local folder → Git URL → ready providers → unready A→Z with "Setup Required";
   local browse opens with `~/`, placeholder "Enter path (e.g. ~/projects/my-app)",
   NO auto-highlight (Enter submits typed path; ArrowDown+Enter descends —
@@ -891,7 +890,7 @@ spelled (`/api/discoverSourceControl`, `/api/lookupRepository`,
   the initialQuery pops to Sources; repo step placeholder "Enter Git clone URL",
   "Continue"+Enter kbd, hint per spec; destination step shows repository card,
   "Select where to clone", Clone/Create & Clone; footer hints present; no up-row
-  at `~/` (matches t3code `canNavigateUp`).
+  at `~/` (matches `canNavigateUp`).
 - ghostex-web end-to-end (`bun run web:dev` + user's daemon on 58744): sidebar
   "Add project" button → dialog → Local folder → typed `/tmp/add-project-verify-scratch`
   (live server browse showed the entry, label "Add") → Enter → dialog closed and
@@ -1067,7 +1066,7 @@ None introduced. Names from all previous handoffs confirmed present as spelled.
   9333), reading the `storyFinished` channel event per story: all 10
   `Modals/Add Project Interactions` stories and all 6 `Modals/Add Project`
   visual stories → `status: "success"` (16/16).
-- Independent t3code fidelity spot-checks on the live DOM: source order
+- Independent fidelity spot-checks on the live DOM: source order
   Local folder → Git URL → ready providers → unready A→Z with disabled rows +
   Setup Required; local browse opens `~/` with placeholder "Enter path (e.g.
   ~/projects/my-app)", NO auto-highlight, Enter submits typed path,
@@ -1266,7 +1265,7 @@ None introduced. All names from previous handoffs confirmed present as spelled.
   `Modals/Add Project` stories → `storyFinished: success` (16/16). Only console
   error across runs was a network favicon-style 404 with no failing story
   resource (harness noise).
-- Independent t3code fidelity spot-checks on the live DOM: source order local →
+- Independent fidelity spot-checks on the live DOM: source order local →
   url → github(ready) → azure-devops/bitbucket/gitlab (unready A→Z,
   aria-disabled, 3 Setup Required buttons); local browse opens `~/` with
   placeholder "Enter path (e.g. ~/projects/my-app)", NO auto-highlight, submit

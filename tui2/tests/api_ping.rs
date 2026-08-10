@@ -628,7 +628,7 @@ fn tab_methods_round_trip_over_socket() {
     let panes = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_t3b","method":"pane.list","params":{{"workspace_id":"{}"}}}}"#,
+            r#"{{"id":"req_three_b","method":"pane.list","params":{{"workspace_id":"{}"}}}}"#,
             workspace_id
         ),
     );

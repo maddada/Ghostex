@@ -1,24 +1,32 @@
-// Tool run rendering with collapsing rules (upstream chat spec §11.3 port), rendered as a
-// shadcn Marker header over a bordered detail rail.
+// Compact work rows for tool calls, results, and file edits.
 
-import { IconChevronRight } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import {
+  IconChevronRight,
+  IconFileText,
+  IconPencil,
+  IconTerminal2,
+  IconTool,
+  IconWorldSearch,
+} from "@tabler/icons-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   SessionChatToolCallBlock,
   SessionChatToolResultBlock,
 } from "../../shared/session-chat";
 import { cn } from "../../lib/utils";
-import { Marker, MarkerContent, MarkerIcon } from "../../components/ui/marker";
 import {
   diffFromSessionChatText,
   diffFromSessionChatToolCall,
   type SessionChatDiffLine,
 } from "./session-chat-diff";
 import {
-  countSessionChatToolCalls,
+  centerSessionChatExpansion,
+  SessionChatExpansion,
+} from "./session-chat-expansion";
+import { pairSessionChatToolBlocks } from "./session-chat-tool-fold";
+import {
   formatSessionChatToolInput,
   summarizeSessionChatToolInput,
-  summarizeSessionChatToolRun,
 } from "./session-chat-tool-summary";
 
 export const SESSION_CHAT_MAX_TOOL_RESULT_CHARS = 4000;
@@ -27,7 +35,7 @@ type ToolBlock = SessionChatToolCallBlock | SessionChatToolResultBlock;
 
 export interface SessionChatToolRunProps {
   blocks: readonly ToolBlock[];
-  /** Global expand toggle; per-run override still works after a change. */
+  /** Global expand toggle; each row remains independently collapsible. */
   expandSignal?: boolean;
 }
 
@@ -37,157 +45,164 @@ function clipBody(text: string): string {
     : text;
 }
 
+function toolIcon(name: string): ReactNode {
+  const normalized = name.toLowerCase();
+  if (/edit|write|patch|replace/.test(normalized)) {
+    return <IconPencil aria-hidden="true" stroke={1.8} />;
+  }
+  if (/read|file|glob|list/.test(normalized)) {
+    return <IconFileText aria-hidden="true" stroke={1.8} />;
+  }
+  if (/exec|command|shell|terminal|bash/.test(normalized)) {
+    return <IconTerminal2 aria-hidden="true" stroke={1.8} />;
+  }
+  if (/web|search|browser|fetch|url/.test(normalized)) {
+    return <IconWorldSearch aria-hidden="true" stroke={1.8} />;
+  }
+  return <IconTool aria-hidden="true" stroke={1.8} />;
+}
+
+function isCommandTool(name: string): boolean {
+  return /exec|command|shell|terminal|bash/.test(name.toLowerCase());
+}
+
 function DiffView({ lines }: { lines: readonly SessionChatDiffLine[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg bg-muted/40 px-2 py-1.5 font-mono text-xs leading-5">
-      {lines.map((line, index) => (
-        <div
-          className={cn(
-            "flex whitespace-pre",
-            line.kind === "add" && "bg-emerald-500/10 text-emerald-500",
-            line.kind === "del" && "bg-red-500/10 text-red-400",
-            line.kind === "meta" && "text-muted-foreground",
-          )}
-          key={index}
-        >
-          <span className="w-4 shrink-0 select-none">
-            {line.kind === "add" ? "+" : line.kind === "del" ? "-" : " "}
-          </span>
-          <span className="min-w-0">{line.text}</span>
-        </div>
-      ))}
+    <div className="ghostex-chat-file-edit">
+      <div className="ghostex-chat-diff">
+        {lines.map((line, index) => (
+          <div
+            className={cn("ghostex-chat-diff-line", `is-${line.kind}`)}
+            key={index}
+          >
+            <span className="ghostex-chat-diff-sign">
+              {line.kind === "add" ? "+" : line.kind === "del" ? "-" : " "}
+            </span>
+            <span>{line.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ToolBody({ error, text }: { error?: boolean; text: string }) {
+function ToolBody({
+  error,
+  label,
+  text,
+}: {
+  error?: boolean;
+  label?: string;
+  text: string;
+}) {
   return (
-    <pre
-      className={cn(
-        "overflow-x-auto rounded-lg bg-muted/40 px-2 py-1.5 font-mono text-xs leading-5 whitespace-pre-wrap wrap-break-word",
-        error && "text-destructive",
-      )}
-    >
-      {clipBody(text)}
-    </pre>
+    <div className="ghostex-chat-tool-body-group">
+      {label ? <div className="ghostex-chat-tool-body-label">{label}</div> : null}
+      <pre className={cn("ghostex-chat-tool-body", error && "is-error")}>
+        {clipBody(text)}
+      </pre>
+    </div>
   );
 }
 
-function ToolLine({ block }: { block: ToolBlock }) {
-  // Each line starts expanded — opening the run reveals every line at once —
-  // then is individually collapsible.
-  const [open, setOpen] = useState(true);
+function ToolLine({
+  call,
+  expandSignal,
+  result,
+}: {
+  call?: SessionChatToolCallBlock;
+  expandSignal: boolean;
+  result?: SessionChatToolResultBlock;
+}) {
+  const [open, setOpen] = useState(expandSignal);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => setOpen(expandSignal), [expandSignal]);
 
-  let name: string;
-  let preview: string;
-  let diff: SessionChatDiffLine[] | null;
-  let detail: string | null = null;
-  let body: { output: string; isError: boolean } | null = null;
-  if (block.type === "tool-call") {
-    name = block.name;
-    preview = summarizeSessionChatToolInput(block.input);
-    diff = diffFromSessionChatToolCall(block.name, block.input);
-    detail = diff ? null : formatSessionChatToolInput(block.input);
-  } else {
-    name = "Result";
-    preview = block.output.split("\n")[0]?.slice(0, 80) ?? "";
-    diff = diffFromSessionChatText(block.output);
-    body = { isError: block.isError === true, output: block.output };
-  }
-
-  // Only offer expansion when there's more than the inline preview shows.
-  const detailAddsInfo =
-    detail !== null && detail.replace(/\s+/g, " ").trim() !== preview;
-  const hasDetail = diff !== null || body !== null || detailAddsInfo;
+  const name = call?.name ?? "Result";
+  const commandTool = isCommandTool(name);
+  const inputPreview = call ? summarizeSessionChatToolInput(call.input) : "";
+  const resultPreview = result?.output.split("\n")[0]?.trim().slice(0, 120) ?? "";
+  const preview = commandTool ? "" : inputPreview || resultPreview;
+  const callDiff = call ? diffFromSessionChatToolCall(call.name, call.input) : null;
+  const resultDiff = result ? diffFromSessionChatText(result.output) : null;
+  const diff = callDiff ?? resultDiff;
+  const inputDetail = call ? formatSessionChatToolInput(call.input) : "";
+  const inputAddsInfo = Boolean(
+    call &&
+      (commandTool || inputDetail.replace(/\s+/g, " ").trim() !== preview),
+  );
+  const hasResultBody = Boolean(result?.output && resultDiff === null);
+  const hasDetail = diff !== null || inputAddsInfo || hasResultBody;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div
+      className={cn("ghostex-chat-work-row", result?.isError && "is-error")}
+      data-open={open}
+    >
       <button
-        className={cn(
-          "flex min-w-0 items-center gap-1.5 text-left text-xs text-muted-foreground",
-          hasDetail && "cursor-pointer transition-colors hover:text-foreground",
-        )}
+        aria-expanded={hasDetail ? open : undefined}
+        className="ghostex-chat-work-trigger"
         disabled={!hasDetail}
         onClick={() => {
           if (hasDetail) {
+            if (!open) {
+              centerSessionChatExpansion(triggerRef.current);
+            }
             setOpen((current) => !current);
           }
         }}
+        ref={triggerRef}
         type="button"
       >
+        <span className="ghostex-chat-work-icon">{toolIcon(name)}</span>
+        <span className="ghostex-chat-work-heading">{name}</span>
+        {preview ? <span className="ghostex-chat-work-preview">{preview}</span> : null}
         {hasDetail ? (
           <IconChevronRight
             aria-hidden="true"
-            className={cn("size-3 shrink-0 transition-transform", open && "rotate-90")}
+            className={cn("ghostex-chat-work-chevron", open && "rotate-90")}
             stroke={2}
           />
-        ) : (
-          <span className="size-3 shrink-0" />
-        )}
-        <span className="shrink-0 font-medium text-foreground/80">{name}</span>
-        {preview ? (
-          <span className="min-w-0 truncate font-mono">{preview}</span>
         ) : null}
       </button>
       {hasDetail && open ? (
-        diff ? (
-          <DiffView lines={diff} />
-        ) : body ? (
-          <ToolBody error={body.isError} text={body.output} />
-        ) : detail !== null ? (
-          <ToolBody text={detail} />
-        ) : null
+        <SessionChatExpansion
+          className="ghostex-chat-work-detail"
+          label={`Collapse ${name}`}
+          onCollapse={() => setOpen(false)}
+        >
+          {inputAddsInfo && (!diff || commandTool) ? (
+            <ToolBody
+              label={commandTool ? "Command" : result ? "Input" : undefined}
+              text={inputDetail}
+            />
+          ) : null}
+          {diff ? <DiffView lines={diff} /> : null}
+          {!diff && hasResultBody && result ? (
+            <ToolBody
+              error={result.isError}
+              label={call ? "Result" : undefined}
+              text={result.output}
+            />
+          ) : null}
+        </SessionChatExpansion>
       ) : null}
     </div>
   );
 }
 
 export function SessionChatToolRun({ blocks, expandSignal = false }: SessionChatToolRunProps) {
-  const [open, setOpen] = useState(expandSignal);
-
-  // Re-sync on every expandSignal change so a global toolbar toggle drives
-  // all runs while a per-run override still works in between.
-  useEffect(() => {
-    setOpen(expandSignal);
-  }, [expandSignal]);
-
-  const callCount = countSessionChatToolCalls(blocks) || blocks.length;
-  const summary = summarizeSessionChatToolRun(blocks);
-  const label =
-    summary || (callCount === 1 ? "1 tool call" : `${callCount} tool calls`);
-
+  const pairs = pairSessionChatToolBlocks(blocks);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-1.5" data-open={open}>
-      <Marker
-        render={
-          <button
-            className="cursor-pointer transition-colors hover:text-foreground"
-            onClick={() => {
-              setOpen((current) => !current);
-            }}
-            type="button"
-          />
-        }
-      >
-        <MarkerIcon>
-          <IconChevronRight
-            aria-hidden="true"
-            className={cn("transition-transform", open && "rotate-90")}
-            stroke={2}
-          />
-        </MarkerIcon>
-        <MarkerContent className="flex min-w-0 items-baseline gap-1.5 truncate text-left">
-          <span className="font-mono text-xs">{callCount}×</span>
-          <span className="min-w-0 truncate">{label}</span>
-        </MarkerContent>
-      </Marker>
-      {open ? (
-        <div className="ml-1.5 flex min-w-0 flex-col gap-1.5 border-l border-border pl-3">
-          {blocks.map((block, index) => (
-            <ToolLine block={block} key={index} />
-          ))}
-        </div>
-      ) : null}
+    <div className="ghostex-chat-tool-run">
+      {pairs.map((pair, index) => (
+        <ToolLine
+          call={pair.call}
+          expandSignal={expandSignal}
+          key={index}
+          result={pair.result}
+        />
+      ))}
     </div>
   );
 }

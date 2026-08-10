@@ -2,17 +2,20 @@ import { createRoot } from "react-dom/client";
 import "../../sidebar/styles.css";
 import {
   isSessionChatEventType,
+  normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverSaveSessionChatAttachmentResult,
   type GxserverSaveSessionChatImageResult,
   type GxserverSessionChatEvent,
+  type SessionChatTheme,
 } from "../../shared/session-chat";
 import { GXSERVER_PROTOCOL_VERSION } from "../../shared/gxserver-protocol";
 import {
   SessionChatView,
   type SessionChatHostActions,
+  type SessionChatHostComposerBridge,
   type SessionChatHostLinks,
 } from "../../sidebar/chat/session-chat-view";
 import type { SessionChatTransport } from "../../sidebar/chat/session-chat-transport";
@@ -38,9 +41,19 @@ interface ChatGxserverBootstrap {
   protocolVersion?: number;
 }
 
+declare global {
+  interface Window {
+    ghostexSetSessionChatTheme?: (theme: unknown) => void;
+  }
+}
+
 interface ChatBridgeNamespace {
   gxserverBootstrap?: ChatGxserverBootstrap;
   onGxserverBootstrapChanged?: (bootstrap: ChatGxserverBootstrap) => void;
+  onSessionChatFocusComposerRequested?: () => void;
+  onSessionChatHandoffToTerminalRequested?: () => void;
+  onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
+  onSessionChatStashPromptRequested?: () => void;
 }
 
 const BOOTSTRAP_RETRY_DELAY_MS = 120;
@@ -327,9 +340,8 @@ gpui cannot paint above this native CEF view, so the chat page renders the
 top-right [Terminal View][Agent Actions] cluster itself and posts clicks to
 Rust over the app-modal-host bridge shim installed for chat.html. The
 action ids and labels mirror the terminal overlay's expanded row; the
-input-injecting ones (Prompt Editor, Stash Prompt, Attach File or Folder)
-still work here because they write to the warm PTY, which stays alive while
-the terminal body is parked under the chat surface.
+terminal-owned actions still reach Rust, while composer-owned actions return
+through the bounded chat bridge below.
 */
 interface AppModalHostMessageHandler {
   postMessage: (payload: string) => unknown;
@@ -351,6 +363,76 @@ function postSessionChatHostAction(
       ...fields,
     }),
   );
+}
+
+function createGpuiSessionChatComposerBridge(
+  bootstrap: { authToken: string; baseUrl: string },
+  projectId: string,
+  sessionId: string,
+): SessionChatHostComposerBridge {
+  return {
+    register(actions) {
+      const namespace = chatBridgeNamespace();
+      const insertPrompt = (payload: { content?: unknown }): void => {
+        if (typeof payload?.content === "string" && payload.content.length > 0) {
+          actions.insertPrompt(payload.content);
+        }
+      };
+      const requestFocus = (): void => actions.focus();
+      const requestHandoffToTerminal = (): void => {
+        void actions
+          .handoffToTerminal()
+          .then((content) => {
+            postSessionChatHostAction("draftHandoffToTerminalComplete", { content });
+          })
+          .catch(() => {
+            postSessionChatHostAction("draftHandoffToTerminalFailed");
+          });
+      };
+      const requestStash = (): void => actions.requestStash();
+      namespace.onSessionChatFocusComposerRequested = requestFocus;
+      namespace.onSessionChatHandoffToTerminalRequested = requestHandoffToTerminal;
+      namespace.onSessionChatInsertPromptRequested = insertPrompt;
+      namespace.onSessionChatStashPromptRequested = requestStash;
+      postSessionChatHostAction("composerReady");
+      return () => {
+        if (namespace.onSessionChatFocusComposerRequested === requestFocus) {
+          delete namespace.onSessionChatFocusComposerRequested;
+        }
+        if (
+          namespace.onSessionChatHandoffToTerminalRequested ===
+          requestHandoffToTerminal
+        ) {
+          delete namespace.onSessionChatHandoffToTerminalRequested;
+        }
+        if (namespace.onSessionChatInsertPromptRequested === insertPrompt) {
+          delete namespace.onSessionChatInsertPromptRequested;
+        }
+        if (namespace.onSessionChatStashPromptRequested === requestStash) {
+          delete namespace.onSessionChatStashPromptRequested;
+        }
+      };
+    },
+    async stashPrompt(content, options) {
+      const result = await rpc<{
+        created?: boolean;
+        prompt?: { promptId?: string };
+      }>(bootstrap, "/api/saveStashedPrompt", {
+        content,
+        projectId,
+        sessionId,
+      });
+      const promptId = result.prompt?.promptId;
+      if (options?.transient && result.created === true && promptId) {
+        try {
+          await rpc(bootstrap, "/api/deleteStashedPrompt", { promptId });
+        } catch {
+          // The draft is already durable. Cleanup can be retried from Prompts
+          // without turning a successful handoff into lost composer text.
+        }
+      }
+    },
+  };
 }
 
 /*
@@ -438,10 +520,17 @@ const GPUI_SESSION_CHAT_HOST_ACTIONS: SessionChatHostActions = {
   onAction: (id) => postSessionChatHostAction(id),
 };
 
-function renderFailure(root: ReturnType<typeof createRoot>, message: string): void {
+function renderFailure(
+  root: ReturnType<typeof createRoot>,
+  message: string,
+  theme: SessionChatTheme,
+): void {
   root.render(
     <div className="native-sidebar-shell gpui-session-chat">
-      <div className="ghostex-chat-empty-state">
+      <div
+        className="ghostex-session-chat-scope ghostex-chat-empty-state"
+        data-chat-theme={theme}
+      >
         <div className="ghostex-chat-empty-title">Chat unavailable</div>
         <div className="ghostex-chat-empty-detail">{message}</div>
       </div>
@@ -453,18 +542,32 @@ const rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Ghostex session chat root element was not found.");
 }
-document.body.dataset.sidebarTheme = "plain-dark";
-document.body.classList.add("vscode-dark", "native-sidebar-body");
-
 const root = createRoot(rootElement);
 const searchParams = new URLSearchParams(window.location.search);
 const projectId = searchParams.get("projectId")?.trim() ?? "";
 const sessionId = searchParams.get("sessionId")?.trim() ?? "";
 const agentId = searchParams.get("agentId")?.trim() ?? "";
 const remote = searchParams.get("remote") === "true";
+let chatTheme = normalizeSessionChatTheme(searchParams.get("theme"));
+let renderReadyChat: ((theme: SessionChatTheme) => void) | null = null;
+
+function applyDocumentChatTheme(theme: SessionChatTheme): void {
+  document.documentElement.style.colorScheme = theme;
+  document.documentElement.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
+  document.body.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
+}
+
+document.body.dataset.sidebarTheme = "plain-dark";
+document.body.classList.add("vscode-dark", "native-sidebar-body");
+applyDocumentChatTheme(chatTheme);
+window.ghostexSetSessionChatTheme = (value) => {
+  chatTheme = normalizeSessionChatTheme(value);
+  applyDocumentChatTheme(chatTheme);
+  renderReadyChat?.(chatTheme);
+};
 
 if (!projectId || !sessionId) {
-  renderFailure(root, "This chat surface was opened without a session identity.");
+  renderFailure(root, "This chat surface was opened without a session identity.", chatTheme);
 } else {
   waitForBootstrap()
     .then((bootstrap) => {
@@ -474,28 +577,39 @@ if (!projectId || !sessionId) {
         sessionId,
         remote,
       );
+      const composerBridge = createGpuiSessionChatComposerBridge(
+        bootstrap,
+        projectId,
+        sessionId,
+      );
       const agentLabel = agentId
         ? resolveSessionChatTranscriptAgent(agentId) ?? agentId
         : null;
-      root.render(
-        <div className="native-sidebar-shell gpui-session-chat">
-          <SessionChatView
-            agentLabel={agentLabel}
-            className="gpui-session-chat-view"
-            hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
-            hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
-            // Staged next to chat.html by gpui/vite.config.ts (stageMonacoVs).
-            monacoVsBaseUrl="./monaco/vs"
-            sessionKey={`${projectId}:${sessionId}`}
-            transport={transport}
-          />
-        </div>,
-      );
+      renderReadyChat = (theme) => {
+        root.render(
+          <div className="native-sidebar-shell gpui-session-chat">
+            <SessionChatView
+              agentLabel={agentLabel}
+              className="gpui-session-chat-view"
+              hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
+              hostComposerBridge={composerBridge}
+              hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
+              // Staged next to chat.html by gpui/vite.config.ts (stageMonacoVs).
+              monacoVsBaseUrl="./monaco/vs"
+              sessionKey={`${projectId}:${sessionId}`}
+              theme={theme}
+              transport={transport}
+            />
+          </div>,
+        );
+      };
+      renderReadyChat(chatTheme);
     })
     .catch(() => {
       renderFailure(
         root,
         "The session's Ghostex server is not reachable from this window. Toggle back to the terminal and try again.",
+        chatTheme,
       );
     });
 }

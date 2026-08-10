@@ -144,7 +144,7 @@ export function GitCommitModal({
     [agents],
   );
   const promptAgents = useMemo(
-    () => commandAgents.filter((agent) => agent.agentId !== "t3"),
+    () => commandAgents,
     [commandAgents],
   );
   const promptAgentSelectItems = useMemo(
@@ -327,7 +327,7 @@ export function GitCommitModal({
    * The git review modal must support three worktree-specific choices: file selection, skipping the commit-message field when only push/PR is needed, and deleting the temporary worktree after a successful action.
    *
    * CDXC:TitlebarGit 2026-05-24-17:41:
-   * Titlebar-launched commits should match t3code's review experience: the message box may be left blank, and confirmation then generates the commit subject/body from the staged selected files.
+   * Titlebar-launched commits allow the message box to be left blank; confirmation then generates the commit subject/body from the staged selected files.
    *
    * CDXC:TitlebarGit 2026-05-25-07:40:
    * The commit review dialog should use the same shadcn Settings modal surface, typography scale, button style, checkbox treatment, and neutral dark background. User-facing copy must call the destination a branch instead of lower-level Git reference terminology.
@@ -339,7 +339,7 @@ export function GitCommitModal({
    * Changed-file rows in the commit review modal should preview the exact patch before users choose a commit action instead of jumping straight to the IDE.
    *
    * CDXC:WorktreeMerge 2026-05-27-06:25:
-   * Worktree PR review keeps the T3-style commit/push/PR flow as the primary action, but the same review modal also offers an explicit merge-to-main action. Direct merge uses the same prompt-agent selector as PR creation so the modal has one clear agent choice.
+   * Worktree PR review keeps the commit/push/PR flow as the primary action, but the same review modal also offers an explicit merge-to-main action. Direct merge uses the same prompt-agent selector as PR creation so the modal has one clear agent choice.
    *
    * CDXC:PromptAgents 2026-05-29-10:53:
    * Commit review exposes a plain prompt-agent dropdown for generated commit
@@ -364,7 +364,7 @@ export function GitCommitModal({
    * second modal stacked above the review.
    *
    * CDXC:TitlebarGit 2026-06-08-04:07:
-   * The commit review modal should match t3code's tighter source-control review
+   * The commit review modal uses compact source-control review
    * controls: remove the Files and Diff headings, keep the branch summary
    * compact, place three icon-only tooltip diff controls in the diff header, and
    * use hover-only 5px transparent-gutter scrollbars on the file tree and diff

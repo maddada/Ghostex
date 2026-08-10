@@ -18,7 +18,6 @@ import {
   type SessionTitleSource,
   type VisibleSessionCount,
 } from "./session-grid-contract";
-import { normalizeT3SessionMetadata } from "./t3-session-metadata";
 
 export function dedupeSessionIds(sessionIds: readonly string[]): string[] {
   const uniqueSessionIds = new Set<string>();
@@ -235,45 +234,6 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
    */
   const isPoppedOut =
     session.isSleeping === true ? undefined : session.isPoppedOut === true || undefined;
-
-  if (
-    session.kind === "t3" &&
-    typeof session.t3.projectId === "string" &&
-    typeof session.t3.serverOrigin === "string" &&
-    typeof session.t3.threadId === "string" &&
-    typeof session.t3.workspaceRoot === "string"
-  ) {
-    return {
-      ...session,
-      alias,
-      displayId,
-      kind: "t3",
-      t3: normalizeT3SessionMetadata({
-        boundThreadId:
-          typeof session.t3.boundThreadId === "string" ? session.t3.boundThreadId : undefined,
-        createdAt: typeof session.t3.createdAt === "string" ? session.t3.createdAt : undefined,
-        environmentId:
-          typeof session.t3.environmentId === "string" ? session.t3.environmentId : undefined,
-        ghostexProjectId:
-          typeof session.t3.ghostexProjectId === "string" ? session.t3.ghostexProjectId : undefined,
-        ghostexSessionId:
-          typeof session.t3.ghostexSessionId === "string" ? session.t3.ghostexSessionId : undefined,
-        projectId: session.t3.projectId,
-        serverOrigin: session.t3.serverOrigin,
-        t3SidebarMode:
-          session.t3.t3SidebarMode === "collapsed" || session.t3.t3SidebarMode === "normal"
-            ? session.t3.t3SidebarMode
-            : undefined,
-        threadId: session.t3.threadId,
-        workspaceRoot: session.t3.workspaceRoot,
-      }, session.sessionId),
-      isPoppedOut,
-      lastAccessedAt: normalizeSessionLifecycleTimestamp(session.lastAccessedAt),
-      lastStartedAt: normalizeSessionLifecycleTimestamp(session.lastStartedAt),
-      title,
-      titleSource,
-    };
-  }
 
   if (session.kind === "browser" && typeof session.browser.url === "string") {
     return {

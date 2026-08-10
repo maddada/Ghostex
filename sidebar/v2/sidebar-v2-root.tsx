@@ -1,5 +1,5 @@
 import { IconFolders, IconLayoutList } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   SidebarNewSessionEnvMode,
   SidebarProjectGroupingMode,
@@ -70,7 +70,6 @@ import {
   postSidebarV2RemoveSessionWorktree,
   postSidebarV2RenameSession,
   postSidebarV2RequestProjectWorktrees,
-  postSidebarV2RequestT3BrowserAccess,
   postSidebarV2SetSessionPinned,
   postSidebarV2SetSessionSleeping,
   postSidebarV2SetSessionTag,
@@ -394,7 +393,7 @@ export function SidebarV2Root({
     Readonly<Record<string, string>>
   >({});
   /*
-   * Shelf defaults are t3code's: Settled opens (it is the recent history you
+   * Shelf defaults keep Settled open (it is the recent history you
    * scroll back through), Snoozed stays shut (you asked not to see it).
    */
   /*
@@ -776,7 +775,7 @@ export function SidebarV2Root({
   };
 
   /*
-   * t3code parity: "New session on <branch>" spawns straight into the checkout
+   * "New session on <branch>" spawns straight into the checkout
    * the clicked row already lives in. There is nothing left to choose — the
    * worktree exists, the branch is fixed — so it posts directly instead of
    * opening the form with one pre-filled field.
@@ -1523,12 +1522,19 @@ export function SidebarV2Root({
               }),
             )}
           </SidebarV2Shelf>
-          {viewModel.flat.active.map((session) =>
-            renderRow(session, {
-              project: viewModel.projectsByGroupId[session.projectId ?? ""],
-              variant: "card",
-            }),
-          )}
+          {viewModel.flat.active.map((session, sessionIndex) => (
+            <Fragment key={session.sessionId}>
+              {renderRow(session, {
+                project: viewModel.projectsByGroupId[session.projectId ?? ""],
+                variant: "card",
+              })}
+              {session.isPinned === true &&
+              viewModel.flat.active[sessionIndex + 1] !== undefined &&
+              viewModel.flat.active[sessionIndex + 1]?.isPinned !== true ? (
+                <li aria-hidden className="pinned-sessions-divider" />
+              ) : null}
+            </Fragment>
+          ))}
           <SidebarV2Shelf
             count={viewModel.flat.snoozed.length}
             isExpanded={isSnoozedExpanded}
@@ -1654,9 +1660,16 @@ export function SidebarV2Root({
                      * them today.
                      */}
                     {group.browserSessions.map((session) => renderRow(session, { variant: "card" }))}
-                    {group.partition.active.map((session) =>
-                      renderRow(session, { variant: "card" }),
-                    )}
+                    {group.partition.active.map((session, sessionIndex) => (
+                      <Fragment key={session.sessionId}>
+                        {renderRow(session, { variant: "card" })}
+                        {session.isPinned === true &&
+                        group.partition.active[sessionIndex + 1] !== undefined &&
+                        group.partition.active[sessionIndex + 1]?.isPinned !== true ? (
+                          <li aria-hidden className="pinned-sessions-divider" />
+                        ) : null}
+                      </Fragment>
+                    ))}
                     {renderProjectShelf(group)}
                 </ul>
               </SidebarV2ProjectGroupSection>
@@ -1742,8 +1755,6 @@ export function SidebarV2Root({
                     }
                   }
                 : undefined,
-              onRemoteAccess: () =>
-                postSidebarV2RequestT3BrowserAccess(vscode, menuSession.sessionId),
               onRename: () => setRenamingSessionId(menuSession.sessionId),
               onSetPinned: (pinned) =>
                 postSidebarV2SetSessionPinned(vscode, menuSession.sessionId, pinned),

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import type { T3FilesystemBrowseEntry } from "./t3-filesystem";
+import type { RemoteFilesystemBrowseEntry } from "./remote-filesystem";
 
-export const T3_REMOTE_PICKER_ITEM_ICON_CLASS = "size-4 text-muted-foreground/80";
-export const T3_REMOTE_PICKER_ADDON_ICON_CLASS = "size-4";
+export const REMOTE_PICKER_ITEM_ICON_CLASS = "size-4 text-muted-foreground/80";
+export const REMOTE_PICKER_ADDON_ICON_CLASS = "size-4";
 
-export interface T3CommandPaletteItem {
+export interface RemoteCommandPaletteItem {
   readonly description?: string;
   readonly disabled?: boolean;
   readonly icon: ReactNode;
@@ -14,26 +14,26 @@ export interface T3CommandPaletteItem {
   readonly value: string;
 }
 
-export interface T3CommandPaletteActionItem extends T3CommandPaletteItem {
+export interface RemoteCommandPaletteActionItem extends RemoteCommandPaletteItem {
   readonly kind: "action";
   readonly keepOpen?: boolean;
   readonly run: () => Promise<void>;
 }
 
-export interface T3CommandPaletteGroup {
-  readonly items: ReadonlyArray<T3CommandPaletteActionItem>;
+export interface RemoteCommandPaletteGroup {
+  readonly items: ReadonlyArray<RemoteCommandPaletteActionItem>;
   readonly label: string;
   readonly value: string;
 }
 
 export function filterBrowseEntries(input: {
-  browseEntries: ReadonlyArray<T3FilesystemBrowseEntry>;
+  browseEntries: ReadonlyArray<RemoteFilesystemBrowseEntry>;
   browseFilterQuery: string;
   highlightedItemValue: string | null;
 }): {
-  exactEntry: T3FilesystemBrowseEntry | null;
-  filteredEntries: T3FilesystemBrowseEntry[];
-  highlightedEntry: T3FilesystemBrowseEntry | null;
+  exactEntry: RemoteFilesystemBrowseEntry | null;
+  filteredEntries: RemoteFilesystemBrowseEntry[];
+  highlightedEntry: RemoteFilesystemBrowseEntry | null;
 } {
   const lowerFilter = input.browseFilterQuery.toLowerCase();
   const showHidden = input.browseFilterQuery.startsWith(".");
@@ -44,7 +44,7 @@ export function filterBrowseEntries(input: {
       (showHidden || !entry.name.startsWith(".")),
   );
 
-  let highlightedEntry: T3FilesystemBrowseEntry | null = null;
+  let highlightedEntry: RemoteFilesystemBrowseEntry | null = null;
   if (input.highlightedItemValue?.startsWith("browse:")) {
     const highlightedPath = input.highlightedItemValue.slice("browse:".length);
     highlightedEntry = filteredEntries.find((entry) => entry.fullPath === highlightedPath) ?? null;
@@ -59,15 +59,15 @@ export function filterBrowseEntries(input: {
 }
 
 export function buildBrowseGroups(input: {
-  browseEntries: ReadonlyArray<T3FilesystemBrowseEntry>;
+  browseEntries: ReadonlyArray<RemoteFilesystemBrowseEntry>;
   browseQuery: string;
   browseTo: (name: string) => void;
   browseUp: () => void;
   canBrowseUp: boolean;
   directoryIcon: ReactNode;
   upIcon: ReactNode;
-}): T3CommandPaletteGroup[] {
-  const items: T3CommandPaletteActionItem[] = [];
+}): RemoteCommandPaletteGroup[] {
+  const items: RemoteCommandPaletteActionItem[] = [];
 
   if (input.canBrowseUp) {
     items.push({

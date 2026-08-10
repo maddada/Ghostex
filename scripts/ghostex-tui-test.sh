@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# CDXC:GhostexTui 2026-07-01-02:10: Release verification must test the promoted GX 2 TUI source because bare `gx` and packaged `ghostex-tui` no longer launch the removed legacy `tui/` submodule.
+# CDXC:GhostexTui 2026-07-01-02:10: Release verification must test the promoted GX 2 TUI source because `gx tui` and packaged `ghostex-tui` no longer launch the removed legacy `tui/` submodule.
 tui_root="$repo_root/tui2"
 
 # CDXC:ReleaseAutomation 2026-06-14-09:07: TUI release verification must not inherit Homebrew's unversioned Zig when it points at Zig 0.16. The vendored Ghostty VT build requires Zig 0.15.2, so choose the compatible keg before running Cargo tests.

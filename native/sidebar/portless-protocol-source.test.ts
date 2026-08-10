@@ -157,7 +157,7 @@ describe("Portless Phase 12 protocol plumbing source contract", () => {
     const sharedNativeResult = sourceBetween(
       nativeHostProtocolSource,
       "Native Portless admin results are structured and sanitized.",
-      "projectId: string;",
+      "protocolVersion: typeof NATIVE_GHOSTTY_HOST_PROTOCOL_VERSION;",
     );
     expect(sharedNativeResult).toContain("requestId: string");
     expect(sharedNativeResult).toContain("status: string");

@@ -27,7 +27,6 @@ import {
   getSidebarAgentIconById,
   type SidebarAgentButton,
 } from "@/shared/sidebar-agents";
-import { T3CODE_ENABLED } from "@/shared/feature-flags";
 import {
   type RemoteMachineSettings,
   type ghostexSettings,
@@ -925,9 +924,7 @@ function createWebSidebarHud(
   return {
     ...hud,
     agents:
-      remoteHud?.agents
-        .filter((agent) => T3CODE_ENABLED || agent.agentId !== "t3")
-        .map((agent) => ({
+      remoteHud?.agents.map((agent) => ({
           ...agent,
           icon: resolveAgentIcon(agent.icon ?? agent.agentId),
         })) ?? hud.agents,

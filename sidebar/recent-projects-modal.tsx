@@ -1,6 +1,6 @@
 import { IconCopy, IconFolder, IconFolderOpen, IconRotateClockwise, IconTrash } from '@tabler/icons-react';
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { ExtensionToSidebarMessage, SidebarRecentProject } from '../shared/session-grid-contract';
 import { resolveWorkspaceProjectIconDataUrl } from '../shared/workspace-project-appearance';
 import { AppTooltip, TooltipProvider } from './app-tooltip';
@@ -162,7 +162,9 @@ export function RecentProjectsModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>();
   const [contextMenuPosition, setContextMenuPosition] = useState<RecentProjectContextMenuPosition>();
+  const recentProjectsBodyRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastSearchSelectionResetQueryRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
   const cachedRecentProjects = useMemo(
     () =>
@@ -188,6 +190,19 @@ export function RecentProjectsModal({
     () => groupRecentProjectsByDay(sortedFilteredProjects),
     [sortedFilteredProjects]
   );
+
+  useLayoutEffect(() => {
+    if (!canShowModal || lastSearchSelectionResetQueryRef.current === searchQuery) {
+      return;
+    }
+    lastSearchSelectionResetQueryRef.current = searchQuery;
+    const firstProjectId = sortedFilteredProjects[0]?.projectId;
+    selectedProjectIdRef.current = firstProjectId;
+    setSelectedProjectId(firstProjectId);
+    if (recentProjectsBodyRef.current) {
+      recentProjectsBodyRef.current.scrollTop = 0;
+    }
+  }, [canShowModal, searchQuery, sortedFilteredProjects]);
 
   const requestRecentProjects = useCallback(() => {
     vscode.postMessage({ machineId, type: 'requestRecentProjects' });
@@ -234,6 +249,7 @@ export function RecentProjectsModal({
     if (!isOpen) {
       setSearchQuery('');
       setContextMenuPosition(undefined);
+      lastSearchSelectionResetQueryRef.current = undefined;
       selectedProjectIdRef.current = undefined;
       setSelectedProjectId(undefined);
     }
@@ -372,7 +388,10 @@ export function RecentProjectsModal({
               setQuery={setSearchQuery}
             />
           </div>
-          <div className='previous-sessions-modal-body recent-projects-modal-body scroll-mask-y'>
+          <div
+            className='previous-sessions-modal-body recent-projects-modal-body scroll-mask-y'
+            ref={recentProjectsBodyRef}
+          >
             {filteredProjects.length > 0 ? (
               groupedProjects.map((group) => (
                 <section className='previous-sessions-day-group' key={group.dayLabel}>

@@ -18,7 +18,7 @@ reference_revision() {
   case "$1" in
     zed) printf '%s\n' "5775362fbd422f00ef7ca3e7a88b088a65d7c22b" ;;
     cef-rs) printf '%s\n' "0ddbc2accc06a3ac7f18e1543f752c3fb65161f2" ;;
-    gpui-component) printf '%s\n' "cb365ed27a96ed786ba8d1812bceef602ea80a4b" ;;
+    gpui-component) printf '%s\n' "5d6ea0453b2f977766419216d9e0a830cafdd349" ;;
   esac
 }
 
@@ -79,7 +79,6 @@ if [[ "${GHOSTEX_RELEASE_SKIP_SUBMODULES:-0}" != "1" ]]; then
     requested=(mobile)
   else
     requested=(code-server zehn zmx)
-    # requested+=(t3code) # CDXC:T3CodeDisabled ghostex-mzp9: keep the submodule, but do not require it for packaging.
   fi
   if [[ "${GHOSTEX_RELEASE_INCLUDE_ANDROID:-0}" == "1" && "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" != "1" ]]; then
     requested+=(mobile)

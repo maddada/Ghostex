@@ -48,7 +48,6 @@ export function TitlebarActions() {
     && activeConnection?.presentation?.sessions.some((session) =>
       session.projectId === activeProject.projectId
       && session.surface === "commands"
-      && session.kind !== "t3"
     ),
   );
 

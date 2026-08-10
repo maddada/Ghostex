@@ -68,7 +68,7 @@ function SettingsModalStory({
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(initialSettings);
   const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>({
-    agents: DEFAULT_SIDEBAR_AGENTS.filter((agent) => agent.agentId !== "t3").map((agent, index) => ({
+    agents: DEFAULT_SIDEBAR_AGENTS.map((agent, index) => ({
       agentId: agent.agentId,
       cliCommand: agent.command.split(" ")[0] ?? agent.command,
       cliInstalled: index < 10,

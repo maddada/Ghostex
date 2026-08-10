@@ -26,7 +26,7 @@ License: Proprietary
 URL: https://ghostex.app
 Source0: ghostex-$VERSION.tar.gz
 BuildArch: x86_64
-Requires: alsa-lib, atk, cairo, cups-libs, dbus-libs, expat, fontconfig, gtk3, libX11, libXcomposite, libXdamage, libXext, libXfixes, libXrandr, libdrm, libxcb, mesa-libgbm, nspr, nss, pango
+Requires: alsa-lib, atk, cairo, cups-libs, dbus-libs, expat, fontconfig, gtk3, libX11, libXcomposite, libXdamage, libXext, libXfixes, libXrandr, libdrm, libxcb, mesa-libgbm, nspr, nss, pango, wmctrl
 
 %description
 Ghostex provides native AI development workspaces, terminals, and project tools.
@@ -42,6 +42,7 @@ cp -a %{_builddir}/ghostex-root/. %{buildroot}/
 %files
 /opt/ghostex
 /usr/bin/ghostex
+/usr/bin/gx
 /usr/share/applications/ghostex.desktop
 /usr/share/icons/hicolor/256x256/apps/ghostex.png
 EOF

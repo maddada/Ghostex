@@ -42,7 +42,6 @@ import {
   type SidebarSessionItem,
 } from "../shared/session-grid-contract";
 import type { BrowserFeedbackTool } from "../shared/ghostex-settings";
-import { T3CODE_ENABLED } from "../shared/feature-flags";
 import {
   getEnabledVisibleSidebarSessionTagSections,
   type SidebarSessionTagListItem,
@@ -432,7 +431,6 @@ export type SidebarSessionContextMenuEligibility = {
   canSleepSession: boolean;
   canTagSession: boolean;
   isBrowserSession: boolean;
-  isT3Session: boolean;
 };
 
 export function getSidebarSessionContextMenuEligibility({
@@ -443,7 +441,6 @@ export function getSidebarSessionContextMenuEligibility({
   showSessionDetailsCopyAction,
 }: SidebarSessionContextMenuEligibilityInput): SidebarSessionContextMenuEligibility {
   const isBrowserSession = isSidebarBrowserSession(session);
-  const isT3Session = session?.sessionKind === "t3";
   const hasSession = session !== undefined;
   const isConcreteSessionRow = hasSession && !isProjectSessionListMoreRow;
   const canUseTerminalAgentMenuAction = isConcreteSessionRow && !isBrowserSession;
@@ -455,7 +452,6 @@ export function getSidebarSessionContextMenuEligibility({
   return {
     canCloseAfterDone:
       canUseTerminalAgentMenuAction &&
-      !isT3Session &&
       hasSession &&
       supportsCloseAfterDoneMenuAction(session, isRemoteSession),
     canCopyAttachCommand:
@@ -470,7 +466,6 @@ export function getSidebarSessionContextMenuEligibility({
     canCopySessionDetails: isConcreteSessionRow && showSessionDetailsCopyAction,
     canDelayedSend:
       canUseTerminalAgentMenuAction &&
-      !isT3Session &&
       hasSession &&
       supportsDelayedSendMenuAction(session, isRemoteSession),
     canForkSession: canUseTerminalAgentMenuAction && hasSession && supportsFork(session),
@@ -490,13 +485,11 @@ export function getSidebarSessionContextMenuEligibility({
       supportsPopOutPaneMenuAction(session, {
         isBrowserSession,
         isRemoteSession,
-        isT3Session,
       }),
     canRenameSession: canUseTerminalAgentMenuAction,
     canSleepSession: isConcreteSessionRow,
     canTagSession: canUseTerminalAgentMenuAction,
     isBrowserSession,
-    isT3Session,
   };
 }
 
@@ -577,7 +570,7 @@ export function runSidebarBulkContextMenuActionInBackground(
 function postSidebarSessionCloseInBackground(vscode: WebviewApi, sessionId: string): void {
   /*
   CDXC:LocalFirstSidebar 2026-06-12-06:22:
-  Native sidebar message delivery is synchronous in the macOS host. Close clicks must flush the local card removal before asking the host to tear down the terminal/browser/T3 runtime, otherwise closeTerminal work can block the same user gesture and make the sidebar feel delayed.
+  Native sidebar message delivery is synchronous in the macOS host. Close clicks must flush the local card removal before asking the host to tear down the terminal or browser runtime, otherwise closeTerminal work can block the same user gesture and make the sidebar feel delayed.
   */
   globalThis.setTimeout(() => {
     vscode.postMessage({
@@ -777,7 +770,6 @@ export function SortableSessionCard({
     canSleepSession,
     canTagSession,
     isBrowserSession,
-    isT3Session,
   } = getSidebarSessionContextMenuEligibility({
     isProjectSessionListMoreRow,
     isRemoteSession,
@@ -1345,26 +1337,7 @@ export function SortableSessionCard({
     });
   };
 
-  const requestClose = (source: "context-menu" | "middle-click" | "programmatic") => {
-    if (isT3Session && showDebugSessionNumbers) {
-      vscode.postMessage({
-        details: {
-          activity: session.activity,
-          groupId,
-          isFocused: session.isFocused,
-          isRunning: session.isRunning,
-          isVisible: session.isVisible,
-          requestedAt: Date.now(),
-          sessionId: session.sessionId,
-          source,
-          title: session.primaryTitle,
-        },
-        event: "repro.t3CloseSession.requested",
-        scenarioId: "native.t3.codePane",
-        type: "sidebarDebugLog",
-      });
-    }
-
+  const requestClose = (_source: "context-menu" | "middle-click" | "programmatic") => {
     flushSync(() => {
       setContextMenuPosition(undefined);
       if (shouldKeepLastProjectSessionVisibleOnClose) {
@@ -1483,23 +1456,6 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionId: session.sessionId,
       type: "toggleCloseAfterDone",
-    });
-  };
-
-  const requestT3BrowserAccess = () => {
-    if (!T3CODE_ENABLED || !isT3Session) {
-      return;
-    }
-
-    setContextMenuPosition(undefined);
-    /**
-     * CDXC:T3RemoteAccess 2026-05-02-00:57
-     * T3 session cards expose Remote Access directly; the controller resolves
-     * the share URL and the app modal host owns the centered QR dialog.
-     */
-    vscode.postMessage({
-      sessionId: session.sessionId,
-      type: "requestT3SessionBrowserAccess",
     });
   };
 
@@ -2026,7 +1982,7 @@ export function SortableSessionCard({
      * CDXC:SidebarContextMenu 2026-06-04-23:40:
      * Session row context menus expose below-scoped lifecycle actions only
      * when the clicked row has visible sessions beneath it. Sleep below targets
-     * sleepable terminal, agent, T3, and browser rows, while Close below
+     * sleepable terminal, agent, and browser rows, while Close below
      * removes every visible row beneath the clicked session in the current
      * sidebar order.
      *
@@ -2075,21 +2031,6 @@ export function SortableSessionCard({
       key: "view-first-message",
       label: "View 1st message",
       onClick: requestViewFirstUserMessage,
-    });
-  }
-  if (T3CODE_ENABLED && isT3Session) {
-    sessionActions.push({
-      icon: (
-        <IconDeviceMobile
-          aria-hidden="true"
-          className="session-context-menu-icon"
-          size={16}
-          stroke={1.8}
-        />
-      ),
-      key: "browser-access",
-      label: "Remote Access",
-      onClick: requestT3BrowserAccess,
     });
   }
   if (canCopyResumeCommand) {
@@ -2278,7 +2219,7 @@ export function SortableSessionCard({
       /**
        * CDXC:SessionClose 2026-05-11-00:45
        * User-facing session removal language is Close. Keep the
-       * destructive action behavior unchanged while making terminal, T3, and
+       * destructive action behavior unchanged while making terminal and
        * browser context menus use the same visible verb.
        *
        * CDXC:SidebarContextMenu 2026-06-10-13:58:
@@ -2763,7 +2704,7 @@ export function SortableSessionCard({
             {/**
              * CDXC:SidebarSessions 2026-05-09-16:55
              * Project and chat session cards route the close-on-hover setting
-             * through the same shared row across terminal, agent, T3 Code, and
+             * through the same shared row across terminal, agent, and
              * browser panes.
              */}
             <SessionCardContent
@@ -2941,7 +2882,7 @@ export function canWakeSidebarSession(session: SidebarSessionItem | undefined): 
    * CDXC:SidebarMultiSelect 2026-07-01-18:33:
    * Wake selected mirrors Sleep selected and targets only rows that are
    * actually parked or sleeping, avoiding no-op wake messages for active
-   * terminal, agent, T3, and browser sessions.
+   * terminal, agent, and browser sessions.
    */
   return (
     Boolean(session) && (session?.isSleeping === true || session?.lifecycleState === "sleeping")
@@ -3061,7 +3002,7 @@ function supportsSelectedSessionFullReload(
   session: SidebarSessionItem | undefined,
   sessionId: string,
 ): boolean {
-  if (!session || isSidebarBrowserSession(session) || session.sessionKind === "t3") {
+  if (!session || isSidebarBrowserSession(session)) {
     return false;
   }
 
@@ -3160,11 +3101,9 @@ function supportsPopOutPaneMenuAction(
   {
     isBrowserSession,
     isRemoteSession,
-    isT3Session,
   }: {
     isBrowserSession: boolean;
     isRemoteSession: boolean;
-    isT3Session: boolean;
   },
 ): boolean {
   if (isRemoteSession) {
@@ -3175,21 +3114,20 @@ function supportsPopOutPaneMenuAction(
     );
   }
 
-  return supportsPopOutPane(session, isBrowserSession, isT3Session);
+  return supportsPopOutPane(session, isBrowserSession);
 }
 
 function supportsPopOutPane(
   session: SidebarSessionItem,
   isBrowserSession: boolean,
-  isT3Session: boolean,
 ): boolean {
   /**
    * CDXC:PanePopOut 2026-05-19-10:15:
    * Sidebar context menus expose pop-out for browser panes and agent terminal
    * sessions. Sleeping sessions dispose their native surface and cannot remain
-   * in a detached window; T3 panes keep the native title-bar model unchanged.
+   * in a detached window.
    */
-  if (session.isSleeping === true || isT3Session) {
+  if (session.isSleeping === true) {
     return false;
   }
 

@@ -12,11 +12,11 @@
  * adapters are pure plumbing rather than translation layers.
  */
 
-/** A machine the dialog can add a project on. t3code calls these "environments". */
+/** A machine the dialog can add a project on. */
 export interface AddProjectMachineOption {
   /**
-   * Optional per-machine "Add project starts in" directory (t3code's
-   * `addProjectBaseDirectory`). Empty/omitted means the browser opens at `~/`.
+   * Optional per-machine "Add project starts in" directory. Empty/omitted means
+   * the browser opens at `~/`.
    */
   readonly addProjectBaseDirectory?: string;
   /** Secondary line in the machine row. Display copy only, never a host. */

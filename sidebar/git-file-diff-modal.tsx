@@ -40,7 +40,7 @@ export function GitFileDiffModal({ draft, isOpen, onClose, theme = "dark-1" }: G
 
   /*
    * CDXC:TitlebarGit 2026-05-25-10:16:
-   * The standalone file diff modal mirrors the t3code diff-panel experience with a sticky file header, monospaced patch rows, and addition/deletion coloring while staying inside Ghostex's existing modal host.
+   * The standalone file diff modal uses a sticky file header, monospaced patch rows, and addition/deletion coloring while staying inside Ghostex's existing modal host.
    */
   return (
     <Dialog
@@ -224,7 +224,7 @@ export function GitFileDiffPanel({
    * Commit review now embeds file diffs in the right side of the widened review modal instead of opening a second modal. Keep diff display controls behind a single overflow menu so Unified, Split, and Hide whitespace do not compete with the selected file path for header space.
    *
    * CDXC:TitlebarGit 2026-06-08-04:07:
-   * Diff display controls should follow t3code's direct icon-control pattern:
+   * Diff display controls use a direct icon-control pattern:
    * one tooltip button toggles unified/split, one toggles line wrapping, and one
    * toggles whitespace-only changes. The commit modal can host those controls
    * in its file header while the standalone file diff keeps the same controls

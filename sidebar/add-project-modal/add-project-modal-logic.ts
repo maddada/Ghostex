@@ -1,6 +1,6 @@
 /*
  * CDXC:AddProject 2026-07-30:
- * Pure presentation logic for the add-project dialog, ported from t3code's
+ * Pure presentation logic for the add-project dialog's
  * CommandPalette (labels, path hints, provider readiness, source ordering,
  * placeholders, empty-state copy, submit-button label). Keeping it out of the
  * component keeps the React file about state transitions and lets Storybook /
@@ -67,7 +67,7 @@ export function addProjectSourceRowDescription(source: AddProjectSourceId): stri
 }
 
 /**
- * t3code `buildAddProjectRemoteSourceReadiness`: `url` is always ready, every
+ * Remote source readiness: `url` is always ready, every
  * provider defaults to unavailable, `auth.status === "unknown"` still counts as
  * ready (the CLI may simply not report auth state).
  */

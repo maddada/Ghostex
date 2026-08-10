@@ -52,6 +52,10 @@ fn automation_help_commands() -> Vec<String> {
 pub fn usage() -> String {
     let session_commands = [
         format_help_command(
+            "tui [--tui-bin path]",
+            "Open the Ghostex terminal TUI",
+        ),
+        format_help_command(
             "sessions | s | ls [--ungrouped|-u] [--json] [--mobile-summary]",
             "List running terminal sessions",
         ),
@@ -212,10 +216,16 @@ pub fn usage() -> String {
     .join("\n");
 
     let automation_commands = {
-        let mut lines = vec![format_help_command(
-            "save-agent --agent-id id --name name --command command",
-            "Unsupported renderer-era agent-button writer; not a project quick action",
-        )];
+        let mut lines = vec![
+            format_help_command(
+                "automations --help",
+                "Show the complete scheduled automation workflow and install its skill",
+            ),
+            format_help_command(
+                "save-agent --agent-id id --name name --command command",
+                "Unsupported renderer-era agent-button writer; not a project quick action",
+            ),
+        ];
         lines.extend(automation_help_commands());
         lines.push(format_help_command(
             "bd <args...>",
@@ -291,6 +301,10 @@ pub fn usage() -> String {
         format_help_command(
             "computer-use --help",
             "Show Ghostex Computer Use skill setup for Cua Driver",
+        ),
+        format_help_command(
+            "cli --help",
+            "Show general Ghostex CLI discovery and agent skill setup",
         ),
         format_help_command(
             "agent-orchestration --help",
@@ -403,7 +417,8 @@ Selectors:
   Titles match exact first, then case-insensitive substring.
 
 Sessions:
-  Running ghostex or gx with no subcommand opens the Ghostex terminal TUI.
+  Running ghostex or gx with no subcommand launches or activates the Ghostex desktop app.
+  ghostex tui and gx tui open the Ghostex terminal TUI.
   gx find and gx f launch bundled zehn for prompt-history search; gx history and gx h open the transcript viewer.
   The TUI shows the attached session, with a top switch button for project/session switching.
   The switcher lists Ghostex projects and sessions in macOS sidebar order and attaches through the existing zmx path.
@@ -421,11 +436,90 @@ Global flags:
   --token-stdin         Read a temporary remote gxserver token from stdin
   --token <token>       Bridge token; legacy remote one-shot only because argv can expose secrets
   --timeout <ms>        Bridge request timeout
+  automations --help    Show focused scheduled automation help
+  cli --help            Show general CLI agent skill setup
   quick-actions --help  Show focused project quick-action help
   server --help         Show server command help
   help                  Show this help
   -h, --help            Show this help
 "
+    )
+}
+
+pub fn cli_usage() -> String {
+    "Ghostex CLI Skill - install the help-first agent workflow for Ghostex commands
+
+Usage:
+  gx cli --help
+  gx cli install-skill [--json]
+
+Agent skill:
+  Use $ghostex-cli for general Ghostex CLI work across projects, sessions,
+  quick actions, automations, UI controls, servers, and diagnostics.
+
+What the skill teaches:
+  Read ghostex --help first, follow focused help where available, inspect state
+  with JSON, target stable ids, perform the requested operation, and verify the
+  resulting state.
+
+Specialized workflows:
+  Use $ghostex-manage-automations, $ghostex-agent-orchestration,
+  $ghostex-manage-beads, $ghostex-embedded-browser-use,
+  $ghostex-browser-use, or $ghostex-computer-use when their domain applies.
+"
+    .to_string()
+}
+
+pub fn automations_usage() -> String {
+    let commands = automation_help_commands().join("\n");
+    format!(
+        r#"Ghostex Automations - manage scheduled project agent work through gxserver
+
+Usage:
+  gx automations --help
+  gx automations install-skill [--json]
+  gx automation-state --path <project-path>
+  gx automation-save --path <project-path> --definition-json '<json>'
+
+Commands:
+{commands}
+
+Recommended workflow:
+  1. Inspect the project with ghostex sessions --json or ghostex state.
+  2. Read automation-state before creating, updating, deleting, or archiving.
+  3. Save new automations disabled unless they should begin scheduling now.
+  4. Re-read automation-state after every mutation.
+  5. After run-now, follow the newest matching run until it leaves queued or running.
+
+Minimal definition JSON:
+  {{"name":"Daily review","agentId":"codex","prompt":"Review the project and report actionable findings.","enabled":false,"schedule":{{"kind":"daily","time":"09:00","timezone":"local"}},"executionMode":{{"kind":"local"}}}}
+
+Schedule shapes:
+  interval  {{"kind":"interval","everyMs":3600000}} (60,000 ms through 365 days)
+  daily     {{"kind":"daily","time":"09:00","timezone":"local"}}
+  weekly    {{"kind":"weekly","days":[1,3,5],"time":"09:00","timezone":"local"}} (days 0-6)
+  cron      {{"kind":"cron","expression":"0 9 * * 1-5","timezone":"local"}}
+
+Execution modes:
+  local     {{"kind":"local"}}
+  worktree  {{"kind":"worktree","setupCommand":"optional command"}}
+  thread    {{"kind":"thread","sessionId":"exact-session-id"}}
+
+Updates:
+  Start from the definition returned by automation-state. Preserve its id,
+  createdAt, project selection, and unchanged fields, then pass the complete
+  edited object to automation-save.
+
+Run results:
+  Automation prompts require a final `AUTOMATION_RESULT: <status>` line.
+  Replace <status> with exactly findings, no_findings, or needs_attention.
+  gxserver records that marker in run history.
+
+Safety:
+  Inspect exact automation and run ids before destructive operations.
+  Use --remove-worktree true only when the exact archived run worktree should be removed.
+  Project automations are separate from the per-session delayed-send and close-after-done controls.
+"#
     )
 }
 
@@ -908,8 +1002,31 @@ mod tests {
         ] {
             assert!(text.contains(section), "missing section {section:?}");
         }
+        assert!(text.contains("automations --help"));
+        assert!(text.contains("cli --help"));
+        assert!(text.contains("tui [--tui-bin path]"));
+        assert!(text.contains("no subcommand launches or activates the Ghostex desktop app"));
+        assert!(!text.contains("gx 2"));
         assert!(text.contains("automation-mark-run-read --run-id id --path path"));
         assert!(text.ends_with("  -h, --help            Show this help\n"));
+    }
+
+    #[test]
+    fn focused_automation_help_documents_skill_and_definition_contract() {
+        let text = automations_usage();
+        assert!(text.contains("gx automations install-skill [--json]"));
+        assert!(text.contains("automation-save --path path --definition-json json"));
+        assert!(text.contains("Minimal definition JSON:"));
+        assert!(text.contains("AUTOMATION_RESULT"));
+        assert!(text.contains("delayed-send"));
+    }
+
+    #[test]
+    fn cli_skill_help_routes_to_specialized_workflows() {
+        let text = cli_usage();
+        assert!(text.contains("gx cli install-skill [--json]"));
+        assert!(text.contains("$ghostex-manage-automations"));
+        assert!(text.contains("$ghostex-agent-orchestration"));
     }
 
     #[test]

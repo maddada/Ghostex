@@ -74,7 +74,6 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES: &[&str] = &[
     "rovo session",
     "rovo dev session",
     "rovodev session",
-    "t3 code session",
 ];
 
 const DEFAULT_SESSION_AGENT_TITLE_NAMES: &[&str] = &[
@@ -95,7 +94,6 @@ const DEFAULT_SESSION_AGENT_TITLE_NAMES: &[&str] = &[
     "pi",
     "qoder",
     "rovo dev",
-    "t3 code",
 ];
 
 const AGENT_STATUS_WORDS: &[&str] = &["done", "error", "idle", "thinking", "working"];

@@ -22,7 +22,6 @@ import {
   type TerminalEngine,
   type TerminalSessionPersistenceProvider,
   type SidebarSessionTag,
-  type T3SessionMetadata,
   type TerminalViewMode,
   type VisibleSessionCount,
   type CreateSessionRecordOptions,
@@ -31,7 +30,6 @@ import { normalizeWorkspaceSessionDisplayIds } from "./grouped-session-workspace
 import { focusVisibleDirectionInSnapshot } from "./session-grid-state-create-focus";
 import { normalizeSessionRecord, reindexSessionsInOrder } from "./session-grid-state-helpers";
 import { reorderGroupSessions } from "./session-order-reorder";
-import { normalizeT3SessionMetadata } from "./t3-session-metadata";
 
 type WorkspaceMutationResult = {
   changed: boolean;
@@ -1421,23 +1419,6 @@ export function setTerminalSessionEngineInSimpleWorkspace(
   });
 }
 
-export function setT3SessionMetadataInSimpleWorkspace(
-  snapshot: GroupedSessionWorkspaceSnapshot,
-  sessionId: string,
-  t3: T3SessionMetadata,
-): WorkspaceMutationResult {
-  return updateSession(snapshot, sessionId, (session) => {
-    if (session.kind !== "t3") {
-      return session;
-    }
-
-    return {
-      ...session,
-      t3: normalizeT3SessionMetadata(t3, session.sessionId),
-    };
-  });
-}
-
 export function setVisibleCountInSimpleWorkspace(
   snapshot: GroupedSessionWorkspaceSnapshot,
   visibleCount: VisibleSessionCount,
@@ -2291,7 +2272,7 @@ function prepareGroupForDisplayIdNormalization(
        * Browser panes are embedded WKWebView workspace sessions, not transient
        * external browser overlays. Keep browser records during workspace
        * normalization so sidebar cards, visible ids, and native split layout
-       * all use the same persistent session list as terminal and T3 panes.
+       * all use the same persistent session list as terminal panes.
        */
       sessions: group.snapshot.sessions,
     },

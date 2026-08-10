@@ -1,13 +1,12 @@
 import {
   IconCopy,
-  IconFileText,
   IconFolder,
   IconInfoCircle,
   IconPencil,
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Command,
   CommandDialog,
@@ -117,10 +116,12 @@ export function StashedPromptsModal({
   const [draftContent, setDraftContent] = useState('');
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [saveError, setSaveError] = useState<string>();
+  const [selectedPromptValue, setSelectedPromptValue] = useState('');
   const latestRequestIdRef = useRef<string | undefined>(undefined);
   const latestSaveRequestIdRef = useRef<string | undefined>(undefined);
   const requestCounterRef = useRef(0);
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const promptListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -233,6 +234,17 @@ export function StashedPromptsModal({
   const normalizedSearchQuery = searchQuery.toLowerCase().replace(/\s+/g, ' ').trim();
   const showAddPrompt =
     normalizedSearchQuery.length === 0 || 'add saved prompt new prompt'.includes(normalizedSearchQuery);
+  const topPromptValue = showAddPrompt ? 'add saved prompt new prompt' : visiblePrompts[0]?.promptId ?? '';
+
+  useLayoutEffect(() => {
+    if (!isOpen || isAddingPrompt) {
+      return;
+    }
+    setSelectedPromptValue(topPromptValue);
+    if (promptListRef.current) {
+      promptListRef.current.scrollTop = 0;
+    }
+  }, [isAddingPrompt, isOpen, searchQuery, topPromptValue]);
 
   const insertPrompt = (prompt: GxserverStashedPrompt) => {
     vscode.postMessage({
@@ -288,10 +300,15 @@ export function StashedPromptsModal({
         stashes the composed text in gxserver. This modal is the recall
         surface: the fourth Ghostex Quick Access tab, listing local prompts
         newest first. Selecting a row inserts the prompt into the launching
-        terminal session without submitting it when that session is available.
+        session's active input surface without submitting it.
       */}
       <TooltipProvider delayDuration={TOOLTIP_DELAY_MS}>
-        <Command className='quick-access-surface ghostex-stashed-prompts-command' shouldFilter={false}>
+        <Command
+          className='quick-access-surface ghostex-stashed-prompts-command'
+          shouldFilter={false}
+          value={selectedPromptValue}
+          onValueChange={setSelectedPromptValue}
+        >
           <QuickAccessHeader activeTab='savedPrompts' />
           {isAddingPrompt ? (
             <div className='ghostex-stashed-prompt-editor'>
@@ -363,7 +380,10 @@ export function StashedPromptsModal({
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
-              <CommandList className='ghostex-command-palette-list ghostex-stashed-prompts-list'>
+              <CommandList
+                className='ghostex-command-palette-list ghostex-stashed-prompts-list'
+                ref={promptListRef}
+              >
                 {prompts !== undefined && !showAddPrompt && visiblePrompts.length === 0 ? (
                   <CommandEmpty>No saved prompts match this search.</CommandEmpty>
                 ) : null}
@@ -475,70 +495,72 @@ function StashedPromptRow({ onDelete, onEdit, onSelect, prompt }: StashedPromptR
 
   return (
     <CommandItem className='ghostex-stashed-prompt-item' onSelect={onSelect} value={prompt.promptId}>
-      <IconFileText aria-hidden='true' />
-      <AppTooltip
-        align='start'
-        content={
-          <div className='ghostex-stashed-prompt-tooltip-body'>
-            {tooltipLines.join('\n')}
-            {tooltipTruncated ? '\n…' : ''}
-          </div>
-        }
-        contentStyle={{ width: 'min(560px, calc(100vw - 32px))' }}
-        side='bottom'
-        sideOffset={4}
-      >
-        <span className='ghostex-command-palette-copy'>
-          <span className='ghostex-command-palette-title'>{stashedPromptTitle(prompt)}</span>
-        </span>
-      </AppTooltip>
-      <span className='ghostex-stashed-prompt-row-meta'>
-        <span className='ghostex-stashed-prompt-project'>
-          <span aria-hidden='true' className='ghostex-stashed-prompt-project-icon'>
-            <StashedPromptProjectIcon prompt={prompt} />
+      <span className='ghostex-stashed-prompt-content'>
+        <span className='ghostex-stashed-prompt-top-line'>
+          <AppTooltip
+            align='start'
+            content={
+              <div className='ghostex-stashed-prompt-tooltip-body'>
+                {tooltipLines.join('\n')}
+                {tooltipTruncated ? '\n…' : ''}
+              </div>
+            }
+            contentStyle={{ width: 'min(560px, calc(100vw - 32px))' }}
+            side='bottom'
+            sideOffset={4}
+          >
+            <span className='ghostex-command-palette-copy'>
+              <span className='ghostex-command-palette-title'>{stashedPromptTitle(prompt)}</span>
+            </span>
+          </AppTooltip>
+          <span className='ghostex-stashed-prompt-actions'>
+            <button
+              aria-label='Copy prompt'
+              className='ghostex-stashed-prompt-action copy-cursor'
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void navigator.clipboard.writeText(prompt.content);
+              }}
+              type='button'
+            >
+              <IconCopy aria-hidden='true' size={14} stroke={1.9} />
+            </button>
+            <button
+              aria-label='Edit prompt'
+              className='ghostex-stashed-prompt-action'
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onEdit();
+              }}
+              type='button'
+            >
+              <IconPencil aria-hidden='true' size={14} stroke={1.9} />
+            </button>
+            <button
+              aria-label='Delete prompt'
+              className='ghostex-stashed-prompt-action'
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+              }}
+              type='button'
+            >
+              <IconTrash aria-hidden='true' size={14} stroke={1.9} />
+            </button>
           </span>
-          <span className='ghostex-stashed-prompt-project-name'>{prompt.projectName ?? 'No project'}</span>
         </span>
-        <span aria-hidden='true'>·</span>
-        <span className='ghostex-stashed-prompt-time'>{relativeTimeLabel(prompt.updatedAt)}</span>
-      </span>
-      <span className='ghostex-stashed-prompt-actions'>
-        <button
-          aria-label='Copy prompt'
-          className='ghostex-stashed-prompt-action copy-cursor'
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void navigator.clipboard.writeText(prompt.content);
-          }}
-          type='button'
-        >
-          <IconCopy aria-hidden='true' size={14} stroke={1.9} />
-        </button>
-        <button
-          aria-label='Edit prompt'
-          className='ghostex-stashed-prompt-action'
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onEdit();
-          }}
-          type='button'
-        >
-          <IconPencil aria-hidden='true' size={14} stroke={1.9} />
-        </button>
-        <button
-          aria-label='Delete prompt'
-          className='ghostex-stashed-prompt-action'
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onDelete();
-          }}
-          type='button'
-        >
-          <IconTrash aria-hidden='true' size={14} stroke={1.9} />
-        </button>
+        <span className='ghostex-stashed-prompt-row-meta'>
+          <span className='ghostex-stashed-prompt-project'>
+            <span aria-hidden='true' className='ghostex-stashed-prompt-project-icon'>
+              <StashedPromptProjectIcon prompt={prompt} />
+            </span>
+            <span className='ghostex-stashed-prompt-project-name'>{prompt.projectName ?? 'No project'}</span>
+          </span>
+          <span className='ghostex-stashed-prompt-time'>{relativeTimeLabel(prompt.updatedAt)}</span>
+        </span>
       </span>
     </CommandItem>
   );

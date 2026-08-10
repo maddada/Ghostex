@@ -75,11 +75,11 @@ use gpui::{
     EntityInputHandler, EventEmitter, ExternalPaths, FocusHandle, Focusable, Font, FontStyle,
     FontWeight, Global, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InteractiveElement,
     IntoElement, KeyContext, KeyDownEvent, KeyUpEvent, Keystroke, LayoutId, Modifiers,
-    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, RenderImage, Rgba, ScrollDelta, ScrollWheelEvent, ShapedLine,
-    SharedString, Size, StrikethroughStyle, Style, Styled, TextAlign, TextRun, UTF16Selection,
-    UnderlineStyle as GpuiUnderlineStyle, Window, canvas, div, fill, outline, point,
-    prelude::FluentBuilder as _, px, size, svg,
+    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, RenderImage, Rgba, ScrollDelta, ScrollWheelEvent,
+    ShapedLine, SharedString, Size, StrikethroughStyle, Style, Styled, TextAlign, TextRun,
+    UTF16Selection, UnderlineStyle as GpuiUnderlineStyle, Window, canvas, div, fill, outline,
+    point, prelude::FluentBuilder as _, px, size, svg,
 };
 use gpui_component::{
     native_menu::NativeMenu,
@@ -93,8 +93,7 @@ use crate::ghostty_vt::{
 use crate::terminal_model::{
     Rgb, SnapshotCell, SnapshotRow, TerminalConfirmCloseBehavior, TerminalEvent, TerminalEventSink,
     TerminalExit, TerminalModel, TerminalPasteDiagnostic, TerminalSnapshot, TerminalSpawnConfig,
-    TerminalTextRow,
-    UnderlineStyle as CellUnderline, WheelRoute,
+    TerminalTextRow, UnderlineStyle as CellUnderline, WheelRoute,
 };
 
 gpui::actions!(
@@ -2322,16 +2321,22 @@ impl Render for TerminalView {
         }
         if self.agent_actions_visible {
             // Agent Actions is always present for the focused agent terminal.
-            // Chat View joins it only after the provider session identity is
-            // known, because that identity is required to resolve a transcript.
+            // Prompts stays directly to its left. Chat View joins the cluster
+            // once the provider session identity can resolve a transcript.
             if self.chat_view_action_visible {
                 root = root.child(terminal_agent_action_button(
                     TerminalAgentAction::ToggleChatView,
-                    1,
+                    2,
                     TerminalAgentActionRow::Cluster,
                     cx,
                 ));
             }
+            root = root.child(terminal_agent_action_button(
+                TerminalAgentAction::StashedPrompts,
+                1,
+                TerminalAgentActionRow::Cluster,
+                cx,
+            ));
             root = root.child(terminal_agent_action_button(
                 TerminalAgentAction::ToggleMenu,
                 0,
@@ -2341,7 +2346,6 @@ impl Render for TerminalView {
             if self.agent_actions_expanded {
                 for (column_from_right, action) in [
                     TerminalAgentAction::AttachPath,
-                    TerminalAgentAction::StashedPrompts,
                     TerminalAgentAction::StashPrompt,
                     TerminalAgentAction::PromptEditor,
                     TerminalAgentAction::FullReload,
@@ -2368,7 +2372,7 @@ impl Render for TerminalView {
 }
 
 /// Which overlay row a button belongs to: the always-visible cluster
-/// ([Chat View][Agent Actions]) or the expanded Agent Actions menu bar below.
+/// ([Chat View][Prompts][Agent Actions]) or the expanded menu bar below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TerminalAgentActionRow {
     Cluster,

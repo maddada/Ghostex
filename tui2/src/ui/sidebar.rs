@@ -1113,7 +1113,6 @@ fn ghostex_agent_color(app: &AppState, session: &crate::ghostex::SessionItem) ->
         "droid" | "factory" | "factory-droid" => app.palette.peach,
         "opencode" | "open-code" => app.palette.teal,
         "pi" | "pi-agent" | "π" => app.palette.green,
-        "t3" | "t3-code" => app.palette.mauve,
         "amp" | "amp-cli" | "codebuddy" | "code-buddy" | "copilot" | "cursor" | "cursor-agent"
         | "cursor-cli" | "github-copilot" | "grok" | "grok-build" | "hermes" | "hermes-agent"
         | "qoder" | "qodercli" | "rovo" | "rovo-dev" | "rovodev" => app.palette.text,

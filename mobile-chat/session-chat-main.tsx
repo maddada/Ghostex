@@ -2,12 +2,14 @@ import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import "./session-chat.css";
 import {
+  normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverSaveSessionChatAttachmentResult,
   type GxserverSaveSessionChatImageResult,
   type GxserverSessionChatSnapshotEvent,
+  type SessionChatTheme,
 } from "../shared/session-chat";
 import { GXSERVER_PROTOCOL_VERSION } from "../shared/gxserver-protocol";
 import { SessionChatView } from "../sidebar/chat/session-chat-view";
@@ -40,6 +42,7 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 
 interface MobileChatConfig {
   agentId?: string;
+  theme?: SessionChatTheme;
 }
 
 interface BridgeResponse {
@@ -316,9 +319,11 @@ document.body.classList.add("vscode-dark", "native-sidebar-body");
 
 function MobileSessionChat({
   agentLabel,
+  theme,
   transport,
 }: {
   agentLabel: string | null;
+  theme: SessionChatTheme;
   transport: SessionChatTransport;
 }) {
   const { canSend, working } = useSyncExternalStore(
@@ -332,6 +337,7 @@ function MobileSessionChat({
         agentLabel={agentLabel}
         canSend={canSend}
         className="gpui-session-chat-view"
+        theme={theme}
         transport={transport}
         working={working}
       />
@@ -343,9 +349,14 @@ const root = createRoot(rootElement);
 void waitForConfig().then((config) => {
   const agentId = config.agentId?.trim() ?? "";
   const agentLabel = agentId ? resolveSessionChatTranscriptAgent(agentId) ?? agentId : null;
+  const theme = normalizeSessionChatTheme(config.theme);
+  document.documentElement.style.colorScheme = theme;
+  document.documentElement.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
+  document.body.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
   root.render(
     <MobileSessionChat
       agentLabel={agentLabel}
+      theme={theme}
       transport={createMobileSessionChatTransport()}
     />,
   );

@@ -1450,8 +1450,8 @@ fn hud_agents_to_automation_agents(hud: &Value) -> Value {
     /*
     CDXC:Automations 2026-07-02-04:10:
     Automation pickers consume this list directly, so it must contain only
-    agents that automations can actually launch. Exclude the embedded T3
-    surface and commandless agents to match the native selector's rules.
+    agents that automations can actually launch. Exclude commandless agents to
+    match the native selector's rules.
     */
     Value::Array(
         hud.get("agents")
@@ -1461,9 +1461,6 @@ fn hud_agents_to_automation_agents(hud: &Value) -> Value {
             .filter_map(|agent| {
                 let object = agent.as_object()?;
                 let agent_id = read_value_text(object, "agentId")?;
-                if agent_id == "t3" {
-                    return None;
-                }
                 let command = read_value_text(object, "command")?;
                 let label = read_value_text(object, "name").unwrap_or_else(|| agent_id.clone());
                 let mut output = Map::new();

@@ -31,6 +31,7 @@ APP_DIR="$REPO_ROOT/gpui/build/linux/Ghostex"
 [[ -x "$APP_DIR/ghostex-gpui-runtime" ]] || { echo "Linux build is missing its internal GPUI runtime" >&2; exit 1; }
 [[ ! -e "$APP_DIR/libcef.so" ]] || { echo "Linux release build still bundles libcef.so" >&2; exit 1; }
 [[ -x "$APP_DIR/gxserver/bin/gxserver" ]] || { echo "Linux build is missing bundled gxserver" >&2; exit 1; }
+[[ -x "$APP_DIR/gxserver/bin/ghostex" ]] || { echo "Linux build is missing bundled ghostex CLI" >&2; exit 1; }
 ON_DEMAND_MANIFEST="$APP_DIR/resources/on-demand-resources.json"
 CEF_COMPONENT_VERSION="$(node -e '
 const fs = require("node:fs");
@@ -58,9 +59,10 @@ cp "$REPO_ROOT/gpui/resources/AppIcon.appiconset/icon_256x256.png" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'
 #!/usr/bin/env bash
-exec /opt/ghostex/Ghostex "$@"
+exec /opt/ghostex/gxserver/bin/ghostex "$@"
 EOF
 chmod 755 "$PACKAGE_ROOT/usr/bin/ghostex"
+ln -s ghostex "$PACKAGE_ROOT/usr/bin/gx"
 cat >"$PACKAGE_ROOT/usr/share/applications/ghostex.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
@@ -82,7 +84,7 @@ Section: devel
 Priority: optional
 Architecture: amd64
 Maintainer: Ghostex <support@ghostex.app>
-Depends: libasound2, libatk1.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libexpat1, libfontconfig1, libgbm1, libglib2.0-0, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libx11-6, libxcb1, libxcomposite1, libxdamage1, libxext6, libxfixes3, libxkbcommon0, libxrandr2
+Depends: libasound2, libatk1.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libexpat1, libfontconfig1, libgbm1, libglib2.0-0, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libx11-6, libxcb1, libxcomposite1, libxdamage1, libxext6, libxfixes3, libxkbcommon0, libxrandr2, wmctrl
 Description: Ghostex desktop application
  Ghostex provides native AI development workspaces, terminals, and project tools.
 EOF
@@ -104,7 +106,7 @@ License: Proprietary
 URL: https://ghostex.app
 Source0: ghostex-$VERSION.tar.gz
 BuildArch: x86_64
-Requires: alsa-lib, atk, cairo, cups-libs, dbus-libs, expat, fontconfig, gtk3, libX11, libXcomposite, libXdamage, libXext, libXfixes, libXrandr, libdrm, libxcb, mesa-libgbm, nspr, nss, pango
+Requires: alsa-lib, atk, cairo, cups-libs, dbus-libs, expat, fontconfig, gtk3, libX11, libXcomposite, libXdamage, libXext, libXfixes, libXrandr, libdrm, libxcb, mesa-libgbm, nspr, nss, pango, wmctrl
 
 %description
 Ghostex provides native AI development workspaces, terminals, and project tools.
@@ -120,6 +122,7 @@ cp -a %{_builddir}/ghostex-root/. %{buildroot}/
 %files
 /opt/ghostex
 /usr/bin/ghostex
+/usr/bin/gx
 /usr/share/applications/ghostex.desktop
 /usr/share/icons/hicolor/256x256/apps/ghostex.png
 EOF

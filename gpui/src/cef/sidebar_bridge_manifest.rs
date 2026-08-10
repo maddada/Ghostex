@@ -14,8 +14,6 @@ pub(crate) enum SidebarBridgeFunctionId {
     GxserverPresentationFocusState,
     CreateProjectTerminal,
     WorkspaceTerminalFocus,
-    T3SessionFocus,
-    T3SessionCreate,
     WorkspaceTerminalRenameCommand,
     WorkspaceTerminalEnter,
     WorkspaceTerminalLifecycleResult,
@@ -26,7 +24,6 @@ pub(crate) enum SidebarBridgeFunctionId {
     TitlebarGitMenuState,
     OpenBrowserUrl,
     BrowserTabFocus,
-    T3BrowserAccessRequest,
     ProjectBoardConversationResponse,
 }
 
@@ -96,8 +93,6 @@ const SIDEBAR_CREATE_PROJECT_TERMINAL_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.createProjectTerminal";
 const SIDEBAR_WORKSPACE_TERMINAL_FOCUS_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.workspaceTerminalFocus";
-const SIDEBAR_T3_SESSION_FOCUS_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.t3SessionFocus";
-const SIDEBAR_T3_SESSION_CREATE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.t3SessionCreate";
 const SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.workspaceTerminalRenameCommand";
 const SIDEBAR_WORKSPACE_TERMINAL_ENTER_PROCESS_MESSAGE_NAME: &str =
@@ -114,8 +109,6 @@ const SIDEBAR_TITLEBAR_GIT_MENU_STATE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.titlebarGitMenuState";
 const SIDEBAR_OPEN_BROWSER_URL_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.openBrowserUrl";
 const SIDEBAR_BROWSER_TAB_FOCUS_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.browserTabFocus";
-const SIDEBAR_T3_BROWSER_ACCESS_REQUEST_PROCESS_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.t3SessionBrowserAccessRequest";
 const SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.projectBoardConversationResponse";
 
@@ -135,8 +128,6 @@ const SIDEBAR_GHOSTEX_HOTKEY_ACTION_JS_FUNCTION: &str = "postGhostexHotkeyAction
 const SIDEBAR_GXSERVER_FOCUS_STATE_JS_FUNCTION: &str = "postGxserverPresentationFocusState";
 const SIDEBAR_CREATE_PROJECT_TERMINAL_JS_FUNCTION: &str = "postCreateProjectTerminal";
 const SIDEBAR_WORKSPACE_TERMINAL_FOCUS_JS_FUNCTION: &str = "postWorkspaceTerminalFocus";
-const SIDEBAR_T3_SESSION_FOCUS_JS_FUNCTION: &str = "postT3SessionFocus";
-const SIDEBAR_T3_SESSION_CREATE_JS_FUNCTION: &str = "postT3SessionCreate";
 const SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_JS_FUNCTION: &str =
     "postWorkspaceTerminalRenameCommand";
 const SIDEBAR_WORKSPACE_TERMINAL_ENTER_JS_FUNCTION: &str = "postWorkspaceTerminalEnter";
@@ -149,7 +140,6 @@ const SIDEBAR_GLOBAL_ACTIONS_JS_FUNCTION: &str = "postGlobalActions";
 const SIDEBAR_TITLEBAR_GIT_MENU_STATE_JS_FUNCTION: &str = "postTitlebarGitMenuState";
 const SIDEBAR_OPEN_BROWSER_URL_JS_FUNCTION: &str = "postOpenBrowserUrl";
 const SIDEBAR_BROWSER_TAB_FOCUS_JS_FUNCTION: &str = "postBrowserTabFocus";
-const SIDEBAR_T3_BROWSER_ACCESS_REQUEST_JS_FUNCTION: &str = "postT3SessionBrowserAccessRequest";
 const SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_JS_FUNCTION: &str =
     "postProjectBoardConversationResponse";
 
@@ -214,7 +204,7 @@ The sidebar CEF post-function allowlist must have one Rust manifest shared by ma
 CDXC:GPUICefBridgeOwnership 2026-06-29-14:45:
 GPUI CEF bridge names, payload budgets, and allowed app-modal/project-workarea surfaces live in this Rust manifest so the macOS browser process and helper renderer consume one ownership point. Keep sidebar, project-workarea, and app-modal handlers surface-specific; this manifest is an allowlist, not a generic IPC bus.
 */
-pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 28] = [
+pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 25] = [
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::ActiveProjectContext,
         js_function_name: SIDEBAR_PROJECT_CONTEXT_JS_FUNCTION,
@@ -286,16 +276,6 @@ pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 28] 
         process_message_name: SIDEBAR_WORKSPACE_TERMINAL_FOCUS_PROCESS_MESSAGE_NAME,
     },
     SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::T3SessionFocus,
-        js_function_name: SIDEBAR_T3_SESSION_FOCUS_JS_FUNCTION,
-        process_message_name: SIDEBAR_T3_SESSION_FOCUS_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::T3SessionCreate,
-        js_function_name: SIDEBAR_T3_SESSION_CREATE_JS_FUNCTION,
-        process_message_name: SIDEBAR_T3_SESSION_CREATE_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::WorkspaceTerminalRenameCommand,
         js_function_name: SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_JS_FUNCTION,
         process_message_name: SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_PROCESS_MESSAGE_NAME,
@@ -344,11 +324,6 @@ pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 28] 
         id: SidebarBridgeFunctionId::BrowserTabFocus,
         js_function_name: SIDEBAR_BROWSER_TAB_FOCUS_JS_FUNCTION,
         process_message_name: SIDEBAR_BROWSER_TAB_FOCUS_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::T3BrowserAccessRequest,
-        js_function_name: SIDEBAR_T3_BROWSER_ACCESS_REQUEST_JS_FUNCTION,
-        process_message_name: SIDEBAR_T3_BROWSER_ACCESS_REQUEST_PROCESS_MESSAGE_NAME,
     },
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::ProjectBoardConversationResponse,

@@ -36,7 +36,6 @@ export type NativeTerminalTitleBarAction =
   | "expandCommandsPanel"
   | "fork"
   | "mergeAllTabs"
-  | "newT3Chat"
   | "newTerminal"
   | "openBrowser"
   | "pinCommandsPanel"
@@ -95,7 +94,7 @@ export type TitlebarResourceSession = {
   lastInteractionAt?: string;
   projectId?: string;
   sessionId: string;
-  sessionKind?: "browser" | "terminal" | "t3";
+  sessionKind?: "browser" | "terminal";
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
   terminalTitle?: string;
@@ -209,24 +208,6 @@ export type NativeGhosttyHostCommand =
   | {
       sessionId: string;
       type: "focusWebPane";
-    }
-  | {
-      cwd: string;
-      type: "startT3CodeRuntime";
-    }
-  | {
-      /**
-       * CDXC:T3Code 2026-06-06-05:13:
-       * This message remains for protocol compatibility only. Native managed T3
-       * web panes now own provider lifetime, so stale sidebar/gxserver projection
-       * cannot stop t3code while an embedded T3 tab is still open.
-       */
-      runtimeCwd?: string;
-      runningSessionIds: string[];
-      type: "setT3CodeRuntimeSessionState";
-    }
-  | {
-      type: "stopT3CodeRuntime";
     }
   | {
       /**
@@ -853,16 +834,6 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:T3CodeStartup 2026-06-09-07:07:
-       * Native reports managed T3 launch/auth failures separately so the app can
-       * show a short support-ready toast while the pane leaves the loading loop.
-       */
-      message: string;
-      sessionId?: string;
-      type: "t3RuntimeStartFailed";
-    }
-  | {
-      /**
        * CDXC:PortlessIntegration 2026-06-23-00:15:
        * Native Portless admin results are structured and sanitized. React gets
        * only stable result fields, never raw process streams, resource paths,
@@ -878,16 +849,6 @@ export type NativeGhosttyHostEvent =
       status: string;
       type: "portlessAdminResult";
     }
-  | {
-      environmentId: string;
-      projectId: string;
-      serverOrigin: string;
-      sessionId: string;
-      threadId: string;
-      type: "t3ThreadReady";
-      workspaceRoot: string;
-    }
-  | { activity: "attention" | "idle" | "working"; sessionId: string; type: "t3ActivityChanged" }
   | {
       protocolVersion: typeof NATIVE_GHOSTTY_HOST_PROTOCOL_VERSION;
       type: "hostReady";

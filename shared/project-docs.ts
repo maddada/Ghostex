@@ -30,6 +30,14 @@ export type ProjectDocsGitBaseline = {
 
 export type ProjectDocsFilePreview = {
   content?: string;
+  /**
+   * CDXC:DocsRootAdditive 2026-08-09:
+   * `path` is the routing address a request must send back; `displayPath` is
+   * the same file named the way the Docs tree names it, so a file under a
+   * mounted Docs directory reads as `<mount name>/...` instead of the reserved
+   * routing segment. Absent for hosts that predate it — fall back to `path`.
+   */
+  displayPath?: string;
   error?: string;
   gitBaseline?: ProjectDocsGitBaseline;
   kind: "text" | "unsupported";

@@ -17,7 +17,406 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* The chat palette is intentionally scoped to the conversation. The
+   surrounding Ghostex shell remains dark even when chat content is light. */
+.ghostex-session-chat-scope[data-chat-theme="light"],
+body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
+  color-scheme: light;
+  --background: oklch(99.2% 0 0);
+  --foreground: oklch(27.4% 0.006 286.033);
+  --card: oklch(100% 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(21% 0.006 285.885);
+  --primary-foreground: oklch(98.5% 0 0);
+  --secondary: oklch(96.7% 0.001 286.375);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(98.5% 0 0);
+  --muted-foreground: oklch(55.2% 0.016 285.938);
+  --accent: oklch(96.7% 0.001 286.375);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(57.7% 0.245 27.325);
+  --border: oklch(92% 0.004 286.32);
+  --input: var(--border);
+  --ring: oklch(70.5% 0.015 286.067);
+  --info-foreground: oklch(48.8% 0.243 264.376);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"],
+body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
+  color-scheme: dark;
+  --background: #111111;
+  --foreground: #fcfcfc;
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: oklch(20.5% 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(92.2% 0 0);
+  --primary-foreground: oklch(20.5% 0 0);
+  --secondary: color-mix(in srgb, #fff 4%, transparent);
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, #fff 4%, transparent);
+  --muted-foreground: #9e9e9e;
+  --accent: color-mix(in srgb, #fff 4%, transparent);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(70.4% 0.191 22.216);
+  --border: color-mix(in srgb, #fff 6%, transparent);
+  --input: color-mix(in srgb, #fff 8%, transparent);
+  --ring: oklch(55.6% 0 0);
+  --info-foreground: oklch(70.7% 0.165 254.624);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* --- Conversation blocks ------------------------------------------------- */
+
+.ghostex-chat-user-bubble > [data-slot="bubble-content"] {
+  background: var(--accent);
+  border-radius: 1rem;
+  color: var(--foreground);
+  padding: 0.75rem;
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"]
+  .ghostex-chat-user-bubble
+  > [data-slot="bubble-content"] {
+  background: #1d1d1d;
+  border-radius: 1rem;
+  color: #fcfcfc;
+  padding: 0.75rem;
+}
+
+.ghostex-chat-user-bubble .ghostex-chat-markdown p,
+.ghostex-chat-user-bubble .ghostex-chat-markdown li,
+.ghostex-chat-user-bubble .ghostex-chat-markdown blockquote {
+  white-space: pre-wrap;
+}
+
+.ghostex-chat-agent-message {
+  align-items: start;
+  column-gap: 0.625rem;
+  display: grid;
+  grid-template-columns: 0.375rem minmax(0, 1fr);
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-chat-agent-message::before,
+.ghostex-chat-thinking-line::before {
+  content: "•";
+  line-height: inherit;
+}
+
+.ghostex-chat-thinking-row {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.375rem + 7px);
+  line-height: 1.5;
+  min-width: 0;
+  padding: 0 0 0.375rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  width: 100%;
+}
+
+.ghostex-chat-thinking-line {
+  align-items: start;
+  column-gap: 0.625rem;
+  display: grid;
+  grid-template-columns: 0.375rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.ghostex-chat-completed-turn,
+.ghostex-chat-completed-work {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-chat-completed-work {
+  gap: 0.625rem;
+  padding: 0 0 1rem;
+}
+
+.ghostex-chat-completed-work-trigger {
+  align-items: center;
+  align-self: flex-start;
+  background: transparent;
+  border: 0;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  gap: 0.375rem;
+  height: auto;
+  line-height: 1.25rem;
+  padding: 0;
+}
+
+.ghostex-chat-completed-work-trigger:not(:disabled) {
+  cursor: pointer;
+}
+
+.ghostex-chat-completed-work-trigger svg {
+  height: 0.875rem;
+  transition: transform 150ms ease;
+  width: 0.875rem;
+}
+
+.ghostex-chat-completed-work-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-chat-expansion {
+  align-items: stretch;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-chat-expansion-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The button itself is the full five-pixel hit target. Its centered pseudo
+   element is the visible two-pixel rail, so no invisible overlap reaches into
+   the expanded content beside it. */
+.ghostex-chat-expansion-rail {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  flex: 0 0 5px;
+  min-width: 5px;
+  padding: 0;
+  position: relative;
+  width: 5px;
+}
+
+.ghostex-chat-expansion-rail::before {
+  background: #1f1f1f;
+  bottom: 0;
+  content: "";
+  left: 50%;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  transition: background-color 150ms ease;
+  width: 2px;
+}
+
+.ghostex-chat-expansion-rail:not(:disabled) {
+  cursor: pointer;
+}
+
+.ghostex-chat-expansion-rail:hover::before,
+.ghostex-chat-expansion-rail:focus-visible::before {
+  background: #ffffff;
+}
+
+.ghostex-chat-tool-run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-chat-work-row {
+  border-radius: 0.375rem;
+  min-width: 0;
+  padding: 0.125rem;
+  width: 100%;
+}
+
+.ghostex-chat-work-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--muted-foreground);
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.375rem;
+  line-height: 1.25rem;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.ghostex-chat-work-trigger:not(:disabled) {
+  cursor: pointer;
+}
+
+.ghostex-chat-work-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.25rem;
+  height: 1.25rem;
+  justify-content: center;
+  width: 1.25rem;
+}
+
+.ghostex-chat-work-icon svg {
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.ghostex-chat-work-heading {
+  color: var(--muted-foreground);
+  flex: 0 0 auto;
+  font-weight: 400;
+}
+
+.ghostex-chat-work-preview {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-weight: 400;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-work-chevron {
+  flex: 0 0 auto;
+  height: 0.75rem;
+  transition: transform 150ms ease;
+  width: 0.75rem;
+}
+
+.ghostex-chat-work-detail {
+  margin-inline-start: 1.75rem;
+  margin-top: 0.25rem;
+  padding-top: 0.125rem;
+}
+
+.ghostex-chat-work-detail .ghostex-chat-markdown,
+.ghostex-chat-tool-body {
+  font-size: 0.6875rem;
+  line-height: 1.625;
+}
+
+.ghostex-chat-tool-body-group + .ghostex-chat-tool-body-group {
+  margin-top: 0.5rem;
+}
+
+.ghostex-chat-tool-body-label {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.ghostex-chat-tool-body {
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.5rem 0.625rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ghostex-chat-tool-body.is-error,
+.ghostex-chat-work-row.is-error .ghostex-chat-work-heading {
+  color: var(--destructive);
+}
+
+.ghostex-chat-file-edit {
+  background: var(--secondary);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 1rem;
+  padding: 0.5rem;
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-file-edit {
+  background: color-mix(in srgb, var(--input) 32%, transparent);
+  border-color: transparent;
+}
+
+.ghostex-chat-diff {
+  border-radius: 0.625rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+
+.ghostex-chat-diff-line {
+  display: flex;
+  min-width: max-content;
+  white-space: pre;
+}
+
+.ghostex-chat-diff-line.is-add {
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  color: #22c55e;
+}
+
+.ghostex-chat-diff-line.is-del {
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: #f87171;
+}
+
+.ghostex-chat-diff-line.is-meta {
+  color: var(--muted-foreground);
+}
+
+.ghostex-chat-diff-sign {
+  flex: 0 0 1rem;
+  user-select: none;
+}
+
 /* --- Composer -------------------------------------------------------------- */
+
+.ghostex-chat-scroll-bottom-button,
+.ghostex-chat-scroll-bottom-button:not(:disabled):hover {
+  background-color: #111111;
+  border-radius: 9999px;
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-composer {
+  background: #242424;
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"]
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button),
+body[data-session-chat-theme="dark"]
+  .ghostex-session-chat-popup
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button) {
+  background-color: transparent;
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"]
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not(:disabled):hover,
+body[data-session-chat-theme="dark"]
+  .ghostex-session-chat-popup
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not(:disabled):hover {
+  background-color: #333333;
+}
+
+.ghostex-chat-footer-control {
+  border-radius: 9999px;
+}
+
+.ghostex-chat-footer-control:not(:disabled):hover {
+  background: var(--muted);
+}
 
 /* The textarea backend uses field-sizing:content so it grows with the draft.
    That intrinsic sizing also applies horizontally, so a pasted line with no
@@ -76,7 +475,13 @@
   scrollbar-color: color-mix(in srgb, var(--foreground) 30%, transparent) transparent;
 }
 
-/* --- Markdown -------------------------------------------------------------- */
+/* --- Markdown ------------------------------------------------------------- */
+
+.ghostex-chat-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 .ghostex-chat-markdown > :first-child {
   margin-top: 0;
@@ -91,13 +496,51 @@
 .ghostex-chat-markdown ol,
 .ghostex-chat-markdown blockquote,
 .ghostex-chat-markdown pre,
-.ghostex-chat-markdown table {
-  margin: 0.5rem 0;
+.ghostex-chat-markdown table,
+.ghostex-chat-markdown .ghostex-chat-markdown-codeblock {
+  margin: 0.65rem 0;
 }
 
 .ghostex-chat-markdown ul,
 .ghostex-chat-markdown ol {
   padding-left: 1.25rem;
+}
+
+.ghostex-chat-markdown ul {
+  list-style: disc;
+}
+
+.ghostex-chat-markdown ol {
+  list-style: decimal;
+}
+
+.ghostex-chat-markdown ul ul {
+  list-style: circle;
+}
+
+.ghostex-chat-markdown ul ul ul {
+  list-style: square;
+}
+
+.ghostex-chat-markdown ol ol {
+  list-style: lower-alpha;
+}
+
+.ghostex-chat-markdown ol ol ol {
+  list-style: lower-roman;
+}
+
+.ghostex-chat-markdown li + li {
+  margin-top: 0.25rem;
+}
+
+.ghostex-chat-markdown li.task-list-item {
+  list-style: none;
+}
+
+.ghostex-chat-markdown input[type="checkbox"] {
+  margin: 0 0.375rem 0 -1.1rem;
+  vertical-align: -0.1em;
 }
 
 .ghostex-chat-markdown h1,
@@ -106,26 +549,58 @@
 .ghostex-chat-markdown h4,
 .ghostex-chat-markdown h5,
 .ghostex-chat-markdown h6 {
-  font-size: 0.9375rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
-  margin: 0.875rem 0 0.375rem;
+  margin: 1.25rem 0 0.5rem;
 }
 
-.ghostex-chat-markdown code {
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  border-radius: 3px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: 0.8125em;
-  padding: 0.0625rem 0.25rem;
-}
+.ghostex-chat-markdown h1 { font-size: 1.25rem; }
+.ghostex-chat-markdown h2 { font-size: 1.125rem; }
+.ghostex-chat-markdown h3 { font-size: 1rem; }
+.ghostex-chat-markdown h4,
+.ghostex-chat-markdown h5,
+.ghostex-chat-markdown h6 { font-size: 0.875rem; }
+.ghostex-chat-markdown h6 { color: var(--muted-foreground); }
 
-.ghostex-chat-markdown pre {
-  background: color-mix(in srgb, currentColor 6%, transparent);
+.ghostex-chat-markdown :not(pre) > code {
+  background: var(--muted);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 0.375rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.ghostex-chat-markdown-codeblock {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ghostex-chat-markdown-codeblock-header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  display: flex;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.6875rem;
+  justify-content: space-between;
+  min-height: 2rem;
+  padding: 0.125rem 0.375rem 0.125rem 0.75rem;
+  text-transform: lowercase;
+}
+
+.ghostex-chat-markdown .ghostex-chat-markdown-codeblock pre {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  max-width: 100%;
   overflow-x: auto;
-  padding: 0.625rem 0.75rem;
+  padding: 0.8rem 0.9rem;
+  scrollbar-width: thin;
 }
 
 .ghostex-chat-markdown pre code {
@@ -136,13 +611,20 @@
 .ghostex-chat-markdown blockquote {
   border-left: 2px solid var(--border);
   color: var(--muted-foreground);
-  padding-left: 0.75rem;
+  padding-left: 0.8rem;
 }
 
 .ghostex-chat-markdown a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: var(--info-foreground);
+  text-decoration: none;
+}
+
+.ghostex-chat-markdown a:hover,
+.ghostex-chat-markdown a:focus-visible {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+  background-size: 4px 2px;
 }
 
 /* Image links render as inline buttons that open the centered overlay. */
@@ -206,13 +688,20 @@
 .ghostex-chat-markdown .ghostex-chat-file-link {
   background: none;
   border: none;
-  color: inherit;
+  color: var(--info-foreground);
   cursor: pointer;
   font: inherit;
   padding: 0;
   text-align: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
+}
+
+.ghostex-chat-markdown .ghostex-chat-file-link:hover,
+.ghostex-chat-markdown .ghostex-chat-file-link:focus-visible {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+  background-size: 4px 2px;
 }
 
 .ghostex-chat-markdown .ghostex-chat-image-link {
@@ -229,13 +718,22 @@
 
 .ghostex-chat-markdown table {
   border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  min-width: max-content;
+  overflow-x: auto;
+  width: 100%;
 }
 
 .ghostex-chat-markdown th,
 .ghostex-chat-markdown td {
-  border: 1px solid var(--border);
-  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.75rem;
   text-align: left;
+}
+
+.ghostex-chat-markdown th {
+  font-weight: 600;
 }
 
 /* --- Empty states ----------------------------------------------------------- */
@@ -303,11 +801,4 @@
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.25;
-}
-
-.ghostex-chat-new-session-agent-name {
-  text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
-  text-decoration-line: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
 }

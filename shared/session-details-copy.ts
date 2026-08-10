@@ -86,9 +86,6 @@ function pickFirstNonEmpty(...values: Array<string | undefined>): string {
 }
 
 function formatSessionKind(session: SidebarSessionItem): string {
-  if (session.sessionKind === "t3") {
-    return "T3";
-  }
   return formatIdentifier(session.sessionKind ?? session.kind ?? "terminal");
 }
 

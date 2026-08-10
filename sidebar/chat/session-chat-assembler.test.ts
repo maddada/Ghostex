@@ -162,7 +162,7 @@ describe("incremental assembler invariant (§6.4)", () => {
     const base = [
       msg("t1", { role: "user", timestamp: 10 }),
       msg("t2", { timestamp: 20 }),
-      msg("t3", {
+      msg("third", {
         blocks: [{ input: {}, name: "Read", type: "tool-call" }],
         timestamp: 30,
       }),

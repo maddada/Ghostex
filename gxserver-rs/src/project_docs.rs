@@ -27,6 +27,7 @@ const GIT_BASELINE_MAX_BYTES: usize = 1024 * 1024;
 const RESOURCE_MAX_BYTES: u64 = 12 * 1024 * 1024;
 const SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 const DOCS_RELATIVE_PATH: &str = "docs";
+const BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] = &[DOCS_RELATIVE_PATH, "artifacts", "ai"];
 /*
 CDXC:DocsRootAdditive 2026-08-09:
 The reserved first path segment that addresses the mounted Docs directory.
@@ -546,10 +547,11 @@ fn additional_docs_folder_relative_paths(value: &str, docs_is_implicit_root: boo
             continue;
         }
         let folder = parts.join("/");
-        if docs_is_implicit_root && folder == DOCS_RELATIVE_PATH {
+        let key = folder.to_lowercase();
+        if docs_is_implicit_root && BUILT_IN_DOCS_RELATIVE_PATHS.contains(&key.as_str()) {
             continue;
         }
-        if seen.insert(folder.to_lowercase()) {
+        if seen.insert(key) {
             folders.push(folder);
         }
     }
@@ -558,7 +560,10 @@ fn additional_docs_folder_relative_paths(value: &str, docs_is_implicit_root: boo
 
 /// The project root's scan roots: `docs` plus each configured Docs folder.
 fn scan_roots(additional_docs_folders: &str) -> Vec<String> {
-    let mut roots = vec![DOCS_RELATIVE_PATH.to_string()];
+    let mut roots = BUILT_IN_DOCS_RELATIVE_PATHS
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
     roots.extend(additional_docs_folder_relative_paths(
         additional_docs_folders,
         true,
@@ -1056,6 +1061,7 @@ fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<
             "File is too large to preview.",
             name,
             &path.outer,
+            &path.display(context),
             &metadata,
         ));
     }
@@ -1065,6 +1071,7 @@ fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<
             "Binary files are not previewed.",
             name,
             &path.outer,
+            &path.display(context),
             &metadata,
         ));
     }
@@ -1073,11 +1080,19 @@ fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<
             "This file is not valid UTF-8 text.",
             name,
             &path.outer,
+            &path.display(context),
             &metadata,
         ));
     };
     Ok(json!({
         "content": content,
+        /*
+        CDXC:DocsRootAdditive 2026-08-09:
+        `path` stays the routing address the page must send back; `displayPath`
+        is the same file named the way the tree names it, so the header never
+        shows the reserved mount segment. Mirrors gpui/src/main.rs.
+        */
+        "displayPath": path.display(context),
         "gitBaseline": git_baseline(path.root, &target, &path.inner),
         "kind": "text",
         "modifiedAt": modified_at(&metadata),
@@ -1107,8 +1122,15 @@ fn project_file_metadata(context: DocsContext<'_>, path: Option<&str>) -> Result
     }))
 }
 
-fn unsupported_preview(error: &str, name: &str, path: &str, metadata: &fs::Metadata) -> Value {
+fn unsupported_preview(
+    error: &str,
+    name: &str,
+    path: &str,
+    display_path: &str,
+    metadata: &fs::Metadata,
+) -> Value {
     json!({
+        "displayPath": display_path,
         "error": error,
         "kind": "unsupported",
         "modifiedAt": modified_at(metadata),

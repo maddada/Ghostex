@@ -37,7 +37,7 @@ const EXPECTED_MIGRATIONS = [
   "0008_remove_retired_session_type_tags",
   "0009_remove_legacy_zmux_chat_projects",
   "0010_portless_persistence_model",
-  "0011_t3_session_kind",
+  "0011_session_kind_constraint",
 ];
 const EXPECTED_CAPABILITIES = [
   "health",

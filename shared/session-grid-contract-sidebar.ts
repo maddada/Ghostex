@@ -162,12 +162,6 @@ export type SidebarGhostexCliStatusMessage = {
    * not Ghostex's Accessibility grant. Carry both Accessibility and Screen
    * Recording from `cua-driver check_permissions` in the setup status payload.
    *
-   * CDXC:T3CodePackaging 2026-06-06-05:50:
-   * Settings -> Integrations must expose whether T3 Code is actually bundled in
-   * this app build, because T3 panes are a core visible feature and missing
-   * packaged runtime state should be repairable before users hit a web-pane
-   * network-style startup error.
-   *
    * CDXC:ContributorStart 2026-06-22-23:23:
    * `unavailable` means an optional local-build resource was intentionally not
    * bundled, while `missing` means a strict or release-shaped build is broken.
@@ -197,9 +191,14 @@ export type SidebarGhostexCliStatusMessage = {
   cuaDriverAccessibilityPermissionGranted?: boolean;
   cuaAppInstalled: boolean;
   cuaDriverInstalled: boolean;
+  /** True only when this host can install and update Cua Driver in-app. */
+  cuaDriverManagedUpdatesSupported?: boolean;
+  cuaDriverLatestVersion?: string;
   cuaDriverPermissionDetail?: string;
   cuaDriverPath?: string;
   cuaDriverScreenRecordingPermissionGranted?: boolean;
+  cuaDriverUpdateAvailable?: boolean;
+  cuaDriverVersion?: string;
   detail: string;
   generatedAt: string;
   ghostexPath?: string;
@@ -207,9 +206,6 @@ export type SidebarGhostexCliStatusMessage = {
   gxPath?: string;
   gxUsable: boolean;
   installed: boolean;
-  t3RuntimeDetail?: string;
-  t3RuntimeInstalled?: boolean;
-  t3RuntimeSource?: "bundled" | "development" | "missing" | "unavailable";
   type: "ghostexCliStatus";
 };
 
@@ -325,7 +321,7 @@ export type SidebarSessionLifecycleCapabilities = {
 
 export type SidebarSessionItem = {
   kind?: "browser" | "workspace";
-  sessionKind?: "browser" | "terminal" | "t3";
+  sessionKind?: "browser" | "terminal";
   activity: "idle" | "working" | "attention";
   activityLabel?: string;
   agentIcon?: SidebarAgentIcon;
@@ -610,7 +606,7 @@ export type SidebarSessionGroup = {
     icon?: WorkspaceProjectIcon;
     /**
      * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
-     * The icon the project's OWN repository ships — its `t3.json` `iconPath`,
+     * The icon the project's own repository ships through standard web metadata,
      * its favicon, or the icon its HTML entry point declares — discovered by
      * gxserver and carried as a `data:` URL
      * (`GxserverPresentationProject.discoveredIconDataUrl`).
@@ -1064,32 +1060,7 @@ export type SidebarDaemonSessionsStateMessage = {
   daemon?: SidebarDaemonInfo;
   errorMessage?: string;
   sessions: SidebarDaemonSessionItem[];
-  t3Server?: SidebarT3ServerInfo;
-  t3Sessions: SidebarT3SessionItem[];
   type: "daemonSessionsState";
-};
-
-export type SidebarT3ServerInfo = {
-  pid: number;
-  port: number;
-  startedAt?: string;
-};
-
-export type SidebarT3SessionItem = {
-  activity: "idle" | "working" | "attention";
-  detail?: string;
-  isCurrentWorkspace: boolean;
-  isFocused: boolean;
-  isLocalOnly?: boolean;
-  isRunning: boolean;
-  isSleeping: boolean;
-  lastInteractionAt?: string;
-  ownership?: "local";
-  sessionId: string;
-  threadId?: string;
-  title?: string;
-  workspaceId: string;
-  workspaceRoot?: string;
 };
 
 export type SidebarPromptGitCommitMessage = {
@@ -1137,19 +1108,6 @@ export type SidebarGitPreferenceScope = {
   projectId?: string;
 };
 
-export type SidebarT3BrowserAccessMode = "external" | "local-network" | "local-only" | "tailscale";
-
-export type SidebarShowT3BrowserAccessMessage = {
-  endpointUrl: string;
-  localUrl: string;
-  mode: SidebarT3BrowserAccessMode;
-  note: string;
-  sessionId: string;
-  sessionTitle: string;
-  tailscaleEnabled: boolean;
-  type: "showT3BrowserAccess";
-};
-
 export type SidebarGhostexFolderStat = {
   name: string;
   path: string;
@@ -1172,6 +1130,22 @@ export type SidebarGhostexFolderStatsMessage = {
   type: "ghostexFolderStats";
 };
 
+export type SidebarPluginSettingsItem = {
+  canReinstall: boolean;
+  errorMessage?: string;
+  id: "code" | "kanban" | "cef";
+  sizeBytes: number;
+  status: "installed" | "notInstalled" | "checking" | "downloading" | "verifying" | "installing" | "finishing" | "failed";
+  statusLabel: string;
+  version: string;
+};
+
+/** Native component-store state shown by Settings -> Plugins. */
+export type SidebarPluginSettingsStatusMessage = {
+  plugins: SidebarPluginSettingsItem[];
+  type: "pluginSettingsStatus";
+};
+
 /**
  * CDXC:AppModals 2026-04-28-16:18
  * User-input flows must not use VS Code input boxes, quick picks, or modal
@@ -1183,12 +1157,6 @@ export type SidebarShowSessionRenameModalMessage = {
   sessionAgentIcon?: string;
   sessionId: string;
   type: "showSessionRenameModal";
-};
-
-export type SidebarShowT3ThreadIdModalMessage = {
-  currentThreadId: string;
-  sessionId: string;
-  type: "showT3ThreadIdModal";
 };
 
 export type SidebarPreviousSessionsResultMessage = {
@@ -1364,13 +1332,12 @@ export type ExtensionToSidebarMessage =
   | SidebarDaemonSessionsStateMessage
   | SidebarPromptGitCommitMessage
   | SidebarGitFileDiffMessage
-  | SidebarShowT3BrowserAccessMessage
   | SidebarGhostexFolderStatsMessage
+  | SidebarPluginSettingsStatusMessage
   | SidebarAgentHookStatusMessage
   | SidebarGhostexCliStatusMessage
   | SidebarOSIntegrationStatusMessage
   | SidebarShowSessionRenameModalMessage
-  | SidebarShowT3ThreadIdModalMessage
   | SidebarPreviousSessionsResultMessage
   | SidebarStashedPromptsResultMessage
   | SidebarSaveStashedPromptResultMessage
@@ -1530,6 +1497,13 @@ export type SidebarToExtensionMessage =
       type: "requestOSIntegrationStatus";
     }
   | {
+      type: "requestPluginSettingsStatus";
+    }
+  | {
+      pluginId: SidebarPluginSettingsItem["id"];
+      type: "reinstallPlugin";
+    }
+  | {
       source?: ghostexSettingsUpdateSource;
       settings: ghostexSettings;
       type: "updateSettings";
@@ -1647,16 +1621,9 @@ export type SidebarToExtensionMessage =
       type: "killTerminalDaemon";
     }
   | {
-      type: "killT3RuntimeServer";
-    }
-  | {
       type: "killDaemonSession";
       sessionId: string;
       workspaceId: string;
-    }
-  | {
-      type: "killT3RuntimeSession";
-      sessionId: string;
     }
   | {
       type: "moveSidebarToOtherSide";
@@ -1923,7 +1890,7 @@ export type SidebarToExtensionMessage =
   | {
       /**
        * CDXC:RemoteProjectPicker 2026-06-02-23:22:
-       * Remote Add Project uses a T3 Code-style directory picker, but every
+       * Remote Add Project uses a path-aware directory picker, but every
        * browse request is machine-scoped. Native must route it to that
        * machine's gxserver after SSH reconnect/token setup instead of exposing
        * local filesystem browsing for remote machines.
@@ -2095,11 +2062,6 @@ export type SidebarToExtensionMessage =
        * is shorter than the rename modal's 70-character Generate Name threshold.
        */
       shouldGenerateTitle?: boolean;
-    }
-  | {
-      sessionId: string;
-      threadId: string;
-      type: "setT3SessionThreadId";
     }
   | {
       type: "renameGroup";
@@ -2401,14 +2363,6 @@ export type SidebarToExtensionMessage =
       groupId: string;
     }
   | {
-      type: "requestT3SessionBrowserAccess";
-      sessionId: string;
-    }
-  | {
-      type: "openT3SessionBrowserAccessLink";
-      url: string;
-    }
-  | {
       /**
        * CDXC:BrowserPanes 2026-05-02-06:35
        * Browser session cards expose pane-specific controls copied from the
@@ -2498,9 +2452,9 @@ export type SidebarToExtensionMessage =
   | {
       /**
        * CDXC:StashedPrompts 2026-07-29:
-       * Selecting a stashed prompt inserts its text into the named terminal
-       * session's composer without submitting it. The host owns the terminal
-       * paste mechanics; the modal only supplies the prompt body and target.
+       * Selecting a stashed prompt inserts its text into the named session's
+       * active composer without submitting it. The host owns the chat/native
+       * input mechanics; the modal only supplies the prompt body and target.
        */
       content: string;
       promptId: string;

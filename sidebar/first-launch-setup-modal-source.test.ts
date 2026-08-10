@@ -38,8 +38,9 @@ describe("first launch setup modal source", () => {
     expect(visiblePages).not.toContain('"remoteAccess"');
     expect(firstLaunchSetupModalSource).toContain("function getVisibleFirstLaunchSetupPage");
     expect(firstLaunchSetupModalSource).toContain('return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : "welcome";');
-    expect(firstLaunchSetupModalSource).toContain('const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS.filter');
-    expect(firstLaunchSetupModalSource).toContain('agent.agentId !== "t3"');
+    expect(firstLaunchSetupModalSource).toContain(
+      "const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;",
+    );
     expect(firstLaunchSetupModalSource).not.toContain("const FIRST_LAUNCH_HOOK_AGENT_IDS");
     expect(firstLaunchSetupModalSource).toContain("function FirstLaunchPreferencesPage");
     expect(firstLaunchSetupModalSource).toContain("function FirstLaunchCliPage");

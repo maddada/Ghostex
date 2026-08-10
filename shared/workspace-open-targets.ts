@@ -62,7 +62,7 @@ export const DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY: WorkspaceOpenTargetAvai
 
 /**
  * CDXC:TitlebarOpenIn 2026-05-11-00:22
- * The titlebar Open In menu mirrors t3code's editor command catalog so
+ * The titlebar Open In menu uses the shared editor command catalog so
  * installed local IDEs appear without maintaining a second, smaller
  * ghostex-only list.
  *

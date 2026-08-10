@@ -12,7 +12,7 @@ export type NativeSessionInventoryOwnershipInput = {
 
 /*
 CDXC:SessionInventoryOwnership 2026-06-02-17:19:
-Agent Manager, gx CLI bridge responses, and Running Sessions can include macOS-local panes alongside gxserver-backed sessions. Every emitted inventory row must carry explicit ownership so local Quick/T3 panes cannot be mistaken for shared gxserver sessions after presentation initializes.
+Agent Manager, gx CLI bridge responses, and Running Sessions can include macOS-local panes alongside gxserver-backed sessions. Every emitted inventory row must carry explicit ownership so local panes cannot be mistaken for shared gxserver sessions after presentation initializes.
 */
 export function resolveNativeSessionInventoryOwnership({
   hasGxserverProjectContext = false,

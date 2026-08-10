@@ -35,8 +35,7 @@ import type { SidebarV2ProjectIdentity } from "./sidebar-v2-view-model";
 /*
  * CDXC:SidebarV2 2026-07-29:
  * One row component renders both V2 surfaces, because they are the same row at
- * two densities — the rich 3-line inbox card and the slim shelf row. Ported
- * from t3code's SidebarV2 with its central discipline intact:
+ * two densities — the rich 3-line inbox card and the slim shelf row:
  *
  * - There is ONE surface model. Background is reserved for interaction state
  *   (hover, active). Status never paints a background, a border, or an edge
@@ -599,8 +598,8 @@ export function SidebarV2SessionRow({
    * The meta line is THE WORK LINE: branch, review, diff — plus the machine
    * badge when the work is happening somewhere else.
    *
-   * - A card is at most 3 lines (project / title / meta), and t3code's card is
-   *   exactly that. Giving git its own fourth line would make every flat card
+   * - A card is at most 3 lines (project / title / meta). Giving git its own
+   *   fourth line would make every flat card
    *   ~25% taller and break the `data-card-lines` intrinsic-size ladder that
    *   keeps the scrollbar still while rows realize.
    * - `session.detail` is NOT the agent name P3 assumed it was. gxserver defines
@@ -777,8 +776,8 @@ export function SidebarV2SessionRow({
             {title}
             {/*
              * CDXC:SidebarV2Git 2026-07-29:
-             * A slim shelf row keeps the PR badge and nothing else (t3code
-             * parity). Parked work is scanned for "did that ship?", which is
+             * A slim shelf row keeps the PR badge and nothing else. Parked work
+             * is scanned for "did that ship?", which is
              * the one question the badge answers; branch and diff belong to
              * work you are still doing. The badge is rendered INSIDE the
              * resting slot (see `slimPrBadge`), so it swaps with the time

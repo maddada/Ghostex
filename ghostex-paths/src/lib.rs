@@ -98,10 +98,6 @@ impl GhostexPaths {
         self.data_dir.join("code-server-runtime-gpui")
     }
 
-    pub fn t3_runtime_dir(&self) -> PathBuf {
-        self.data_dir.join("t3-runtime")
-    }
-
     pub fn cef_cache_dir(&self) -> PathBuf {
         self.cache_dir.join("cef")
     }
@@ -176,7 +172,6 @@ impl GhostexPaths {
                 ("icons", self.icons_dir()),
                 ("source-runtime", self.source_runtime_dir()),
                 ("code-server-runtime-gpui", self.code_server_runtime_dir()),
-                ("t3-runtime", self.t3_runtime_dir()),
                 ("chats", self.data_dir.join("chats")),
                 ("cli", self.state_dir.join("cli")),
                 (

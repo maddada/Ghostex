@@ -1,5 +1,17 @@
 # Changelog
 
+## 7.5.0 - 2026-08-10
+
+- Major
+  - Session Chat now protects unfinished drafts, moves prompts safely between chat and terminal, detects agent model and effort details, and keeps completed work compact until you choose to expand it.
+  - Project Board can start work with the agent assigned to a ticket, making it faster to move directly from planning into the right conversation, thanks to @banozz.
+- Minor
+  - Docs now discovers files in artifact and AI folders by default and handles find, replace, redo, and common editing shortcuts more naturally.
+  - Quick Access and sidebar modals rank results more clearly, preserve pinned-section boundaries, group stashed prompts by day, and make keyboard selection more dependable.
+  - Settings adds a preferred interface for newly launched agents, chat appearance controls, optional titlebar chrome, and more reliable plugin reinstalls.
+  - Focused terminals can be zoomed more easily, while Windows runtime startup, on-demand components, and WSL packaging are more dependable.
+  - The Android app adds light and dark Session Chat themes and a clearer outline around the active session.
+
 ## 7.4.0 - 2026-08-08
 
 - Major
@@ -108,7 +120,6 @@
 
 - Major
   - Ghostex for Windows now ships beta x64 and ARM64 installer EXEs designed for running agent terminals and project tools through WSL2.
-  - Windows can install and manage its gxserver, Source editor, and T3 Code runtimes inside the selected WSL2 distribution.
   - Browser camera and microphone access now uses clear permission prompts, while browser and terminal keyboard input behaves more reliably.
   - Creating several project terminals at once and receiving live session updates is more dependable under heavy activity.
   - The Android app adds customizable agent hotkeys, better scrollback controls, and more reliable terminal interactions.
@@ -306,9 +317,7 @@
   - Sidebar session cards now support multi-select bulk actions for sleep, wake, pin, unpin, tag, full reload, and close.
   - GPUI now has more app parity, including named session groups, local gxserver startup feedback, app toasts, configured hotkeys, folder picking, Close After Done, and previous-session text search.
   - Manage HTML previews now run as interactive browser documents, so generated docs can use their own scripts, forms, frames, and fullscreen behavior.
-  - Embedded T3 Code sessions now restore their bound thread routes more reliably and can rename the upstream T3 thread from Ghostex.
 - Minor
-  - T3 Code sidebar rows now use a clearer chat icon even when agent metadata is missing.
   - GPUI terminals now handle link opens, bells, title updates, and working-directory updates from Ghostty runtime actions.
   - GPUI project and session workflows now cover more repository folder and workspace folder picker paths.
   - README wording around Excalidraw docs is clearer.
@@ -317,16 +326,13 @@
 
 - Major
   - `ghostex` and `gx` now open the promoted GX 2 terminal UI by default, with `gx 2` kept as a compatibility alias.
-  - Embedded T3 Code sessions now keep their Ghostex project/session identity, route new drafts directly into the composer, collapse the T3 sidebar by default, and clean up empty Ghostex-created drafts.
   - Automations Overview and project Automate pages now stay behind Enable Experimental Features while picker state and agent lists load more reliably.
   - Docs and Manage are smoother, with duplicate file actions, isolated HTML previews, markdown annotations, and a folders shortcut.
-  - T3 Code includes Claude Sonnet 5, restored chat scroll affordances, a timeline minimap, and word-wrap controls. Thanks @juliusmarminge and @imabdulazee.
 - Minor
   - The menu-bar status dropdown now puts attention sessions first, working sessions second, and idle sessions by recent activity.
   - Sidebar and modal chrome are calmer, with steadier pinned-session dragging, modal scroll caps, tooltip radius, session list polish, and stable Keep Awake styling.
   - Remote and mobile flows are steadier, with Android attach latency improvements and iOS Zen bubble and scrolling polish.
   - Terminal bell attention, remote edit drafts, color environment forwarding, and native workspace behavior are more consistent.
-  - T3 Code also brings preview stability, WSL/Windows backend work, Grok ACP resume hardening, and safer remote protocol handling. Thanks @juliusmarminge, @Jgratton24, @mwolson, and @StiensWout.
 
 ## 5.2.0 - 2026-06-30
 
@@ -347,7 +353,6 @@
 ## 5.1.0 - 2026-06-29
 
 - Major
-  - GPUI can create and focus project-scoped T3 Code draft sessions from the sidebar.
   - App Shots now support both Shift and both Option hotkeys, return Ghostex to the front after capture, and keep metadata optional.
   - Docs can show root Markdown, HTML, and Excalidraw files, plus rename or delete folders from the file tree.
   - Settings and Keep Awake now live in the sidebar shortcut row with compact dropdowns.
@@ -602,7 +607,6 @@
 - Agent Hub file contents load only when opened.
 - iOS refresh indicators stay tied to active refresh requests.
 - Packaged macOS runtime validation checks the bundled code-server Node 22 runtime.
-- Packaged macOS runtime validation checks ripgrep, T3 Code native helpers, Beads, and source-map pruning.
 - Packaged macOS runtime validation no longer executes sealed native modules during validation.
 
 ## 4.1.5 - 2026-06-10
@@ -677,7 +681,6 @@
 - The native sidebar/workarea divider keeps its resize cursor and visible separator aligned during hover and live resizing.
 - Installed macOS app bundles are smaller because release packaging prunes duplicate Beads payloads before notarization.
 - Installed macOS app bundles are smaller because release packaging prunes wrong-architecture node-pty prebuilds before notarization.
-- Installed macOS app bundles are smaller because release packaging prunes T3 Code source maps before notarization.
 
 ## 4.0.2 - 2026-06-08
 
@@ -695,9 +698,6 @@
 - Command-pane completions keep using the action completion sound path.
 - Command-pane completions write status updates through per-process temp files.
 - Command-pane completions reduce missed completion sounds during concurrent status updates.
-- T3 Code runtime startup is coalesced while Project Editor panes are retargeting.
-- T3 Code runtime startup reduces duplicate startup probes.
-- T3 Code runtime startup reduces layout churn when opening, closing, or switching embedded T3 panes.
 - Git agent workflows no longer pin duplicate persistent "running" toasts when the visible agent terminal already shows the workflow progress.
 - Ghostex Android auto-scroll now follows new output only from the actual live bottom row.
 - Scrolling up even one row keeps history anchored without selecting text first.
@@ -720,7 +720,6 @@
 - Session tags can be applied, displayed on cards, filtered in Active and Previous Sessions, and preserved in manual sidebar order across restore and Previous Sessions.
 - Git commit review adds inline changed-file diff inspection so review prompts can inspect file patches without leaving the modal.
 - First-prompt title generation is more reliable, including Grok Build support, staged rename handling, guards for skipped or stale generated titles, and retry after cancellation.
-- Native T3 Code panes package the managed runtime in installed macOS builds, keep it alive from live pane ownership, resolve the packaged runtime path, and show bundled, development, or missing status in Settings -> Integrations.
 - zmx Ctrl+G prompt editing follows the currently attached client capability, keeping desktop Monaco available while SSH, mobile, and TUI attaches use terminal-native `gte`.
 - Cmd+T creates a terminal tab next to the focused tab, Cmd+N opens a browser tab next to the focused tab, and Option+1 through Option+4 switch Agents, Source, GitHub, and Kanban views.
 - Closing the active tab in a split pane promotes the adjacent tab in that pane before layout materialization, preserving split layout instead of collapsing unrelated panes.
@@ -760,7 +759,6 @@
 - Background sleep, close, and auto-sleep transitions preserve the focused pane/tab instead of pulling focus away from the active session, and focused agent sessions are always excluded from Agent Auto Sleep.
 - New projects and embedded editor panes appear in the sidebar earlier, and code-server startup failures now surface as row errors and toasts instead of failing silently.
 - Installed macOS builds validate the packaged gxserver Node 22 native-module runtime and show actionable reinstall or Node setup guidance when the runtime does not match.
-- T3 Code panes in installed macOS builds now resolve the packaged runtime path, retain an in-flight startup instead of spawning duplicates, and keep local T3/browser pane rows visible inside gxserver-backed project groups.
 - Codex-powered title generation, board-title generation, and other internal prompt jobs now run as ephemeral/internal work so they do not create restorable Codex sessions or overwrite a real session's resume identity.
 - Codex resume now validates exact ids and falls back through filtered title lookup, avoiding internal `codex exec` title-generation transcripts.
 - Cancelling first-prompt title generation no longer lets a stale result rename the session, and a later user prompt can retry title generation.
@@ -778,8 +776,6 @@
 ## 4.0.0-beta.2 - 2026-06-06
 
 - Beta distribution remains available through GitHub Releases and Homebrew DMG installs while Sparkle automatic-update feeds stay on the current public release.
-- T3 Code panes now keep the managed runtime alive from live native pane ownership, including inactive tab siblings, so sidebar projection gaps no longer stop an open embedded T3 tab.
-- Installed macOS builds now package the managed T3 Code server runtime and show its bundled/development/missing status in Settings -> Integrations.
 - Ctrl+G prompt editing in zmx sessions now follows the currently attached client capability, so desktop Monaco remains available while SSH, mobile, and TUI attaches stay on terminal-native `gte`.
 - Restoring Previous Sessions preserves session tags, restored-from identity, and saved manual sidebar order when that order was explicitly stored.
 - Cmd+T now creates a terminal tab next to the focused tab, Cmd+N opens a browser tab next to the focused tab, and Option+1 through Option+4 switch Agents, Source, GitHub, and Kanban views.
@@ -1079,7 +1075,6 @@
 
 - Completed the Ghostex public naming cleanup across release, app, Homebrew, and generated CEF helper surfaces.
 - Added Factory Droid and Grok Build as built-in agent options with bundled icons, sidebar labels, and session metadata support.
-- Updated the default agent picker order to T3 Code, Codex, Claude, Pi Agent, OpenCode, Gemini, Copilot, Factory Droid, and Grok Build.
 - Renamed the default Pi launch option to Pi Agent while keeping `pi` as the command.
 - Changed directional pane focus defaults to `Cmd+Alt+Arrow` so normal `Cmd+Arrow` text-editing behavior is not stolen by workspace navigation.
 - Added a searchable action icon picker in Settings so custom sidebar actions can choose icons faster and keep accessible labels visible.
@@ -1120,7 +1115,6 @@
 - Resized the floating pet overlay to fit the sprite when no activity bubbles are visible while preserving the wider activity panel when messages appear.
 - Improved Commands panel focus restoration so collapsing command terminals returns keyboard focus to the previous workspace terminal.
 - Improved Reload Session placement so reloaded terminals replace the clicked pane/tab instead of appending as a new split.
-- Kept embedded VS Code open when creating new terminal, browser, T3, or command sessions from the sidebar.
 - Polished Previous Sessions rows with centered restore content, an X delete control, and active-session icon hover behavior that does not dim the focused row.
 - Consolidated sidebar resize ownership, aligned pane tab heights, and hid active pane borders in single-pane workspaces.
 - Updated local native launch behavior so `bun run start` uses architecture-specific DerivedData paths for arm64 and x86_64 builds.
@@ -1136,7 +1130,6 @@
 - Added floating Monaco prompt editing with resize/move behavior, save/cancel status handling, and safer terminal-close persistence.
 - Improved native pane chrome, focus/resize hit ownership, project editor routing, commands panel tab controls, and embedded browser pane handling.
 - Restored direct native terminal scrollbar behavior so embedded Ghostty surfaces keep scrollback geometry, scrollbar rendering, and precise trackpad momentum.
-- Improved T3/code-server runtime stability, including runtime liveness repair and correct macOS elapsed-time parsing for startup grace decisions.
 - Added a floating pet overlay with clickable activity bubbles that bring Ghostex forward and focus the exact session shown above the pet.
 - Added release handover docs and updated the release workflow so future agents keep GitHub Releases, Sparkle, and Homebrew aligned for both architectures.
 
@@ -1200,7 +1193,6 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 ## 2.0.0 - 2026-05-08
 
 - Changed the whole ghostex UI around the simplified Codex-style workspace: refreshed top chrome, project groups, action controls, tooltips, session cards, Previous Sessions rows, settings surfaces, icons, and README screenshots.
-- Improved workspace stability and performance by suppressing byte-identical native storage writes, skipping metadata-only AppKit relayouts, reducing high-frequency native diagnostics, and filtering noisy T3/focus logs.
 - Added native workspace visibility helpers and tests so sidebar/native sync can avoid unnecessary workspace work while preserving visible pane behavior.
 - Improved restore and fork actions for native terminal title bars, including Codex and Claude fork command paths.
 - Fixed first-prompt auto-rename so meaningful terminal-synced titles are preserved instead of being overwritten by redundant generated rename commands.
@@ -1215,7 +1207,6 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 - Added reference-style sidebar action flows, modal flows, story fixtures, and Combined layout refinements.
 - Added Pi as a supported agent option with icon assets, tests, and agent configuration UI wiring.
 - Improved sidebar group, session-card, search, modal, and scroll styling to better match the reference layout.
-- Improved native editor pane handling, pane resize routing, T3 diagnostics, and accessibility-permission driven controls.
 - Improved floating session status indicators with refined drawing, attention/working visual treatment, and additional settings support.
 - Improved session title, activity, rename, and first-prompt metadata handling so loading and restored-title states are more reliable.
 
@@ -1291,8 +1282,6 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 - Added Combined sidebar mode so native ghostex can show one project group per project across all projects, while preserving Separated mode for the previous per-project layout.
 - Added a Recent Projects drawer with fuzzy project/path search and startup cleanup for empty combined-mode projects.
 - Added project context actions for opening project config, setting project theme, copying the project path, opening the folder in Finder, opening it in the selected IDE, and closing projects into Recent Projects.
-- Improved native T3 Code runtime handling so fresh supervised runtimes are retained during startup/auth races, with explicit stop still available for recovery.
-- Improved T3 thread changes by creating and syncing sidebar cards when the native host receives thread-change events.
 - Fixed sidebar resize drags to use stable window coordinates so the sidebar does not jump while dragging.
 - Added color-environment diagnostics for agent launches so monochrome CLI sessions can be traced to inherited terminal environment values.
 - Added long-paste rename handling that summarizes pasted session text before syncing the rename into the agent CLI.
@@ -1302,7 +1291,6 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 - Added an opt-in Browser Panes mode that opens browser actions as first-class workspace panes instead of Chrome Canary windows.
 - Added native browser pane controls for address navigation, reload, DevTools, React Grab, profile selection, and browser-data import messaging.
 - Persisted browser pane URLs, favicons, and browser-auto titles so sidebar cards and app restarts reflect the current page.
-- Added native pane header drag-to-reorder support across terminal, T3, and browser panes without surfacing hidden sessions.
 
 ## 1.4.2 - 2026-05-02
 
@@ -1318,13 +1306,10 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 ## 1.4.0 - 2026-05-02
 
 - Added Sparkle appcast update support with signed appcast metadata for native macOS updates.
-- Added native T3 Code panes with managed runtime bootstrap, authentication, thread routing, and runtime diagnostics.
-- Added T3 remote/browser access links for native panes, including local-network and Tailscale-friendly pairing URLs.
 - Added draggable workspace pane resizing with double-click equalize behavior for pane rows and columns.
 - Added a standard native macOS app menu with About, Check for Updates, Settings, Services, Hide, and Quit.
 - Added a setting to hide the native IDE title-bar attach button without disabling IDE attachment.
 - Improved IDE attachment behavior so the floating Show IDE button raises or launches the configured IDE for the current workspace.
-- Improved T3 runtime startup by rebuilding the local t3code-embed checkout only when source fingerprints or build output require it.
 - Kept the local release workflow skill available on this machine while removing it from the public repository tree.
 
 ## 1.3.0 - 2026-04-30
@@ -1349,9 +1334,7 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 
 ## 1.1.0 - 2026-04-29
 
-- Added full-window native modals for Find Previous Session and T3 Thread ID entry.
 - Improved previous-session search launching by routing modal input through the sidebar/native command bridge.
-- Improved T3 session thread binding controls in the native sidebar workflow.
 - Fixed agent wrapper process launch so interactive CLIs stay attached to the foreground terminal TTY and receive resize signals.
 - Added agent wrapper debug logging for TTY/process details used to diagnose resize and child-process issues.
 - Fixed native embedded terminal layout to step pane sizes to whole Ghostty character cells, including configured terminal padding.
@@ -1367,7 +1350,6 @@ Install with Homebrew: `brew install --cask maddada/tap/ghostex`
 - Added native terminal search bar rendering and focus preservation improvements for modal workflows.
 - Improved sidebar sessions to default to last-activity ordering and keep agent-icon mode blank for iconless sessions until hover.
 - Expanded command/workspace icon choices and kept the icon picker search fixed while the icon list scrolls.
-- Removed T3 Code from default sidebar agents while preserving existing T3 session recognition.
 - Improved Previous Sessions by using the search field for "Find Session" prompts and keeping the native full-window modal compact.
 - Added Scratch Pad focus diagnostics to help trace terminal-first-responder focus steals without logging note text.
 

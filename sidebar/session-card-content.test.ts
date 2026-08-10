@@ -795,18 +795,6 @@ describe("formatSessionHeadingText", () => {
     ).toBe("Bug Fix");
   });
 
-  test("should keep t3 titles unmarked even when they do not match the synced terminal title", () => {
-    expect(
-      formatSessionHeadingText({
-        agentIcon: "t3",
-        alias: "Session 1",
-        isPrimaryTitleTerminalTitle: false,
-        primaryTitle: "Refactor auth flow",
-        terminalTitle: "Thread 12345678",
-      }),
-    ).toBe("Refactor auth flow");
-  });
-
   test("should append the unsynced label in tooltip mode", () => {
     expect(
       formatSessionHeadingText({
@@ -1201,7 +1189,7 @@ describe("SessionCardContent", () => {
         session: {
           activity: "idle",
           activityLabel: undefined,
-          agentIcon: "t3",
+          agentIcon: "codex",
           alias: "00",
           column: 0,
           isFocused: false,
@@ -1209,7 +1197,7 @@ describe("SessionCardContent", () => {
           isVisible: true,
           row: 0,
           sessionId: "session-1",
-          sessionKind: "t3",
+          sessionKind: "terminal",
           shortcutLabel: "1",
         },
         showCloseButton: true,

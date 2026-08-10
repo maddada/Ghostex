@@ -9,10 +9,10 @@ import {
   inferProjectTitleFromPath,
   isFilesystemBrowseQuery,
   resolveProjectPathForDispatch,
-} from "./t3-project-paths";
+} from "./remote-project-paths";
 
-describe("T3 remote project picker path helpers", () => {
-  test("keeps T3 browse path navigation semantics", () => {
+describe("remote project picker path helpers", () => {
+  test("keeps browse path navigation semantics", () => {
     expect(isFilesystemBrowseQuery("~/projects")).toBe(true);
     expect(isFilesystemBrowseQuery("./local")).toBe(true);
     expect(isFilesystemBrowseQuery("plain search")).toBe(false);
@@ -25,7 +25,7 @@ describe("T3 remote project picker path helpers", () => {
     expect(canNavigateUp("/")).toBe(false);
   });
 
-  test("resolves project paths for dispatch like T3 Code", () => {
+  test("resolves project paths for dispatch", () => {
     expect(resolveProjectPathForDispatch("~/projects/ghostex/")).toBe("~/projects/ghostex");
     expect(resolveProjectPathForDispatch("./app", "/Users/madda/dev")).toBe("/Users/madda/dev/app");
     expect(resolveProjectPathForDispatch("../app", "/Users/madda/dev/ghostex")).toBe("/Users/madda/dev/app");

@@ -216,7 +216,7 @@ html:has(body.app-modal-host-native-window-body) {
    *
    * CDXC:AppModals 2026-05-28-13:52:
    * All legacy confirm-modal shells should use var(--app-modal-background) so previous-session,
-   * pinned-prompt, first-message, T3, and confirmation dialogs match Settings.
+   * pinned-prompt, first-message, and confirmation dialogs match Settings.
    */
   border-radius: 0;
   box-shadow:
@@ -645,145 +645,6 @@ html:has(body.app-modal-host-native-window-body) {
   width: min(840px, 100%);
 }
 
-.t3-browser-access-modal {
-  max-width: min(520px, 100%);
-  width: min(520px, 100%);
-}
-
-.t3-browser-access-body {
-  align-items: start;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 176px) minmax(0, 1fr);
-}
-
-.t3-browser-access-qr-shell {
-  align-items: center;
-  aspect-ratio: 1;
-  background: color-mix(in srgb, white 94%, var(--app-card));
-  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  border-radius: 0;
-  display: flex;
-  justify-content: center;
-  min-height: 176px;
-  overflow: hidden;
-  padding: 10px;
-}
-
-.t3-browser-access-qr {
-  display: block;
-  height: auto;
-  max-width: 100%;
-  width: 100%;
-}
-
-.t3-browser-access-qr-placeholder {
-  align-items: center;
-  color: color-mix(in srgb, var(--app-muted) 85%, var(--app-foreground) 15%);
-  display: grid;
-  font-size: 12px;
-  gap: 8px;
-  justify-items: center;
-  text-align: center;
-}
-
-.t3-browser-access-card {
-  background: color-mix(in srgb, var(--app-card-active) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-  border-radius: 0;
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px;
-}
-
-.t3-browser-access-status-block {
-  display: grid;
-  gap: 8px;
-}
-
-.t3-browser-access-status-pill {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-card) 86%, transparent);
-  border: 1px solid color-mix(in srgb, #f87171 34%, var(--app-border));
-  border-radius: 0;
-  color: #fca5a5;
-  display: inline-flex;
-  font-size: 11px;
-  font-weight: 700;
-  justify-content: center;
-  letter-spacing: 0.08em;
-  min-height: 30px;
-  padding: 0 12px;
-  text-transform: uppercase;
-  width: fit-content;
-}
-
-.t3-browser-access-status-pill[data-enabled="true"] {
-  border-color: color-mix(in srgb, #4ade80 34%, var(--app-border));
-  color: #4ade80;
-}
-
-.t3-browser-access-status-copy {
-  color: var(--app-foreground);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.t3-browser-access-label {
-  color: var(--app-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.t3-browser-access-url {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.t3-browser-access-note {
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.t3-browser-access-guide {
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.t3-browser-access-guide a {
-  color: var(--app-button-background);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.t3-browser-access-guide a:hover,
-.t3-browser-access-guide a:focus-visible {
-  text-decoration: underline;
-}
-
-.t3-browser-access-tagline {
-  color: var(--app-foreground);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.t3-browser-access-local-link {
-  color: var(--app-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.t3-browser-access-local-link code {
-  overflow-wrap: anywhere;
-}
 
 .daemon-sessions-toolbar {
   display: grid;
@@ -983,10 +844,6 @@ html:has(body.app-modal-host-native-window-body) {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-button-background) 12%, transparent);
 }
 
-.daemon-session-card-t3-server {
-  background: color-mix(in srgb, var(--app-button-background) 8%, var(--app-card-active) 92%);
-}
-
 .daemon-session-card-header {
   align-items: flex-start;
   display: flex;
@@ -1093,10 +950,6 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: 112px;
   padding: 12px;
   text-align: center;
-}
-
-.daemon-sessions-t3-empty {
-  min-height: 84px;
 }
 
 .previous-sessions-toolbar {
@@ -1947,10 +1800,10 @@ html:has(body.app-modal-host-native-window-body) {
    * controls live on the right without opening a second stacked modal.
    *
    * CDXC:TitlebarGit 2026-06-08-04:20:
-   * The commit review panes should use t3code-style source review density:
+   * The commit review panes should use compact source review density:
    * the message editor grows until its bottom aligns with the right diff pane,
    * file/diff scrollbars are floating 5px hover-only thumbs that do not reserve
-   * layout, and file paths/code use the same SF Mono-oriented stack as t3code.
+   * layout, and file paths/code use the same SF Mono-oriented stack.
    *
    * CDXC:TitlebarGit 2026-06-08-04:47:
    * The file list should behave like a narrow source-control rail while the
@@ -2071,7 +1924,7 @@ html:has(body.app-modal-host-native-window-body) {
    * CDXC:TitlebarGit 2026-06-08-04:07:
    * The commit file panel no longer has a separate "Files" label. Keep the
    * branch summary compact so the file tree starts higher and matches the
-   * t3code review density.
+   * the intended review density.
    *
    * CDXC:TitlebarGit 2026-06-19-15:43:
    * The branch header should be plain text without the visible "Branch" label
@@ -2190,7 +2043,7 @@ html:has(body.app-modal-host-native-window-body) {
   /*
    * CDXC:TitlebarGit 2026-06-08-04:07:
    * File and diff scrolling should expose a quiet 5px transparent gutter only
-   * on hover/focus, matching t3code's thin scrollbar feel without the previous
+   * on hover/focus, using a thin scrollbar without the previous
    * scroll-mask overflow fade at the top and bottom of the panes.
    *
    * CDXC:TitlebarGit 2026-06-08-04:20:
@@ -2626,7 +2479,7 @@ html:has(body.app-modal-host-native-window-body) {
    *
    * CDXC:TitlebarGit 2026-06-08-04:20:
    * Standalone file diffs share the same floating 5px hover scrollbar and
-   * t3code-style SF Mono patch typography as the inline commit diff.
+   * SF Mono patch typography as the inline commit diff.
    */
   --git-review-mono-font: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   height: min(820px, calc(100vh - 2rem));
@@ -4368,16 +4221,6 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 @media (max-width: 640px) {
-  .t3-browser-access-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .t3-browser-access-qr-shell {
-    margin-inline: auto;
-    max-width: 220px;
-    width: 100%;
-  }
-
   .daemon-session-card-details {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4516,9 +4359,7 @@ html:has(body.app-modal-host-native-window-body) {
 .app-modal-host-native-window-body[data-app-modal-fit-height="true"]
   .remote-gxserver-install-modal-body,
 .app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .portless-setup-modal-body,
-.app-modal-host-native-window-body[data-app-modal-fit-height="true"]
-  .t3-browser-access-body {
+  .portless-setup-modal-body {
   max-height: min(420px, calc(100vh - 150px));
   overflow-y: auto;
   overscroll-behavior: contain;

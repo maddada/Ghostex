@@ -6,7 +6,6 @@ import {
   shouldPreferTerminalTitleForAgentIcon,
   supportsTerminalTitleSessionSync,
 } from "./sidebar-agents";
-import { T3CODE_ENABLED } from "./feature-flags";
 
 function sidebarButtons(...args: Parameters<typeof createSidebarAgentButtons>) {
   return createSidebarAgentButtons(...args).map(({ acceptAllMode, ...button }) =>
@@ -15,19 +14,12 @@ function sidebarButtons(...args: Parameters<typeof createSidebarAgentButtons>) {
 }
 
 function expectedSidebarButtons<T extends { agentId: string }>(buttons: T[]): T[] {
-  return buttons.filter((button) => T3CODE_ENABLED || button.agentId !== "t3");
+  return buttons;
 }
 
 describe("createSidebarAgentButtons", () => {
   test("should expose the built-in agents by default", () => {
     expect(sidebarButtons([])).toEqual(expectedSidebarButtons([
-      {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
-      },
       {
         agentId: "codex",
         command: "codex",
@@ -117,13 +109,6 @@ describe("createSidebarAgentButtons", () => {
 
   test("should apply default command overrides to built-in agents when no stored override exists", () => {
     expect(sidebarButtons([], [], { claude: "cw", codex: "x" })).toEqual(expectedSidebarButtons([
-      {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
-      },
       {
         agentId: "codex",
         command: "x",
@@ -237,13 +222,6 @@ describe("createSidebarAgentButtons", () => {
       ]),
     ).toEqual(expectedSidebarButtons([
       {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
-      },
-      {
         agentId: "codex",
         command: "codex --model gpt-5.4",
         icon: "codex",
@@ -350,13 +328,6 @@ describe("createSidebarAgentButtons", () => {
         },
       ]),
     ).toEqual(expectedSidebarButtons([
-      {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
-      },
       {
         agentId: "claude",
         command: "claude",
@@ -466,13 +437,6 @@ describe("createSidebarAgentButtons", () => {
         },
       ]),
     ).toEqual(expectedSidebarButtons([
-      {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
-      },
       {
         agentId: "codex",
         command: "codex",
@@ -602,13 +566,6 @@ describe("createSidebarAgentButtons", () => {
         icon: "claude",
         isDefault: true,
         name: "Claude",
-      },
-      {
-        agentId: "t3",
-        command: "npx --yes t3",
-        icon: "t3",
-        isDefault: true,
-        name: "T3 Code",
       },
       {
         agentId: "codex",

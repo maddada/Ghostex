@@ -12,7 +12,7 @@
 
 Cross-platform Ghostty-based desktop app (not using Electron or Tauri) for running agent CLIs with persistent terminals, GUI panes, browser panes, notifications, mobile access, and a lightweight code editor.
 
-Ghostex is built for developers who keep multiple agents and terminals alive at once. It combines low-RAM Ghostty terminals, a native Rust/GPUI interface, T3 Code GUI panes, Chromium CEF browser panes, and Mobile (iOS/Android) session access in one workspace.
+Ghostex is built for developers who keep multiple agents and terminals alive at once. It combines low-RAM Ghostty terminals, a native Rust/GPUI interface, Chromium CEF browser panes, and Mobile (iOS/Android) session access in one workspace.
 
 > Looking for contributors. Join the Discord if you want to help: https://discord.gg/df7b3G92CS
 
@@ -32,7 +32,7 @@ Latest download: [macOS Apple Silicon DMG](https://maddada.com/download/macos-ar
 
 > **The Windows app is a beta intended for WSL2 workflows only and may still have bugs.** Install and use it with an existing WSL2 distribution; native Windows shell workflows are not the intended setup yet. Please report problems on the [Ghostex Discord](https://discord.gg/df7b3G92CS).
 
-Latest downloads: [Windows x64](https://maddada.com/download/windows-x64) · [Windows ARM64](https://maddada.com/download/windows-arm64). Ghostex manages its terminals, gxserver, Source editor, and T3 Code runtime inside the selected WSL2 distribution.
+Latest downloads: [Windows x64](https://maddada.com/download/windows-x64) · [Windows ARM64](https://maddada.com/download/windows-arm64). Ghostex manages its terminals, gxserver, and Source editor inside the selected WSL2 distribution.
 
 Starting with 7.0.0, Windows installations receive automatic updates from GitHub Releases. If you installed a 6.x Windows beta, install the 7.0.0 Setup EXE once to move to the new updater; later releases can be downloaded and applied from inside Ghostex.
 
@@ -59,7 +59,7 @@ Supports all extensions. Sleeps when not in use to same resources (configurable)
 
 ### Inbox Based Agent Management
 
-Inspired by Theo & T3 Code's Sidebar V2, this optional inbox moves work beyond individual sessions. <br/>
+This optional inbox moves work beyond individual sessions. <br/>
 Organize around threads and worktrees, focus on one project or see every project together, then snooze or settle threads as needed.
 
 <img width="3456" height="2072" alt="Inbox-based agent management in Ghostex" src="media/readme/ghostex-inbox-agent-management.png" />
@@ -74,10 +74,6 @@ Use Cmd/Ctrl + T for a new terminal, Cmd/Ctrl + D to split, and configurable sho
 ### Supports all of the popular Agent CLIs
 
 Ghostex works with Claude Code, Codex CLI, OpenCode, Pi Agent, Gemini, and all other Agent CLIs. <br/>
-Also supports T3code GUI panes if you prefer those (feature is fully hibernated when not used)
-
-<img width="1200" alt="Ghostex T3code panes and supported terminal CLIs" src="https://github.com/user-attachments/assets/49862e2d-1edd-4647-8161-5afb25ed8341" />
-
 ### Embedded Chromium Browser
 
 Comes with Annotations, Chrome Devtools MCP for Agents, Profiles.<br />
@@ -152,7 +148,6 @@ See how many agents are running with just a glance at your menu bar. Click to ju
 | --- | --- |
 | Ghostty terminals | Lower RAM use, better battery life, and stable agent CLI sessions. |
 | Native desktop shell | Rust/GPUI UI for performance-sensitive desktop behavior. |
-| T3code GUI panes | Graphical panes alongside terminal agents. |
 | Chromium CEF browser | Embedded browser panes with DevTools, profiles, and MCP access. |
 | Lightweight code editor | VS Code-based editor for Markdown, PR review, files, and git work. |
 | Mobile access | iOS & Android app for checking and controlling live sessions. |
@@ -213,7 +208,6 @@ Ghostex builds on open source work from these projects and communities:
 - [CEF Project](https://github.com/chromiumembedded/cef) — embedded Chromium browser panes
 - [Agentation](https://github.com/benjitaylor/agentation) — browser annotation and feedback tooling
 - [CMUX](https://github.com/manaflow-ai/cmux) — agent hook patterns and notification integration
-- [T3 Code](https://github.com/pingdotgg/t3code) — GUI editor panes for coding agents
 - [VS Code](https://github.com/microsoft/vscode) and [code-server](https://github.com/coder/code-server) — embedded IDE surfaces
 - [zehn](https://github.com/al3rez/zehn) by [al3erz](https://github.com/al3rez) — searching sessions by prompt
 - [vvterm](https://github.com/vivy-company/vvterm) — source of terminal ideas ported into the mobile app

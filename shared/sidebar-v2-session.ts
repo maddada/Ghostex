@@ -6,20 +6,20 @@ import {
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Sidebar V2 ("Inbox") ports t3code's pure sidebar logic onto Ghostex sessions.
+Sidebar V2 ("Inbox") keeps its pure sidebar logic on compact Ghostex session types.
 Every V2 module works on the small structural types declared here instead of the
 full `SidebarSessionItem`/`SidebarSessionGroup` contracts, so the logic stays
 testable, host-agnostic, and free of the contract's ~120 unrelated fields.
 
-Concept mapping (t3code thread -> Ghostex session):
-- thread.session.status running/starting -> `activity: "working"`. A Ghostex
+Concept mapping:
+- provider status running/starting -> `activity: "working"`. A Ghostex
   session's `lifecycleState: "running"` only means the terminal/pane is ALIVE,
   not that an agent is doing work, so it must never be read as "working".
-- thread.hasPendingApprovals / hasPendingUserInput -> `activity: "attention"`,
+- pending approvals or user input -> `activity: "attention"`,
   optionally refined by `attentionKind` once gxserver can tell the two apart.
-- thread.session.status error -> `lifecycleState: "error"` (the sidebar
+- provider error -> `lifecycleState: "error"` (the sidebar
   projection already folds gxserver's `missing`/`unknown` domain states there).
-- thread.latestTurn timestamps / latestUserMessageAt -> `lastInteractionAt`,
+- provider turn timestamps and latest user activity -> `lastInteractionAt`,
   gxserver's meaningful-activity clock, plus `workingStartedAt` for the current
   working stint.
 
@@ -37,7 +37,7 @@ export type SidebarV2AttentionKind = "approval" | "input";
 
 export type SidebarV2LifecycleState = "done" | "error" | "running" | "sleeping";
 
-export type SidebarV2SessionKind = "browser" | "t3" | "terminal";
+export type SidebarV2SessionKind = "browser" | "terminal";
 
 /** Server-owned settle pin (P2). "settled" forces the settled shelf, "active"
     pins a session into the inbox and suppresses auto-settle. */

@@ -3,19 +3,19 @@ import { firstValidTimestampMs } from "./sidebar-v2-status";
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `packages/client-runtime/src/state/threadSettled.ts`
+Sidebar inbox lifecycle and settlement rules.
 (`effectiveSettled`, `effectiveSnoozed`, `canSettle`, `canSnooze`,
 `threadWokeAt`, `threadRaisedHandWhileSnoozed`, `threadLastActivityAt`).
 
 Ghostex adaptations:
-- t3code's "session running/starting" blocker maps to `activity: "working"`.
+- A provider's "session running/starting" blocker maps to `activity: "working"`.
   `lifecycleState: "running"` is pane liveness, not work, and must not block a
   settle — every awake terminal would be unsettleable otherwise.
-- t3code's `hasQueuedTurnStart` grace window has no Ghostex twin: a Ghostex
+- A provider-side queued-turn grace window has no Ghostex twin: a Ghostex
   session has no "message sent but no turn adopted it" state, because the text
   goes straight into the terminal and gxserver flips `activity` to working. It
   is therefore dropped rather than emulated.
-- t3code's `latestTurn.completedAt` (raised-hand-after-completion) maps to
+- A provider's latest completed-turn marker maps to
   gxserver's meaningful-activity clock `lastInteractionAt`, which advances when
   a run finishes and deliberately does not advance for short working blips.
 

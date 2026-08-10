@@ -594,13 +594,6 @@ elif [[ "$ON_DEMAND_COMPONENTS" == "1" || "${GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME
 fi
 report_build_phase "Packaging the bundled WSL runtime archives..."
 stage_current_wsl_runtime_archive "$WSL_GXSERVER_ARCHIVE" "gxserver-linux-$RELEASE_ARCH.tar.gz"
-# CDXC:T3CodeDisabled ghostex-mzp9: Keep the archive checks ready for a future
-# re-enable; Source archives intentionally contain no T3 runtime today.
-# if [[ -n "$WSL_CODE_SERVER_ARCHIVE" && -f "$WSL_CODE_SERVER_ARCHIVE" ]]; then
-#   WSL_CODE_SERVER_LISTING="$(tar -tzf "$WSL_CODE_SERVER_ARCHIVE")"
-#   grep -Eq '(^|/)t3code-server/dist/bin\.mjs$' <<<"$WSL_CODE_SERVER_LISTING"
-#   grep -Eq '(^|/)t3code-server/lib/node$' <<<"$WSL_CODE_SERVER_LISTING"
-# fi
 if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
   CODE_SERVER_STAGE="$(mktemp -d "$GPUI_DIR/build/code-server-windows-component-XXXXXX")"
   CODE_SERVER_ASSET="$COMPONENT_ASSET_DIR/code-server-$CODE_SERVER_VERSION-windows-$RELEASE_ARCH.tar.gz"

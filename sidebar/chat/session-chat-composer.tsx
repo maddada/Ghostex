@@ -5,9 +5,9 @@
 // ArrowUp/Down highlight, Tab/Enter complete, Enter on an exact match sends,
 // Escape dismisses the picker without interrupting.
 //
-// Layout (§1.1): input row, then a footer row — [+] attach on the left,
-// session-option pills and the Send/Stop button on the right. Styled with
-// shadcn tokens to sit under the shadcn chat conversation.
+// Layout (§1.1): input row, then a footer row — session identity/options on
+// the left, with Attach and Send/Stop on the right. Styled with shadcn tokens
+// to sit under the shadcn chat conversation.
 
 import {
   IconArrowUp,
@@ -19,6 +19,7 @@ import {
 } from "@tabler/icons-react";
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -43,9 +44,17 @@ import {
   type SessionChatSlashCommand,
 } from "./session-chat-slash-commands";
 import { SessionChatMonacoInput } from "./session-chat-monaco-input";
+import {
+  sessionChatImageTargetForHref,
+  useSessionChatImageViewer,
+} from "./session-chat-image-viewer";
+import type { SessionChatTheme } from "../../shared/session-chat";
 
 export interface SessionChatComposerHandle {
+  /** Clear the draft only when it still matches the supplied snapshot. */
+  clearDraft: (expected: string) => boolean;
   focus: () => void;
+  getDraft: () => string;
   /** Insert text at the caret; returns false when the composer cannot take it. */
   insertTypedText: (text: string) => boolean;
 }
@@ -81,6 +90,8 @@ export interface SessionChatComposerInputApi {
 export interface SessionChatComposerProps {
   disabled?: boolean;
   isWorking: boolean;
+  /** Stable conversation identity used to restore this session's unsent draft. */
+  sessionKey?: string;
   placeholder?: string;
   /** Agent slash commands offered by the "/" picker; empty disables it. */
   slashCommands?: readonly SessionChatSlashCommand[];
@@ -133,6 +144,8 @@ export interface SessionChatComposerProps {
    * unreachable), the plain textarea renders instead.
    */
   monacoVsBaseUrl?: string;
+  /** Palette used by the chat-owned Monaco prompt input. */
+  theme?: SessionChatTheme;
 }
 
 interface PastedImagePreview {
@@ -166,6 +179,51 @@ function nextFileReferenceIndex(text: string): number {
 }
 
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
+const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
+const SESSION_CHAT_DRAFT_STORAGE_PREFIX = "ghostex.sessionChat.draft.";
+
+function composerDraftStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredSessionChatDraft(sessionKey: string | undefined): string {
+  if (!sessionKey) {
+    return "";
+  }
+  return composerDraftStorage()?.getItem(
+    `${SESSION_CHAT_DRAFT_STORAGE_PREFIX}${sessionKey}`,
+  ) ?? "";
+}
+
+function writeStoredSessionChatDraft(
+  sessionKey: string | undefined,
+  draft: string,
+): void {
+  if (!sessionKey) {
+    return;
+  }
+  try {
+    const storage = composerDraftStorage();
+    const key = `${SESSION_CHAT_DRAFT_STORAGE_PREFIX}${sessionKey}`;
+    if (draft === "") {
+      storage?.removeItem(key);
+    } else {
+      storage?.setItem(key, draft);
+    }
+  } catch {
+    // Storage quota/private-mode failures must not break the composer.
+  }
+}
+
+function linkedImageReferenceHrefs(text: string): string[] {
+  return [...text.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)]
+    .map((match) => match[1]?.trim() ?? "")
+    .filter(Boolean);
+}
 
 function isImageFile(file: File): boolean {
   return file.type.startsWith("image/") || IMAGE_PATH_PATTERN.test(file.name);
@@ -225,30 +283,40 @@ export const SessionChatComposer = forwardRef<
     onSend,
     optionPills,
     placeholder,
+    sessionKey,
     slashCommands,
     slashHeading,
+    theme = "dark",
   },
   ref,
 ) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => readStoredSessionChatDraft(sessionKey));
   const [history, setHistory] = useState(EMPTY_SESSION_CHAT_COMPOSER_HISTORY);
   const [slashDismissed, setSlashDismissed] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [pastedImages, setPastedImages] = useState<readonly PastedImagePreview[]>([]);
   const [pendingImagePastes, setPendingImagePastes] = useState(0);
   const [monacoFailed, setMonacoFailed] = useState(false);
+  const imageViewer = useSessionChatImageViewer();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const slashListRef = useRef<HTMLDivElement | null>(null);
   const pasteSequenceRef = useRef(0);
+  const previewLoadsRef = useRef(new Set<string>());
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const monacoApiRef = useRef<SessionChatComposerInputApi | null>(null);
+  const pendingFocusRef = useRef(false);
+  const pendingInsertTextRef = useRef("");
+  const sendInFlightRef = useRef(false);
   const useMonaco = monacoVsBaseUrl !== undefined && !monacoFailed;
 
   // Previews mirror the draft: deleting a reference (by any means, including
   // sending, which clears the draft) drops its thumbnail.
   useEffect(() => {
+    const referencedHrefs = new Set(linkedImageReferenceHrefs(draft));
     setPastedImages((current) =>
-      current.filter((image) => draft.includes(`](${image.path})`)),
+      current.filter((image) => referencedHrefs.has(image.path)),
     );
   }, [draft]);
 
@@ -273,6 +341,7 @@ export const SessionChatComposer = forwardRef<
   }, [highlightedIndex, slashOpen]);
 
   const updateDraft = (next: string): void => {
+    writeStoredSessionChatDraft(sessionKey, next);
     setDraft(next);
     setHistory((current) => resetSessionChatComposerHistoryIndex(current));
     if (sessionChatSlashQuery(next) === null) {
@@ -324,28 +393,89 @@ export const SessionChatComposer = forwardRef<
   const getInputApi = (): SessionChatComposerInputApi | null =>
     useMonaco ? monacoApiRef.current : textareaApi;
 
+  useEffect(() => {
+    if (!useMonaco && textareaRef.current) {
+      if (pendingInsertTextRef.current) {
+        const pending = pendingInsertTextRef.current;
+        pendingInsertTextRef.current = "";
+        textareaApi.insertText(pending);
+      }
+      if (pendingFocusRef.current) {
+        pendingFocusRef.current = false;
+        textareaRef.current.focus();
+      }
+    }
+  }, [useMonaco]);
+
   useImperativeHandle(ref, () => ({
-    focus: () => {
-      getInputApi()?.focus();
+    clearDraft: (expected: string): boolean => {
+      const current = getInputApi()?.getValue() ?? draftRef.current;
+      if (current !== expected) {
+        return false;
+      }
+      writeStoredSessionChatDraft(sessionKey, "");
+      draftRef.current = "";
+      setDraft("");
+      setHistory((value) => resetSessionChatComposerHistoryIndex(value));
+      getInputApi()?.applyValue("", 0);
+      setSlashDismissed(false);
+      setSlashIndex(0);
+      return true;
     },
+    focus: () => {
+      const input = getInputApi();
+      if (!input) {
+        // Monaco loads asynchronously. Preserve the host's one-shot focus
+        // handoff until the real editor API exists instead of dropping it.
+        pendingFocusRef.current = true;
+        return;
+      }
+      pendingFocusRef.current = false;
+      input.focus();
+    },
+    getDraft: () => getInputApi()?.getValue() ?? draftRef.current,
     insertTypedText: (text: string): boolean => {
       if (disabled) {
         return false;
       }
-      return getInputApi()?.insertText(text) ?? false;
+      const input = getInputApi();
+      if (!input) {
+        pendingInsertTextRef.current += text;
+        return true;
+      }
+      return input.insertText(text);
     },
   }));
 
   const send = (text: string = draft): void => {
-    if (text.trim() === "" || disabled) {
+    if (text.trim() === "" || disabled || sendInFlightRef.current) {
       return;
     }
-    void onSend(text);
-    setHistory((current) => pushSessionChatComposerHistory(current, text));
-    setDraft("");
-    getInputApi()?.applyValue("", 0);
-    setSlashDismissed(false);
-    setSlashIndex(0);
+    sendInFlightRef.current = true;
+    void Promise.resolve()
+      .then(() => onSend(text))
+      .then(() => {
+        // Preservation and terminal submission are asynchronous. Clear only
+        // the exact snapshot that succeeded; text added while the request was
+        // in flight remains the next draft.
+        const current = getInputApi()?.getValue() ?? draftRef.current;
+        if (current === text) {
+          writeStoredSessionChatDraft(sessionKey, "");
+          draftRef.current = "";
+          setDraft("");
+          getInputApi()?.applyValue("", 0);
+        }
+        setHistory((value) => pushSessionChatComposerHistory(value, text));
+        setSlashDismissed(false);
+        setSlashIndex(0);
+      })
+      .catch(() => {
+        // The transport rejected the send before submission. Keep the exact
+        // chat draft so preserving terminal input can be retried safely.
+      })
+      .finally(() => {
+        sendInFlightRef.current = false;
+      });
   };
 
   const insertReference = (reference: string): void => {
@@ -363,13 +493,52 @@ export const SessionChatComposer = forwardRef<
     api?.applyValue(next, start + inserted.length);
   };
 
-  const addImagePreview = (path: string, dataUrl: string): void => {
-    pasteSequenceRef.current += 1;
-    setPastedImages((currentImages) => [
-      ...currentImages,
-      { dataUrl, id: `${path}#${pasteSequenceRef.current}`, path },
-    ]);
-  };
+  const addImagePreview = useCallback((path: string, dataUrl: string): void => {
+    setPastedImages((currentImages) => {
+      if (currentImages.some((image) => image.path === path)) {
+        return currentImages;
+      }
+      pasteSequenceRef.current += 1;
+      return [
+        ...currentImages,
+        { dataUrl, id: `${path}#${pasteSequenceRef.current}`, path },
+      ];
+    });
+  }, []);
+
+  // A pasted/typed literal "[Image #N](path)" is the same attachment as one
+  // inserted by the paperclip. Resolve it through the shared image viewer so
+  // it gains a thumbnail without requiring a second attach action.
+  useEffect(() => {
+    if (!imageViewer) {
+      return;
+    }
+    for (const href of linkedImageReferenceHrefs(draft)) {
+      if (
+        pastedImages.some((image) => image.path === href) ||
+        previewLoadsRef.current.has(href)
+      ) {
+        continue;
+      }
+      const pending = imageViewer.resolve(sessionChatImageTargetForHref(href));
+      if (!pending) {
+        continue;
+      }
+      previewLoadsRef.current.add(href);
+      void pending
+        .then((dataUrl) => {
+          if (linkedImageReferenceHrefs(draftRef.current).includes(href)) {
+            addImagePreview(href, dataUrl);
+          }
+        })
+        .catch(() => {
+          // Keep the literal reference when its preview cannot be loaded.
+        })
+        .finally(() => {
+          previewLoadsRef.current.delete(href);
+        });
+    }
+  }, [addImagePreview, draft, imageViewer, pastedImages]);
 
   const insertImageReference = (path: string, dataUrl?: string): void => {
     const api = getInputApi();
@@ -650,7 +819,7 @@ export const SessionChatComposer = forwardRef<
       ) : null}
       <div
         className={cn(
-          "min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
+          "ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
           disabled && "opacity-60",
         )}
         data-disabled={disabled ? "true" : undefined}
@@ -659,11 +828,24 @@ export const SessionChatComposer = forwardRef<
           <div className="flex flex-wrap items-center gap-2 pb-2">
             {pastedImages.map((image) => (
               <div className="relative" key={image.id}>
-                <img
-                  alt="Pasted image"
-                  className="h-12 w-12 rounded-lg border border-input object-cover"
-                  src={image.dataUrl}
-                />
+                <button
+                  aria-label="View pasted image"
+                  className="block cursor-zoom-in rounded-lg"
+                  disabled={!imageViewer}
+                  onClick={() =>
+                    imageViewer?.open({
+                      alt: "Pasted image",
+                      url: image.dataUrl,
+                    })
+                  }
+                  type="button"
+                >
+                  <img
+                    alt="Pasted image"
+                    className="h-12 w-12 rounded-lg border border-input object-cover"
+                    src={image.dataUrl}
+                  />
+                </button>
                 <button
                   aria-label="Remove image"
                   className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-input bg-card text-muted-foreground hover:text-foreground"
@@ -707,7 +889,17 @@ export const SessionChatComposer = forwardRef<
             placeholder={placeholder ?? "Send a message…"}
             registerApi={(api) => {
               monacoApiRef.current = api;
+              if (api && pendingInsertTextRef.current) {
+                const pending = pendingInsertTextRef.current;
+                pendingInsertTextRef.current = "";
+                api.insertText(pending);
+              }
+              if (api && pendingFocusRef.current) {
+                pendingFocusRef.current = false;
+                api.focus();
+              }
             }}
+            theme={theme}
             vsBaseUrl={monacoVsBaseUrl ?? ""}
           />
         ) : (
@@ -741,6 +933,9 @@ export const SessionChatComposer = forwardRef<
         </div>
         <div className="flex w-full items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-0.5">
+            {optionPills}
+          </div>
+          <div className="ml-auto flex items-center gap-1.5">
             {onPasteImage || onAttachFile || onPickPaths ? (
               <>
                 {onPickPaths ? null : (
@@ -775,6 +970,7 @@ export const SessionChatComposer = forwardRef<
                   <span className="inline-flex">
                     <Button
                       aria-label="Attach an Image, File, or Folder"
+                      className="ghostex-chat-footer-control rounded-full"
                       disabled={disabled}
                       onClick={() => {
                         if (onPickPaths) {
@@ -792,9 +988,6 @@ export const SessionChatComposer = forwardRef<
                 </AppTooltip>
               </>
             ) : null}
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            {optionPills}
             {isWorking ? (
               <Button
                 aria-label="Stop the agent"
@@ -814,7 +1007,7 @@ export const SessionChatComposer = forwardRef<
             ) : (
               <Button
                 aria-label="Send"
-                className="size-8 rounded-full"
+                className="ghostex-chat-send-button size-8 rounded-full"
                 disabled={sendDisabled}
                 onClick={() => send()}
                 size="icon"

@@ -1,7 +1,7 @@
 # Ghostex Surfaces Recon — for the new Add-Project dialog (2026-07-30)
 
 Working repo: /Users/madda/dev/_active/Ghostex. All file:line refs are into this repo.
-Companion docs: `plans/014-add-project-dialog.t3code-spec.md` (behavior spec), `plans/014-add-project-dialog.md` (implementation plan).
+Companion doc: `plans/014-add-project-dialog.md` (implementation plan).
 
 ## 0. Architecture decision
 
@@ -34,7 +34,7 @@ Two dialog systems exist. The "new worktree dialog" (2026-07-29) is the **Sideba
 
 - gpui local: sidebar posts `{ type: "pickWorkspaceFolder" }` (`sidebar/sidebar-app.tsx:4745-4748`, contract `shared/session-grid-contract-sidebar.ts:1776-1783`) → native OS folder picker in Rust (`gpui/src/main.rs:29430-29466`) → `workspaceFolderPicked` → `gpui/sidebar/gxserver-runtime.ts:13256-13285` calls `POST /api/addProjectPath`.
 - `registerProjectPath()` helper: `gpui/sidebar/gxserver-runtime.ts:12899-12912`.
-- T3-style path browser ALREADY EXISTS (pattern-A modal host, used for remote add + clone destination): `sidebar/remote-project-picker/remote-project-picker-modal.tsx` (props `:43-56`: `onAddProject(path)`, `onBrowse(input)`), helpers `sidebar/remote-project-picker/t3-project-paths.ts`, `t3-command-palette-logic.ts`, types `t3-filesystem.ts:1-13`. Wired in modal host at `native/sidebar/modal-host.tsx:1275-1304`; also embedded in `sidebar/add-repository-modal.tsx:521-544`.
+- A path browser already exists (pattern-A modal host, used for remote add + clone destination): `sidebar/remote-project-picker/remote-project-picker-modal.tsx` (props `:43-56`: `onAddProject(path)`, `onBrowse(input)`), helpers `sidebar/remote-project-picker/remote-project-paths.ts`, `remote-command-palette-logic.ts`, types `remote-filesystem.ts:1-13`. Wired in modal host at `native/sidebar/modal-host.tsx:1275-1304`; also embedded in `sidebar/add-repository-modal.tsx:521-544`.
 
 ## 3. Storybook
 
@@ -61,7 +61,7 @@ Two dialog systems exist. The "new worktree dialog" (2026-07-29) is the **Sideba
 - **Does not speak gxserver protocol.** Everything over SSH via CLI: `mobile/src/commands/ghostexCli.ts` (`addProjectCommand` `:196-199`, `removeProjectCommand` `:192-194`); transport `mobile/src/inventory/client.ts` (`GhostexNative.exec(machine.id, loginShellCommand(...), 20000)`). Mobile does NOT import shared/; its contract types live in `mobile/src/contract/mobileSummary.ts`.
 - CLI is implemented in `gxserver-rs/src/ghostex_cli/mod.rs` (`add-project` registered `:173`, mapped `:318`), `actions.rs:183` (`addProject → POST /api/addProjectPath`), usage `usage.rs:143`. **No browse CLI verb exists — must be added** (register in mod.rs, route in actions.rs to `/api/browseProjectDirectories`, add builder in ghostexCli.ts).
 - Existing Add Project UI: `Overlay` union variant `{ kind: 'addProject', machine, error }` `mobile/src/screens/SessionsScreen.tsx:185`; entry = Projects section-label context menu `:1492-1550` (item `:1515-1521`); render = bare `PromptDialog` `:2309-2327`; executor `runSessionCommand` `:546-590`.
-- Navigation: `@react-navigation/native-stack`, single root stack `mobile/App.tsx:36`, routes `mobile/src/navigation/types.ts:2-11`. New multi-step flow can be a new stack screen (t3code mobile precedent) or upgraded overlay.
+- Navigation: `@react-navigation/native-stack`, single root stack `mobile/App.tsx:36`, routes `mobile/src/navigation/types.ts:2-11`. New multi-step flow can be a new stack screen or upgraded overlay.
 - UI conventions: tokens `mobile/src/theme/palette.ts` (`GhostexPalette`, `GhostexRadii`); copy centralized in `mobile/src/copy.ts`; dialogs `mobile/src/components/common/PromptDialog.tsx` / `ActionSheet.tsx` / `ConfirmDialog.tsx` / `ProgressOverlay.tsx` / `StateCard.tsx`; anchored menus `mobile/src/components/sessions/ContextMenu.tsx`; svg glyphs `mobile/src/components/sessions/icons.tsx`; zustand stores.
 - Run iOS: `cd mobile && bun install && bunx expo prebuild && bunx expo run:ios`; typecheck `bunx tsc --noEmit`. Simulator is arm64-only. `mobile/AGENTS.md` is binding: read https://docs.expo.dev/versions/v57.0.0/ docs before writing code.
 

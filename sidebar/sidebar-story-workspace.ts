@@ -711,19 +711,6 @@ function createSessionRecord(session: SidebarSessionItem): SessionRecord {
     };
   }
 
-  if (session.agentIcon === "t3") {
-    return {
-      ...baseRecord,
-      kind: "t3",
-      t3: {
-        projectId: `story-project-${session.sessionId}`,
-        serverOrigin: "http://127.0.0.1:3773",
-        threadId: "pending-thread",
-        workspaceRoot: "/tmp/story-workspace",
-      },
-    };
-  }
-
   return {
     ...baseRecord,
     kind: "terminal",

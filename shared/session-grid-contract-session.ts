@@ -19,12 +19,10 @@ import {
   type TerminalSurface,
   type TerminalSessionPersistenceProvider,
   type TerminalSessionRecord,
-  type T3SessionRecord,
   type BrowserSessionRecord,
   type TerminalViewMode,
   type VisibleSessionCount,
 } from "./session-grid-contract-core";
-import { normalizeT3SessionMetadata } from "./t3-session-metadata";
 
 /**
  * CDXC:Claude-session-status 2026-04-25-08:29
@@ -168,7 +166,6 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES = new Set([
   "rovo session",
   "rovo dev session",
   "rovodev session",
-  "t3 code session",
 ]);
 const DEFAULT_SESSION_AGENT_TITLE_NAMES = new Map<string, string>([
   ["agy", "Antigravity CLI"],
@@ -204,7 +201,6 @@ const DEFAULT_SESSION_AGENT_TITLE_NAMES = new Map<string, string>([
   ["rovo-dev", "Rovo Dev"],
   ["rovodev", "Rovo Dev"],
   ["π", "Pi"],
-  ["t3", "T3 Code"],
 ]);
 const DEFAULT_SESSION_SEARCH_PLACEHOLDER_TITLES = createDefaultSessionSearchPlaceholderTitles();
 const ELLIPSIZED_PATH_TITLE_PATTERN = /^(?:…|\.\.\.)[\\/]/u;
@@ -552,24 +548,6 @@ export function createSessionRecord(
     };
   }
 
-  if (options?.kind === "t3") {
-    return {
-      alias,
-      column: position.column,
-      createdAt,
-      displayId,
-      kind: "t3",
-      lastAccessedAt,
-      lastStartedAt,
-      row: position.row,
-      sessionId,
-      slotIndex,
-      t3: normalizeT3SessionMetadata(options.t3, sessionId),
-      title,
-      titleSource,
-    };
-  }
-
   return {
     alias,
     agentName: normalizeTerminalSessionAgentName(terminalAgentName),
@@ -683,12 +661,6 @@ export function isXtermTerminalEngine(value: TerminalEngine): boolean {
 }
 
 export function getTerminalSessionSurfaceTitle(
-  session: Pick<BaseSessionRecord, "alias" | "displayId" | "sessionId" | "slotIndex" | "title">,
-): string {
-  return formatSessionSurfaceTitle(session);
-}
-
-export function getT3SessionSurfaceTitle(
   session: Pick<BaseSessionRecord, "alias" | "displayId" | "sessionId" | "slotIndex" | "title">,
 ): string {
   return formatSessionSurfaceTitle(session);
@@ -987,10 +959,6 @@ export function isTerminalSession(session: SessionRecord): session is TerminalSe
 
 export function isBrowserSession(session: SessionRecord): session is BrowserSessionRecord {
   return session.kind === "browser";
-}
-
-export function isT3Session(session: SessionRecord): session is T3SessionRecord {
-  return session.kind === "t3";
 }
 
 function getSessionNumber(session: Pick<BaseSessionRecord, "sessionId" | "slotIndex">): number {

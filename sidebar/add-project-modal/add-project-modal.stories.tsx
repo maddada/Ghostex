@@ -26,7 +26,7 @@ export const Sources: Story = {
   args: {},
 };
 
-/** Two machines: the machine step is shown first (t3code's "environments"). */
+/** Two machines: the machine step is shown first. */
 export const MachineStep: Story = {
   args: {
     mockOptions: {

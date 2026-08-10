@@ -7,9 +7,8 @@ import { useEffect, useState } from "react";
  * by the root. The alternative (a timer per row) re-renders the whole inbox N
  * times a minute for lists that can hold a hundred sessions.
  *
- * Resolution is deliberately 30 seconds, not one second: t3code ticks its
- * working duration every second because that duration is its own leaf <span>,
- * while Ghostex's V2 status label lives inside the row. A per-second whole-inbox
+ * Resolution is deliberately 30 seconds, not one second. Ghostex's V2 status
+ * label lives inside the row, so a per-second whole-inbox
  * re-render is exactly the scroll-linked paint work this sidebar has spent a lot
  * of effort removing. Half a minute is the coarsest tick that still lands a
  * minute-granular label ("Working 7m", "3d") within half a minute of the truth.

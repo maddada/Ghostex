@@ -10,6 +10,10 @@ import {
   normalizeTerminalEngine,
 } from "./session-grid-contract-session";
 import {
+  normalizeSessionChatTheme,
+  type SessionChatTheme,
+} from "./session-chat";
+import {
   clampCompletionSoundSetting,
   DEFAULT_COMPLETION_SOUND,
   type CompletionSoundSetting,
@@ -86,6 +90,8 @@ export function clampSidebarCollapseAnimationDurationMs(value: number): number {
  * hosts that only persist unknown keys need no change to support it.
  */
 export type SidebarVersion = "v1" | "v2";
+/** The surface shown first when a newly launched agent supports Session Chat. */
+export type PreferredAgentInterface = "terminal" | "chat";
 /**
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 renders one flat session inbox by default and can switch to
@@ -97,7 +103,7 @@ export type SidebarV2Layout = "flat" | "byProject";
  * CDXC:SidebarV2Worktree 2026-07-29:
  * What the plain "+" does in Sidebar V2: start a session in the project itself
  * ("local", the unchanged instant path) or open the worktree popover
- * pre-filled ("worktree"). Mirror of t3code's `defaultThreadEnvMode`.
+ * pre-filled ("worktree").
  */
 export type SidebarNewSessionEnvMode = "local" | "worktree";
 /**
@@ -115,6 +121,7 @@ export type SessionTitleGenerationAgent = "codex" | "cursor" | "claude" | "grok"
 export const SETTINGS_MODAL_NAVIGATION_TABS = [
   "settings",
   "integrations",
+  "plugins",
   "osIntegration",
   "remote",
   "projects",
@@ -300,13 +307,6 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     id: "native.prompt.editor",
     label: "Prompt editor",
     logFiles: ["native-prompt-editor-debug.log"],
-  },
-  {
-    description: "T3 Code panes, CEF geometry, browser/editor console forwarding, and source drag diagnostics.",
-    group: "macOS",
-    id: "native.t3.codePane",
-    label: "T3 Code and CEF panes",
-    logFiles: ["native-t3-code-pane-repro.log"],
   },
   {
     description: "Browser profile import, Chromium cookie/keychain/decrypt, and CEF handoff diagnostics.",
@@ -855,8 +855,24 @@ export type ghostexSettings = {
    * only the coming-soon overlay for those pages.
    */
   showBetaFeatures: boolean;
-  /** Persisted by the Source install prompt; the Plugins modal can reverse it. */
+  /**
+   * Built-in project workarea switches control titlebar presentation only;
+   * they do not stop runtimes, unmount surfaces, or disable hotkeys.
+   */
   codeViewTabHidden: boolean;
+  browserViewTabHidden: boolean;
+  kanbanViewTabHidden: boolean;
+  automateViewTabHidden: boolean;
+  docsViewTabHidden: boolean;
+  /**
+   * Quick-access switches affect only the matching right-side titlebar button.
+   * The menus and commands remain available through their other entry points.
+   */
+  tipsAndTricksTitlebarButtonHidden: boolean;
+  resourcesTitlebarButtonHidden: boolean;
+  gitActionsTitlebarButtonHidden: boolean;
+  quickActionsTitlebarButtonHidden: boolean;
+  openInTitlebarButtonHidden: boolean;
   codeServerLinkVscodeUserConfig: boolean;
   codeServerUseVscodeInsidersUserConfig: boolean;
   customDefaultEditorCommand: string;
@@ -871,7 +887,7 @@ export type ghostexSettings = {
   hideProjectHeaderDiffStats: boolean;
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
-   * The Docs sidebar scans ./docs recursively and root artifacts by default, and users can add comma-separated project-relative folder roots from global Projects settings. Trim spaces around each folder name while preserving spaces inside names such as "my documents".
+   * The Docs sidebar scans ./docs, ./artifacts, and ./ai recursively plus root artifacts by default. Users can add comma-separated project-relative folder roots from global Projects settings. Trim spaces around each folder name while preserving spaces inside names such as "my documents".
    *
    * CDXC:DocsRootAdditive 2026-08-09:
    * These folders are project-root-relative, always. A configured Docs directory is mounted as an ADDITIONAL top-level folder that always shows its whole tree, so it is never narrowed by this list (round 2 briefly made it a narrowing control for that root; additive mounting replaced that).
@@ -1009,6 +1025,8 @@ export type ghostexSettings = {
   sessionStatusIndicatorSize: SessionStatusIndicatorSize;
   sessionPersistenceProvider: SessionPersistenceProvider;
   showSessionIdInTerminalPanes: boolean;
+  /** Newly launched supported agents still start a terminal, then show this surface first. */
+  preferredAgentInterface: PreferredAgentInterface;
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The sidebar version selector is the rollout switch for the Inbox sidebar.
@@ -1103,6 +1121,8 @@ export type ghostexSettings = {
    */
   showLessForExpandedProjectJumps: boolean;
   sidebarTheme: SidebarThemeSetting;
+  /** Theme for chat content only; the surrounding Ghostex chrome stays dark. */
+  sessionChatTheme: SessionChatTheme;
   /**
    * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
    * Custom chrome colors are scoped to the sidebar and native titlebar only.
@@ -1462,6 +1482,15 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   showBetaFeatures: false,
   codeViewTabHidden: false,
+  browserViewTabHidden: false,
+  kanbanViewTabHidden: false,
+  automateViewTabHidden: false,
+  docsViewTabHidden: false,
+  tipsAndTricksTitlebarButtonHidden: false,
+  resourcesTitlebarButtonHidden: false,
+  gitActionsTitlebarButtonHidden: false,
+  quickActionsTitlebarButtonHidden: false,
+  openInTitlebarButtonHidden: false,
   /**
    * CDXC:EditorPanes 2026-05-06-15:00
    * Embedded code-server editor panes can reuse the user's local VS Code
@@ -1498,7 +1527,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
     SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats,
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
-   * Additional Docs scan folders are opt-in so existing projects continue to expose only ./docs plus root Markdown, HTML, and Excalidraw artifacts until the user lists more project-relative folders. A configured Docs directory adds its own tree on top of whatever this lists (CDXC:DocsRootAdditive).
+   * Additional Docs scan folders remain opt-in beyond the built-in ./docs,
+   * ./artifacts, and ./ai roots plus root Markdown, HTML, and Excalidraw files.
+   * A configured Docs directory adds its own tree on top of whatever this
+   * lists (CDXC:DocsRootAdditive).
    */
   manageAdditionalDocsFolders: "",
   /**
@@ -1750,6 +1782,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * identifiers unless they explicitly enable the pane overlay.
    */
   showSessionIdInTerminalPanes: false,
+  preferredAgentInterface: "terminal",
   /**
    * CDXC:SidebarV2 2026-07-29:
    * The classic sidebar stays the default for every user. Sidebar V2 must be
@@ -1811,6 +1844,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Use Dark 2 as the active app theme and present it to users as Dark Gray.
    */
   sidebarTheme: "dark-2",
+  sessionChatTheme: "dark",
   /**
    * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
    * Custom sidebar/titlebar colors are scoped to the sidebar and titlebar.
@@ -1953,7 +1987,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * CDXC:TitlebarOpenIn 2026-05-11-00:22
    * The titlebar Open In menu is configurable: built-in editor targets can be
    * hidden and user-defined command targets can be appended without changing
-   * the t3code-derived default editor catalog.
+   * the default editor catalog.
    */
   customWorkspaceOpenTargets: [],
   /**
@@ -1988,6 +2022,14 @@ export const SIDEBAR_THEME_SETTING_OPTIONS: ReadonlyArray<{
    * Dark Gray so the disabled control matches the current app chrome.
    */
   { label: "Dark Gray", value: "dark-2" },
+];
+
+export const SESSION_CHAT_THEME_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: SessionChatTheme;
+}> = [
+  { label: "Light", value: "light" },
+  { label: "Dark", value: "dark" },
 ];
 
 export const TERMINAL_ENGINE_SETTING_OPTIONS: ReadonlyArray<{
@@ -2079,6 +2121,14 @@ export const SIDEBAR_VERSION_OPTIONS: ReadonlyArray<{
 }> = [
   { label: "Standard", value: "v1" },
   { label: "Inbox (Beta)", value: "v2" },
+];
+
+export const PREFERRED_AGENT_INTERFACE_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: PreferredAgentInterface;
+}> = [
+  { label: "Terminal", value: "terminal" },
+  { label: "Chat", value: "chat" },
 ];
 
 export const SIDEBAR_V2_LAYOUT_OPTIONS: ReadonlyArray<{
@@ -2457,6 +2507,51 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       "codeViewTabHidden",
       DEFAULT_ghostex_SETTINGS.codeViewTabHidden,
+    ),
+    browserViewTabHidden: readBoolean(
+      source,
+      "browserViewTabHidden",
+      DEFAULT_ghostex_SETTINGS.browserViewTabHidden,
+    ),
+    kanbanViewTabHidden: readBoolean(
+      source,
+      "kanbanViewTabHidden",
+      DEFAULT_ghostex_SETTINGS.kanbanViewTabHidden,
+    ),
+    automateViewTabHidden: readBoolean(
+      source,
+      "automateViewTabHidden",
+      DEFAULT_ghostex_SETTINGS.automateViewTabHidden,
+    ),
+    docsViewTabHidden: readBoolean(
+      source,
+      "docsViewTabHidden",
+      DEFAULT_ghostex_SETTINGS.docsViewTabHidden,
+    ),
+    tipsAndTricksTitlebarButtonHidden: readBoolean(
+      source,
+      "tipsAndTricksTitlebarButtonHidden",
+      DEFAULT_ghostex_SETTINGS.tipsAndTricksTitlebarButtonHidden,
+    ),
+    resourcesTitlebarButtonHidden: readBoolean(
+      source,
+      "resourcesTitlebarButtonHidden",
+      DEFAULT_ghostex_SETTINGS.resourcesTitlebarButtonHidden,
+    ),
+    gitActionsTitlebarButtonHidden: readBoolean(
+      source,
+      "gitActionsTitlebarButtonHidden",
+      DEFAULT_ghostex_SETTINGS.gitActionsTitlebarButtonHidden,
+    ),
+    quickActionsTitlebarButtonHidden: readBoolean(
+      source,
+      "quickActionsTitlebarButtonHidden",
+      DEFAULT_ghostex_SETTINGS.quickActionsTitlebarButtonHidden,
+    ),
+    openInTitlebarButtonHidden: readBoolean(
+      source,
+      "openInTitlebarButtonHidden",
+      DEFAULT_ghostex_SETTINGS.openInTitlebarButtonHidden,
     ),
     /**
      * CDXC:EditorPanes 2026-06-08-20:12:
@@ -2865,6 +2960,13 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sidebarVersion: normalizeSidebarVersion(
       readString(source, "sidebarVersion", DEFAULT_ghostex_SETTINGS.sidebarVersion),
     ),
+    preferredAgentInterface: normalizePreferredAgentInterface(
+      readString(
+        source,
+        "preferredAgentInterface",
+        DEFAULT_ghostex_SETTINGS.preferredAgentInterface,
+      ),
+    ),
     sidebarV2Layout: normalizeSidebarV2Layout(
       readString(source, "sidebarV2Layout", DEFAULT_ghostex_SETTINGS.sidebarV2Layout),
     ),
@@ -2961,6 +3063,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sidebarTheme: clampSidebarThemeSetting(
       readString(source, "sidebarTheme", DEFAULT_ghostex_SETTINGS.sidebarTheme),
     ),
+    sessionChatTheme: normalizeSessionChatTheme(source.sessionChatTheme),
     customSidebarTitlebarColorsEnabled: true,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
       customSidebarTitlebarBackgroundColor,
@@ -3681,6 +3784,12 @@ function normalizeSidebarProjectGroupStyle(
 
 function normalizeSidebarVersion(value: string | undefined): SidebarVersion {
   return value === "v2" ? "v2" : DEFAULT_ghostex_SETTINGS.sidebarVersion;
+}
+
+function normalizePreferredAgentInterface(
+  value: string | undefined,
+): PreferredAgentInterface {
+  return value === "chat" ? "chat" : DEFAULT_ghostex_SETTINGS.preferredAgentInterface;
 }
 
 function normalizeSidebarV2Layout(value: string | undefined): SidebarV2Layout {

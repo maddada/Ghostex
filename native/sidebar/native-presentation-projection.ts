@@ -88,7 +88,7 @@ export function createNativePresentationSidebarGroups(
   Native gxserver presentation must be a pure value projection from gxserver rows plus macOS-local pane facts. Keep hidden overlays, local-only pane rows, Quick/Chats classification, and routing callbacks in the input so this module cannot mutate sidebar state, pane chrome, or publish state.
 
   CDXC:GxserverPresentationParity 2026-06-24-10:45:
-  Shared gxserver projection owns presentation row mapping for macOS and GPUI. This wrapper keeps macOS-only overlays here: local browser/T3 pane rows, Quick/Chats carriers, remote-attach carrier suppression, delayed-send timers, and Close After Done countdowns.
+  Shared gxserver projection owns presentation row mapping for macOS and GPUI. This wrapper keeps macOS-only overlays here: local browser pane rows, Quick/Chats carriers, remote-attach carrier suppression, delayed-send timers, and Close After Done countdowns.
   */
   const localProjectsById = new Map(input.localProjects.map((project) => [project.projectId, project]));
   const sessionsByProject = createGxserverPresentationSessionsByProjectFromGroups(input);
@@ -252,15 +252,14 @@ function createPresentationProjectSidebarGroup({
   CDXC:GxserverPresentationProjects 2026-06-13-00:49:
   Project rows are not session rows. A visible gxserver project must stay in the Projects section even when it has no workspace sessions yet.
 
-  CDXC:T3Code 2026-06-13-00:49:
-  T3 Code and browser panes are macOS-local WKWebView sessions even when gxserver owns terminal presentation. Merge only those native pane cards into normal project groups with project-scoped ids so native tabs and the React sidebar stay aligned while stale pre-cutover terminal rows stay suppressed.
+  Browser panes are macOS-local WKWebView sessions even when gxserver owns terminal presentation. Merge only those native pane cards into normal project groups with project-scoped ids so native tabs and the React sidebar stay aligned while stale pre-cutover terminal rows stay suppressed.
   */
   const presentationSessionIds = new Set<string>(sessions.map((session) => session.sessionId));
   const localRows = localProject?.localSidebarSessions ?? [];
   const localPaneSessions = localRows
     .filter(
       (session) =>
-        (session.sessionKind === "t3" || session.sessionKind === "browser") &&
+        session.sessionKind === "browser" &&
         !presentationSessionIds.has(originalSidebarSessionId(session.sessionId)) &&
         !input.hiddenSessionKeys?.has(
           createNativePresentationProjectionSessionKey(project.projectId, originalSidebarSessionId(session.sessionId)),

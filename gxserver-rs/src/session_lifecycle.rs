@@ -13,29 +13,27 @@ use crate::{
 
 /*
 CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
-Server side of Sidebar V2's settle/snooze inbox, ported from t3code
-(`apps/server/src/orchestration/decider.ts` command invariants +
-`packages/client-runtime/src/state/threadSettled.ts` predicates). The Ghostex
+Server side of Sidebar V2's settle/snooze inbox. The Ghostex
 client twin lives in `shared/sidebar-v2-lifecycle.ts` and this module must agree
 with it field for field.
 
-Concept mapping (t3code thread -> Ghostex session):
+Concept mapping:
 - `session.status` starting/running -> gxserver activity "working".
 - `hasPendingApprovals` / `hasPendingUserInput` -> gxserver activity "attention".
 - `latestTurn` / `latestUserMessageAt` -> gxserver's meaningful-activity clock
   (`meaningfulActivityAt`, falling back to `lastActiveAt`/`createdAt`) combined
   with `workingStartedAt`, which is exactly what the sidebar projection feeds the
   client as `lastInteractionAt`.
-- t3code's `hasQueuedTurnStart` grace window has no Ghostex twin: text goes
+- A provider-side queued-turn grace window has no Ghostex twin: text goes
   straight into the terminal and gxserver flips activity to working, so there is
   no "message sent but unadopted" state to protect.
 
-Deliberate divergences from t3code, all documented at their rule:
-- Auto-settle is PERSISTED here (t3code derives it per client). gxserver serves
+Lifecycle decisions documented at their rule:
+- Auto-settle is persisted here. gxserver serves
   GPUI, web, mobile, and the CLI, so one server answer beats four derivations.
 - Snooze expiry is NOT an eager clear (see `SNOOZE_WAKE_RETENTION_MS`).
 - Snoozing does not clear a settle: the client partition already ranks snoozed
-  above settled, and t3code's decider leaves the settle untouched, so a woken
+  above settled, and the decider leaves the settle untouched, so a woken
   session returns to whichever shelf it came from.
 */
 
@@ -310,9 +308,9 @@ fn apply(
 /*
 Settle. Settling an already-settled session keeps the original `settledAt` so a
 double click or a bulk settle is a silent no-op instead of an error or a
-reordering churn (t3code's `alreadySettled` re-emission). Settling a session the
+reordering churn from redundant settle emissions. Settling a session the
 sweep auto-settled DOES stamp `settledAt`: that is the user promoting an
-automatic decision into an explicit one, exactly like t3code, which treats a row
+automatic decision into an explicit one, which treats a row
 with a null `settledAt` as not-yet-explicitly-settled.
 */
 pub fn settle_session(
@@ -339,7 +337,7 @@ pub fn settle_session(
 /*
 Un-settle. The "active" pin is the user saying "keep this in my inbox": it
 suppresses auto-settle until real activity outruns the pin's stamp, at which
-point the sweep clears it and the ordinary rules apply again. That is t3code's
+point the sweep clears it and the ordinary rules apply again. This is the
 `thread.unsettled` with `reason: "user"` projected to `settledOverride: "active"`
 plus its `reason: "activity"` reset, expressed against gxserver's activity clock
 instead of an event log.
@@ -433,7 +431,7 @@ durable write per session:
    switch back to V1, and that state still has to be groomed.
 2. Activity reset. Real activity newer than the override's stamp clears ANY
    override — a settled session wakes, an "active" pin unpins — mirroring
-   t3code's `thread.unsettled` with `reason: "activity"`.
+   activity-driven session unsetting rule.
 3. Auto-settle, from either of two triggers: the inactivity window, or a merged
    or closed pull request on the session's branch. Runs only for Sidebar V2
    users (see `read_sweep_auto_settle_after_days`; a V1 machine passes

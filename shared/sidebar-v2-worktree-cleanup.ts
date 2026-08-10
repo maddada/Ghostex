@@ -2,7 +2,7 @@ import type { SidebarV2Session } from "./sidebar-v2-session";
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `worktreeCleanup.ts` and the temp-branch naming in
+Implements worktree cleanup and the temp-branch naming in
 `packages/shared/src/git.ts`.
 
 In V2 a worktree is an ATTRIBUTE of a session (its cwd plus branch), not a

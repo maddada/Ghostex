@@ -433,6 +433,32 @@ fn install_and_verify_cef_component(
     verify_cef_runtime_dir(&installed.path)
 }
 
+pub(super) fn reinstall_and_verify_cef_component(
+    progress_tx: mpsc::UnboundedSender<component_store::ComponentStoreProgressPhase>,
+) -> Result<(), String> {
+    let store = on_demand_component_store()?
+        .ok_or_else(|| "The sealed CEF component manifest is unavailable.".to_string())?;
+    let component = store.component(CEF_COMPONENT).ok_or_else(|| {
+        "The sealed manifest does not define the required CEF component.".to_string()
+    })?;
+    let expected_version = expected_cef_component_version();
+    if component.component_version != expected_version {
+        return Err(format!(
+            "The sealed CEF component version {} does not match this app's required version {expected_version}.",
+            component.component_version
+        ));
+    }
+    let current = store.query_current(CEF_COMPONENT)?;
+    if current.installed {
+        store.uninstall(CEF_COMPONENT, &current.version)?;
+    }
+    let mut report_progress = |progress: component_store::ComponentStoreProgress| {
+        let _ = progress_tx.unbounded_send(progress.phase);
+    };
+    let installed = store.install(CEF_COMPONENT, &mut report_progress)?;
+    verify_cef_runtime_dir(&installed.path)
+}
+
 fn bundled_cef_runtime_dir() -> Option<PathBuf> {
     let executable = env::current_exe().ok()?;
     let executable_dir = executable.parent()?;

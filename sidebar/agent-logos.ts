@@ -16,7 +16,6 @@ import opencodeLogo from "../src/assets/opencode.svg" with { type: "text" };
 import piLogo from "../src/assets/pi.svg" with { type: "text" };
 import qoderLogo from "../src/assets/qoder.svg" with { type: "text" };
 import rovoDevLogo from "../src/assets/rovo-dev.svg" with { type: "text" };
-import t3Logo from "../src/assets/t3.svg" with { type: "text" };
 import type { SidebarAgentIcon } from "../shared/sidebar-agents";
 import type { CSSProperties } from "react";
 
@@ -91,7 +90,6 @@ export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   pi: svgTextToDataUrl(piLogo),
   qoder: svgTextToDataUrl(qoderLogo),
   "rovo-dev": svgTextToDataUrl(rovoDevLogo),
-  t3: svgTextToDataUrl(t3Logo),
 };
 
 /**
@@ -120,7 +118,6 @@ export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
   pi: "#c8ff62",
   qoder: "#a991ff",
   "rovo-dev": "#4fc3a1",
-  t3: "#ff6af3",
 };
 
 /**
@@ -158,7 +155,6 @@ export const COLORED_AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   pi: svgTextToColorizedDataUrl(piLogo, AGENT_LOGO_COLORS.pi),
   qoder: svgTextToColorizedDataUrl(qoderLogo, AGENT_LOGO_COLORS.qoder),
   "rovo-dev": svgTextToColorizedDataUrl(rovoDevLogo, AGENT_LOGO_COLORS["rovo-dev"]),
-  t3: svgTextToColorizedDataUrl(t3Logo, AGENT_LOGO_COLORS.t3),
 };
 
 /**

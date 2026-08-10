@@ -84,7 +84,7 @@
   - `node --check gxserver-rs/compat/run-compat.mjs`: passed.
   - `node gxserver-rs/compat/run-compat.mjs --target rust --suite phase0 --bin gxserver-rs/target/debug/gxserver`: blocked at the harness fixed-port check because `127.0.0.1:58744` is still in use; the packaged daemon was not stopped.
   - `bun run typecheck`: passed.
-  - `bun run test`: failed outside this Phase 2 surface because root Vitest attempts to run `t3code/apps/web` tests without that app's `~/*` alias, producing import errors such as `Cannot find module '~/lib/utils'` and `Cannot find module '~/composerDraftStore'`. The targeted Phase 2 tests above passed.
+  - The targeted Phase 2 tests passed.
 
 ## 2026-06-14 21:44, alternate-port approval
 

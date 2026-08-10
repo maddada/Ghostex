@@ -3448,7 +3448,14 @@ function ManagePreview({
   const isDrawing = isExcalidrawPath(preview.path);
   const isHtml = isHtmlPath(preview.path);
   const usesCompactArtifactHeader = isMarkdown || isDrawing || isHtml;
-  const previewTitle = usesCompactArtifactHeader ? preview.path : preview.name;
+  /*
+   * CDXC:DocsRootAdditive 2026-08-09:
+   * Show the file the way the tree names it. `preview.path` is a routing
+   * address that starts with the reserved mount segment for anything under a
+   * configured Docs directory, which is not a name any human asked for.
+   */
+  const previewDisplayPath = preview.displayPath ?? preview.path;
+  const previewTitle = usesCompactArtifactHeader ? previewDisplayPath : preview.name;
   const annotationPersistenceTitle = annotationPersistenceLabel(annotationPersistenceState);
 
   return (
@@ -3571,7 +3578,9 @@ function ManagePreview({
           </div>
         ) : null}
       </header>
-      {!usesCompactArtifactHeader ? <div className="manage-preview-path">{preview.path}</div> : null}
+      {!usesCompactArtifactHeader ? (
+        <div className="manage-preview-path">{previewDisplayPath}</div>
+      ) : null}
       {preview.kind === "unsupported" ? (
         <ManagePreviewMessage
           icon={<IconAlertTriangle aria-hidden="true" size={21} />}

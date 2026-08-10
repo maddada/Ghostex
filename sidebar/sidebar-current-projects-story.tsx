@@ -485,7 +485,6 @@ function normalizeAgentIcon(agentName: unknown): SidebarSessionItem["agentIcon"]
     case "gemini":
     case "opencode":
     case "pi":
-    case "t3":
       return normalizedAgentName;
     default:
       return undefined;

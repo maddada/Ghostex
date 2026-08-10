@@ -5,8 +5,7 @@ import { useSidebarCollapsiblePresence } from "../sidebar-collapse-animation";
 /*
  * CDXC:SidebarV2 2026-07-29:
  * Settled and Snoozed are shelves, not filters: they park rows out of the
- * inbox without deleting them. Ported from t3code's shelf header, including
- * two rules that are easy to lose in a port:
+ * inbox without deleting them, including two important rules:
  *
  * - The count shows ONLY while collapsed. Expanded, the visible rows are the
  *   count, and repeating it just adds noise to the header.

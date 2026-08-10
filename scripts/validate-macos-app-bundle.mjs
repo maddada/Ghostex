@@ -75,16 +75,6 @@ export async function validateMacosAppBundle({
     releaseManifest,
     resourcesRoot,
   });
-  // CDXC:T3CodeDisabled ghostex-mzp9: Preserve the validator for a future
-  // re-enable, while current bundles intentionally omit this resource.
-  // if (shouldValidateOptionalResource({
-  //   allowMissingOptionalResources,
-  //   capabilities,
-  //   markerPath: path.join(resourcesRoot, "t3code-server", "dist", "bin.mjs"),
-  //   resourceName: "t3Code",
-  // })) {
-  //   await validateBundledT3Runtime({ arch, resourcesRoot, expectedNodePtyPrebuild });
-  // }
 }
 
 function expectedNodePtyPrebuildForArch(arch) {
@@ -480,11 +470,6 @@ async function validateUnbundledCodeServerComponent({ arch, onDemandManifest, re
       `${arch} on-demand app still bundles Web/code-server instead of installing the sealed component.`,
     );
   }
-  if (existsSync(path.join(resourcesRoot, "t3code-server"))) {
-    throw new MacosAppBundleValidationError(
-      `${arch} release app still bundles disabled Web/t3code-server.`,
-    );
-  }
   const nodeScan = spawnSync("/usr/bin/find", [resourcesRoot, "-type", "f", "-name", "node", "-print", "-quit"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -504,35 +489,6 @@ async function validateUnbundledCodeServerComponent({ arch, onDemandManifest, re
     throw new MacosAppBundleValidationError(
       `${arch} app does not seal a valid code-server component checksum.`,
     );
-  }
-}
-
-async function validateBundledT3Runtime({ arch, resourcesRoot, expectedNodePtyPrebuild }) {
-  const t3Root = path.join(resourcesRoot, "t3code-server");
-  const t3Entrypoint = path.join(t3Root, "dist", "bin.mjs");
-  const t3PackageJson = path.join(t3Root, "package.json");
-  const t3NodeModules = path.join(t3Root, "node_modules");
-  const t3NodePtyRoot = path.join(t3NodeModules, "node-pty");
-  const t3NodePtyPrebuildRoot = path.join(t3NodePtyRoot, "prebuilds", expectedNodePtyPrebuild);
-
-  await assertRequiredPaths(arch, "bundled T3 Code runtime resource", [
-    t3Root,
-    t3Entrypoint,
-    t3PackageJson,
-    t3NodeModules,
-    t3NodePtyRoot,
-  ]);
-  await assertOnlyExpectedNodePtyPrebuilds(
-    arch,
-    path.join(t3NodePtyRoot, "prebuilds"),
-    expectedNodePtyPrebuild,
-  );
-  await assertMachOContainsArch(path.join(t3NodePtyPrebuildRoot, "pty.node"), arch);
-  await assertMachOContainsArch(path.join(t3NodePtyPrebuildRoot, "spawn-helper"), arch);
-
-  const t3SourceMap = findFirstFileWithExtension(t3Root, ".map");
-  if (t3SourceMap) {
-    throw new MacosAppBundleValidationError(`${arch} app still bundles T3 Code source map: ${t3SourceMap}`);
   }
 }
 
@@ -584,34 +540,6 @@ async function assertOnlyExpectedNodePtyPrebuilds(arch, prebuildsRoot, expectedN
       `${arch} app is missing expected node-pty prebuild ${expectedNodePtyPrebuild} under ${prebuildsRoot}.`,
     );
   }
-}
-
-function findFirstFileWithExtension(root, extension) {
-  if (!existsSync(root)) {
-    return undefined;
-  }
-  /*
-   CDXC:LocalStartReleaseParity 2026-06-09-09:07:
-   Local starts validate the installed T3 bundle before opening Ghostex, so source-map checks must stay fast even with a large production node_modules tree. Use the system find implementation instead of JS-recursing every dependency file.
-   */
-  const result = spawnSync("/usr/bin/find", [root, "-type", "f", "-name", `*${extension}`, "-print", "-quit"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    const output = [result.stderr, result.stdout]
-      .join("\n")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(0, 3)
-      .join("\n");
-    throw new MacosAppBundleValidationError(`T3 Code source-map scan failed.${output ? `\n${output}` : ""}`);
-  }
-  return result.stdout.split(/\r?\n/).find(Boolean);
 }
 
 function runFile(command, args, options = {}) {

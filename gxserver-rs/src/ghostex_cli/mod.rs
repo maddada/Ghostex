@@ -22,7 +22,7 @@ use rpc::{CliError, CliResult};
 /*
 CDXC:GhostexRustCli 2026-07-13:
 Rust replacement for scripts/ghostex-cli.mjs. The dispatch table, bare-`ghostex`
-TUI launch, VS Code-style bare-path open, help gating, and the JSON error
+desktop launch, VS Code-style bare-path open, help gating, and the JSON error
 shape (`{ error, ok: false }` + exit 1 when --json) are preserved verbatim so
 every existing consumer (skills, agents, React Native Android automation, remote hosts)
 sees identical behavior after the Node CLI deletion.
@@ -54,12 +54,14 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "agent-orchestration",
+    "automations",
     "bd",
     "beads",
     "board",
     "browser",
     "browser-use",
     "computer-use",
+    "cli",
     "editor-daemon",
     "f",
     "fable-5.6-orchestration",
@@ -77,8 +79,8 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
 
 fn dispatch(argv: &[String]) -> CliResult<i32> {
     if argv.is_empty() {
-        launchers::ghostex_tui_command(&[])?;
-        return Ok(0);
+        launchers::ghostex_desktop_command()?;
+        return Ok(exit_code());
     }
     let command_name = argv[0].as_str();
     let args: Vec<String> = argv[1..].to_vec();
@@ -103,6 +105,12 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
             "Unknown command: {command_name}\n\n{}",
             usage::usage()
         )));
+    }
+    if automations::is_automation_command(command_name)
+        && args.iter().any(|arg| arg == "-h" || arg == "--help")
+    {
+        println!("{}", usage::automations_usage());
+        return Ok(0);
     }
     if !HELP_GATE_EXCLUDED.contains(&command_name)
         && args.iter().any(|arg| arg == "-h" || arg == "--help")
@@ -130,7 +138,7 @@ fn exit_code() -> i32 {
 fn is_known_command(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "sessions",
-        "2",
+        "tui",
         "s",
         "list-sessions",
         "ls",
@@ -231,6 +239,8 @@ fn is_known_command(name: &str) -> bool {
         "install-browser-mcp-skill",
         "install-browser-use-skill",
         "computer-use",
+        "cli",
+        "automations",
         "install-computer-use-skill",
         "agent-orchestration",
         "install-agent-orchestration-skill",
@@ -272,7 +282,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
     };
     match name {
         "sessions" | "s" | "list-sessions" | "ls" => sessions::sessions_command(args),
-        "2" => launchers::ghostex_tui2_command(args),
+        "tui" => launchers::ghostex_tui_command(args),
         "find" | "f" => launchers::zehn_search_command(args),
         "history" | "h" => launchers::history_command(args),
         "android-check" => diagnostics::android_check_command(args),
@@ -497,6 +507,8 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "install-browser-use-skill" => skills::install_browser_use_skill_command(args),
         "computer-use" => skills::computer_use_command(args),
         "install-computer-use-skill" => skills::install_computer_use_skill_command(args),
+        "cli" => skills::cli_command(args),
+        "automations" => skills::automations_command(args),
         "agent-orchestration" => skills::agent_orchestration_command(args),
         "install-agent-orchestration-skill" => {
             skills::install_agent_orchestration_skill_command(args)
@@ -567,4 +579,15 @@ fn server_command(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     launchers::run_gxserver_cli_command(args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_known_command;
+
+    #[test]
+    fn tui_is_explicit_and_the_numeric_alias_is_removed() {
+        assert!(is_known_command("tui"));
+        assert!(!is_known_command("2"));
+    }
 }

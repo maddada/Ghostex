@@ -26,10 +26,8 @@ ZEHN_ROOT="${ZEHN_ROOT:-$REPO_ROOT/zehn}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/gxserver-rs}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
-# CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx`; build the promoted GX 2 source from `tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
+# CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
 TUI_ROOT="${TUI_ROOT:-$REPO_ROOT/tui2}"
-T3CODE_ROOT_EXPLICITLY_CONFIGURED=0
-[[ -n "${T3CODE_ROOT:-${VSMUX_T3CODE_REPO_ROOT:-${ghostex_T3CODE_REPO_ROOT:-}}}" ]] && T3CODE_ROOT_EXPLICITLY_CONFIGURED=1
 CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-}}" ]] && CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=1
 CODE_SERVER_ROOT="${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-$REPO_ROOT/code-server}}"
@@ -112,7 +110,7 @@ case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" i
 		GHOSTEX_ON_DEMAND_ASSETS=0
 		;;
 esac
-# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source, T3 Code, TUI, or Zehn resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
+# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source, TUI, or Zehn resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES="${GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES:-${GHOSTEX_LOCAL_START:-0}}"
 case "$(printf '%s' "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
 	1 | true | yes | on)
@@ -125,7 +123,6 @@ esac
 
 APP_CAPABILITY_SHARED_NODE_RUNTIME=false
 APP_CAPABILITY_SOURCE_EDITOR=false
-APP_CAPABILITY_T3_CODE=false
 APP_CAPABILITY_TUI=false
 APP_CAPABILITY_ZEHN=false
 APP_CAPABILITY_BEADS=false
@@ -245,7 +242,7 @@ prune_node_pty_prebuilds() {
 	if [[ ! -d "$root" ]]; then
 		return 0
 	fi
-	# CDXC:ReleaseBundleSize 2026-06-08-19:49: macOS DMGs are built per architecture, so bundled app resources must keep only the matching node-pty darwin prebuild. Prune Windows/Linux and opposite-arch prebuild directories from generated code-server and T3 Code payloads to reduce download size without changing runtime behavior.
+	# CDXC:ReleaseBundleSize 2026-06-08-19:49: macOS DMGs are built per architecture, so bundled app resources must keep only the matching node-pty darwin prebuild. Prune Windows/Linux and opposite-arch prebuild directories from generated code-server payloads to reduce download size without changing runtime behavior.
 	while IFS= read -r -d '' prebuilds_dir; do
 		while IFS= read -r -d '' platform_dir; do
 			if [[ "$(basename "$platform_dir")" != "$keep_platform" ]]; then
@@ -273,15 +270,6 @@ node_pty_prebuilds_match_arch() {
 		done < <(find "$prebuilds_dir" -mindepth 1 -maxdepth 1 -type d -print0)
 	done < <(find "$root" -path '*/node_modules/node-pty/prebuilds' -type d -print0)
 	return 0
-}
-
-remove_t3code_source_maps() {
-	local target_dir="$1"
-	if [[ ! -d "$target_dir" ]]; then
-		return 0
-	fi
-	# CDXC:T3CodePackaging 2026-06-08-19:49: Release app bundles should not carry T3 Code source maps. They add installed size and download weight while the shipped server only needs compiled JS and production dependencies.
-	find "$target_dir" -type f -name '*.map' -exec rm -f {} +
 }
 
 write_gxserver_shared_bd_launcher() {
@@ -384,55 +372,6 @@ prepare_code_server_app_node_runtime() {
 		exit 1
 	fi
 	printf '%s\n' "$node_bin"
-}
-
-node_supports_t3code() {
-	local candidate="$1"
-	# CDXC:T3CodePackaging 2026-07-13: The pinned T3 Code workspace declares Node ^24.13.1. Reject the older shared code-server Node runtime so packaging selects the dedicated Node 24 runner toolchain used to install and build that workspace.
-	"$candidate" -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); process.exit(major === 24 && (minor > 13 || (minor === 13 && patch >= 1)) ? 0 : 1);' >/dev/null 2>&1
-}
-
-resolve_t3code_node() {
-	local home
-	home="$HOME"
-	local candidates=(
-		"${GXSERVER_NODE_BIN:-}"
-		"/opt/homebrew/bin/node"
-		"/usr/local/bin/node"
-		"$home/.local/share/mise/shims/node"
-		"$home/.local/bin/node"
-		"$home/.asdf/shims/node"
-	)
-	local candidate
-	for candidate in "${candidates[@]}"; do
-		if [[ -n "$candidate" && -x "$candidate" ]] && node_supports_t3code "$candidate"; then
-			printf '%s\n' "$candidate"
-			return 0
-		fi
-	done
-	candidate="$(command -v node || true)"
-	if [[ -n "$candidate" && -x "$candidate" ]] && node_supports_t3code "$candidate"; then
-		printf '%s\n' "$candidate"
-		return 0
-	fi
-	return 1
-}
-
-resolve_t3code_root() {
-	local configured="${T3CODE_ROOT:-${VSMUX_T3CODE_REPO_ROOT:-${ghostex_T3CODE_REPO_ROOT:-}}}"
-	if [[ -n "$configured" ]]; then
-		if [[ -f "$configured/apps/server/package.json" ]]; then
-			(cd "$configured" && pwd)
-			return 0
-		fi
-		return 1
-	fi
-	# CDXC:T3CodeSubmodule 2026-06-07-13:00: Package T3 Code from the root `t3code` submodule by default so app builds use the parent-pinned fork commit instead of unreviewed sibling checkouts.
-	if [[ -f "$REPO_ROOT/t3code/apps/server/package.json" ]]; then
-		(cd "$REPO_ROOT/t3code" && pwd)
-		return 0
-	fi
-	return 1
 }
 
 resolve_code_server_root() {
@@ -673,7 +612,7 @@ package_code_server_if_needed() {
 
 stage_shared_code_server_node_runtime() {
 	local target_node="$WEB_DIR/code-server/lib/node"
-	# CDXC:ContributorStart 2026-06-22-23:23: Optional Source panes must not remove the shared app-owned Node runtime. Native sidebar helpers, Portless, and optional T3 runtime launchers still resolve Web/code-server/lib/node, so contributor builds without the code-server submodule stage only that executable and leave Source-specific files absent.
+	# CDXC:ContributorStart 2026-06-22-23:23: Optional Source panes must not remove the shared app-owned Node runtime. Native sidebar helpers and Portless still resolve Web/code-server/lib/node, so contributor builds without the code-server submodule stage only that executable and leave Source-specific files absent.
 	if [[ "$APP_CAPABILITY_SOURCE_EDITOR" != "true" ]]; then
 		rm -rf "$WEB_DIR/code-server"
 	fi
@@ -864,71 +803,6 @@ package_portless_if_needed() {
 	write_cache_stamp "portless-package-$GHOSTEX_MACOS_ARCH" "$package_digest"
 }
 
-package_t3code_server() {
-	local t3_root="$1"
-	local node_bin="$2"
-	local npm_bin="$3"
-	local target_dir="$WEB_DIR/t3code-server"
-	local node_identity npm_version package_digest expected_node_pty_prebuild
-
-	# CDXC:T3CodePackaging 2026-06-06-05:50: T3 Code is a core advertised pane type, so release builds must ship the managed server runtime under Web/t3code-server instead of letting installed apps fall through to a developer-only source checkout and fail with a network-looking pane error.
-	#
-	# CDXC:LocalStartFast 2026-06-07-16:23: `bun run start` already treats T3 Code as a packaged runtime, so the build should not run the T3 monorepo build and production npm install on every app relaunch. Reuse the package when the T3 source tree, packager script, and selected Node/npm runtime are unchanged.
-	#
-	# CDXC:LocalStartReleaseParity 2026-06-09-09:07: Web/t3code-server is a shared staging directory reused by arm64 and x86_64 release/local-start passes. A per-arch cache stamp is valid only when the staged node-pty prebuild still matches GHOSTEX_MACOS_ARCH; otherwise rebuild so `bun run start` cannot copy Intel T3 native modules into an arm64 app.
-	#
-	# CDXC:T3CodePackaging 2026-06-22-22:15: The generated Web/t3code-server package must install against current upstream T3 versions even when the developer's npm user config pins `before` or disables install scripts. Use an isolated npm userconfig for this app-resource install so local/global npm policy cannot hide recently published upstream packages or skip native module setup.
-	node_identity="$("$node_bin" -p 'process.version + ":" + process.versions.modules')"
-	npm_version="$("$npm_bin" --version 2>/dev/null || true)"
-	expected_node_pty_prebuild="$target_dir/node_modules/node-pty/prebuilds/$(node_pty_prebuild_platform_dir)/pty.node"
-	package_digest="$(fingerprint_inputs \
-		--value "t3code-package-v2" \
-		--value "arch=$GHOSTEX_MACOS_ARCH" \
-		--value "node=$node_identity" \
-		--value "npm=$npm_version" \
-		--path "$t3_root" \
-		--path "$REPO_ROOT/scripts/build-t3code-if-needed.mjs" \
-		--path "$REPO_ROOT/scripts/package-t3code-server.mjs")"
-	if cache_matches "t3code-server-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "$target_dir/dist/bin.mjs" "$target_dir/package.json" "$target_dir/node_modules" "$expected_node_pty_prebuild" &&
-		node_pty_prebuilds_match_arch "$target_dir"; then
-		echo "T3 Code package is current; skipping package rebuild."
-		return 0
-	fi
-
-	env VSMUX_T3CODE_REPO_ROOT="$t3_root" ghostex_T3CODE_REPO_ROOT="$t3_root" PATH="$(dirname "$node_bin"):$PATH" bun "$REPO_ROOT/scripts/build-t3code-if-needed.mjs"
-	rm -rf "$target_dir"
-	mkdir -p "$target_dir"
-	cp -R "$t3_root/apps/server/dist" "$target_dir/dist"
-	"$node_bin" "$REPO_ROOT/scripts/package-t3code-server.mjs" \
-		--source-root "$t3_root" \
-		--target "$target_dir"
-	(
-		cd "$target_dir"
-		env \
-			-u npm_config_before \
-			-u NPM_CONFIG_BEFORE \
-			-u npm_config_ignore_scripts \
-			-u NPM_CONFIG_IGNORE_SCRIPTS \
-			PATH="$(dirname "$node_bin"):$PATH" \
-			"$npm_bin" --userconfig=/dev/null install --omit=dev --no-audit --no-fund
-		prune_node_pty_prebuilds "$target_dir"
-		remove_t3code_source_maps "$target_dir"
-		env PATH="$(dirname "$node_bin"):$PATH" "$node_bin" dist/bin.mjs --help >/dev/null
-	)
-	write_cache_stamp "t3code-server-package-$GHOSTEX_MACOS_ARCH" "$package_digest"
-}
-
-# CDXC:ZmxPersistence 2026-07-12:
-# The macOS 27 SDK defines INFINITY/NAN in math.h only when clang's float.h
-# supports the __need_infinity_nan protocol (a clang-modules code path). Zig
-# 0.15's bundled clang predates that protocol, so Zig's own libc++
-# sub-compilation (triggered by linking the zmx exe, whose ghostty-vt module
-# now compiles simdutf/highway C++) fails with "use of undeclared identifier
-# 'INFINITY'". When the SDK the zmx build would use has that guard shape,
-# synthesize an overlay SDK that symlinks everything except math.h and appends
-# unconditional INFINITY/NAN fallbacks, then route only `xcrun --sdk macosx
-# --show-sdk-path` at the overlay for the zmx build. Same overlay pattern as
-# gpui/scripts/build-libghostty-vt.sh uses for the arm64e libSystem stub.
 macos_sdk_needs_infinity_fix() {
 	local sdk="$1"
 	[[ -f "$sdk/usr/include/math.h" ]] || return 1
@@ -1855,7 +1729,6 @@ write_build_capabilities_manifest() {
 	fi
 	GHOSTEX_CAP_SHARED_NODE_RUNTIME="$APP_CAPABILITY_SHARED_NODE_RUNTIME" \
 		GHOSTEX_CAP_SOURCE_EDITOR="$APP_CAPABILITY_SOURCE_EDITOR" \
-		GHOSTEX_CAP_T3_CODE="$APP_CAPABILITY_T3_CODE" \
 		GHOSTEX_CAP_TUI="$APP_CAPABILITY_TUI" \
 		GHOSTEX_CAP_ZEHN="$APP_CAPABILITY_ZEHN" \
 		GHOSTEX_CAP_BEADS="$APP_CAPABILITY_BEADS" \
@@ -1886,7 +1759,6 @@ writeFileSync(
       beads: bool("GHOSTEX_CAP_BEADS"),
       sharedNodeRuntime: bool("GHOSTEX_CAP_SHARED_NODE_RUNTIME"),
       sourceEditor: bool("GHOSTEX_CAP_SOURCE_EDITOR"),
-      t3Code: bool("GHOSTEX_CAP_T3_CODE"),
       tui: bool("GHOSTEX_CAP_TUI"),
       zehn: bool("GHOSTEX_CAP_ZEHN"),
       zmx: bool("GHOSTEX_CAP_ZMX"),
@@ -1938,40 +1810,6 @@ if [[ "$GXSERVER_NODE_MAJOR" != "$CODE_SERVER_APP_NODE_MAJOR" ]]; then
 fi
 GXSERVER_NODE_MODULE_VERSION="$("$GXSERVER_NODE_BIN" -p 'process.versions.modules')"
 
-# CDXC:T3CodeDisabled ghostex-mzp9: Keep the packaging implementation available
-# for a future flag flip, but do not resolve or require its toolchain today.
-# T3CODE_ROOT="$(resolve_t3code_root || true)"
-# if [[ -z "$T3CODE_ROOT" ]]; then
-# 	if [[ "$T3CODE_ROOT_EXPLICITLY_CONFIGURED" == "1" || "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" == "0" ]]; then
-# 		cat >&2 <<EOF
-# T3 Code source is required to package the embedded runtime.
-#
-# Set T3CODE_ROOT or VSMUX_T3CODE_REPO_ROOT to a t3code checkout, or place it at:
-#   $REPO_ROOT/t3code
-# EOF
-# 		exit 1
-# 	fi
-# 	record_optional_resource_note "T3 Code" "t3code checkout was not found"
-# else
-# 	T3CODE_NODE_BIN="${T3CODE_NODE:-$(resolve_t3code_node || true)}"
-# 	if [[ -z "$T3CODE_NODE_BIN" ]]; then
-# 		cat >&2 <<EOF
-# Node.js 24.13.1 or newer within the Node 24 release line is required to package T3 Code for the macOS app.
-#
-# Install a compatible Node runtime from https://nodejs.org or set T3CODE_NODE explicitly.
-# EOF
-# 		exit 1
-# 	fi
-# 	T3CODE_NODE_DIR="$(cd "$(dirname "$T3CODE_NODE_BIN")" && pwd)"
-# 	T3CODE_NPM_BIN="${T3CODE_NPM:-$T3CODE_NODE_DIR/npm}"
-# 	if [[ ! -x "$T3CODE_NPM_BIN" ]]; then
-# 		T3CODE_NPM_BIN="$(PATH="$T3CODE_NODE_DIR:$PATH" command -v npm || true)"
-# 	fi
-# 	if [[ -z "$T3CODE_NPM_BIN" || ! -x "$T3CODE_NPM_BIN" ]]; then
-# 		echo "npm is required beside the selected T3 Code Node runtime: $T3CODE_NODE_BIN" >&2
-# 		exit 1
-# 	fi
-# fi
 # CDXC:NativeBuild 2026-05-29-11:24: `bun run start` builds zmx and its Ghostty Zig dependency, which require Zig 0.15.2. A global Homebrew `zig` upgrade to 0.16 breaks the build API, so the local native build must choose the compatible Zig binary deliberately instead of inheriting the first PATH entry.
 ZIG_BIN="${ZIG:-}"
 if [[ -z "$ZIG_BIN" && -x /opt/homebrew/opt/zig@0.15/bin/zig ]]; then
@@ -2033,7 +1871,7 @@ rm -rf "$WEB_DIR/bin"
 mkdir -p "$WEB_DIR/bin"
 cp "$ZMX_ROOT/zig-out/bin/zmx" "$WEB_DIR/bin/zmx"
 chmod 755 "$WEB_DIR/bin/zmx"
-# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate TUI, Zehn, Source, and T3 independently so one missing feature cannot remove the rest of the app shell. Beads is staged independently from its verified official release archive.
+# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate TUI, Zehn, and Source independently so one missing feature cannot remove the rest of the app shell. Beads is staged independently from its verified official release archive.
 case "$GHOSTEX_MACOS_ARCH" in
 	arm64)
 		TUI_CARGO_TARGET="aarch64-apple-darwin"
@@ -2169,12 +2007,4 @@ if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
 else
 	rm -f "$WEB_DIR/on-demand-resources.json"
 fi
-# CDXC:T3CodeDisabled ghostex-mzp9: Leave the packager intact but dormant.
-# if [[ -n "$T3CODE_ROOT" ]]; then
-# 	package_t3code_server "$T3CODE_ROOT" "$T3CODE_NODE_BIN" "$T3CODE_NPM_BIN"
-# 	APP_CAPABILITY_T3_CODE=true
-# else
-# 	rm -rf "$WEB_DIR/t3code-server"
-# fi
-rm -rf "$WEB_DIR/t3code-server"
 printf 'Prepared GPUI macOS runtime at %s\n' "$WEB_DIR"

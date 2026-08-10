@@ -39,7 +39,6 @@ pub mod sidebar_hud;
 pub mod sidebar_project_collections;
 pub mod source_control;
 pub mod storage;
-pub mod t3_runtime;
 pub mod terminal_ws;
 pub mod toolchain;
 pub mod typed_operations;

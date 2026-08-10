@@ -48,7 +48,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 - Embedded code-server editor panes now use Ghostex-owned bundled settings by default, start with the Dark 2026 theme on new profiles, and keep local VS Code settings as an explicit opt-in.
 - Sparkle update checks repeat quietly while Ghostex is running, the titlebar update button can appear on first render, and update download/extraction progress windows stay hidden while the release notes and relaunch prompts remain available.
 - The native sidebar/workarea divider keeps its resize cursor and visible separator aligned during hover and live resizing.
-- Installed macOS app bundles are smaller because release packaging prunes duplicate Beads payloads, wrong-architecture node-pty prebuilds, and T3 Code source maps before notarization.
+- Installed macOS app bundles are smaller because release packaging prunes duplicate Beads payloads and wrong-architecture node-pty prebuilds before notarization.
 
 [Full release notes](https://github.com/maddada/Ghostex/releases/tag/v4.0.3)
 ]]></description>
@@ -68,7 +68,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 - Terminal image paste can convert clipboard images into previewable Markdown links with Cmd+V or Ctrl+V, and Settings -> Terminal Behavior now includes a Paste previewable images toggle for users who want normal clipboard behavior.
 - gxserver presentation updates now carry stable attention event IDs, so macOS can play completion sounds and notifications once for fresh attention events without replaying them during startup or stream recovery.
 - Command-pane completions keep using the action completion sound path and write status updates through per-process temp files, reducing missed completion sounds during concurrent status updates.
-- T3 Code runtime startup is coalesced while Project Editor panes are retargeting, reducing duplicate startup probes and layout churn when opening, closing, or switching embedded T3 panes.
 - Git agent workflows no longer pin duplicate persistent "running" toasts when the visible agent terminal already shows the workflow progress.
 - Ghostex Android auto-scroll now follows new output only when the terminal is already near the bottom, so users can scroll through history without selecting text first.
 

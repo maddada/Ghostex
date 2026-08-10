@@ -18,6 +18,7 @@ import Fuse from "fuse.js";
 import ColorPicker from "react-best-gradient-color-picker";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Command,
@@ -90,6 +91,7 @@ import {
   IconAsterisk,
   IconAlertTriangle,
   IconArrowBigUp,
+  IconBolt,
   IconChevronDown,
   IconChevronRight,
   IconCircleCheckFilled,
@@ -101,12 +103,15 @@ import {
   IconEye,
   IconEyeOff,
   IconExternalLink,
+  IconFileText,
   IconFolderOpen,
+  IconGitCommit,
   IconGripVertical,
   IconInfoCircle,
   IconKeyboard,
   IconMinus,
   IconPalette,
+  IconPlug,
   // CDXC:AppIconPicker 2026-06-25-21:50: Placeholder glyph for the default-icon tile and missing thumbnails.
   IconPhoto,
   IconPencil,
@@ -118,10 +123,10 @@ import {
   IconTerminal2,
   IconTools,
   IconTrash,
+  IconWorld,
   IconX,
 } from "@tabler/icons-react";
 import { COMPLETION_SOUND_OPTIONS, type CompletionSoundSetting } from "../shared/completion-sound";
-import { T3CODE_ENABLED } from "../shared/feature-flags";
 import { GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES } from "../shared/ghostty-config-actions";
 import {
   resolveSidebarTheme,
@@ -133,6 +138,8 @@ import {
   type SidebarGhostexCliStatusMessage,
   type SidebarGhostexFolderStatsMessage,
   type SidebarOSIntegrationStatusMessage,
+  type SidebarPluginSettingsItem,
+  type SidebarPluginSettingsStatusMessage,
   type SidebarOSIntegrationStatusItem,
   type SidebarPortlessState,
   type SidebarProjectSettingsItem,
@@ -154,6 +161,7 @@ import {
   GHOSTTY_SCROLLBAR_OPTIONS,
   GHOSTTY_THEME_SETTING_OPTIONS,
   KEEP_AWAKE_DURATION_OPTIONS,
+  PREFERRED_AGENT_INTERFACE_OPTIONS,
   MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   MIN_TERMINAL_PANE_PADDING_PX,
   MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
@@ -161,6 +169,7 @@ import {
   WINDOWS_TERMINAL_BACKEND_OPTIONS,
   type PromptEditorBackend,
   SESSION_PERSISTENCE_PROVIDER_OPTIONS,
+  SESSION_CHAT_THEME_OPTIONS,
   SESSION_TITLE_GENERATION_AGENT_OPTIONS,
   SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
@@ -197,6 +206,7 @@ import {
   type GhosttyScrollbar,
   type KeepAwakeDurationMinutes,
   type PortlessProtocol,
+  type PreferredAgentInterface,
   type RemoteMachineSettings,
   type SessionPersistenceProvider,
   type SettingsModalNavigationState,
@@ -212,6 +222,7 @@ import {
   type ghostexSettingsUpdateSource,
   type ghostexSettings,
 } from "../shared/ghostex-settings";
+import type { SessionChatTheme } from "../shared/session-chat";
 import {
   BUILT_IN_WORKSPACE_OPEN_TARGETS,
   CUSTOM_WORKSPACE_OPEN_TARGET_ID_PREFIX,
@@ -444,101 +455,50 @@ function SettingsSelectContent({
   return <SelectContent className={cn("settings-select-content", className)} {...props} />;
 }
 
-const HOTKEY_SETTINGS_SECTIONS: readonly HotkeySettingsSectionDefinition[] = [
-  {
-    id: "general",
-    ids: [
-      "createSession",
-      "openCommandPalette",
-      "openSessionSearchPalette",
-      "openSettings",
-      "openHotkeys",
-      "toggleSidebarCollapsed",
-      "toggleCompanionPane",
-      "moveSidebar",
-    ],
-    title: "General",
-  },
-  {
-    id: "paneActions",
-    ids: [
-      "openBrowserPane",
-      "splitMore",
-      "splitMoreDown",
-      "rotatePanesClockwise",
-      "mergeAllTabs",
-      "renameActiveSession",
-      "sleepFocusedSession",
-      "delayedSend",
-      "forkSession",
-      "reloadSession",
-      "promptEditor",
-      "stashPrompt",
-      "stashedPrompts",
-      "attachFileOrFolder",
-      "toggleAgentActions",
-      "scrollTerminalToTop",
-      "scrollTerminalToBottom",
-      "popOutPane",
-    ],
-    title: "Pane Actions",
-  },
-  {
-    id: "navigation",
-    ids: [
-      "focusPreviousGroup",
-      "focusNextGroup",
-      "focusPreviousSession",
-      "focusNextSession",
-      "focusUp",
-      "focusRight",
-      "focusDown",
-      "focusLeft",
-    ],
-    title: "Navigation",
-  },
-  {
-    id: "projects",
-    ids: [
-      "jumpToProject1",
-      "jumpToProject2",
-      "jumpToProject3",
-      "jumpToProject4",
-      "jumpToProject5",
-      "jumpToProject6",
-      "jumpToProject7",
-      "jumpToProject8",
-      "jumpToProject9",
-    ],
-    title: "Projects",
-  },
-  {
-    id: "sessionSlots",
-    ids: [
-      "focusSessionSlot1",
-      "focusSessionSlot2",
-      "focusSessionSlot3",
-      "focusSessionSlot4",
-      "focusSessionSlot5",
-      "focusSessionSlot6",
-      "focusSessionSlot7",
-      "focusSessionSlot8",
-      "focusSessionSlot9",
-    ],
-    title: "Session Slots",
-  },
-  {
-    id: "actions",
-    ids: [
-      "runActionSlot1",
-      "runActionSlot2",
-      "runActionSlot3",
-      "runActionSlot4",
-      "runActionSlot5",
-    ],
-    title: "Actions",
-  },
-];
+function getHotkeySettingsSectionId(
+  definition: (typeof GHOSTEX_HOTKEY_DEFINITIONS)[number],
+): HotkeySettingsSectionId {
+  switch (definition.action.kind) {
+    case "focusedPaneAction":
+    case "renameActiveSession":
+    case "splitFocusedPane":
+    case "terminalToolbarAction":
+      return "paneActions";
+    case "focusAdjacentGroup":
+    case "focusDirection":
+      return "navigation";
+    case "focusSessionSlot":
+      return definition.action.slotNumber > 0 ? "sessionSlots" : "navigation";
+    case "jumpToProject":
+      return "projects";
+    case "runActionSlot":
+      return "actions";
+    default:
+      return "general";
+  }
+}
+
+const HOTKEY_SETTINGS_SECTIONS: readonly HotkeySettingsSectionDefinition[] = (
+  [
+    { id: "general", title: "General" },
+    { id: "paneActions", title: "Pane Actions" },
+    { id: "navigation", title: "Navigation" },
+    { id: "projects", title: "Projects" },
+    { id: "sessionSlots", title: "Session Slots" },
+    { id: "actions", title: "Actions" },
+  ] as const
+).map((section) => ({
+  ...section,
+  /*
+   * Settings is a view of the canonical hotkey catalog, not a second catalog.
+   * Deriving each section prevents newly registered or unassigned actions from
+   * silently disappearing until this modal's former hand-maintained ID lists
+   * are updated separately.
+   */
+  ids: GHOSTEX_HOTKEY_DEFINITIONS.filter(
+    (definition) => getHotkeySettingsSectionId(definition) === section.id,
+  ).map((definition) => definition.id),
+}));
 
 type SettingSearchDefinition = {
   advanced?: boolean;
@@ -622,6 +582,7 @@ type MainSettingsScrollTargetId =
   | "terminalBehavior"
   | "terminalScrolling"
   | "terminalDevServers"
+  | "builtInFeatures"
   | "browser"
   | "editor"
   | "autoSleep"
@@ -674,16 +635,18 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
    */
   appearance: [
     "sidebarTheme",
+    "sessionChatTheme",
     "customSidebarTitlebarBackgroundDarknessPercent",
     "customSidebarTitlebarBackgroundTintColor",
     "workspaceActivePaneBorderColor",
     "appIconSourceId",
   ],
   sidebar: [
+    "preferredAgentInterface",
     /*
      * CDXC:SidebarV2 2026-07-29:
-     * Sidebar version is the first General setting, so it also leads this
-     * section's key list for search, section-visibility, and jump targets.
+     * Sidebar version follows the agent-interface preference near the top of
+     * General, ahead of its own V2-only sub-settings.
      */
     "sidebarVersion",
     "sidebarV2Layout",
@@ -838,6 +801,7 @@ const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   ...MAIN_SETTINGS_SECTION_SETTING_KEYS,
   theming: [
     "sidebarTheme",
+    "sessionChatTheme",
     "customSidebarTitlebarBackgroundDarknessPercent",
     "customSidebarTitlebarBackgroundTintColor",
   ],
@@ -871,6 +835,12 @@ const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     "terminalDevServerDetectionEnabled",
     "terminalDevServerOpenTarget",
     "terminalDevServerIgnoredPortRules",
+  ],
+  builtInFeatures: [
+    "codeViewTabHidden",
+    "kanbanViewTabHidden",
+    "automateViewTabHidden",
+    "docsViewTabHidden",
   ],
   browser: ["browserFeedbackTool", "openTerminalLinksInApp"],
   editor: [
@@ -1304,6 +1274,8 @@ export type SettingsModalProps = {
   onRequestGhostexCliStatus?: () => void;
   onRequestGhostexFolderStats?: () => void;
   onRequestOSIntegrationStatus?: () => void;
+  onRequestPluginSettingsStatus?: () => void;
+  onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem["id"]) => void;
   onSetOSIntegrationDefaults?: (target: "editor" | "terminalLinks" | "scriptRunner" | "all") => void;
   onTestAgentTaskCompletion?: () => void;
   projects?: SidebarProjectSettingsItem[];
@@ -1316,6 +1288,8 @@ export type SettingsModalProps = {
   ghostexFolderStatsLoading?: boolean;
   osIntegrationStatus?: SidebarOSIntegrationStatusMessage;
   osIntegrationStatusLoading?: boolean;
+  pluginSettingsStatus?: SidebarPluginSettingsStatusMessage;
+  pluginSettingsStatusLoading?: boolean;
   // CDXC:AppIconPicker 2026-06-25-21:50: Native App Icon state arrives prop-driven via the modal-state relay.
   appIconState?: SidebarAppIconStateMessage;
   /** Hosts without a native App Icon subsystem hide the section entirely. */
@@ -1362,6 +1336,8 @@ export function SettingsModal({
   onRequestGhostexCliStatus,
   onRequestGhostexFolderStats,
   onRequestOSIntegrationStatus,
+  onRequestPluginSettingsStatus,
+  onReinstallPlugin,
   onSetOSIntegrationDefaults,
   onTestAgentTaskCompletion,
   projects = [],
@@ -1374,6 +1350,8 @@ export function SettingsModal({
   ghostexFolderStatsLoading = false,
   osIntegrationStatus,
   osIntegrationStatusLoading = false,
+  pluginSettingsStatus,
+  pluginSettingsStatusLoading = false,
   // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state replaces direct host-event listeners.
   appIconState,
   appIconPickerUnavailable = false,
@@ -1705,20 +1683,22 @@ export function SettingsModal({
   }, [activeTab, agentHookStatus, agentHookStatusLoading, isOpen, onRequestAgentHookStatus]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "integrations") {
+    if (!isOpen || (activeTab !== "integrations" && activeTab !== "plugins")) {
       return;
     }
     /**
-     * CDXC:IntegrationsSetup 2026-05-27-04:17:
-     * Settings -> Integrations is the ongoing setup page for CLI, Ghostex Browser Use, Ghostex Computer Use, and macOS permissions. Request machine-local statuses only when the tab opens so Settings does not run filesystem checks while the user is editing unrelated settings.
+     * CDXC:CuaDriverPlugins 2026-08-09:
+     * Integrations needs CLI, skill, and macOS permission state; Plugins uses
+     * the same native-owned payload for Cua Driver version/update state. Probe
+     * only while one of those pages is active.
      *
      * CDXC:AgentHookSettings 2026-06-29-01:26:
      * Integrations still requests hook status for the bottom hook-removal recovery card, but hook installation and per-agent hook status now belong in Settings -> Agents.
      *
      * CDXC:ComputerAgentControl 2026-05-27-06:58:
-     * Settings should present the public skill names Ghostex Browser Use and Ghostex Computer Use. Desktop Control is ready only when Cua Driver and the `$ghostex-computer-use` skill are both installed.
+     * Settings should present the public skill names Ghostex Browser Use and Ghostex Computer Use.
      */
-    if (!agentHookStatus && !agentHookStatusLoading) {
+    if (activeTab === "integrations" && !agentHookStatus && !agentHookStatusLoading) {
       onRequestAgentHookStatus?.();
     }
     if (!ghostexCliStatus && !ghostexCliStatusLoading) {
@@ -1751,6 +1731,32 @@ export function SettingsModal({
         title: "App Icon",
       },
     ]),
+    builtInFeatures: getSettingsSectionSearch(
+      settingsSearchQuery,
+      "Built-in feature switches",
+      [
+        {
+          key: "codeViewTabHidden",
+          subtitle: "Show or hide Code in the title bar without disabling its runtime.",
+          title: "Code",
+        },
+        {
+          key: "kanbanViewTabHidden",
+          subtitle: "Show or hide Kanban in the title bar without disabling its runtime.",
+          title: "Kanban",
+        },
+        {
+          key: "automateViewTabHidden",
+          subtitle: "Show or hide Automate in the title bar without disabling its runtime.",
+          title: "Automate",
+        },
+        {
+          key: "docsViewTabHidden",
+          subtitle: "Show or hide Docs in the title bar without disabling its runtime.",
+          title: "Docs",
+        },
+      ],
+    ),
     browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", [
       {
         key: "browserFeedbackTool",
@@ -1979,6 +1985,13 @@ export function SettingsModal({
         : [],
     ),
     sidebar: getSettingsSectionSearch(settingsSearchQuery, "Sidebar", [
+      {
+        key: "preferredAgentInterface",
+        options: PREFERRED_AGENT_INTERFACE_OPTIONS,
+        subtitle:
+          "Choose which interface opens first for newly launched agents that support chat. The terminal still starts in the background.",
+        title: "Preferred interface for agents",
+      },
       /*
        * CDXC:SidebarV2 2026-07-29:
        * Sidebar version must be findable by searching for the new Inbox
@@ -2119,6 +2132,12 @@ export function SettingsModal({
         key: "sidebarTheme",
         subtitle: "Light theme coming soon.",
         title: "Theme",
+      },
+      {
+        key: "sessionChatTheme",
+        options: SESSION_CHAT_THEME_OPTIONS,
+        subtitle: "Choose the palette used by chat messages, thinking, tools, edits, and Markdown.",
+        title: "Chat appearance",
       },
       {
         key: "customSidebarTitlebarBackgroundDarknessPercent",
@@ -2678,6 +2697,7 @@ export function SettingsModal({
     appIcon: appIconSectionRef,
     autoSleep: autoSleepSectionRef,
     beta: betaSectionRef,
+    builtInFeatures: browserSectionRef,
     browser: browserSectionRef,
     debugging: debuggingSectionRef,
     editor: editorSectionRef,
@@ -2832,6 +2852,7 @@ export function SettingsModal({
       title: "General",
     },
     { icon: IconTools, id: "integrations", title: "Integrations" },
+    { icon: IconPlug, id: "plugins", title: "Customize" },
     { icon: IconCloud, id: "remote", title: "Remote" },
     { icon: IconFolderOpen, id: "projects", title: "Projects" },
     {
@@ -2876,6 +2897,7 @@ export function SettingsModal({
       advanced: betaSectionRef,
       appearance: themingSectionRef,
       autoSleep: autoSleepSectionRef,
+      builtInFeatures: browserSectionRef,
       browser: browserSectionRef,
       editor: editorSectionRef,
       notifications: soundsSectionRef,
@@ -3562,10 +3584,21 @@ export function SettingsModal({
             ) : null}
             {mainSubsectionVisible("sidebar", settingsSearch.sidebar) ? (
               <SettingsSection sectionRef={sidebarSectionRef} title="Sidebar">
+              {mainSettingVisible(settingsSearch.sidebar, "preferredAgentInterface") ? (
+              <PreferredAgentInterfaceField
+                description="Choose which interface opens first for newly launched agents that support chat. The terminal still starts in the background."
+                label="Preferred interface for agents"
+                {...getSettingModificationProps("preferredAgentInterface")}
+                onChange={(preferredAgentInterface) =>
+                  updateDraft("preferredAgentInterface", preferredAgentInterface)
+                }
+                value={draft.preferredAgentInterface}
+              />
+              ) : null}
               {/*
                * CDXC:SidebarV2 2026-07-29:
-               * Sidebar version is the very first control on the General tab so
-               * the opt-in Inbox sidebar is discoverable without scrolling. Its
+               * Sidebar version stays near the top of the General tab so the
+               * opt-in Inbox sidebar is discoverable without scrolling. Its
                * Group by Project sub-mode only appears while V2 is selected,
                * because the classic sidebar has no such layout.
                */}
@@ -3885,6 +3918,15 @@ export function SettingsModal({
                     label="Theme"
                     surface="plain"
                     value="Light theme coming soon"
+                  />
+                ) : null}
+                {mainSettingVisible(settingsSearch.theming, "sessionChatTheme") ? (
+                  <SessionChatThemeField
+                    description="Changes chat content only; the surrounding Ghostex app remains dark."
+                    label="Chat Appearance"
+                    {...getSettingModificationProps("sessionChatTheme")}
+                    onChange={(value) => updateDraft("sessionChatTheme", value)}
+                    value={draft.sessionChatTheme}
                   />
                 ) : null}
                 {mainSettingVisible(
@@ -5276,7 +5318,6 @@ export function SettingsModal({
               onInstallBrowserControl={onInstallBrowserControl}
               onInstallBrowserUseSkill={onInstallBrowserUseSkill}
               onInstallComputerUseSkill={onInstallComputerUseSkill}
-              onInstallCuaDriver={onInstallCuaDriver}
               onInstallFable56OrchestrationSkill={onInstallFable56OrchestrationSkill}
               onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
               onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
@@ -5290,6 +5331,24 @@ export function SettingsModal({
               onRequestGhostexCliStatus={onRequestGhostexCliStatus}
               search={extraSettingsTabSearches.integrations}
               searchEmptyState={settingsSearchEmptyState}
+            />
+          </TabsContent>
+          ) : null}
+          {!isFirstLaunchSetup ? (
+          <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="plugins">
+            <PluginsSettingsTab
+              ghostexCliStatus={ghostexCliStatus}
+              ghostexCliStatusLoading={ghostexCliStatusLoading}
+              onInstallCuaDriver={onInstallCuaDriver}
+              onRequestGhostexCliStatus={onRequestGhostexCliStatus}
+              onRequestStatus={onRequestPluginSettingsStatus}
+              onReinstallPlugin={onReinstallPlugin}
+              onUpdateSetting={updateDraft}
+              search={extraSettingsTabSearches.plugins}
+              searchEmptyState={settingsSearchEmptyState}
+              settings={draft}
+              status={pluginSettingsStatus}
+              statusLoading={pluginSettingsStatusLoading}
             />
           </TabsContent>
           ) : null}
@@ -6603,7 +6662,8 @@ function ProjectsSettingsPanel({
             <div className="settings-management-header-text">
               <h3 className="settings-management-heading">Docs</h3>
               <p className="settings-management-description">
-                Choose the project-relative folders that Docs scans for files.
+                Docs scans docs, artifacts, and ai by default. Add more project-relative folders
+                here.
               </p>
             </div>
             <FieldGroup>
@@ -6616,7 +6676,7 @@ function ProjectsSettingsPanel({
                   value={settings.manageAdditionalDocsFolders}
                 />
                 <FieldDescription>
-                  Comma-separated project-relative folders to scan recursively in Docs. Spaces around folder names are ignored. Leave blank to scan docs/ plus root Markdown, HTML, and Excalidraw files. A Docs directory set below adds its whole tree on top of this.
+                  Comma-separated project-relative folders to scan recursively in Docs. Spaces around folder names are ignored. Leave blank to scan docs/, artifacts/, and ai/ plus root Markdown, HTML, and Excalidraw files. A Docs directory set below adds its whole tree on top of this.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -6905,7 +6965,7 @@ function ProjectsSettingsPanel({
                   value={beadsDirectory}
                 />
                 <FieldDescription>
-                  Absolute path the Project board reads its Beads workspace (.beads) from. Leave blank to use the Global Default, or the project root when that is empty too.
+                  Path to this project's Beads workspace (.beads). Leave blank to use the Global Default or project root.
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -7907,9 +7967,7 @@ function OSIntegrationDiagnosticRow({ label, value }: { label: string; value: st
   );
 }
 
-const AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS = DEFAULT_SIDEBAR_AGENTS.filter(
-  (agent) => agent.agentId !== "t3",
-);
+const AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS = DEFAULT_SIDEBAR_AGENTS;
 const AGENT_TYPE_SELECT_ITEMS = [
   { label: "Custom", value: "custom" },
   ...DEFAULT_SIDEBAR_AGENTS.map((agent) => ({
@@ -7979,6 +8037,456 @@ function hasInstalledBundledAgentSkills(
   );
 }
 
+type PluginVisibilitySettingKey =
+  | "codeViewTabHidden"
+  | "browserViewTabHidden"
+  | "kanbanViewTabHidden"
+  | "automateViewTabHidden"
+  | "docsViewTabHidden"
+  | "tipsAndTricksTitlebarButtonHidden"
+  | "resourcesTitlebarButtonHidden"
+  | "gitActionsTitlebarButtonHidden"
+  | "quickActionsTitlebarButtonHidden"
+  | "openInTitlebarButtonHidden";
+
+function PluginsSettingsTab({
+  ghostexCliStatus,
+  ghostexCliStatusLoading,
+  onInstallCuaDriver,
+  onRequestGhostexCliStatus,
+  onRequestStatus,
+  onReinstallPlugin,
+  onUpdateSetting,
+  search,
+  searchEmptyState,
+  settings,
+  status,
+  statusLoading,
+}: {
+  ghostexCliStatus?: SidebarGhostexCliStatusMessage;
+  ghostexCliStatusLoading: boolean;
+  onInstallCuaDriver?: () => void;
+  onRequestGhostexCliStatus?: () => void;
+  onRequestStatus?: () => void;
+  onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem["id"]) => void;
+  onUpdateSetting: (key: PluginVisibilitySettingKey, value: boolean) => void;
+  search: SettingsTabSearch;
+  searchEmptyState?: ReactNode;
+  settings: ghostexSettings;
+  status?: SidebarPluginSettingsStatusMessage;
+  statusLoading: boolean;
+}) {
+  const statusById = new Map(status?.plugins.map((plugin) => [plugin.id, plugin]));
+  const code = statusById.get("code");
+  const kanban = statusById.get("kanban");
+  const cef = statusById.get("cef");
+  const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
+  const cuaDriverManagedUpdatesSupported =
+    ghostexCliStatus?.cuaDriverManagedUpdatesSupported !== false;
+  const cuaDriverUpdateAvailable = ghostexCliStatus?.cuaDriverUpdateAvailable;
+  const cuaDriverStatus =
+    ghostexCliStatusLoading || !ghostexCliStatus
+      ? "Checking"
+      : !cuaDriverInstalled
+        ? "Not installed"
+        : cuaDriverUpdateAvailable === true
+          ? "Update available"
+          : cuaDriverUpdateAvailable === false
+            ? "Up to date"
+            : "Installed";
+  const cuaDriverActionLabel = !cuaDriverManagedUpdatesSupported
+    ? cuaDriverInstalled
+      ? "View downloads"
+      : "Download"
+    : !cuaDriverInstalled
+      ? "Install"
+      : cuaDriverUpdateAvailable === true
+        ? "Upgrade"
+        : "Check for updates";
+  const showViewTab = (key: string) => shouldShowSetting(search.sections.viewTabs, key);
+  const showQuickAccessButton = (key: string) =>
+    shouldShowSetting(search.sections.quickAccessButtons, key);
+
+  return (
+    <SettingsNativeScrollArea className="h-full min-h-0">
+      <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
+        {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab)
+          ? searchEmptyState
+          : null}
+        {shouldShowSettingsSection(search.sections.viewTabs) ? (
+          <SettingsSection
+            description="Choose which project workareas appear in the title bar. Hiding a tab does not stop its runtime or disable its other entry points."
+            title="Plugins"
+          >
+            {showViewTab("code") ? (
+              <PluginManagedSettingsRow
+                description="Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex."
+                icon={IconCodeDots}
+                onReinstall={() => onReinstallPlugin?.("code")}
+                onVisibleChange={(visible) => onUpdateSetting("codeViewTabHidden", !visible)}
+                reinstallAvailable={Boolean(onReinstallPlugin && code?.canReinstall)}
+                runtime={code}
+                title="Code"
+                visible={!settings.codeViewTabHidden}
+              />
+            ) : null}
+            {showViewTab("browser") ? (
+              <PluginManagedSettingsRow
+                description="Open websites alongside your project and keep useful pages organized without leaving Ghostex. If it’s the last choice beside Agents, hiding it clears the switcher too."
+                icon={IconWorld}
+                onVisibleChange={(visible) => onUpdateSetting("browserViewTabHidden", !visible)}
+                title="Browser"
+                visible={!settings.browserViewTabHidden}
+              />
+            ) : null}
+            {showViewTab("kanban") ? (
+              <PluginManagedSettingsRow
+                description="Plan upcoming work, organize tasks by progress, and keep your whole project easy to follow at a glance."
+                icon={IconPlayerPlay}
+                onReinstall={() => onReinstallPlugin?.("kanban")}
+                onVisibleChange={(visible) => onUpdateSetting("kanbanViewTabHidden", !visible)}
+                reinstallAvailable={Boolean(onReinstallPlugin && kanban?.canReinstall)}
+                runtime={kanban}
+                title="Kanban"
+                visible={!settings.kanbanViewTabHidden}
+              />
+            ) : null}
+            {showViewTab("automate") ? (
+              <PluginManagedSettingsRow
+                description="Turn repeatable project routines into simple workflows you can run whenever you need them."
+                icon={IconBolt}
+                onVisibleChange={(visible) => onUpdateSetting("automateViewTabHidden", !visible)}
+                title="Automate"
+                visible={!settings.automateViewTabHidden}
+              />
+            ) : null}
+            {showViewTab("docs") ? (
+              <PluginManagedSettingsRow
+                description="Browse your project’s notes, plans, and reference files together in one focused reading space."
+                icon={IconFileText}
+                onVisibleChange={(visible) => onUpdateSetting("docsViewTabHidden", !visible)}
+                title="Docs"
+                visible={!settings.docsViewTabHidden}
+              />
+            ) : null}
+          </SettingsSection>
+        ) : null}
+
+        {shouldShowSettingsSection(search.sections.components) ? (
+          <SettingsSection
+            actions={
+              <SettingButton
+                disabled={
+                  statusLoading ||
+                  ghostexCliStatusLoading ||
+                  (!onRequestStatus && !onRequestGhostexCliStatus)
+                }
+                disabledReason={
+                  statusLoading || ghostexCliStatusLoading
+                    ? "Plugin status is being checked."
+                    : "Status refresh isn’t available here."
+                }
+                onClick={() => {
+                  onRequestStatus?.();
+                  onRequestGhostexCliStatus?.();
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <IconRefresh
+                  aria-hidden="true"
+                  className={cn((statusLoading || ghostexCliStatusLoading) && "animate-spin")}
+                  data-icon="inline-start"
+                />
+                Refresh
+              </SettingButton>
+            }
+            description={
+              <>
+                <span className="block">
+                  Runtime components shared by Ghostex surfaces and agent workflows.
+                </span>
+                <span className="block">Check their status and keep them up to date here.</span>
+              </>
+            }
+            descriptionClassName="pb-2"
+            title="Shared components"
+          >
+            {shouldShowSetting(search.sections.components, "cuaDriver") ? (
+              <IntegrationSettingsRow
+                description="Cua Driver powers /ghostex-browser-use and /ghostex-computer-use. Install both skills from the Integrations page."
+                icon={IconDeviceDesktop}
+                status={cuaDriverStatus}
+                title="Cua Driver"
+                tone={
+                  cuaDriverUpdateAvailable === true
+                    ? "warning"
+                    : cuaDriverInstalled
+                      ? "success"
+                      : "warning"
+                }
+                version={ghostexCliStatus?.cuaDriverVersion}
+              >
+                <SettingButton
+                  disabled={ghostexCliStatusLoading || !onInstallCuaDriver}
+                  disabledReason={
+                    ghostexCliStatusLoading
+                      ? "Cua Driver status is being checked."
+                      : "Cua Driver installation isn’t available here."
+                  }
+                  onClick={onInstallCuaDriver}
+                  type="button"
+                  variant={
+                    cuaDriverInstalled && cuaDriverUpdateAvailable !== true ? "outline" : "default"
+                  }
+                >
+                  {cuaDriverManagedUpdatesSupported && cuaDriverInstalled ? (
+                    <IconRefresh aria-hidden="true" data-icon="inline-start" />
+                  ) : (
+                    <IconDownload aria-hidden="true" data-icon="inline-start" />
+                  )}
+                  {cuaDriverActionLabel}
+                </SettingButton>
+              </IntegrationSettingsRow>
+            ) : null}
+            {shouldShowSetting(search.sections.components, "cef") ? (
+              <PluginManagedSettingsRow
+                description="Chromium Embedded Framework powers Ghostex web surfaces and remains enabled because the app requires it."
+                icon={IconDeviceDesktop}
+                onReinstall={() => onReinstallPlugin?.("cef")}
+                reinstallAvailable={Boolean(onReinstallPlugin && cef?.canReinstall)}
+                runtime={cef}
+                title="Chromium runtime (CEF)"
+              />
+            ) : null}
+          </SettingsSection>
+        ) : null}
+
+        {shouldShowSettingsSection(search.sections.quickAccessButtons) ? (
+          <SettingsSection
+            description="This is the same button cluster shown on the right side of the title bar. Click any button to show or hide it; its feature stays available everywhere else."
+            title="Quick access buttons"
+          >
+            <Field className="rounded-none border border-border bg-muted/20 px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <FieldContent>
+                  <FieldTitle className="text-sm">Titlebar preview</FieldTitle>
+                  <FieldDescription className="text-xs text-muted-foreground">
+                    Bright buttons are enabled and shown. Outlined buttons are hidden.
+                  </FieldDescription>
+                </FieldContent>
+                <ButtonGroup
+                  aria-label="Quick access button visibility"
+                  className="shrink-0 gap-[2px] [&>[data-slot]~[data-slot]]:border-l!"
+                >
+                  {showQuickAccessButton("tips") ? (
+                    <QuickAccessTitlebarButton
+                      icon={IconInfoCircle}
+                      label="Tips"
+                      onToggle={() =>
+                        onUpdateSetting(
+                          "tipsAndTricksTitlebarButtonHidden",
+                          !settings.tipsAndTricksTitlebarButtonHidden,
+                        )
+                      }
+                      visible={!settings.tipsAndTricksTitlebarButtonHidden}
+                    />
+                  ) : null}
+                  {showQuickAccessButton("resources") ? (
+                    <QuickAccessTitlebarButton
+                      icon={IconDeviceDesktop}
+                      label="Resources"
+                      onToggle={() =>
+                        onUpdateSetting(
+                          "resourcesTitlebarButtonHidden",
+                          !settings.resourcesTitlebarButtonHidden,
+                        )
+                      }
+                      visible={!settings.resourcesTitlebarButtonHidden}
+                    />
+                  ) : null}
+                  {showQuickAccessButton("gitActions") ? (
+                    <QuickAccessTitlebarButton
+                      icon={IconGitCommit}
+                      label="Git actions"
+                      onToggle={() =>
+                        onUpdateSetting(
+                          "gitActionsTitlebarButtonHidden",
+                          !settings.gitActionsTitlebarButtonHidden,
+                        )
+                      }
+                      visible={!settings.gitActionsTitlebarButtonHidden}
+                    />
+                  ) : null}
+                  {showQuickAccessButton("quickActions") ? (
+                    <QuickAccessTitlebarButton
+                      icon={IconPlayerPlay}
+                      label="Quick Actions"
+                      onToggle={() =>
+                        onUpdateSetting(
+                          "quickActionsTitlebarButtonHidden",
+                          !settings.quickActionsTitlebarButtonHidden,
+                        )
+                      }
+                      visible={!settings.quickActionsTitlebarButtonHidden}
+                    />
+                  ) : null}
+                  {showQuickAccessButton("openIn") ? (
+                    <QuickAccessTitlebarButton
+                      icon={IconFolderOpen}
+                      label="Open In"
+                      onToggle={() =>
+                        onUpdateSetting(
+                          "openInTitlebarButtonHidden",
+                          !settings.openInTitlebarButtonHidden,
+                        )
+                      }
+                      visible={!settings.openInTitlebarButtonHidden}
+                    />
+                  ) : null}
+                </ButtonGroup>
+              </div>
+            </Field>
+          </SettingsSection>
+        ) : null}
+      </div>
+    </SettingsNativeScrollArea>
+  );
+}
+
+function PluginManagedSettingsRow({
+  description,
+  icon,
+  onReinstall,
+  onVisibleChange,
+  reinstallAvailable,
+  runtime,
+  title,
+  visible,
+}: {
+  description: string;
+  icon: typeof IconInfoCircle;
+  onReinstall?: () => void;
+  onVisibleChange?: (visible: boolean) => void;
+  reinstallAvailable?: boolean;
+  runtime?: SidebarPluginSettingsItem;
+  title: string;
+  visible?: boolean;
+}) {
+  const busy = runtime !== undefined && !["installed", "notInstalled", "failed"].includes(runtime.status);
+  const actionLabel = runtime?.status === "notInstalled" ? "Install" : "Reinstall";
+  const detail = runtime
+    ? `${description}${runtime.errorMessage ? ` · ${runtime.errorMessage}` : ""}`
+    : description;
+  const tone = runtime
+    ? runtime.status === "installed"
+      ? "success"
+      : runtime.status === "failed"
+        ? "warning"
+        : "neutral"
+    : "success";
+  return (
+    <IntegrationSettingsRow
+      description={detail}
+      icon={icon}
+      status={runtime?.statusLabel ?? "Built in"}
+      title={title}
+      tone={tone}
+      version={runtime?.version}
+    >
+      {onReinstall ? (
+        <SettingButton
+          disabled={busy || !reinstallAvailable}
+          disabledReason={
+            busy
+              ? `${title} is being installed.`
+              : "This build does not provide a reinstallable remote component."
+          }
+          onClick={onReinstall}
+          type="button"
+          variant="outline"
+        >
+          <IconRefresh
+            aria-hidden="true"
+            className={cn(busy && "animate-spin")}
+            data-icon="inline-start"
+          />
+          {actionLabel}
+        </SettingButton>
+      ) : null}
+      {onVisibleChange && visible !== undefined ? (
+        <label className="flex h-8 items-center gap-2 px-1 text-xs text-muted-foreground">
+          Visible
+          <Switch
+            aria-label={`Show ${title} in the title bar`}
+            checked={visible}
+            onCheckedChange={onVisibleChange}
+          />
+        </label>
+      ) : null}
+    </IntegrationSettingsRow>
+  );
+}
+
+function VersionInfoButton({ label, version }: { label: string; version: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <AppTooltip content={copied ? `Copied ${version}` : version}>
+      <Button
+        aria-label={`Copy ${label} version ${version}`}
+        onClick={() => {
+          void navigator.clipboard.writeText(version).then(
+            () => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1200);
+            },
+            () => undefined,
+          );
+        }}
+        size="icon-xs"
+        type="button"
+        variant="ghost"
+      >
+        <IconInfoCircle aria-hidden="true" />
+      </Button>
+    </AppTooltip>
+  );
+}
+
+function QuickAccessTitlebarButton({
+  icon: Icon,
+  label,
+  onToggle,
+  visible,
+}: {
+  icon: typeof IconInfoCircle;
+  label: string;
+  onToggle: () => void;
+  visible: boolean;
+}) {
+  return (
+    <AppTooltip
+      content={`${label} is ${visible ? "shown" : "hidden"}. Click to ${visible ? "hide" : "show"}.`}
+    >
+      <Button
+        aria-label={`${visible ? "Hide" : "Show"} ${label} in the title bar`}
+        aria-pressed={visible}
+        onClick={onToggle}
+        size="icon"
+        style={
+          visible
+            ? { backgroundColor: "#e5e5e5", borderColor: "#e5e5e5", color: "#0a0a0a" }
+            : undefined
+        }
+        type="button"
+        variant="outline"
+      >
+        <Icon aria-hidden="true" />
+      </Button>
+    </AppTooltip>
+  );
+}
+
 function IntegrationsSettingsTab({
   agentHookStatus,
   agentHookStatusLoading,
@@ -7994,7 +8502,6 @@ function IntegrationsSettingsTab({
   onInstallBrowserControl,
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
-  onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
@@ -8023,7 +8530,6 @@ function IntegrationsSettingsTab({
   onInstallBrowserControl?: () => void;
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
-  onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
@@ -8043,23 +8549,6 @@ function IntegrationsSettingsTab({
   const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const bundledAgentSkillsAvailableForUninstall = hasInstalledBundledAgentSkills(ghostexCliStatus);
   const cliReady = ghostexCliStatus?.installed === true;
-  const desktopControlReady =
-    ghostexCliStatus?.cuaDriverInstalled === true &&
-    ghostexCliStatus?.computerUseSkillInstalled === true;
-  const t3RuntimeReady = ghostexCliStatus?.t3RuntimeInstalled === true;
-  const t3RuntimeStatus =
-    ghostexCliStatusLoading && !ghostexCliStatus
-      ? "Checking"
-      : t3RuntimeReady
-        ? ghostexCliStatus?.t3RuntimeSource === "development"
-          ? "Development"
-          : "Bundled"
-        : ghostexCliStatus?.t3RuntimeSource === "unavailable"
-          ? "Not bundled"
-        : "Missing";
-  const t3RuntimeDescription =
-    ghostexCliStatus?.t3RuntimeDetail ??
-    "T3 Code should be packaged with Ghostex so GUI coding panes can start without a developer checkout.";
   /**
    * CDXC:CuaPermissions 2026-05-29-06:00:
    * Cua Permissions status must be based on Cua Driver's own permission check,
@@ -8074,7 +8563,9 @@ function IntegrationsSettingsTab({
       <div className="settings-page-width flex flex-col gap-6 px-5 pb-5">
         {/*
          * CDXC:IntegrationsSetup 2026-05-27-04:17:
-         * Settings owns one Integrations tab for post-onboarding setup. Keep CLI, bundled Ghostex skills, Cua Driver, and macOS privacy permissions on the same page so users can recover skipped first-launch steps without hunting through unrelated tabs.
+         * Settings owns one Integrations tab for post-onboarding CLI, bundled
+         * Ghostex skills, and macOS privacy permissions. The Cua Driver runtime
+         * lifecycle itself belongs to Plugins.
          *
          * CDXC:AgentHookSettings 2026-06-29-01:26:
          * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row; it only keeps hook removal as a recovery action at the bottom of the page.
@@ -8122,38 +8613,6 @@ function IntegrationsSettingsTab({
                 ghostexCliStatusLoading
                   ? "CLI status is being checked."
                   : "CLI status refresh isn’t available here."
-              }
-              onClick={onRequestGhostexCliStatus}
-              type="button"
-              variant="ghost"
-            >
-              <IconRefresh aria-hidden="true" data-icon="inline-start" />
-              Refresh
-            </SettingButton>
-          </IntegrationSettingsRow>
-          ) : null}
-
-          {/*
-           * CDXC:T3CodePackaging 2026-06-06-05:50:
-           * T3 Code panes are a core advertised Ghostex feature, so Settings -> Integrations must show whether the app build actually contains the managed T3 runtime instead of leaving users to discover a missing Web/t3code-server package through a pane startup failure.
-           *
-           * CDXC:ContributorStart 2026-06-22-23:23:
-           * Contributor local builds can intentionally omit the optional t3code submodule. Show that state as Not bundled instead of Missing so the warning points to a disabled feature, not a broken app shell.
-           */}
-          {T3CODE_ENABLED && showIntegrationRow("t3Runtime") ? (
-          <IntegrationSettingsRow
-            description={t3RuntimeDescription}
-            icon={IconCodeDots}
-            status={t3RuntimeStatus}
-            tone={t3RuntimeReady ? "success" : "warning"}
-            title="T3 Code Runtime"
-          >
-            <SettingButton
-              disabled={ghostexCliStatusLoading || !onRequestGhostexCliStatus}
-              disabledReason={
-                ghostexCliStatusLoading
-                  ? "Runtime status is being checked."
-                  : "Runtime status refresh isn’t available here."
               }
               onClick={onRequestGhostexCliStatus}
               type="button"
@@ -8242,33 +8701,6 @@ function IntegrationsSettingsTab({
                 />
               </div>
             </div>
-          </IntegrationSettingsRow>
-          ) : null}
-
-          {showIntegrationRow("desktopControl") ? (
-          <IntegrationSettingsRow
-            description="Install Cua Driver for native macOS desktop automation. The bundled Ghostex Computer Use skill above teaches agents when and how to use it."
-            icon={IconDeviceDesktop}
-            status={ghostexCliStatusLoading && !ghostexCliStatus ? "Checking" : desktopControlReady ? "Installed" : "Not installed"}
-            tone={desktopControlReady ? "success" : "warning"}
-            title="Desktop Control Runtime"
-          >
-            <SettingButton
-              disabled={ghostexCliStatusLoading || desktopControlReady || !onInstallCuaDriver}
-              disabledReason={
-                ghostexCliStatusLoading
-                  ? "Desktop Control status is being checked."
-                  : desktopControlReady
-                    ? "Desktop Control is already installed."
-                    : "Desktop Control installation isn’t available here."
-              }
-              onClick={onInstallCuaDriver}
-              type="button"
-              variant={desktopControlReady ? "outline" : "default"}
-            >
-              <IconDownload aria-hidden="true" data-icon="inline-start" />
-              {desktopControlReady ? "Installed" : "Install Desktop Control"}
-            </SettingButton>
           </IntegrationSettingsRow>
           ) : null}
 
@@ -8372,6 +8804,7 @@ function IntegrationSettingsRow({
   status,
   title,
   tone,
+  version,
 }: {
   badge?: string;
   children: ReactNode;
@@ -8380,6 +8813,7 @@ function IntegrationSettingsRow({
   status: string;
   title: string;
   tone: "success" | "warning" | "neutral";
+  version?: string;
 }) {
   return (
     <Field className="rounded-none border border-border bg-muted/20 px-4 py-3">
@@ -8413,6 +8847,7 @@ function IntegrationSettingsRow({
               >
                 {status}
               </span>
+              {version ? <VersionInfoButton label={title} version={version} /> : null}
             </div>
             <FieldDescription className="text-xs text-muted-foreground">
               {description}
@@ -8483,7 +8918,7 @@ function AgentsSettingsTab({
   const promptAgentOptions = useMemo(
     () =>
       agents
-        .filter((agent) => agent.agentId !== "t3" && Boolean(agent.command?.trim()))
+        .filter((agent) => Boolean(agent.command?.trim()))
         .map((agent) => ({ label: agent.name.trim() || agent.agentId, value: agent.agentId })),
     [agents],
   );
@@ -8602,7 +9037,7 @@ function AgentsSettingsTab({
             <details className="group w-full">
               {/*
                * CDXC:AgentHookSettings 2026-05-23-10:05:
-               * Settings -> Agents starts with a collapsed hook setup panel so reliable-resume requirements are discoverable without pushing normal agent ordering/editing controls down the tab. The panel must cover every current Ghostex CLI resume-hook agent, while T3 Code remains outside the hook list because its managed runtime does not use CLI hook capture.
+               * Settings -> Agents starts with a collapsed hook setup panel so reliable-resume requirements are discoverable without pushing normal agent ordering/editing controls down the tab. The panel covers every current Ghostex CLI resume-hook agent.
                *
                * CDXC:AgentHookSettings 2026-06-11-17:45:
                * The collapsed header must use the same field label/description typography and bordered row spacing as the other Agents settings rows. The disclosure chevron points right when collapsed and rotates down when expanded.
@@ -8638,9 +9073,6 @@ function AgentsSettingsTab({
                     existing title-based restore path remains available when a hook has not captured
                     an id yet.
                   </p>
-                  {T3CODE_ENABLED ? (
-                    <p>T3 Code uses Ghostex&apos;s managed runtime, so it does not need a CLI hook.</p>
-                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <SettingButton
@@ -9501,15 +9933,6 @@ function ActionsSettingsTab({
             label="Hide New Terminal button"
             onChange={onHideTabStripNewTerminalButtonChange}
           />
-          {T3CODE_ENABLED ? (
-            <ToggleField
-              checked={hideTabStripNewChatButton}
-              description="Hide the New Chat button from the tab strip."
-              {...getSettingModificationProps("hideTabStripNewChatButton")}
-              label="Hide New Chat button"
-              onChange={onHideTabStripNewChatButtonChange}
-            />
-          ) : null}
           <ToggleField
             checked={hideTabStripNewBrowserButton}
             description="Hide the New Browser Tab button from the tab strip."
@@ -10868,6 +11291,7 @@ type SearchableExtraSettingsTabId =
   | "actions"
   | "agents"
   | "integrations"
+  | "plugins"
   | "openTargets"
   | "osIntegration"
   | "projects"
@@ -10942,13 +11366,6 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle: "Hide the New Terminal button from the tab strip.",
             title: "Hide New Terminal button",
           },
-          ...(T3CODE_ENABLED
-            ? [{
-                key: "hideTabStripNewChatButton",
-                subtitle: "Hide the New Chat button from the tab strip.",
-                title: "Hide New Chat button",
-              }]
-            : []),
           {
             key: "hideTabStripNewBrowserButton",
             subtitle: "Hide the New Browser Tab button from the tab strip.",
@@ -11044,14 +11461,6 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
               "Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup.",
             title: "Ghostex CLI",
           },
-          ...(T3CODE_ENABLED
-            ? [{
-                key: "t3Runtime",
-                subtitle:
-                  "T3 Code should be packaged with Ghostex so GUI coding panes can start without a developer checkout.",
-                title: "T3 Code Runtime",
-              }]
-            : []),
           {
             key: "bundledAgentSkills",
             options: BUNDLED_GHOSTEX_AGENT_SKILLS.map((skill) => ({
@@ -11068,11 +11477,6 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle:
               "Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.",
             title: "App Shots",
-          },
-          {
-            key: "desktopControl",
-            subtitle: "Install Cua Driver for native macOS desktop automation.",
-            title: "Desktop Control Runtime",
           },
           {
             key: "cuaPermissions",
@@ -11101,6 +11505,46 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
       },
     ],
     title: "Integrations",
+  },
+  plugins: {
+    sections: [
+      {
+        id: "viewTabs",
+        settings: [
+          { key: "code", subtitle: "Show Code in the title bar and manage its VS Code runtime.", title: "Code" },
+          { key: "browser", subtitle: "Show or hide Browser in the title bar.", title: "Browser" },
+          { key: "kanban", subtitle: "Show Kanban in the title bar and manage its Beads runtime.", title: "Kanban" },
+          { key: "automate", subtitle: "Show or hide Automate in the title bar.", title: "Automate" },
+          { key: "docs", subtitle: "Show or hide Docs in the title bar.", title: "Docs" },
+        ],
+        title: "Plugins",
+      },
+      {
+        id: "components",
+        settings: [
+          {
+            key: "cuaDriver",
+            subtitle:
+              "Install or upgrade Cua Driver for Ghostex Browser Use and native Desktop Control.",
+            title: "Cua Driver",
+          },
+          { key: "cef", subtitle: "Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.", title: "Chromium runtime (CEF)" },
+        ],
+        title: "Shared components",
+      },
+      {
+        id: "quickAccessButtons",
+        settings: [
+          { key: "tips", subtitle: "Show or hide the Tips & Tricks titlebar button.", title: "Tips & Tricks" },
+          { key: "resources", subtitle: "Show or hide the Resources titlebar button.", title: "Resources" },
+          { key: "gitActions", subtitle: "Show or hide the Git actions titlebar button.", title: "Git actions" },
+          { key: "quickActions", subtitle: "Show or hide the Quick Actions titlebar button.", title: "Quick Actions" },
+          { key: "openIn", subtitle: "Show or hide the Open In titlebar button.", title: "Open In" },
+        ],
+        title: "Quick access buttons",
+      },
+    ],
+    title: "Customize",
   },
   openTargets: {
     sections: [
@@ -11472,12 +11916,14 @@ function SettingsSection({
   actions,
   children,
   description,
+  descriptionClassName,
   sectionRef,
   title,
 }: {
   actions?: ReactNode;
   children: ReactNode;
   description?: ReactNode;
+  descriptionClassName?: string;
   sectionRef?: RefObject<HTMLDivElement | null>;
   title: string;
 }) {
@@ -11519,7 +11965,14 @@ function SettingsSection({
       {actions ? <div className="settings-section-header-actions">{actions}</div> : null}
       <CardContent className="pt-2">
         {description ? (
-          <p className="m-0 pb-5 text-sm leading-6 text-muted-foreground">{description}</p>
+          <p
+            className={cn(
+              "m-0 pb-5 text-sm leading-6 text-muted-foreground",
+              descriptionClassName,
+            )}
+          >
+            {description}
+          </p>
         ) : null}
         <FieldGroup className="gap-6">{children}</FieldGroup>
       </CardContent>
@@ -12573,8 +13026,8 @@ function SidebarProjectGroupStyleField({
 /*
  * CDXC:SidebarV2 2026-07-29:
  * The sidebar version selector reuses the Preset toggle-group shape so the
- * first General setting reads as one two-option switch, with a New badge on the
- * row label while the Inbox sidebar is still rolling out.
+ * sidebar version setting reads as one two-option switch, with a New badge on
+ * the row label while the Inbox sidebar is still rolling out.
  */
 function SidebarVersionField({
   advanced,
@@ -12617,6 +13070,104 @@ function SidebarVersionField({
         variant="outline"
       >
         {SIDEBAR_VERSION_OPTIONS.map((option, index) => (
+          <ToggleGroupItem
+            aria-label={option.label}
+            id={index === 0 ? id : undefined}
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </SettingRow>
+  );
+}
+
+function PreferredAgentInterfaceField({
+  description,
+  isModified,
+  label,
+  onChange,
+  onResetToDefault,
+  value,
+}: {
+  description?: string;
+  label: string;
+  onChange: (value: PreferredAgentInterface) => void;
+  value: PreferredAgentInterface;
+} & SettingModificationProps) {
+  const id = useId();
+  return (
+    <SettingRow
+      description={description}
+      htmlFor={id}
+      isModified={isModified}
+      label={label}
+      onResetToDefault={onResetToDefault}
+    >
+      <ToggleGroup
+        aria-label={label}
+        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        onValueChange={(nextValue) => {
+          const [nextInterface] = nextValue as PreferredAgentInterface[];
+          if (nextInterface) {
+            onChange(nextInterface);
+          }
+        }}
+        value={[value]}
+        variant="outline"
+      >
+        {PREFERRED_AGENT_INTERFACE_OPTIONS.map((option, index) => (
+          <ToggleGroupItem
+            aria-label={option.label}
+            id={index === 0 ? id : undefined}
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </SettingRow>
+  );
+}
+
+function SessionChatThemeField({
+  description,
+  isModified,
+  label,
+  onChange,
+  onResetToDefault,
+  value,
+}: {
+  description?: string;
+  label: string;
+  onChange: (value: SessionChatTheme) => void;
+  value: SessionChatTheme;
+} & SettingModificationProps) {
+  const id = useId();
+  return (
+    <SettingRow
+      description={description}
+      htmlFor={id}
+      isModified={isModified}
+      label={label}
+      onResetToDefault={onResetToDefault}
+    >
+      <ToggleGroup
+        aria-label={label}
+        className="w-full [&>[data-slot=toggle-group-item]]:flex-1"
+        onValueChange={(nextValues) => {
+          const [nextValue] = nextValues as SessionChatTheme[];
+          if (nextValue) {
+            onChange(nextValue);
+          }
+        }}
+        value={[value]}
+        variant="outline"
+      >
+        {SESSION_CHAT_THEME_OPTIONS.map((option, index) => (
           <ToggleGroupItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}

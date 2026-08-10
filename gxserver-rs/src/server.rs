@@ -115,10 +115,6 @@ use crate::{
         create_gxserver_migration_status, initialize_gxserver_storage, open_gxserver_database,
         open_gxserver_database_with_busy_timeout,
     },
-    t3_runtime::{
-        parse_t3_runtime_panes_params, parse_t3_runtime_start_params, T3RuntimeManager,
-        T3RuntimeStatusPayload,
-    },
     terminal_ws::{handle_terminal_socket, TerminalWsState},
     toolchain::{get_gxserver_tool_statuses, require_bundled_bd, require_bundled_zmx},
     typed_operations::{
@@ -177,7 +173,6 @@ struct AppState {
     session_chat_option_cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
     shutdown_tx: broadcast::Sender<()>,
     stale_activity_timers: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
-    t3_runtime: T3RuntimeManager,
     version: String,
     zmx_title_observers: Arc<Mutex<HashMap<String, ZmxTitleObserverTask>>>,
 }
@@ -369,7 +364,6 @@ pub async fn run_gxserver_foreground(
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
         shutdown_tx: shutdown_tx.clone(),
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
-        t3_runtime: T3RuntimeManager::new(&paths),
         version,
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });
@@ -450,7 +444,6 @@ pub async fn run_gxserver_foreground(
     remove_runtime_metadata(&paths)?;
     stop_all_zmx_title_observers(&state);
     stop_all_session_chat_followers(&state);
-    state.t3_runtime.abort_background_tasks();
     Ok(GxserverForegroundResult { reused: false })
 }
 
@@ -2109,25 +2102,6 @@ async fn route_http(
                 Ok(json!({ "session": session }))
             },
         ),
-        "/api/syncT3EmbeddedSession" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |repository, db, params, _| {
-                let session = sync_t3_embedded_session(repository, params)?;
-                let project_id = value_text(&session, "projectId")?;
-                let session_id = value_text(&session, "sessionId")?;
-                schedule_presentation_session_delta(
-                    &state,
-                    db,
-                    repository,
-                    &project_id,
-                    &session_id,
-                )?;
-                Ok(json!({ "session": session }))
-            },
-        ),
         "/api/updateSessionOrder" => handle_domain_http(
             &state,
             endpoint.path,
@@ -2704,6 +2678,7 @@ async fn route_http(
         }
         "/api/sendSessionChatMessage" => {
             handle_send_session_chat_message_http(&state, endpoint.path, request_id, &body_json)
+                .await
         }
         "/api/saveSessionChatImage" => {
             handle_save_session_chat_image_http(&state, endpoint.path, request_id, &body_json)
@@ -2741,12 +2716,6 @@ async fn route_http(
         }
         "/api/resolveGitRootForPath" => {
             handle_resolve_git_root_for_path_http(&state, endpoint.path, request_id, &body_json)
-        }
-        "/api/t3Runtime/status"
-        | "/api/t3Runtime/start"
-        | "/api/t3Runtime/stop"
-        | "/api/t3Runtime/panes" => {
-            handle_t3_runtime_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/control/stop" => {
             broadcast_server_stopping(&state);
@@ -2825,68 +2794,6 @@ fn handle_query_logs_http(
                 Some(request_id),
             ),
         ),
-    }
-}
-
-async fn handle_t3_runtime_http(
-    state: &Arc<AppState>,
-    endpoint_path: String,
-    request_id: String,
-    body: &Value,
-) -> RoutedResponse {
-    let params = match read_domain_rpc_params(body) {
-        Ok(params) => params,
-        Err(error) => return domain_error_response(endpoint_path, request_id, error),
-    };
-    let result = match endpoint_path.as_str() {
-        "/api/t3Runtime/status" => t3_runtime_status_snapshot(state).await,
-        "/api/t3Runtime/start" => match parse_t3_runtime_start_params(&params) {
-            Ok(request) => {
-                state.t3_runtime.request_start(request);
-                t3_runtime_status_snapshot(state).await
-            }
-            Err(error) => Err(error),
-        },
-        "/api/t3Runtime/stop" => {
-            let manager = state.t3_runtime.clone();
-            tokio::task::spawn_blocking(move || manager.stop_runtime())
-                .await
-                .map_err(t3_runtime_task_error)
-        }
-        "/api/t3Runtime/panes" => match parse_t3_runtime_panes_params(&params) {
-            Ok((client_id, session_ids)) => {
-                state.t3_runtime.update_panes(client_id, session_ids);
-                t3_runtime_status_snapshot(state).await
-            }
-            Err(error) => Err(error),
-        },
-        _ => Err(DomainStateError::not_found(format!(
-            "{endpoint_path} is not a T3 runtime endpoint."
-        ))),
-    };
-    match result {
-        Ok(status) => routed_json(
-            Some(endpoint_path),
-            StatusCode::OK,
-            rpc_success(request_id, json!({ "t3Runtime": status })),
-        ),
-        Err(error) => domain_error_response(endpoint_path, request_id, error),
-    }
-}
-
-async fn t3_runtime_status_snapshot(
-    state: &Arc<AppState>,
-) -> std::result::Result<T3RuntimeStatusPayload, DomainStateError> {
-    let manager = state.t3_runtime.clone();
-    tokio::task::spawn_blocking(move || manager.status_snapshot())
-        .await
-        .map_err(t3_runtime_task_error)
-}
-
-fn t3_runtime_task_error(error: tokio::task::JoinError) -> DomainStateError {
-    DomainStateError {
-        code: "internalError",
-        message: format!("T3 runtime task failed: {error}"),
     }
 }
 
@@ -5571,7 +5478,6 @@ fn default_agent_name(agent_id: &str) -> Option<&'static str> {
         "pi" => Some("Pi Agent"),
         "qoder" => Some("Qoder"),
         "rovodev" => Some("Rovo Dev"),
-        "t3" => Some("T3 Code"),
         _ => None,
     }
 }
@@ -6445,7 +6351,7 @@ async fn run_worktree_session_setup_command(
 }
 
 /*
-`startFromOrigin` means what it means in t3code: fetch the remote first and base
+`startFromOrigin` fetches the remote first and bases
 the new branch on the REMOTE tip, not on whatever the local branch happens to
 point at. Without it the base is the requested branch, or the repository's own
 default branch resolved by the shared P3 rules.
@@ -8481,7 +8387,7 @@ fn browse_project_directories(
     A path browser walks directories the user may not be allowed to read, and a
     hard error there would replace the suggestion list with a failure every time
     the caret crosses one. Permission failures therefore answer with an empty
-    entry list for the resolved parent (the t3code `filesystem.browse`
+    entry list for the resolved parent (the shared filesystem browse
     contract); every other read failure still surfaces as `notFound`.
     */
     let dirents = match fs::read_dir(&parent_path) {
@@ -10603,7 +10509,7 @@ fn resolve_session_chat_send_target(
     })
 }
 
-fn handle_send_session_chat_message_http(
+async fn handle_send_session_chat_message_http(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
@@ -10700,14 +10606,31 @@ fn handle_send_session_chat_message_http(
             },
         );
     }
-    let steps = crate::session_chat_send::build_session_chat_message_steps(&text, &image_paths);
-    crate::session_chat_send::enqueue_session_chat_send(
+    let mut steps = crate::session_chat_send::build_session_chat_message_steps(&text, &image_paths);
+    steps.insert(
+        0,
+        crate::session_chat_send::SessionChatSendStep::PreserveTerminalDraft {
+            state_dir: state.paths.app_state_dir.clone(),
+        },
+    );
+    if let Err(message) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
         &target.zmx_name,
         "session-chat-message",
         steps,
-    );
+    )
+    .await
+    {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "dependencyUnavailable",
+                message,
+            },
+        );
+    }
     // An option command changes what the statusline reports: read it back.
     let agent = session_chat_agent_for_session(&target.session);
     if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), &text) {
@@ -12152,322 +12075,6 @@ fn read_session_text(session: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn sync_t3_object_field(value: &Value, key: &str) -> Map<String, Value> {
-    value
-        .get(key)
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn sync_t3_param_text(params: &Map<String, Value>, key: &str) -> Option<String> {
-    read_text_from_map(params, key)
-        .filter(|value| value.chars().count() <= 1024 && !value.chars().any(char::is_control))
-}
-
-fn sync_t3_required_param_text(
-    params: &Map<String, Value>,
-    key: &str,
-) -> std::result::Result<String, DomainStateError> {
-    sync_t3_param_text(params, key)
-        .ok_or_else(|| DomainStateError::bad_request(format!("{key} is required.")))
-}
-
-fn sync_t3_metadata_text(
-    runtime_t3: &Map<String, Value>,
-    provider_t3: &Map<String, Value>,
-    key: &str,
-) -> Option<String> {
-    read_text_from_map(runtime_t3, key).or_else(|| read_text_from_map(provider_t3, key))
-}
-
-fn sync_t3_thread_is_placeholder(thread_id: &str) -> bool {
-    let normalized = thread_id.trim().to_ascii_lowercase();
-    normalized.starts_with("ghostex-thread-")
-        || normalized.starts_with("ghostex-draft-")
-        || normalized.starts_with("pending-")
-}
-
-fn sync_t3_normalize_activity(value: Option<&Value>) -> Option<&'static str> {
-    match value.and_then(Value::as_str).map(str::trim) {
-        Some("attention") => Some("attention"),
-        Some("idle") => Some("idle"),
-        Some("working") => Some("working"),
-        _ => None,
-    }
-}
-
-fn sync_t3_normalize_lifecycle(value: Option<&Value>) -> Option<&'static str> {
-    match value.and_then(Value::as_str).map(str::trim) {
-        Some("missing") => Some("missing"),
-        Some("running") => Some("running"),
-        Some("sleeping") => Some("sleeping"),
-        Some("stopped") => Some("stopped"),
-        Some("unknown") => Some("unknown"),
-        _ => None,
-    }
-}
-
-fn sync_t3_sidebar_mode(value: Option<&Value>) -> &'static str {
-    match value.and_then(Value::as_str).map(str::trim) {
-        Some("normal") => "normal",
-        _ => "collapsed",
-    }
-}
-
-fn sync_t3_normalize_title(value: Option<&Value>) -> Option<String> {
-    let normalized = value
-        .and_then(Value::as_str)?
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let normalized = normalized.trim();
-    if normalized.is_empty() || normalized.chars().any(char::is_control) {
-        return None;
-    }
-    let lower = normalized.to_ascii_lowercase();
-    if matches!(
-        lower.as_str(),
-        "t3 code" | "t3 code (alpha)" | "no active thread" | "pick a thread to continue"
-    ) {
-        return None;
-    }
-    Some(normalized.chars().take(240).collect())
-}
-
-fn sync_t3_agent_activity(activity: &str, previous: Option<&Value>) -> Value {
-    let now = now_iso();
-    let previous_seen_working = previous
-        .and_then(Value::as_object)
-        .and_then(|activity| activity.get("hasSeenWorking"))
-        .and_then(Value::as_bool)
-        == Some(true);
-    json!({
-        "activity": activity,
-        "hasSeenWorking": previous_seen_working || activity == "working",
-        "isAcknowledged": activity != "attention",
-        "lastChangedAt": now,
-        "suppressedUntil": now,
-    })
-}
-
-fn sync_t3_embedded_session(
-    repository: &DomainRepository<'_>,
-    params: &Map<String, Value>,
-) -> std::result::Result<Value, DomainStateError> {
-    /*
-    CDXC:T3SessionOwnership 2026-07-01-02:17:
-    Embedded T3 sync updates exactly one existing Ghostex `kind: "t3"` row by Ghostex project/session id. Do not create fallback rows from T3 thread ids; validate the workspace/thread binding and then update only provider metadata, lifecycle/activity, title provenance, and cleanup-safe markers.
-    */
-    let ghostex_project_id = sync_t3_required_param_text(params, "ghostexProjectId")?;
-    let ghostex_session_id = sync_t3_required_param_text(params, "ghostexSessionId")?;
-    if !is_gxserver_project_id(&ghostex_project_id) || !is_gxserver_session_id(&ghostex_session_id)
-    {
-        return Err(DomainStateError::bad_request(
-            "Ghostex T3 sync target identity is invalid.",
-        ));
-    }
-    let current = repository
-        .get_session(&ghostex_project_id, &ghostex_session_id)?
-        .ok_or_else(|| DomainStateError::not_found("Ghostex T3 session does not exist."))?;
-    if read_session_text(&current, "kind").as_deref() != Some("t3") {
-        return Err(DomainStateError::bad_request(
-            "Ghostex T3 sync target must be a T3 session.",
-        ));
-    }
-
-    let mut runtime_settings = sync_t3_object_field(&current, "runtimeSettings");
-    let mut provider_state = sync_t3_object_field(&current, "providerState");
-    let mut runtime_t3 = runtime_settings
-        .get("t3")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let mut provider_t3 = provider_state
-        .get("t3")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-
-    let incoming_workspace_root = sync_t3_param_text(params, "workspaceRoot");
-    let current_workspace_root = sync_t3_metadata_text(&runtime_t3, &provider_t3, "workspaceRoot")
-        .or_else(|| read_session_text(&current, "cwd"));
-    if let (Some(current_workspace_root), Some(incoming_workspace_root)) =
-        (&current_workspace_root, &incoming_workspace_root)
-    {
-        if current_workspace_root != incoming_workspace_root {
-            return Err(DomainStateError::bad_request(
-                "T3 sync workspace does not match the Ghostex session.",
-            ));
-        }
-    }
-    let workspace_root = incoming_workspace_root.or(current_workspace_root);
-
-    let incoming_t3_project_id = sync_t3_param_text(params, "t3ProjectId")
-        .or_else(|| sync_t3_param_text(params, "projectId"));
-    let current_t3_project_id = sync_t3_metadata_text(&runtime_t3, &provider_t3, "projectId");
-    if let (Some(current_t3_project_id), Some(incoming_t3_project_id)) =
-        (&current_t3_project_id, &incoming_t3_project_id)
-    {
-        if current_t3_project_id != incoming_t3_project_id {
-            return Err(DomainStateError::bad_request(
-                "T3 sync project does not match the Ghostex session binding.",
-            ));
-        }
-    }
-    let t3_project_id = incoming_t3_project_id.or(current_t3_project_id);
-
-    let incoming_thread_id = sync_t3_param_text(params, "threadId");
-    let current_thread_id = sync_t3_metadata_text(&runtime_t3, &provider_t3, "boundThreadId")
-        .or_else(|| sync_t3_metadata_text(&runtime_t3, &provider_t3, "threadId"));
-    let allow_rebind = params.get("allowThreadRebind").and_then(Value::as_bool) == Some(true);
-    if let (Some(current_thread_id), Some(incoming_thread_id)) =
-        (&current_thread_id, &incoming_thread_id)
-    {
-        if current_thread_id != incoming_thread_id
-            && !allow_rebind
-            && !sync_t3_thread_is_placeholder(current_thread_id)
-        {
-            return Err(DomainStateError::bad_request(
-                "T3 sync thread does not match the Ghostex session binding.",
-            ));
-        }
-    }
-    let thread_id = incoming_thread_id.or(current_thread_id).ok_or_else(|| {
-        DomainStateError::bad_request("T3 sync requires thread binding metadata.")
-    })?;
-
-    runtime_t3.insert(
-        "ghostexProjectId".to_string(),
-        Value::String(ghostex_project_id.clone()),
-    );
-    runtime_t3.insert(
-        "ghostexSessionId".to_string(),
-        Value::String(ghostex_session_id.clone()),
-    );
-    provider_t3.insert(
-        "ghostexProjectId".to_string(),
-        Value::String(ghostex_project_id.clone()),
-    );
-    provider_t3.insert(
-        "ghostexSessionId".to_string(),
-        Value::String(ghostex_session_id.clone()),
-    );
-    if let Some(t3_project_id) = t3_project_id {
-        runtime_t3.insert(
-            "projectId".to_string(),
-            Value::String(t3_project_id.clone()),
-        );
-        provider_t3.insert("projectId".to_string(), Value::String(t3_project_id));
-    }
-    if let Some(server_origin) = sync_t3_param_text(params, "serverOrigin")
-        .or_else(|| sync_t3_metadata_text(&runtime_t3, &provider_t3, "serverOrigin"))
-    {
-        runtime_t3.insert(
-            "serverOrigin".to_string(),
-            Value::String(server_origin.clone()),
-        );
-        provider_t3.insert("serverOrigin".to_string(), Value::String(server_origin));
-    }
-    if let Some(environment_id) = sync_t3_param_text(params, "environmentId")
-        .or_else(|| sync_t3_metadata_text(&runtime_t3, &provider_t3, "environmentId"))
-    {
-        runtime_t3.insert(
-            "environmentId".to_string(),
-            Value::String(environment_id.clone()),
-        );
-        provider_t3.insert("environmentId".to_string(), Value::String(environment_id));
-    }
-    runtime_t3.insert(
-        "boundThreadId".to_string(),
-        Value::String(thread_id.clone()),
-    );
-    runtime_t3.insert("threadId".to_string(), Value::String(thread_id.clone()));
-    provider_t3.insert(
-        "boundThreadId".to_string(),
-        Value::String(thread_id.clone()),
-    );
-    provider_t3.insert("threadId".to_string(), Value::String(thread_id));
-    if let Some(workspace_root) = workspace_root {
-        runtime_t3.insert(
-            "workspaceRoot".to_string(),
-            Value::String(workspace_root.clone()),
-        );
-        provider_t3.insert("workspaceRoot".to_string(), Value::String(workspace_root));
-    }
-    if let Some(created_at) = sync_t3_param_text(params, "createdAt")
-        .or_else(|| sync_t3_metadata_text(&runtime_t3, &provider_t3, "createdAt"))
-    {
-        runtime_t3.insert("createdAt".to_string(), Value::String(created_at.clone()));
-        provider_t3.insert("createdAt".to_string(), Value::String(created_at));
-    }
-    runtime_t3.insert(
-        "createdBy".to_string(),
-        Value::String("ghostex-embedded".to_string()),
-    );
-    provider_t3.insert(
-        "createdBy".to_string(),
-        Value::String("ghostex-embedded".to_string()),
-    );
-    let sidebar_mode = sync_t3_sidebar_mode(params.get("t3SidebarMode"));
-    runtime_t3.insert(
-        "t3SidebarMode".to_string(),
-        Value::String(sidebar_mode.to_string()),
-    );
-    provider_t3.insert(
-        "t3SidebarMode".to_string(),
-        Value::String(sidebar_mode.to_string()),
-    );
-
-    runtime_settings.insert("provider".to_string(), Value::String("t3code".to_string()));
-    runtime_settings.insert("t3".to_string(), Value::Object(runtime_t3));
-    provider_state.insert("provider".to_string(), Value::String("t3code".to_string()));
-    provider_state.insert("t3".to_string(), Value::Object(provider_t3));
-    if let Some(lifecycle) = sync_t3_normalize_lifecycle(params.get("lifecycleState")) {
-        provider_state.insert(
-            "lifecycleState".to_string(),
-            Value::String(
-                if lifecycle == "stopped" {
-                    "missing"
-                } else {
-                    "unknown"
-                }
-                .to_string(),
-            ),
-        );
-    }
-    if let Some(title_source) = sync_t3_param_text(params, "titleSource") {
-        runtime_settings.insert("titleSource".to_string(), Value::String(title_source));
-    }
-    if let Some(activity) = sync_t3_normalize_activity(params.get("activity")) {
-        let previous = runtime_settings.get("agentActivity").cloned();
-        runtime_settings.insert(
-            "agentActivity".to_string(),
-            sync_t3_agent_activity(activity, previous.as_ref()),
-        );
-    }
-
-    let mut update = Map::new();
-    update.insert("kind".to_string(), Value::String("t3".to_string()));
-    update.insert("projectId".to_string(), Value::String(ghostex_project_id));
-    update.insert("sessionId".to_string(), Value::String(ghostex_session_id));
-    update.insert(
-        "runtimeSettings".to_string(),
-        Value::Object(runtime_settings),
-    );
-    update.insert("providerState".to_string(), Value::Object(provider_state));
-    if let Some(lifecycle) = sync_t3_normalize_lifecycle(params.get("lifecycleState")) {
-        update.insert(
-            "lifecycleState".to_string(),
-            Value::String(lifecycle.to_string()),
-        );
-    }
-    if let Some(title) = sync_t3_normalize_title(params.get("title")) {
-        update.insert("title".to_string(), Value::String(title));
-    }
-    repository.update_session(&update)
-}
-
 fn result_activity(result: &Value) -> Option<&str> {
     result
         .get("activity")
@@ -13017,7 +12624,6 @@ fn create_authenticated_health(state: &AppState) -> ServerHealthResponse {
         port: state.metadata.port,
         server_id: state.metadata.server_id.clone(),
         started_at: state.metadata.started_at.clone(),
-        t3_runtime: Some(state.t3_runtime.status_snapshot()),
         tools: get_gxserver_tool_statuses(),
     }
 }
@@ -14883,167 +14489,6 @@ mod tests {
         assert!(!worktree.exists());
     }
 
-    #[tokio::test]
-    async fn t3_runtime_endpoints_require_auth_and_stay_on_the_local_listener() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-
-        for path in [
-            "/api/t3Runtime/status",
-            "/api/t3Runtime/start",
-            "/api/t3Runtime/stop",
-            "/api/t3Runtime/panes",
-        ] {
-            let endpoint = endpoint_for(path).expect("t3 runtime endpoint");
-            assert_eq!(endpoint.permission, ApiPermission::RemoteBlocked);
-            assert!(endpoint.requires_auth);
-            assert!(endpoint.requires_protocol_version);
-            assert_eq!(endpoint.transport, Transport::Http);
-            assert!(!is_remote_endpoint_allowed(
-                ListenerKind::Remote,
-                endpoint.permission
-            ));
-
-            let response = route_http(
-                state.clone(),
-                rpc_request(path, "wrong-token", json!({ "params": {} })),
-                "request-t3-runtime-auth".to_string(),
-            )
-            .await;
-            assert_eq!(response.response.status(), StatusCode::UNAUTHORIZED);
-        }
-    }
-
-    #[tokio::test]
-    async fn t3_runtime_status_route_returns_the_stopped_contract_shape() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-        let token = state.auth_token.clone();
-
-        let response = route_http(
-            state,
-            rpc_request("/api/t3Runtime/status", &token, json!({ "params": {} })),
-            "request-t3-runtime-status".to_string(),
-        )
-        .await;
-
-        assert_eq!(response.response.status(), StatusCode::OK);
-        let body = response_json(response.response).await;
-        assert_eq!(
-            body["result"]["t3Runtime"],
-            json!({
-                "running": false,
-                "port": 3774,
-                "authReady": false,
-            })
-        );
-    }
-
-    #[tokio::test]
-    async fn t3_runtime_stop_route_is_a_clean_no_op_when_not_running() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-        let token = state.auth_token.clone();
-
-        let response = route_http(
-            state,
-            rpc_request("/api/t3Runtime/stop", &token, json!({ "params": {} })),
-            "request-t3-runtime-stop".to_string(),
-        )
-        .await;
-
-        assert_eq!(response.response.status(), StatusCode::OK);
-        let body = response_json(response.response).await;
-        assert_eq!(body["result"]["t3Runtime"]["running"], json!(false));
-        assert!(body["result"]["t3Runtime"].get("pid").is_none());
-        assert!(body["result"]["t3Runtime"].get("ownership").is_none());
-    }
-
-    #[tokio::test]
-    async fn t3_runtime_start_route_rejects_invalid_params_before_launching() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-        let token = state.auth_token.clone();
-
-        let missing_cwd = route_http(
-            state.clone(),
-            rpc_request("/api/t3Runtime/start", &token, json!({ "params": {} })),
-            "request-t3-runtime-start-missing-cwd".to_string(),
-        )
-        .await;
-        assert_eq!(missing_cwd.response.status(), StatusCode::BAD_REQUEST);
-        let body = response_json(missing_cwd.response).await;
-        assert_eq!(body["error"], json!("badRequest"));
-
-        let one_sided_plan = route_http(
-            state,
-            rpc_request(
-                "/api/t3Runtime/start",
-                &token,
-                json!({
-                    "params": {
-                        "cwd": path_to_string(temp.path()),
-                        "nodePath": "/usr/bin/env",
-                    }
-                }),
-            ),
-            "request-t3-runtime-start-one-sided-plan".to_string(),
-        )
-        .await;
-        assert_eq!(one_sided_plan.response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn t3_runtime_panes_route_validates_params_and_touches_the_heartbeat_file() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-        let token = state.auth_token.clone();
-        let heartbeat_file = state.t3_runtime.t3_paths().heartbeat_file.clone();
-
-        let missing_sessions = route_http(
-            state.clone(),
-            rpc_request(
-                "/api/t3Runtime/panes",
-                &token,
-                json!({ "params": { "clientId": "gpui" } }),
-            ),
-            "request-t3-runtime-panes-missing-sessions".to_string(),
-        )
-        .await;
-        assert_eq!(missing_sessions.response.status(), StatusCode::BAD_REQUEST);
-        assert!(!heartbeat_file.exists());
-
-        let live_panes = route_http(
-            state.clone(),
-            rpc_request(
-                "/api/t3Runtime/panes",
-                &token,
-                json!({ "params": { "clientId": "gpui", "sessionIds": ["G1", "G2"] } }),
-            ),
-            "request-t3-runtime-panes-live".to_string(),
-        )
-        .await;
-        assert_eq!(live_panes.response.status(), StatusCode::OK);
-        let body = response_json(live_panes.response).await;
-        assert_eq!(body["result"]["t3Runtime"]["running"], json!(false));
-        assert!(heartbeat_file.exists());
-        assert!(state.t3_runtime.heartbeat_task_is_running());
-
-        let empty_panes = route_http(
-            state.clone(),
-            rpc_request(
-                "/api/t3Runtime/panes",
-                &token,
-                json!({ "params": { "clientId": "gpui", "sessionIds": [] } }),
-            ),
-            "request-t3-runtime-panes-empty".to_string(),
-        )
-        .await;
-        assert_eq!(empty_panes.response.status(), StatusCode::OK);
-        assert!(!state.t3_runtime.heartbeat_task_is_running());
-    }
-
-    // -----------------------------------------------------------------------
     // Sidebar V2 worktree sessions
     // -----------------------------------------------------------------------
 
@@ -15727,7 +15172,6 @@ mod tests {
                 config.listeners.local.host, config.listeners.local.port
             ),
         );
-        let t3_runtime = crate::t3_runtime::test_t3_runtime_manager(&paths);
         Arc::new(AppState {
             auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
             automation_runtime,
@@ -15745,7 +15189,6 @@ mod tests {
             session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
             shutdown_tx,
             stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
-            t3_runtime,
             version: "0.0.0-test".to_string(),
             zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -15841,7 +15284,6 @@ mod tests {
             port: config.listeners.local.port,
             server_id: "S7k".to_string(),
             started_at: "2026-05-30T10:00:00.000Z".to_string(),
-            t3_runtime: None,
             tools: vec![],
         }
     }

@@ -8,6 +8,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>7.5.0</title>
+            <pubDate>Sun, 09 Aug 2026 22:14:59 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.5.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>70500</sparkle:version>
+            <sparkle:shortVersionString>7.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.5.0
+
+## 7.5.0 - 2026-08-10
+
+- Major
+  - Session Chat now protects unfinished drafts, moves prompts safely between chat and terminal, detects agent model and effort details, and keeps completed work compact until you choose to expand it.
+  - Project Board can start work with the agent assigned to a ticket, making it faster to move directly from planning into the right conversation, thanks to @banozz.
+- Minor
+  - Docs now discovers files in artifact and AI folders by default and handles find, replace, redo, and common editing shortcuts more naturally.
+  - Quick Access and sidebar modals rank results more clearly, preserve pinned-section boundaries, group stashed prompts by day, and make keyboard selection more dependable.
+  - Settings adds a preferred interface for newly launched agents, chat appearance controls, optional titlebar chrome, and more reliable plugin reinstalls.
+  - Focused terminals can be zoomed more easily, while Windows runtime startup, on-demand components, and WSL packaging are more dependable.
+  - The Android app adds light and dark Session Chat themes and a clearer outline around the active session.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.5.0/ghostex-7.5.0-arm64.dmg" length="115241205" type="application/octet-stream" sparkle:edSignature="AjLfdUOMfGmZqYXgSkQy72X6hCZMy5WeFQc55QKrfDeO6NAVlu8XKIm2TugqfOnRz01DgkgvMvozW1j8yTYVAQ=="/>
+        </item>
+        <item>
             <title>7.4.0</title>
             <pubDate>Sat, 08 Aug 2026 05:27:34 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.4.0</sparkle:fullReleaseNotesLink>
@@ -127,28 +151,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.0.0/ghostex-7.0.0-arm64.dmg" length="113450325" type="application/octet-stream" sparkle:edSignature="wWqZCDkDh7wpKGP7xI2rsp/5F3+6oBf1zfOvSbyUxIWCbFMAfIJ/HehnaH1Ocs429RpkLLkRZdKb3pqXPuSECw=="/>
         </item>
         <item>
-            <title>6.13.0</title>
-            <pubDate>Sat, 01 Aug 2026 08:04:45 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v6.13.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>61300</sparkle:version>
-            <sparkle:shortVersionString>6.13.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 6.13.0
-
-## 6.13.0 - 2026-08-01
-
-- Major
-  - Session Chat lets you read and reply to agent conversations directly from Ghostex on desktop, web, and Android without switching back to the terminal.
-  - Chat conversations update live with complete transcripts, tool activity, working status, question choices, and session actions so you can follow and guide agents more naturally.
-  - The chat composer adds rich editing, slash commands, image paste, and attachment support for faster, more expressive prompts.
-- Minor
-  - Mobile adds clearer Session Chat entry points, agent actions, live host state, and context menus that stay compact and fit the available screen.
-  - Shared Project Boards keep their established Beads issue prefix when the same board is opened from multiple projects.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v6.13.0/ghostex-6.13.0-arm64.dmg" length="571209453" type="application/octet-stream" sparkle:edSignature="AJrGXjImm+/8Y4yd+Ux4xg4tOar6yUaggBHVS0Kg0qMaHHh2Pxf29ElMwtiKu11wWKqdjc0eazOCZbldMd0zCA=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -160,6 +162,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: OI4/i9Ta4+rc1ZEiFEcsNO8EpJiEVtzRFwSGfaIjo3Nij8SR2fIJdD/l5f1Uba1vKVERO4Yry/g6zvucqT8zBw==
-length: 13401
+edSignature: JS2vvojkB7eHXjXu6Qb0v6ZxoIudvTpA9JjV946Gj9vrboCCGwViynw5NhuO+e2HuG9zRAcbomwk/Hhl7moFAw==
+length: 13748
 -->

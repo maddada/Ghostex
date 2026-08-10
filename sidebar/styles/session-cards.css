@@ -871,7 +871,7 @@
 .session-frame:not(.project-editor-session-frame) .session-alias-heading {
   /*
    * CDXC:SidebarSessions 2026-05-10-13:49
-   * Terminal, T3 Code, and browser session card titles must render ellipsis
+   * Terminal and browser session card titles must render ellipsis
    * truncation instead of hard clipping. Keep the title as a normal text box;
    * flex layout prevents text-overflow from painting the visible dots.
    */
@@ -1336,29 +1336,12 @@
   width: calc(16px * var(--sidebar-density-scale));
 }
 
-.session-floating-agent-tabler-icon[data-agent-icon="t3"],
-.session-header-agent-tabler-icon[data-agent-icon="t3"] {
-  /*
-   * CDXC:T3CodeSidebar 2026-07-01-18:15:
-   * T3 Code chat rows use IconMessageCircle as a white Tabler glyph instead of
-   * the T3 agent logo so sidebar chats read as chat sessions and stay visually
-   * aligned with Codex's white icon treatment.
-   */
-  --session-agent-icon-color: #ffffff;
-  height: calc(16px * var(--sidebar-density-scale));
-  width: calc(16px * var(--sidebar-density-scale));
-}
-
 .session-frame:not(.session-history-frame) .session-floating-agent-tabler-icon[data-agent-icon="terminal"] {
   left: calc(-5px * var(--sidebar-density-scale));
   top: calc(4px * var(--sidebar-density-scale));
 }
 
 .session-header-agent-tabler-icon[data-agent-icon="terminal"] {
-  margin-inline-end: calc(-1px * var(--sidebar-density-scale));
-}
-
-.session-header-agent-tabler-icon[data-agent-icon="t3"] {
   margin-inline-end: calc(-1px * var(--sidebar-density-scale));
 }
 
@@ -1973,7 +1956,7 @@ body.native-sidebar-body[data-native-pointer-inside="false"]
   --reference-session-trailing-inset: 6px;
   /*
    * CDXC:SidebarSessions 2026-05-10-13:49
-   * Terminal, T3 Code, and browser session titles need 15px more readable
+   * Terminal and browser session titles need 15px more readable
    * width before the right-side status/close slot starts.
   */
   --reference-session-trailing-slot-width: 29px;
@@ -2469,8 +2452,6 @@ body[data-custom-sidebar-titlebar-colors="true"]
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .session-floating-agent-tabler-icon[data-agent-icon="terminal"],
-.sidebar-reference-layout[data-reference-sidebar="true"]
-  .session-floating-agent-tabler-icon[data-agent-icon="t3"],
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .session-floating-agent-tabler-icon[data-agent-icon="browser"][data-icon-variant="favicon"] {
   height: var(--reference-session-icon-size);

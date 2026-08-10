@@ -314,6 +314,18 @@ export default defineConfig({
        * The GPUI CEF sidebar bundle imports app-owned sidebar and shadcn modules from the repository root. Keep the same @ alias as Storybook and Electron so this app exercises the production React component graph.
        */
       "@": repoRoot,
+      /*
+       * CDXC:GPUIDevNativeEntryUrls 2026-08-09:
+       * modal-host.html and titlebar-host.html point at ../native/sidebar/*.tsx,
+       * which the browser normalises to /native/sidebar/*.tsx against the dev
+       * root (gpui/). That URL escapes the root, so the dev server answered the
+       * SPA fallback HTML instead of the module and both windows rendered blank.
+       * Map the escaped prefix back to the real directory so dev serves the same
+       * entry the build resolves from disk. Build output is unaffected: Rollup
+       * resolves the relative src itself and no module specifier starts with
+       * /native.
+       */
+      "/native": path.resolve(repoRoot, "native"),
     },
   },
   server: {

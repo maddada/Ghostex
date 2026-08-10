@@ -864,7 +864,7 @@ export const ShowsV1ParityContextMenuItems: Story = {
     });
 
     await step("the items V2 deliberately did not adopt stay absent", async () => {
-      /* Remote Access is T3-only; the other four name V1 structures V2 does not
+      /* The other menu items name V1 structures V2 does not
          render, or a host command gpui leaves unhandled. */
       for (const label of [
         "Remote Access",

@@ -12,7 +12,7 @@
 // the Prompts modal, and Attach File or Folder need native pickers, terminal
 // buffer access, or modal hosts the web app does not have.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
@@ -27,6 +27,10 @@ import { rpcForMachine } from "../connections/connection-registry";
 import type { GhostexWebFocusSessionDetail } from "../sidebar-runtime/sidebar-runtime";
 import type { WorkspaceSession } from "../workspace/workspace-model";
 import { createSessionChatTransport } from "../chat/session-chat-transport";
+import {
+  readWebSettings,
+  WEB_SETTINGS_CHANGED_EVENT,
+} from "./web-settings";
 
 const CHAT_ACTION_REASON = "ghostex-web-chat";
 
@@ -141,6 +145,14 @@ export function SessionChatHost({
   onSwitchToTerminal?: () => void;
   session: WorkspaceSession;
 }) {
+  const [theme, setTheme] = useState(() => readWebSettings().sessionChatTheme);
+  useEffect(() => {
+    const handleSettingsChanged = (event: Event) => {
+      setTheme((event as CustomEvent<ReturnType<typeof readWebSettings>>).detail.sessionChatTheme);
+    };
+    window.addEventListener(WEB_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+    return () => window.removeEventListener(WEB_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
+  }, []);
   const transport = useMemo(
     () => createSessionChatTransport(session.machineId, session.projectId, session.sessionId),
     [session.machineId, session.projectId, session.sessionId],
@@ -165,6 +177,7 @@ export function SessionChatHost({
       // config's monaco plugin.
       monacoVsBaseUrl="/monaco/vs"
       sessionKey={`${session.machineId}:${session.projectId}:${session.sessionId}`}
+      theme={theme}
       transport={transport}
       working={session.activity === "working"}
     />

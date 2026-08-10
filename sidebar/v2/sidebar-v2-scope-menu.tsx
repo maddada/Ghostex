@@ -7,7 +7,7 @@ import type { SidebarV2ScopeOption } from "./sidebar-v2-view-model";
 
 /*
  * CDXC:SidebarV2 2026-07-29:
- * Scoping is a MENU, not a row of chips, straight from t3code's rationale:
+ * Scoping is a menu, not a row of chips:
  * filtering the inbox must not make the sidebar header's width depend on how
  * many projects exist or how long their names are. The trigger states the
  * current scope, the menu owns the list.

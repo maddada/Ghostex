@@ -235,7 +235,7 @@ type TitlebarResourceSession = {
   providerSessionState?: "exists" | "missing" | "persistence-disabled" | "unknown";
   projectId?: string;
   sessionId: string;
-  sessionKind?: "browser" | "terminal" | "t3";
+  sessionKind?: "browser" | "terminal";
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: SessionPersistenceProvider;
   terminalTitle?: string;
@@ -311,6 +311,16 @@ type TitlebarProjectState = {
   debuggingMode: boolean;
   diagnosticLogging: DiagnosticLoggingSettings;
   showBetaFeatures: boolean;
+  codeViewTabHidden: boolean;
+  browserViewTabHidden: boolean;
+  kanbanViewTabHidden: boolean;
+  automateViewTabHidden: boolean;
+  docsViewTabHidden: boolean;
+  tipsAndTricksTitlebarButtonHidden: boolean;
+  resourcesTitlebarButtonHidden: boolean;
+  gitActionsTitlebarButtonHidden: boolean;
+  quickActionsTitlebarButtonHidden: boolean;
+  openInTitlebarButtonHidden: boolean;
   diffStats: SidebarProjectDiffStats;
   editorIsOpen: boolean;
   editorIsSleeping: boolean;
@@ -886,7 +896,7 @@ function createTitlebarMissingAgentHooksNotice(
         continue;
       }
       const agent = getDefaultSidebarAgentByIcon(session.agentIcon as SidebarAgentIcon | undefined);
-      if (!agent || agent.agentId === "t3") {
+      if (!agent) {
         continue;
       }
       liveSupportedAgentIds.add(agent.agentId);
@@ -899,7 +909,7 @@ function createTitlebarMissingAgentHooksNotice(
       continue;
     }
     const agent = getDefaultSidebarAgentById(status.agentId);
-    if (!agent || agent.agentId === "t3") {
+    if (!agent) {
       continue;
     }
     if (status.status === "updateRequired") {
@@ -4401,7 +4411,7 @@ function App() {
    * CDXC:TitlebarModeTabs 2026-06-30-12:55:
    * Kanban must appear before Automate in the macOS titlebar mode switcher, preserving the project-management flow before scheduled automation while keeping Docs last.
    */
-  const titlebarModes = [
+  const configuredTitlebarModes = [
     {
       label: "Agents",
       onSelect: openAgentsMode,
@@ -4439,6 +4449,26 @@ function App() {
       value: "manage" as const,
     },
   ];
+  const visibleTitlebarModes = configuredTitlebarModes.filter((mode) => {
+    switch (mode.value) {
+      case "code":
+        return !projectState.codeViewTabHidden;
+      case "git":
+        return !projectState.browserViewTabHidden;
+      case "tasks":
+        return !projectState.kanbanViewTabHidden;
+      case "automate":
+        return !projectState.automateViewTabHidden;
+      case "manage":
+        return !projectState.docsViewTabHidden;
+      case "agents":
+        return true;
+    }
+  });
+  const titlebarModes =
+    visibleTitlebarModes.length === 1 && visibleTitlebarModes[0]?.value === "agents"
+      ? []
+      : visibleTitlebarModes;
   const resolveTitlebarDropdownPanelSize = useCallback(
     (kind: TitlebarDropdownPanelKind) =>
       createTitlebarDropdownPanelPreferredSize(kind, {
@@ -4770,13 +4800,15 @@ function App() {
             />
           </div>
           <div style={styles.centerSlot}>
-            <TitlebarModeSwitcher
-              activeMode={activeMode}
-              companionPaneHidden={projectState.projectEditorCompanionPaneHidden}
-              modes={titlebarModes}
-              onToggleCompanion={toggleProjectEditorCompanion}
-              showCompanionToggle={shouldShowCompanionToggleButton}
-            />
+            {titlebarModes.length > 0 ? (
+              <TitlebarModeSwitcher
+                activeMode={activeMode}
+                companionPaneHidden={projectState.projectEditorCompanionPaneHidden}
+                modes={titlebarModes}
+                onToggleCompanion={toggleProjectEditorCompanion}
+                showCompanionToggle={shouldShowCompanionToggleButton}
+              />
+            ) : null}
           </div>
           <div style={styles.rightSlot}>
             {projectState.promptEditorOpen ? (
@@ -4844,6 +4876,7 @@ function App() {
              * CDXC:SidebarTopChrome 2026-06-29-01:43:
              * Settings and Keep Awake are no longer titlebar triggers; they render in the sidebar shortcut row so this titlebar cluster stays focused on project/window actions.
              */}
+            {!projectState.tipsAndTricksTitlebarButtonHidden ? (
             <ButtonGroup
               className="titlebar-open-group titlebar-tips-group"
               data-titlebar-dropdown-anchor
@@ -4878,6 +4911,8 @@ function App() {
                 </Button>
               </TitlebarAppTooltip>
             </ButtonGroup>
+            ) : null}
+            {!projectState.resourcesTitlebarButtonHidden ? (
             <ButtonGroup
               className="titlebar-open-group"
               data-titlebar-dropdown-anchor
@@ -4912,6 +4947,8 @@ function App() {
                 </Button>
               </TitlebarAppTooltip>
             </ButtonGroup>
+            ) : null}
+            {!projectState.gitActionsTitlebarButtonHidden ? (
             <ButtonGroup
               className="titlebar-open-group titlebar-git-group"
               data-titlebar-dropdown-anchor
@@ -4936,7 +4973,7 @@ function App() {
                 >
                   {/*
                    * CDXC:TitlebarGit 2026-05-24-17:41:
-                   * The titlebar Git split button mirrors t3code's commit/push control and sits immediately after Resources so commit, push, and PR actions are reachable from top chrome without opening the sidebar Git row.
+                   * The titlebar Git split button sits immediately after Resources so commit, push, and PR actions are reachable from top chrome without opening the sidebar Git row.
                    *
                    * CDXC:TitlebarTooltips 2026-06-13-02:59:
                    * Use aria-disabled instead of native disabled here so the
@@ -4957,6 +4994,8 @@ function App() {
                 </Button>
               </TitlebarAppTooltip>
             </ButtonGroup>
+            ) : null}
+            {!projectState.quickActionsTitlebarButtonHidden ? (
             <ButtonGroup
               className="titlebar-open-group titlebar-actions-group"
               data-titlebar-dropdown-anchor
@@ -4984,14 +5023,12 @@ function App() {
                   type="button"
                   variant="ghost"
                 >
-                  {activeAction ? (
-                    getSidebarActionIcon(activeAction)
-                  ) : (
-                    <IconSettings aria-hidden="true" className="quick-action-icon" size={16} stroke={1.8} />
-                  )}
+                  {getSidebarActionIcon(activeAction)}
                 </Button>
               </TitlebarAppTooltip>
             </ButtonGroup>
+            ) : null}
+            {!projectState.openInTitlebarButtonHidden ? (
             <ButtonGroup
               className="titlebar-open-group"
               data-titlebar-dropdown-anchor
@@ -5017,6 +5054,7 @@ function App() {
                 </Button>
               </TitlebarAppTooltip>
             </ButtonGroup>
+            ) : null}
           </div>
         </div>
       </div>
@@ -5912,6 +5950,16 @@ function createInitialProjectState(bootstrap: Record<string, unknown>): Titlebar
     debuggingMode: settings.debuggingMode,
     diagnosticLogging: settings.diagnosticLogging,
     showBetaFeatures: settings.showBetaFeatures,
+    codeViewTabHidden: settings.codeViewTabHidden,
+    browserViewTabHidden: settings.browserViewTabHidden,
+    kanbanViewTabHidden: settings.kanbanViewTabHidden,
+    automateViewTabHidden: settings.automateViewTabHidden,
+    docsViewTabHidden: settings.docsViewTabHidden,
+    tipsAndTricksTitlebarButtonHidden: settings.tipsAndTricksTitlebarButtonHidden,
+    resourcesTitlebarButtonHidden: settings.resourcesTitlebarButtonHidden,
+    gitActionsTitlebarButtonHidden: settings.gitActionsTitlebarButtonHidden,
+    quickActionsTitlebarButtonHidden: settings.quickActionsTitlebarButtonHidden,
+    openInTitlebarButtonHidden: settings.openInTitlebarButtonHidden,
     diffStats: createDefaultSidebarProjectDiffStats(false),
     editorIsOpen: false,
     editorIsSleeping: false,
@@ -7286,7 +7334,7 @@ function getResourceBundleAvatar(bundle: ResourceProcessBundle): ReactNode {
      * CDXC:TitlebarResources 2026-05-26-13:24:
      * Resource rows should use the same shared agent-logo mask assets as Agents
      * Hub profile chips instead of two-letter text abbreviations. This keeps
-     * Codex, Claude, T3, browser, and other agent identities visually aligned
+     * Codex, Claude, browser, and other agent identities visually aligned
      * across the sidebar and resource manager.
      */
     return (

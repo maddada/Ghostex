@@ -2,7 +2,7 @@ import type { SidebarSessionGroup } from "./session-grid-contract-sidebar";
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `logicalProject.ts` / `sidebarProjectGrouping.ts` /
+Logical project and sidebar grouping helpers.
 `packages/shared/src/git.ts` (`normalizeGitRemoteUrl`) and
 `packages/shared/src/path.ts` (`normalizeProjectPathForComparison`).
 
@@ -12,7 +12,7 @@ is the normalized git remote URL, probed server-side by gxserver-rs (P5) and
 shipped in the presentation snapshot. Non-git projects never merge — they fall
 back to their physical machine+path key.
 
-t3code's `environmentId` maps to Ghostex's `machineId` (project ids are already
+The upstream environment identity maps to Ghostex's `machineId` (project ids are already
 machine-scoped in gpui), and `workspaceRoot` maps to the project path.
 Consumed in P5; the key derivation lands now so the settings shape and the
 gxserver probe can be built against it.
@@ -24,7 +24,7 @@ export type SidebarV2ProjectGroupingMode = "repository" | "repositoryPath" | "se
 export type SidebarV2SourceControlProvider = "bitbucket" | "github" | "gitlab";
 
 export type SidebarV2RepositoryIdentity = {
-  /** Normalized remote URL, e.g. `github.com/pingdotgg/t3code`. */
+  /** Normalized remote URL, e.g. `github.com/acme/example`. */
   canonicalKey: string;
   /** `owner/repo` when derivable. */
   displayName?: string;

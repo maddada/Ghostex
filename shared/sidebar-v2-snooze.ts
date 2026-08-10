@@ -1,6 +1,6 @@
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `Sidebar.snooze.ts`.
+Pure snooze helpers for the sidebar inbox.
 
 Snooze preset resolution for the V2 snooze popover. Pure functions so the preset
 math (evening / tomorrow / next-week boundaries) is unit-testable without a DOM.

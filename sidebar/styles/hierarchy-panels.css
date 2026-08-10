@@ -22,11 +22,7 @@
 /* ------------------- level 1: section labels ------------------- */
 
 .sidebar-reference-layout[data-reference-sidebar="true"] {
-  --sidebar-active-session-border: color-mix(
-    in srgb,
-    var(--app-foreground) 48%,
-    transparent
-  );
+  --sidebar-active-session-border: #ffffff;
 }
 
 .reference-sidebar-section-heading {

@@ -558,13 +558,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
   }, [interrupted, workingSignal]);
 
+  // Live work can arrive before the seed read. Keep unresolved transcript
+  // states authoritative so they cannot be mistaken for confirmed emptiness.
   const status: SessionChatStatus = error
     ? "error"
-    : working
-      ? "working"
-      : serverStatus === "working"
-        ? "ready"
-        : serverStatus;
+    : serverStatus === "loading" || serverStatus === "starting"
+      ? serverStatus
+      : working
+        ? "working"
+        : serverStatus === "working"
+          ? "ready"
+          : serverStatus;
 
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {

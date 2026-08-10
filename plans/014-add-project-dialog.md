@@ -1,39 +1,37 @@
-# 014 — t3code-style Add-Project Dialog (gpui + web + mobile, gxserver shared logic)
+# 014 — Add-Project Dialog (gpui + web + mobile, gxserver shared logic)
 
 Date: 2026-07-30. Status: in progress (multi-agent implementation).
 
-Companion docs (READ BOTH FIRST):
-- `plans/014-add-project-dialog.t3code-spec.md` — the exact behavior/UX spec to reproduce (extracted from /Users/madda/dev/active/t3code — read-only reference repo, never edit it; open its files when the spec's file:line refs need detail).
-- `plans/014-add-project-dialog.surfaces.md` — where everything plugs into Ghostex (modal systems, Storybook harness, web runtime, mobile structure, contract checklist, repo rules).
+Companion doc: `plans/014-add-project-dialog.surfaces.md` — where everything plugs into Ghostex (modal systems, Storybook harness, web runtime, mobile structure, contract checklist, repo rules).
 
 ## Goal
 
-Replace Ghostex's bad add-project UX (native OS folder picker locally; flaky `RemoteProjectPickerModal` remotely) with a faithful port of t3code's add-project command-palette flow, working for **local and remote machines**, on **gpui desktop**, **ghostex-web**, and **mobile (RN)**, with **gxserver owning all shared logic**.
+Replace Ghostex's bad add-project UX (native OS folder picker locally; flaky `RemoteProjectPickerModal` remotely) with a consistent add-project command-palette flow, working for **local and remote machines**, on **gpui desktop**, **ghostex-web**, and **mobile (RN)**, with **gxserver owning all shared logic**.
 
 Also fixes the reported remote bug (root-caused 2026-07-30):
 1. Remote `/api/addProjectPath` right after reconnect can take ~19s vs the 20s timeout (`gpui/src/main.rs:30639-30647`, JS waiter `native/sidebar/modal-host.tsx:675-678`); failure feedback is a tiny transient line; **and on error Rust never refreshes remote presentation** (`main.rs:30650-30677`) so adds that land after the timeout never appear (the machine's presentation stream is often dead: `presentationStreamFailed`).
-2. Enter-key trap: cmdk auto-highlights the first suggestion so plain Enter *navigates* instead of *adding* (`sidebar/remote-project-picker/remote-project-picker-modal.tsx:199-208`). t3code's model (`autoHighlight={false}` in path modes — Enter submits the typed path, mod+Enter overrides a highlight) is the fix.
+2. Enter-key trap: cmdk auto-highlights the first suggestion so plain Enter *navigates* instead of *adding* (`sidebar/remote-project-picker/remote-project-picker-modal.tsx:199-208`). Using `autoHighlight={false}` in path modes—Enter submits the typed path, mod+Enter overrides a highlight—is the fix.
 
 ## Architecture decisions (settled — do not relitigate)
 
-1. **The dialog is one shared React component** at `sidebar/add-project-modal/` (new directory), styled and behaving per the t3code spec (centered top-anchored command dialog, max-w-xl). Reuse existing t3 helpers in `sidebar/remote-project-picker/` (t3-project-paths.ts etc.) rather than duplicating.
-2. **gpui hosts it in the app-modal native child-window system** (pattern A: `openAppModal` → `modal-host.html`) — a t3code-fidelity 576px dialog cannot fit inside the 220–420px sidebar document, and the user asked for "React in a gpui window". New `GpuiAppModalKind::AddProject` with payload `{ machineId?: string }` (preselects a machine; omitted → machine step decides).
+1. **The dialog is one shared React component** at `sidebar/add-project-modal/` (new directory), styled as a centered top-anchored command dialog. Reuse existing remote helpers in `sidebar/remote-project-picker/` rather than duplicating.
+2. **gpui hosts it in the app-modal native child-window system** (pattern A: `openAppModal` → `modal-host.html`) — a 576px dialog cannot fit inside the 220–420px sidebar document, and the user asked for "React in a gpui window". New `GpuiAppModalKind::AddProject` with payload `{ machineId?: string }` (preselects a machine; omitted → machine step decides).
 3. **ghostex-web hosts the same component in-page** via the app-modal shim → CustomEvent → host component pattern (`ghostex-web/src/app/recent-projects-modal-host.tsx` is the model).
 4. **The component is callback-driven** (no transport inside): props supply async ops `{ listMachineOptions, browse, addProject, discoverSourceControl, lookupRepository, startClone, readCloneJob, cancelCloneJob }` plus presentation props. gpui's modal host implements callbacks with requestId request/response bridge messages (Rust routes local vs remote by machineId — CEF never sees hosts/tokens); web implements them with `rpcForMachine`; Storybook mocks them. Adopt the worktree-popover idioms (mint requestId per call, nothing optimistic, dismiss abandons answers).
-5. **Machines are t3code's "environments"**: machine step shown only when >1 option (local + connected remotes); a remote entry point preselects its machine and skips the step.
+5. **Machines**: machine step shown only when >1 option (local + connected remotes); a remote entry point preselects its machine and skips the step.
 6. **gxserver owns all logic**: browse, add (with create-if-missing), source-control discovery/lookup, clone. Mobile reaches the same logic through new `ghostex` CLI verbs (mobile speaks SSH+CLI, not the wire protocol).
-7. **Scope of clone sources**: Local folder + Git URL fully working everywhere. Provider sources (GitHub via `gh`, GitLab via `glab`) implemented in discovery+lookup; Bitbucket / Azure DevOps rows render with t3code's "not ready / Setup Required" treatment (discovery reports them unavailable) — no server support for them in this pass.
-8. Mobile is a **multi-screen native-stack flow** (t3code mobile precedent), not a port of the palette: Source → Repository → Destination / Local-browse screens, Ghostex mobile conventions (`plans/014-add-project-dialog.surfaces.md` §5).
+7. **Scope of clone sources**: Local folder + Git URL fully working everywhere. Provider sources (GitHub via `gh`, GitLab via `glab`) implemented in discovery+lookup; Bitbucket / Azure DevOps rows render with "not ready / Setup Required" treatment (discovery reports them unavailable) — no server support for them in this pass.
+8. Mobile is a **multi-screen native-stack flow**, not a port of the palette: Source → Repository → Destination / Local-browse screens, Ghostex mobile conventions (`plans/014-add-project-dialog.surfaces.md` §5).
 9. Old surfaces: entry points are rewired to the new dialog; `RemoteProjectPickerModal` stays only where embedded for clone-destination in `add-repository-modal.tsx` (untouched).
 
 ## Part A — gxserver + contracts + CLI (foundation)
 
 Files: `gxserver-rs/src/*`, `shared/gxserver-protocol.ts`, `native/sidebar/gxserver-client.ts`, `gxserver-rs/src/ghostex_cli/*`.
 
-1. `/api/addProjectPath`: add optional `createIfMissing?: boolean` — expand `~`, resolve, `mkdir -p` when missing and requested; keep idempotency; error messages mirror t3code's shapes ("Workspace root is not a directory: …" etc. — see spec §6.2). Existing behavior unchanged when the flag is absent.
+1. `/api/addProjectPath`: add optional `createIfMissing?: boolean` — expand `~`, resolve, `mkdir -p` when missing and requested; keep idempotency; use consistent error messages ("Workspace root is not a directory: …" etc.). Existing behavior unchanged when the flag is absent.
 2. `/api/browseProjectDirectories`: verify parity with spec §6.1 (dirs only, prefix case-insensitive, hidden rules, `parentPath` = server-resolved absolute, EACCES→empty, `~` and bare `~` handling). Fix gaps only if found.
-3. New `/api/discoverSourceControl`: probe `gh`/`glab` (availability, version, auth status via `gh auth status` / `glab auth status`, 5s timeout per probe); return t3code-shaped readiness data incl. `installHint`; bitbucket/azure-devops reported unavailable with a hint. New `/api/lookupRepository`: `{provider, repository}` → `{provider, nameWithOwner, url, sshUrl}` (`gh repo view --json …`, glab equivalent).
-4. Clone: reuse the existing job endpoints (`/api/previewRepositoryClone`, `/api/startRepositoryClone`, `/api/readRepositoryCloneJob`, `/api/cancelRepositoryCloneJob`, `gxserver-rs/src/server.rs:2464-2469`). Verify a plain `remoteUrl` + `destinationPath` clone-then-register works with t3code's destination semantics (exists&non-empty → error; create parent dirs; register project at cwd on success). Extend only if a gap blocks the dialog.
+3. New `/api/discoverSourceControl`: probe `gh`/`glab` (availability, version, auth status via `gh auth status` / `glab auth status`, 5s timeout per probe); return readiness data including `installHint`; bitbucket/azure-devops reported unavailable with a hint. New `/api/lookupRepository`: `{provider, repository}` → `{provider, nameWithOwner, url, sshUrl}` (`gh repo view --json …`, glab equivalent).
+4. Clone: reuse the existing job endpoints (`/api/previewRepositoryClone`, `/api/startRepositoryClone`, `/api/readRepositoryCloneJob`, `/api/cancelRepositoryCloneJob`, `gxserver-rs/src/server.rs:2464-2469`). Verify a plain `remoteUrl` + `destinationPath` clone-then-register works with the intended destination semantics (exists&non-empty → error; create parent dirs; register project at cwd on success). Extend only if a gap blocks the dialog.
 5. `protocol.rs`: remote-allowlist all endpoints the dialog needs from remote machines.
 6. CLI verbs (for mobile): `browse-directories <partialPath>`, `discover-source-control`, `lookup-repository <provider> <repo>`, `clone-repository <remoteUrl> <destinationPath>` (blocking wrapper over the clone job), and `add-project --create-if-missing`. JSON output. Register in `ghostex_cli/mod.rs`, route in `actions.rs`, document in `usage.rs`.
 7. `shared/gxserver-protocol.ts`: endpoint paths + Params/Result types; `native/sidebar/gxserver-client.ts`: methods + dispatch entries.
@@ -43,9 +41,9 @@ Files: `gxserver-rs/src/*`, `shared/gxserver-protocol.ts`, `native/sidebar/gxser
 
 Files: new `sidebar/add-project-modal/**`, story `sidebar/add-project-modal/add-project-modal.stories.tsx` (+ interactions).
 
-- Port the t3code flow per the spec: machine step (>1 machines) → sources step → local browse / repo input → clone destination. Reproduce keyboard model (§2.7: no auto-highlight in path modes; Enter submits typed path; mod+Enter with highlight; Backspace-on-empty pops; clearing initialQuery pops), submit-path resolution (§2.8), "Add"/"Create & Add"/"Clone"/"Create & Clone"/"Cloning" labels (§2.9), empty-state hints (§2.11), placeholders (§2.12), visual design (§4) adapted to Ghostex's existing dialog/command primitives (see `sidebar/remote-project-picker/remote-project-picker-modal.tsx` and `sidebar/add-repository-modal.tsx` for the house cmdk/dialog stack and tokens).
+- Implement the flow: machine step (>1 machines) → sources step → local browse / repo input → clone destination. Reproduce the keyboard model (no auto-highlight in path modes; Enter submits typed path; mod+Enter with highlight; Backspace-on-empty pops; clearing initialQuery pops), submit-path resolution, labels, empty-state hints, placeholders, and visual design adapted to Ghostex's existing dialog/command primitives.
 - Callback props per architecture decision 4; every interactive element gets `data-add-project-field="…"` + aria-labels.
-- Clone uses the job API: start → poll `readCloneJob` until done/failed (progress text allowed; t3code has none, so a simple "Cloning…" state is faithful) → `addProject(cwd)`.
+- Clone uses the job API: start → poll `readCloneJob` until done/failed with a simple "Cloning…" state → `addProject(cwd)`.
 - Reliability UX from the root cause: pending states must not be lossy — errors render as a persistent inline error region (not a transient list line); add timeout handled by the HOST (60s), and the dialog shows "still working…" affordance rather than silently dying.
 - Storybook: standalone stories with mocked callbacks (fixture directory tree, scripted latencies/failures) + play-function interaction stories covering: browse/descend/up, Enter-submits-typed-path, mod+Enter with highlight, Create & Add label flip, machine step with local+remote, source readiness (ready gh / not-ready bitbucket with Setup Required treatment), url→destination→clone→add happy path, lookup failure stays on step, add failure shows persistent error. Follow harness conventions in surfaces doc §3 (storyRoot = document.body, `findRequiredElement`, `step()`).
 - Typecheck: `bun run typecheck` (or the sidebar tsconfig path used by CI) and `bun run storybook` must build.

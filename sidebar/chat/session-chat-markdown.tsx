@@ -9,9 +9,18 @@
 // renders as inert text — following it would only navigate the page away from
 // the chat.
 
-import { useMemo } from "react";
+import { IconCheck, IconCopy } from "@tabler/icons-react";
+import {
+  Children,
+  isValidElement,
+  useMemo,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "../../components/ui/button";
 import { AppTooltip } from "../app-tooltip";
 import {
   isSessionChatImageHref,
@@ -28,11 +37,61 @@ import {
 
 const REMARK_PLUGINS = [remarkGfm];
 
+function nodeText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(nodeText).join("");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return nodeText(node.props.children);
+  }
+  return "";
+}
+
+function MarkdownCodeBlock({ children }: ComponentProps<"pre">) {
+  const [copied, setCopied] = useState(false);
+  const codeNode = Children.toArray(children)[0];
+  const className = isValidElement<{ className?: string }>(codeNode)
+    ? codeNode.props.className
+    : undefined;
+  const language = className?.match(/language-([^\s]+)/)?.[1] ?? "code";
+  const text = nodeText(children).replace(/\n$/, "");
+
+  return (
+    <div className="ghostex-chat-markdown-codeblock">
+      <div className="ghostex-chat-markdown-codeblock-header">
+        <span>{language}</span>
+        <Button
+          aria-label="Copy code"
+          onClick={() => {
+            void navigator.clipboard.writeText(text).then(() => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1200);
+            });
+          }}
+          size="icon-xs"
+          variant="ghost"
+        >
+          {copied ? (
+            <IconCheck aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+          ) : (
+            <IconCopy aria-hidden="true" data-icon="inline-start" stroke={1.9} />
+          )}
+        </Button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
 function markdownComponents(
   viewer: SessionChatImageViewerApi | null,
   hostLinks: SessionChatHostLinks | null,
 ): Components {
   return {
+    pre: MarkdownCodeBlock,
     a: ({ children, href }) => {
       if (typeof href !== "string" || href === "") {
         return <>{children}</>;

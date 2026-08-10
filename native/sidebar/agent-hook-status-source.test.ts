@@ -55,8 +55,7 @@ describe("agent hook status source", () => {
       "function orderedNativeAgentHookStatusAgentIds",
       "function mergeAgentHookStatusMessages",
     );
-    expect(orderedStatus).toContain("DEFAULT_SIDEBAR_AGENTS.flatMap");
-    expect(orderedStatus).toContain("agent.agentId === \"t3\" ? [] : [agent.agentId]");
+    expect(orderedStatus).toContain("DEFAULT_SIDEBAR_AGENTS.map");
     expect(orderedStatus).toContain("nativeAgentHookPriorityStatusAgentIds.filter");
   });
 

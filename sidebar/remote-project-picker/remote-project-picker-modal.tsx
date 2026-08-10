@@ -28,19 +28,19 @@ import {
   isFilesystemBrowseQuery,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
-} from "./t3-project-paths";
+} from "./remote-project-paths";
 import {
   buildBrowseGroups,
   filterBrowseEntries,
-  T3_REMOTE_PICKER_ITEM_ICON_CLASS,
-  type T3CommandPaletteActionItem,
-} from "./t3-command-palette-logic";
+  REMOTE_PICKER_ITEM_ICON_CLASS,
+  type RemoteCommandPaletteActionItem,
+} from "./remote-command-palette-logic";
 import type {
-  T3FilesystemBrowseInput,
-  T3FilesystemBrowseResult,
-} from "./t3-filesystem";
+  RemoteFilesystemBrowseInput,
+  RemoteFilesystemBrowseResult,
+} from "./remote-filesystem";
 
-const EMPTY_BROWSE_ENTRIES: T3FilesystemBrowseResult["entries"] = [];
+const EMPTY_BROWSE_ENTRIES: RemoteFilesystemBrowseResult["entries"] = [];
 
 export type RemoteProjectPickerModalProps = {
   actionLabel?: string;
@@ -49,7 +49,7 @@ export type RemoteProjectPickerModalProps = {
   isOpen: boolean;
   machineName: string;
   onAddProject: (path: string) => Promise<void> | void;
-  onBrowse: (input: T3FilesystemBrowseInput) => Promise<T3FilesystemBrowseResult | null>;
+  onBrowse: (input: RemoteFilesystemBrowseInput) => Promise<RemoteFilesystemBrowseResult | null>;
   onClose: () => void;
   pendingLabel?: string;
   platform?: string;
@@ -71,7 +71,7 @@ export function RemoteProjectPickerModal({
 }: RemoteProjectPickerModalProps) {
   const [query, setQuery] = useState(initialQuery);
   const [browseGeneration, setBrowseGeneration] = useState(0);
-  const [browseResult, setBrowseResult] = useState<T3FilesystemBrowseResult | null>(null);
+  const [browseResult, setBrowseResult] = useState<RemoteFilesystemBrowseResult | null>(null);
   const [browseError, setBrowseError] = useState<string | undefined>();
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const [isBrowsePending, setIsBrowsePending] = useState(false);
@@ -170,8 +170,8 @@ export function RemoteProjectPickerModal({
     browseEntries: filteredEntries,
     browseQuery: query,
     canBrowseUp: isBrowsing && !unsupportedWindowsPath && canNavigateUp(browseDirectoryPath),
-    upIcon: <IconArrowBackUp className={T3_REMOTE_PICKER_ITEM_ICON_CLASS} />,
-    directoryIcon: <IconFolder className={T3_REMOTE_PICKER_ITEM_ICON_CLASS} />,
+    upIcon: <IconArrowBackUp className={REMOTE_PICKER_ITEM_ICON_CLASS} />,
+    directoryIcon: <IconFolder className={REMOTE_PICKER_ITEM_ICON_CLASS} />,
     browseUp,
     browseTo,
   });
@@ -208,7 +208,7 @@ export function RemoteProjectPickerModal({
     }
   }
 
-  function executeItem(item: T3CommandPaletteActionItem): void {
+  function executeItem(item: RemoteCommandPaletteActionItem): void {
     void item.run();
   }
 
@@ -226,7 +226,7 @@ export function RemoteProjectPickerModal({
     >
       {/*
        * CDXC:RemoteProjectPicker 2026-06-02-23:22:
-       * Remote Add Project uses the T3 Code browse model: typing a path browses
+       * Remote Add Project uses a path-aware browse model: typing a path browses
        * that machine's gxserver, hidden folders appear only for a dot prefix,
        * Enter adds the typed/exact path, and highlighted directories require
        * the primary modifier plus Enter to add instead of navigate.

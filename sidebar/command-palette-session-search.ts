@@ -222,13 +222,37 @@ export function filterCommandPaletteItems<T>(
   query: string,
   getSearchText: (item: T) => string,
 ): T[] {
-  const normalizedQuery = normalizeCommandPaletteSearchValue(query);
+  /*
+   * Keep command finding on Tinycast's relevance ladder: exact, prefix,
+   * word-start, substring, then subsequence. Consecutive and word-boundary
+   * subsequence hits receive the same bonuses, and equal scores sort by label.
+   */
+  const normalizedQuery = normalizeCommandPaletteFuzzyValue(query.trim());
   if (!normalizedQuery) {
     return [...items];
   }
-  return items.filter((item) =>
-    matchesCommandPaletteSearchQuery(getSearchText(item), normalizedQuery),
-  );
+  return items
+    .map((item, itemIndex) => {
+      const searchText = getSearchText(item);
+      return {
+        item,
+        itemIndex,
+        score: scoreCommandPaletteFuzzyMatch(normalizedQuery, searchText),
+        searchText,
+      };
+    })
+    .filter((result): result is typeof result & { score: number } => result.score !== undefined)
+    .sort((left, right) => {
+      const scoreDelta = right.score - left.score;
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+      const alphabetical = left.searchText.localeCompare(right.searchText, undefined, {
+        sensitivity: "base",
+      });
+      return alphabetical !== 0 ? alphabetical : left.itemIndex - right.itemIndex;
+    })
+    .map(({ item }) => item);
 }
 
 export function filterCommandPaletteCurrentSessionItems(
@@ -315,12 +339,6 @@ function getCommandPaletteSessionTimestamp(value: string | undefined): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function matchesCommandPaletteSearchQuery(searchText: string, query: string): boolean {
-  const normalizedSearchText = normalizeCommandPaletteSearchValue(searchText);
-  const queryTokens = normalizeCommandPaletteSearchValue(query).split(/\s+/).filter(Boolean);
-  return queryTokens.every((token) => fuzzyIncludes(normalizedSearchText, token));
-}
-
 function matchesCommandPaletteTitleSearchQuery(searchText: string, query: string): boolean {
   const normalizedSearchText = normalizeCommandPaletteSearchValue(searchText);
   const queryTokens = normalizeCommandPaletteSearchValue(query).split(/\s+/).filter(Boolean);
@@ -340,20 +358,70 @@ function normalizeCommandPaletteSearchValue(value: string | undefined): string {
     .toLowerCase();
 }
 
-function fuzzyIncludes(text: string, query: string): boolean {
-  let queryIndex = 0;
+function scoreCommandPaletteFuzzyMatch(normalizedQuery: string, rawCandidate: string): number | undefined {
+  const candidate = normalizeCommandPaletteFuzzyValue(rawCandidate);
+  const candidateLength = Array.from(candidate).length;
 
-  for (const character of text) {
-    if (character !== query[queryIndex]) {
+  if (candidate === normalizedQuery) {
+    return 100_000;
+  }
+  if (candidate.startsWith(normalizedQuery)) {
+    return 90_000 - candidateLength;
+  }
+
+  const substringIndex = candidate.indexOf(normalizedQuery);
+  if (substringIndex >= 0) {
+    const precedingCharacters = Array.from(candidate.slice(0, substringIndex));
+    const precedingCharacter = precedingCharacters[precedingCharacters.length - 1];
+    const isWordStart = precedingCharacter === undefined || !isCommandPaletteLetterOrNumber(precedingCharacter);
+    return (isWordStart ? 80_000 : 70_000) - candidateLength;
+  }
+
+  const queryCharacters = Array.from(normalizedQuery);
+  const candidateCharacters = Array.from(candidate);
+  let queryIndex = 0;
+  let score = 0;
+  let run = 0;
+  let previousMatchIndex = -2;
+
+  for (let candidateIndex = 0; candidateIndex < candidateCharacters.length; candidateIndex += 1) {
+    const character = candidateCharacters[candidateIndex];
+    if (queryIndex >= queryCharacters.length || character !== queryCharacters[queryIndex]) {
       continue;
     }
+
+    let bonus = 1;
+    if (candidateIndex === previousMatchIndex + 1) {
+      run += 1;
+      bonus += run * 3;
+    } else {
+      run = 0;
+    }
+    if (candidateIndex === 0) {
+      bonus += 12;
+    } else if (!isCommandPaletteLetterOrNumber(candidateCharacters[candidateIndex - 1])) {
+      bonus += 8;
+    }
+    score += bonus;
+    previousMatchIndex = candidateIndex;
     queryIndex += 1;
-    if (queryIndex >= query.length) {
-      return true;
+    if (queryIndex === queryCharacters.length) {
+      return score;
     }
   }
 
-  return query.length === 0;
+  return undefined;
+}
+
+function normalizeCommandPaletteFuzzyValue(value: string): string {
+  return Array.from(value)
+    .filter((character) => !/\p{Cf}/u.test(character))
+    .join("")
+    .toLowerCase();
+}
+
+function isCommandPaletteLetterOrNumber(character: string): boolean {
+  return /[\p{L}\p{N}]/u.test(character);
 }
 
 function createCurrentSessionTitleSearchText(session: SidebarSessionItem): string {

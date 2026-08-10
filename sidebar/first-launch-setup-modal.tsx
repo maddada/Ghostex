@@ -35,7 +35,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { FirstLaunchSetupMainSettingKey } from "../shared/first-launch-setup-settings";
-import { T3CODE_ENABLED } from "../shared/feature-flags";
 import type { SidebarTheme } from "../shared/session-grid-contract";
 import type {
   SidebarAgentHookStatus,
@@ -159,13 +158,10 @@ const FIRST_LAUNCH_INTRO_BENEFITS: readonly FirstLaunchBenefit[] = [
   },
 ];
 
-const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS.filter(
-  (agent) => agent.agentId !== "t3",
-);
+const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;
 const FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS = ["claude", "codex", "opencode", "pi"] as const;
 const FIRST_LAUNCH_PROMPT_AGENT_OPTIONS = DEFAULT_SIDEBAR_AGENTS.filter(
-  (agent) =>
-    agent.agentId !== "t3" && (!("hiddenByDefault" in agent) || agent.hiddenByDefault !== true),
+  (agent) => !("hiddenByDefault" in agent) || agent.hiddenByDefault !== true,
 ).map((agent) => ({ label: agent.name, value: agent.agentId }));
 const FIRST_LAUNCH_SIDEBAR_PRESET_ORDER: readonly SidebarSettingsPresetId[] = [
   "recommended",
@@ -330,13 +326,6 @@ const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
         text: "Review setup tasks later from Settings > Integrations.",
         title: "Review setup",
       },
-      ...(T3CODE_ENABLED
-        ? [{
-            icon: IconCode,
-            text: "Use T3 Code when you want GUI-based coding sessions; it also supports splitting.",
-            title: "T3 Code",
-          }]
-        : []),
       {
         icon: IconSettings,
         text: "Add custom CLI agents from Settings, then launch them from the sidebar.",
@@ -490,7 +479,7 @@ const FIRST_LAUNCH_CONTINUE_WARNINGS: Record<
 type FirstLaunchHookStatusGroupId = "installed" | "updateRequired" | "missing" | "cliMissing" | "unknown";
 
 type FirstLaunchHookStatusGroup = {
-  agents: typeof FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS;
+  agents: Array<(typeof FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS)[number]>;
   id: FirstLaunchHookStatusGroupId;
   title: string;
 };
@@ -1363,8 +1352,7 @@ function FirstLaunchHooksPage({
            * First launch hook setup must show the real supported agent names,
            * not only a readiness count, because users need to understand which
            * CLI configs Ghostex will inspect or install before accepting setup.
-           * The supported set matches native hook installation: all default
-           * agents except T3 Code, whose sessions are managed by Ghostex.
+           * The supported set matches native hook installation for all default agents.
            *
            * CDXC:FirstLaunchSetup 2026-05-26-07:14:
            * Group agents under Installed / Needs update / Not installed / CLI missing headers so

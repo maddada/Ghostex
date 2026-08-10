@@ -359,7 +359,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       terminalToolbarAction: "stashedPrompts",
     },
     defaultKey: "",
-    description: "Open stashed prompts for the focused agent terminal.",
+    description: "Open stashed prompts for the focused agent session.",
     id: "stashedPrompts",
     title: "Stashed Prompts",
   },

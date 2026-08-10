@@ -168,10 +168,9 @@ describe("Native Presentation Projection", () => {
     });
   });
 
-  test("keeps native-only T3 and browser panes visible in gxserver-owned project groups", () => {
+  test("keeps native-only browser panes visible in gxserver-owned project groups", () => {
     const projectId = projectIdValue("P1abc");
     const terminalId = sessionIdValue("G1abc");
-    const t3Id = "local-t3";
     const browserId = "local-browser";
     const groups = createNativePresentationSidebarGroups({
       activeProjectId: projectId,
@@ -182,7 +181,6 @@ describe("Native Presentation Projection", () => {
         localProject({
           localSidebarSessions: [
             localSidebarSession({ sessionId: terminalId, sessionKind: "terminal" }),
-            localSidebarSession({ sessionId: t3Id, sessionKind: "t3" }),
             localSidebarSession({ sessionId: browserId, sessionKind: "browser" }),
           ],
           projectId,
@@ -202,7 +200,6 @@ describe("Native Presentation Projection", () => {
 
     expect(groups[1]?.sessions.map((session) => session.sessionId)).toEqual([
       createCombinedProjectSessionId(projectId, terminalId),
-      createCombinedProjectSessionId(projectId, t3Id),
     ]);
   });
 

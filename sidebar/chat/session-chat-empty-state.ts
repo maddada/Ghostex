@@ -35,6 +35,6 @@ export function sessionChatEmptyStateCopy(
         title: "No conversation here",
       };
     case "starting":
-      return sessionChatEmptyStateCopy("empty", agentLabel);
+      return sessionChatEmptyStateCopy("loading", agentLabel);
   }
 }

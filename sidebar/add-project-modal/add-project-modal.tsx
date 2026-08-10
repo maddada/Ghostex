@@ -39,8 +39,8 @@ import {
   isFilesystemBrowseQuery,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
-} from "../remote-project-picker/t3-project-paths";
-import { filterBrowseEntries } from "../remote-project-picker/t3-command-palette-logic";
+} from "../remote-project-picker/remote-project-paths";
+import { filterBrowseEntries } from "../remote-project-picker/remote-command-palette-logic";
 import {
   addProjectEmptyStateMessage,
   addProjectInitialBrowseQuery,
@@ -70,8 +70,7 @@ import type {
 
 /*
  * CDXC:AddProject 2026-07-30:
- * Ghostex's add-project flow is a faithful port of t3code's command-palette
- * add-project mode (plans/014-add-project-dialog.t3code-spec.md). The dialog is
+ * Ghostex's add-project flow uses a command-palette model. The dialog is
  * transport-free: gpui, ghostex-web, and Storybook all supply the same callback
  * props, so the exact same keyboard model and copy ship on every surface.
  *
@@ -83,7 +82,7 @@ import type {
  *    plain Enter navigates into a suggestion instead of adding the typed path.
  *    So this dialog owns its highlight state and its own arrow-key handling and
  *    does not mount a cmdk <Command>. It still uses the house dialog / input-group
- *    primitives and the shared t3 path helpers.
+ *    primitives and the shared remote path helpers.
  * 2. Errors are a persistent inline region, never a transient list line. A slow
  *    server call surfaces a "still working" notice instead of silently dying;
  *    the host owns the hard timeout.
@@ -129,7 +128,7 @@ export function AddProjectModal(props: AddProjectModalProps) {
   }
   /*
    * The body is keyed on nothing and mounted only while open, so dismissing the
-   * dialog destroys every step of the flow exactly like t3code's palette
+   * dialog destroys every step of the flow
    * (spec §8 gotcha 8: state reset is by unmount, there is no reset()).
    */
   return (
@@ -283,7 +282,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   }, [currentView?.kind, discoveryByMachineId, machineId]);
 
   /*
-   * No debounce, exactly like t3code: the request key is the DIRECTORY portion
+   * No debounce: the request key is the DIRECTORY portion
    * of the query, so typing a leaf filter never refetches and crossing a `/`
    * always does.
    */

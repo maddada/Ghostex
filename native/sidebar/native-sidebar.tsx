@@ -101,7 +101,6 @@ import {
   type SidebarDaemonSessionsStateMessage,
   type SidebarGroupsChangedMessage,
   type SidebarHudChangedMessage,
-  type SidebarT3SessionItem,
   type SidebarHydrateMessage,
   type SidebarPortlessState,
   type SidebarPreviousSessionItem,
@@ -121,7 +120,6 @@ import {
   type SidebarAppIconInfo,
   type TerminalSessionPersistenceProvider,
   type TerminalSessionRecord,
-  type T3SessionRecord,
   type VisibleSessionCount,
   type SidebarCommandSessionIndicator,
   type SessionGridDirection,
@@ -206,7 +204,6 @@ import {
   setSessionPoppedOutInSimpleWorkspace,
   setSessionSleepingInSimpleWorkspace,
   setSessionTitleInSimpleWorkspace,
-  setT3SessionMetadataInSimpleWorkspace,
   setTerminalSessionAgentSessionMetadataInSimpleWorkspace,
   setTerminalSessionAgentNameInSimpleWorkspace,
   setTerminalSessionLastActivityAtInSimpleWorkspace,
@@ -401,17 +398,11 @@ import type {
   GxserverSessionStateEventParams,
   GxserverSessionStateEventResult,
   GxserverSessionTitleProjection,
-  GxserverSyncT3EmbeddedSessionParams,
   GxserverTerminalTitleEventResult,
   GxserverTypedOperationResult,
   GxserverUpdateAgentActivityResult,
   GxserverUpdateSessionParams,
 } from "../../shared/gxserver-protocol";
-import {
-  GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-  stableGhostexT3DraftThreadId,
-  type GhostexT3SidebarMode,
-} from "../../shared/t3-session-binding";
 import "../../sidebar/styles.css";
 
 type NativeSessionStatusIndicatorStatus = "attention" | "working" | "available";
@@ -434,7 +425,6 @@ type NativeTerminalTitleBarAction =
   | "expandCommandsPanel"
   | "fork"
   | "mergeAllTabs"
-  | "newT3Chat"
   | "newTerminal"
   | "openBrowser"
   | "pinCommandsPanel"
@@ -546,19 +536,6 @@ type NativeHostCommand =
   | { sessionId: string; type: "focusProjectEditorCompanionSession" }
   | { sessionId: string; type: "focusWebPane" }
   | { sessionId: string; type: "reloadWebPane" }
-  | { cwd: string; type: "startT3CodeRuntime" }
-  | {
-      /**
-       * CDXC:T3Code 2026-06-06-05:13:
-       * This message remains for protocol compatibility only. Native managed T3
-       * web panes now own provider lifetime, so stale sidebar/gxserver projection
-       * cannot stop t3code while an embedded T3 tab is still open.
-       */
-      runtimeCwd?: string;
-      runningSessionIds: string[];
-      type: "setT3CodeRuntimeSessionState";
-    }
-  | { type: "stopT3CodeRuntime" }
   | {
       cwd: string;
       linkVscodeUserConfig?: boolean;
@@ -1132,11 +1109,6 @@ type NativeHostEvent =
       projectId?: string;
       type: "codeServerRuntimeStartFailed";
     }
-  | {
-      message: string;
-      sessionId?: string;
-      type: "t3RuntimeStartFailed";
-    }
   | (ProjectBoardBridgeRequest & { type: "projectBoardRequest" })
   | { payloadJson: string; type: "osIntegrationStatus" }
   /*
@@ -1173,18 +1145,6 @@ type NativeHostEvent =
   | { projectId: string; sessionId: string; type: "sessionStatusIndicatorSessionClicked" }
   | { projectId: string; sessionId: string; type: "petOverlayActivityClicked" }
   | { sessionId: string; type: "sessionAttentionNotificationClicked" }
-  | {
-      environmentId: string;
-      projectId: string;
-      serverOrigin: string;
-      sessionId: string;
-      threadId: string;
-      type: "t3ThreadReady";
-      workspaceRoot: string;
-    }
-  | { sessionId: string; threadId: string; title?: string; type: "t3ThreadChanged" }
-  | { activity: "attention" | "idle" | "working"; sessionId: string; type: "t3ActivityChanged" }
-  | { projectId: string; sessionId: string; threadId: string; type: "t3EmptySessionObserved" }
   | { exitCode: number; requestId: string; stderr: string; stdout: string; type: "processResult" }
   | NativePortlessAdminResult
   | { payloadJson: string; type: "gxserverStatus" }
@@ -1517,18 +1477,7 @@ const OS_INTEGRATION_ONBOARDING_SEEN_STORAGE_KEY = "ghostex-os-integration-onboa
 const COMBINED_CHATS_GROUP_ID = NATIVE_PRESENTATION_CHATS_GROUP_ID;
 const PLUGINS_BROWSER_CHAT_URL = "https://skills.sh/";
 const MOBILE_BROWSER_CHAT_URL = "https://ghostex.dev/?download=1";
-const NATIVE_T3_REMOTE_ACCESS_ORIGIN = "http://127.0.0.1:3774";
-const NATIVE_T3_REMOTE_ACCESS_AUTH_ATTEMPTS = 30;
-const NATIVE_T3_REMOTE_ACCESS_AUTH_RETRY_MS = 500;
 const APP_SHOT_RECENT_TARGET_MS = 60_000;
-/**
- * CDXC:T3Code 2026-05-04-04:41
- * T3 can emit a thread-change event before the sidebar summary title has caught
- * up. Keep new ghostex T3 cards responsive by creating them immediately, then
- * retry the snapshot-backed title sync a few times so the card title converges
- * to the title visible inside T3.
- */
-const NATIVE_T3_TITLE_SYNC_RETRY_DELAYS_MS = [500, 1_500, 3_000] as const;
 const FIRST_PROMPT_AUTO_RENAME_POLL_MS = 2_000;
 /**
  * CDXC:SessionTitleSync 2026-04-26-09:52
@@ -1842,11 +1791,6 @@ let didLogStartupPaneLayoutFirstSync = false;
 const lastPostedWorkspaceNativeLayoutShapeByProjectId = new Map<string, PaneLayoutShapeSummary>();
 const nativeLayoutCollapseAllowedUntilByProjectId = new Map<string, number>();
 const lastFocusedWorkspaceTerminalByProjectId = new Map<string, string>();
-let lastNativeT3RuntimeSessionStateKey: string | undefined;
-const NATIVE_T3_RUNTIME_PREWARM_DELAY_MS = 750;
-const NATIVE_T3_RUNTIME_PREWARM_COOLDOWN_MS = 60 * 1000;
-let pendingNativeT3RuntimePrewarmTimeout: number | undefined;
-const lastNativeT3RuntimePrewarmAtByProjectId = new Map<string, number>();
 let nativeSplitLayoutHint: NativeSplitLayoutHint | undefined;
 let lastPersistedProjectsPayloadJson: string | undefined;
 const projectEditorSleepTimeoutByProjectId = new Map<string, number>();
@@ -2176,7 +2120,7 @@ type TitlebarResourceSession = {
   providerSessionState?: ProviderSessionState;
   projectId?: string;
   sessionId: string;
-  sessionKind?: "browser" | "terminal" | "t3";
+  sessionKind?: "browser" | "terminal";
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: TerminalSessionPersistenceProvider;
   terminalTitle?: string;
@@ -2245,7 +2189,7 @@ type AgentManagerXWorkspaceSession = {
   isLocalOnly: boolean;
   isRunning: boolean;
   isVisible: boolean;
-  kind: "t3" | "terminal";
+  kind: "terminal";
   lastActiveAt: string;
   ownership: "gxserver" | "local";
   projectName?: string;
@@ -3113,7 +3057,6 @@ function getNativeSidebarCommandSession(
  */
 const nativeSessionIdBySidebarSessionId = new Map<string, string>();
 const sidebarSessionIdByNativeSessionId = new Map<string, string>();
-const nativeT3ThreadChangeInFlightBySessionId = new Set<string>();
 /**
  * CDXC:AgentManagerXBridge 2026-04-27-20:34
  * Agent Manager X reads live mux sessions from a localhost WebSocket. The
@@ -5253,29 +5196,6 @@ function createAppToastId(scope: string): string {
 
 const GXSERVER_DAEMON_TOAST_ID = "toast-gxserver-daemon";
 const CODE_SERVER_RUNTIME_TOAST_ID = "toast-code-server-runtime";
-const T3_RUNTIME_TOAST_ID = "toast-t3-runtime";
-const MAX_T3_RUNTIME_TOAST_MESSAGE_LINES = 3;
-const MAX_T3_RUNTIME_TOAST_MESSAGE_LENGTH = 180;
-
-function compactT3RuntimeToastMessage(message: string): string {
-  /*
-  CDXC:T3CodeStartup 2026-06-09-07:07:
-  T3 runtime failure toasts must tell users why loading paused without dumping
-  raw startup output. Cap the toast description to three lines so the modal
-  layer stays readable while still giving support a clear report trigger.
-  */
-  const fallback =
-    "T3 Code runtime failed to start. Ghostex paused auto-retry; send support logs to report this.";
-  const lines = (message || fallback)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, MAX_T3_RUNTIME_TOAST_MESSAGE_LINES);
-  const compact = lines.length > 0 ? lines.join("\n") : fallback;
-  return compact.length <= MAX_T3_RUNTIME_TOAST_MESSAGE_LENGTH
-    ? compact
-    : `${compact.slice(0, MAX_T3_RUNTIME_TOAST_MESSAGE_LENGTH - 3).trimEnd()}...`;
-}
 
 function showGxserverLoadingToast(description = "Checking local daemon status."): void {
   /*
@@ -6844,7 +6764,7 @@ function createNativeBrowserSession(
   /**
    * CDXC:BrowserPanes 2026-05-27-07:24
    * Browser-pane mode turns every browser action into a first-class workspace
-   * browser session. The card lives beside terminal and T3 cards in the active
+   * browser session. The card lives beside terminal cards in the active
    * group now that the old Chrome Canary attachment section has been removed.
    *
    * CDXC:ModeSwitcher 2026-05-15-14:42:
@@ -9381,11 +9301,7 @@ function createNativeSessionAttentionNotificationContent(
    * labels so the banner shows no extra metadata.
    */
   const agentName =
-    session?.kind === "terminal"
-      ? (terminalState?.agentName ?? session.agentName)
-      : session?.kind === "t3"
-        ? "t3"
-        : undefined;
+    session?.kind === "terminal" ? (terminalState?.agentName ?? session.agentName) : undefined;
   const threadName =
     getSessionCardPrimaryTitle({
       agentName,
@@ -11367,7 +11283,7 @@ function createLocalPersistableProjectsSnapshot(
 ): NativeProject[] {
   /*
   CDXC:ProjectSidebarOwnership 2026-06-02-12:39:
-  WK `ghostex-native-projects` is a macOS-local pane/layout cache, not a shared project/session store. Persist local pane placement, local-only Quick/browser/file/T3 panes, gxserver-mirrored recent flags, and editor chrome, but strip gxserver-owned terminal metadata from canonical G sessions at the writer boundary so restart cannot rehydrate titles, provider state, lifecycle, activity, pinned/favorite flags, or agent metadata from the old native-owned project tree.
+  WK `ghostex-native-projects` is a macOS-local pane/layout cache, not a shared project/session store. Persist local pane placement, local-only Quick/browser/file panes, gxserver-mirrored recent flags, and editor chrome, but strip gxserver-owned terminal metadata from canonical G sessions at the writer boundary so restart cannot rehydrate titles, provider state, lifecycle, activity, pinned/favorite flags, or agent metadata from the old native-owned project tree.
 
   CDXC:SessionLifecycle 2026-06-02-14:52:
   G-session sleep/running state is gxserver-owned lifecycle data. The local pane/layout snapshot may remember where a tab was placed, but it must not persist `isSleeping` for gxserver-backed terminal sessions because that lets old WK storage override gxserver presentation on restart.
@@ -11640,7 +11556,7 @@ function normalizeLocalPersistedWorkspaceSnapshot(
   /*
    * CDXC:ProjectSidebarOwnership 2026-06-02-13:49:
    * WK project storage restores macOS-owned pane layout and local-only browser,
-   * T3, and file rows. Terminal rows are shared gxserver sessions after the
+   * browser and file rows. Terminal rows are shared gxserver sessions after the
    * cutoff, so persisted terminal records with old macOS `g-*` ids must be
    * dropped before they can create native Ghostty surfaces or sidebar tabs.
    * Re-normalize after filtering so focused ids, visible ids, and pane layout
@@ -14672,7 +14588,7 @@ function createDefaultPromptAgentOptions(
     return [];
   }
   return agents
-    .filter((agent) => agent.agentId !== "t3" && Boolean(agent.command?.trim()))
+    .filter((agent) => Boolean(agent.command?.trim()))
     .flatMap((agent) => {
       const command = readGxserverAgentLaunchCommandForProject(canonicalProject, agent.agentId);
       return command
@@ -14747,7 +14663,7 @@ function createProjectAutomationAgentOptions(
     ? ensureNativeProjectRegisteredWithGxserver(project, "projectAutomationAgentOptions")
     : undefined;
   return agents
-    .filter((agent) => agent.agentId !== "t3" && Boolean(agent.command?.trim()))
+    .filter((agent) => Boolean(agent.command?.trim()))
     .map((agent) => ({
       agentId: agent.agentId,
       command: canonicalProject
@@ -15288,7 +15204,7 @@ async function generateSidebarGitCommitMessageFromStagedChanges(agentId?: string
 }> {
   /**
    * CDXC:TitlebarGit 2026-05-24-17:41:
-   * Blank commit messages must use the same core experience as t3code: generate a concise subject and optional body from the exact staged diff after file selection, then commit that generated message instead of using a placeholder fallback.
+   * Blank commit messages generate a concise subject and optional body from the exact staged diff after file selection, then commit that generated message instead of using a placeholder fallback.
    */
   showAppToast("info", "Generating commit message", activeProject().name);
   const project = activeProject();
@@ -16799,16 +16715,6 @@ function normalizePreviousSessionRecord(candidate: unknown): SessionRecord | und
   ) {
     return record as BrowserSessionRecord;
   }
-  if (
-    record.kind === "t3" &&
-    typeof record.sessionId === "string" &&
-    typeof record.displayId === "string" &&
-    typeof record.alias === "string" &&
-    typeof record.title === "string" &&
-    typeof (record as Partial<T3SessionRecord>).t3?.threadId === "string"
-  ) {
-    return record as T3SessionRecord;
-  }
   return undefined;
 }
 
@@ -18081,30 +17987,12 @@ function commandsPanelRestoreSessionId(project: NativeProject): string | undefin
   return rememberedWorkspaceTerminal(project);
 }
 
-type AgentsModeFocusSessionSource =
-  "focusedT3CompanionSession" | "focusedWorkspaceSession" | "rememberedWorkspaceTerminal";
+type AgentsModeFocusSessionSource = "focusedWorkspaceSession" | "rememberedWorkspaceTerminal";
 
 type AgentsModeFocusSessionTarget = {
   sessionId: string;
   source: AgentsModeFocusSessionSource;
 };
-
-function focusedT3CompanionSessionIdForAgentsMode(project: NativeProject): string | undefined {
-  const surfaceState = projectEditorSurfaceByProjectId.get(project.projectId);
-  if (
-    surfaceState?.isOpen !== true ||
-    surfaceState.isSleeping === true ||
-    project.projectEditorCompanionPaneHidden === true
-  ) {
-    return undefined;
-  }
-  const sessionId = focusedWorkspaceSessionIdForProject(project);
-  if (!sessionId) {
-    return undefined;
-  }
-  const session = findSessionRecordInProject(project, sessionId);
-  return session?.kind === "t3" ? sessionId : undefined;
-}
 
 function agentsModeFocusSessionTargetForProject(
   project: NativeProject,
@@ -18113,16 +18001,7 @@ function agentsModeFocusSessionTargetForProject(
    * CDXC:CommandsPanel 2026-06-16-08:19:
    * Explicit Agents-mode navigation after using Source, Browser, or Kanban should restore keyboard focus to the last real workspace terminal, not to a command-pane terminal or whichever sidebar session was selected for the project-editor companion.
    *
-   * CDXC:ModeSwitcher 2026-06-29-01:53:
-   * A visible T3 Code companion pane is the selected workspace session, not transient editor chrome. When leaving Source, Browser, Project, or Docs for Agents, preserve that focused T3 pane before falling back to remembered terminal focus so Agents mode does not switch users away from the code session they were using.
    */
-  const focusedT3CompanionSessionId = focusedT3CompanionSessionIdForAgentsMode(project);
-  if (focusedT3CompanionSessionId) {
-    return {
-      sessionId: focusedT3CompanionSessionId,
-      source: "focusedT3CompanionSession",
-    };
-  }
   const rememberedTerminalSessionId = rememberedWorkspaceTerminal(project);
   if (rememberedTerminalSessionId) {
     return {
@@ -18974,7 +18853,7 @@ function titlebarResourceGroupsContainLiveSupportedAgent(
         return false;
       }
       const agent = getDefaultSidebarAgentByIcon(session.agentIcon as SidebarAgentButton["icon"]);
-      return Boolean(agent && agent.agentId !== "t3");
+      return Boolean(agent);
     }),
   );
 }
@@ -19385,30 +19264,6 @@ function createProjectedSidebarSessionsForGroup(
       sessionRecord?.kind === "terminal"
         ? createNativeSidebarSessionRoutingId(projectId, session.sessionId)
         : undefined;
-    if (sessionRecord?.kind === "t3") {
-      const isSleeping = sessionRecord.isSleeping === true;
-      const nativePaneState: NativePaneState = isSleeping ? "unmounted" : "mounted";
-      return {
-        ...session,
-        agentIcon: "t3",
-        closeAfterDone: closeAfterDone?.armed,
-        closeAfterDoneDeadlineAt: closeAfterDone?.deadlineAt,
-        closeAfterDoneRemainingLabel: closeAfterDone?.remainingLabel,
-        closeAfterDoneRemainingMs: closeAfterDone?.remainingMs,
-        delayedSendDeadlineAt: delayedSend?.deadlineAt,
-        delayedSendRemainingLabel: delayedSend?.remainingLabel,
-        delayedSendRemainingMs: delayedSend?.remainingMs,
-        isLive: nativePaneState === "mounted",
-        isRunning: !isSleeping,
-        lastInteractionAt: sessionRecord.createdAt,
-        lifecycleState: isSleeping ? "sleeping" : "running",
-        nativePaneState,
-        primaryTitle: session.primaryTitle ?? "T3 Code",
-        providerSessionState: "persistence-disabled",
-        sessionRoutingId,
-      };
-    }
-
     const persistedAgentName =
       sessionRecord?.kind === "terminal" ? sessionRecord.agentName : undefined;
     const terminalState = terminalStateById.get(session.sessionId);
@@ -21005,7 +20860,7 @@ function createAgentManagerXWorkspaceSessionFromSidebarSession(
       isLocalOnly: ownership.isLocalOnly,
       isRunning: session.isRunning,
       isVisible: group.isActive && session.isVisible,
-      kind: session.sessionKind === "t3" ? "t3" : "terminal",
+      kind: "terminal",
       lastActiveAt: session.lastInteractionAt ?? updatedAt,
       ownership: ownership.ownership,
       projectName: projectMetadata.projectName ?? group.title,
@@ -21121,7 +20976,6 @@ function finishPublishContext(context: PublishContext, options: PublishOptions =
    */
   postAppModalHost({ message: sidebarMessage, type: "sidebarState" });
   maybeOpenPortlessSetupPrompt(sidebarMessage.hud.portless);
-  syncNativeT3RuntimeSessionState(sidebarMessage);
   if (options.skipNativeLayoutSync !== true && options.nativeLayoutBeforeSidebarHydrate !== true) {
     syncNativeLayoutForPublish();
   }
@@ -21435,48 +21289,6 @@ function getVirtualPaneTabMaterializationIntent(
   return reason === "publish" ? "passiveSync" : "explicitLayoutMutation";
 }
 
-function syncNativeT3RuntimeSessionState(sidebarMessage: SidebarHydrateMessage): void {
-  /**
-   * CDXC:T3Code 2026-06-06-05:13:
-   * This projection sync is compatibility-only after native pane ownership took
-   * over T3 provider lifetime. Keep sending it for older hosts, but current
-   * native ignores it so gxserver presentation gaps cannot stop t3code while an
-   * embedded T3 pane is still open.
-   */
-  const runningSessions = sidebarMessage.groups
-    .flatMap((group) => group.sessions)
-    .filter(
-      (session) =>
-        session.agentIcon === "t3" &&
-        session.isSleeping !== true &&
-        session.isRunning !== false &&
-        session.lifecycleState !== "sleeping",
-    );
-  const runningSessionIds = runningSessions.map((session) => session.sessionId).sort();
-  const runtimeCwd = runningSessions
-    .map((session) => resolveNativeT3RuntimeCwdForSidebarSession(session.sessionId))
-    .find((cwd): cwd is string => Boolean(cwd));
-  const nextKey = JSON.stringify({ runningSessionIds, runtimeCwd });
-  if (nextKey === lastNativeT3RuntimeSessionStateKey) {
-    return;
-  }
-  lastNativeT3RuntimeSessionStateKey = nextKey;
-  postNative({
-    runtimeCwd,
-    runningSessionIds,
-    type: "setT3CodeRuntimeSessionState",
-  });
-}
-
-function resolveNativeT3RuntimeCwdForSidebarSession(sessionId: string): string | undefined {
-  const reference = resolveSidebarSessionReference(sessionId);
-  const session = findSessionRecordInProject(reference.project, reference.sessionId);
-  if (session?.kind !== "t3") {
-    return undefined;
-  }
-  return session.t3.workspaceRoot || reference.project.path;
-}
-
 function ensureVisibleNativeSessions(reason: string): boolean {
   let didCreateNativeSession = false;
   /**
@@ -21484,12 +21296,6 @@ function ensureVisibleNativeSessions(reason: string): boolean {
    * Native ghostex recreates terminal processes for awake sessions in the active
    * workspace group. Sleeping terminals remain parked until focus/wake asks for
    * their resume; this hot publish path must not emit per-session diagnostics.
-   *
-   * CDXC:T3Code 2026-04-30-19:23
-   * Visible restored T3 sessions also need their native WKWebView recreated at
-   * startup. A persisted T3 card without a native web-pane surface leaves the
-   * workspace focused on a session id AppKit cannot render, producing the blank
-   * gray pane even though the sidebar card is selected.
    *
    * CDXC:PaneTabs 2026-05-11-01:31
    * All non-sleeping sessions in the active group are native pane-tab inventory.
@@ -21546,13 +21352,6 @@ function ensureVisibleNativeSessions(reason: string): boolean {
           !isDelayedSendWakeSession &&
           !isStartupActivityWakeSession
         ) {
-          continue;
-        }
-        if (session.kind === "t3") {
-          if (!nativeSessionIdBySidebarSessionId.has(session.sessionId)) {
-            restoreNativeT3Session(project, session, reason);
-            didCreateNativeSession = true;
-          }
           continue;
         }
         if (session.kind === "browser") {
@@ -22128,7 +21927,7 @@ function hasRunningZmxBackingForNativeIdleIndicator(session: SidebarSessionItem)
    * CDXC:SessionStatusIndicators 2026-06-15-12:42:
    * The IDLE/available number is a live agent-terminal count. Require a
    * terminal row with zmx persistence and a currently live provider or native
-   * pane so sleeping, done, browser, T3, and providerless rows do not inflate
+   * pane so sleeping, done, browser, and providerless rows do not inflate
    * the menu bar, floating indicator, or pet overlay numbers.
    */
   if (session.sessionKind !== "terminal") {
@@ -22877,7 +22676,7 @@ function orderedNativeAgentHookStatusAgentIds(agentIds?: readonly string[]): str
   const requestedAgentIds =
     agentIds && agentIds.length > 0
       ? agentIds
-      : DEFAULT_SIDEBAR_AGENTS.flatMap((agent) => (agent.agentId === "t3" ? [] : [agent.agentId]));
+      : DEFAULT_SIDEBAR_AGENTS.map((agent) => agent.agentId);
   const normalized = [
     ...new Set(requestedAgentIds.map((agentId) => String(agentId).trim()).filter(Boolean)),
   ];
@@ -22993,9 +22792,6 @@ async function requestNativeGhostexCliStatus(): Promise<void> {
       gxBlockedByExistingCommand: false,
       gxUsable: false,
       installed: false,
-      t3RuntimeDetail: "T3 Code runtime status could not be checked.",
-      t3RuntimeInstalled: false,
-      t3RuntimeSource: "missing",
       type: "ghostexCliStatus",
     });
     return;
@@ -23019,9 +22815,6 @@ async function requestNativeGhostexCliStatus(): Promise<void> {
       gxBlockedByExistingCommand: false,
       gxUsable: false,
       installed: false,
-      t3RuntimeDetail: "T3 Code runtime status could not be checked.",
-      t3RuntimeInstalled: false,
-      t3RuntimeSource: "missing",
       type: "ghostexCliStatus",
     });
   }
@@ -23150,28 +22943,6 @@ function readJsonFile(filePath) {
  * CDXC:ContributorStart 2026-06-22-23:23:
  * Settings should distinguish optional resources intentionally omitted from a contributor local build from a broken full app package. Read the build capability manifest by feature booleans only; do not include filesystem paths in the status payload.
  */
-const buildCapabilities = readJsonFile(webResourceDir ? path.join(webResourceDir, "ghostex-build-capabilities.json") : "");
-const optionalSubmodulesMayBeMissing = buildCapabilities?.optionalSubmodulesMayBeMissing === true;
-const t3BundledEntrypoint = webResourceDir ? path.join(webResourceDir, "t3code-server", "dist", "bin.mjs") : "";
-const t3ConfiguredRoot = process.env.VSMUX_T3CODE_REPO_ROOT || process.env.ghostex_T3CODE_REPO_ROOT || "";
-const t3ConfiguredEntrypoint = t3ConfiguredRoot ? path.join(t3ConfiguredRoot, "apps", "server", "src", "bin.ts") : "";
-const t3BundledInstalled = Boolean(t3BundledEntrypoint && isFile(t3BundledEntrypoint));
-const t3DevelopmentInstalled = Boolean(t3ConfiguredEntrypoint && isFile(t3ConfiguredEntrypoint));
-const t3RuntimeInstalled = Boolean(t3BundledInstalled || t3DevelopmentInstalled);
-const t3RuntimeSource = t3BundledInstalled
-  ? "bundled"
-  : t3DevelopmentInstalled
-    ? "development"
-    : optionalSubmodulesMayBeMissing && buildCapabilities?.resources?.t3Code === false
-      ? "unavailable"
-      : "missing";
-const t3RuntimeDetail = t3BundledInstalled
-  ? "T3 Code runtime is bundled with this app."
-  : t3DevelopmentInstalled
-    ? "T3 Code is using an explicit development checkout."
-    : t3RuntimeSource === "unavailable"
-      ? "T3 Code is not bundled in this contributor local build because the optional t3code checkout was not present."
-      : "T3 Code runtime is missing from this app build. Reinstall Ghostex or rebuild so Web/t3code-server is packaged.";
 const cuaDriverPath = which("cua-driver");
 const cuaAppInstalled = isDirectory("/Applications/CuaDriver.app");
 const cuaDriverInstalled = Boolean(cuaDriverPath || cuaAppInstalled);
@@ -23229,7 +23000,6 @@ if (cuaDriverPermissionDetail) {
     ? " Cua Driver reports Accessibility and Screen Recording permissions are granted."
     : " Cua Driver permissions need attention.";
 }
-detail += " " + t3RuntimeDetail;
 
 console.log(JSON.stringify({
   browserSkillInstalled,
@@ -23257,9 +23027,6 @@ console.log(JSON.stringify({
   gxPath,
   gxUsable,
   installed: Boolean(ghostexUsable),
-  t3RuntimeDetail,
-  t3RuntimeInstalled,
-  t3RuntimeSource,
   type: "ghostexCliStatus",
 }));
 `;
@@ -23482,9 +23249,9 @@ function getNativePaneTitleBarActions(session: SessionRecord): NativeTerminalTit
    * represented session even when the selected pane owns a different titlebar
    * view.
    *
-   * Browser and T3 Code panes expose pane creation, split controls, and the
+   * Browser panes expose pane creation, split controls, and the
    * project-scoped Merge All Tabs command in title-bar chrome. Their
-   * page/runtime tooling stays in the dedicated browser/T3 surfaces.
+   * page/runtime tooling stays in the dedicated browser surfaces.
    *
    * CDXC:PaneTabs 2026-05-15-13:35
    * Merge All Tabs belongs directly below Split Sideways and Split Downwards
@@ -23495,14 +23262,13 @@ function getNativePaneTitleBarActions(session: SessionRecord): NativeTerminalTit
    * CDXC:CloseAfterDone 2026-06-15-21:00:
    * Terminal pane and tab context menus that expose Delayed Send must also expose
    * Close After Done immediately below it. Keep this terminal-only so browser and
-   * T3 pane menus do not advertise a Done-state terminal timer they cannot run.
+   * browser pane menus do not advertise a Done-state terminal timer they cannot run.
    */
   const popOutAction = session.isPoppedOut === true ? "restorePopOut" : "popOut";
   /**
    * CDXC:PanePopOut 2026-05-19-10:15:
    * Browser pane tab-bar overflow menus must expose Pop Out Pane for the active
-   * browser tab, matching terminal and agent panes. Keep T3 panes on the
-   * creation/split/merge action set only.
+   * browser tab, matching terminal and agent panes.
    */
   if (session.kind === "browser") {
     return [
@@ -23513,16 +23279,6 @@ function getNativePaneTitleBarActions(session: SessionRecord): NativeTerminalTit
       "rotatePanesClockwise",
       "mergeAllTabs",
       popOutAction,
-    ];
-  }
-  if (session.kind === "t3") {
-    return [
-      "newTerminal",
-      "openBrowser",
-      "splitHorizontal",
-      "splitVertical",
-      "rotatePanesClockwise",
-      "mergeAllTabs",
     ];
   }
   return [
@@ -24204,335 +23960,6 @@ function createGxserverTerminalRecordForNativeCreate(
   }
 }
 
-type NativeT3GxserverMetadataInput = {
-  activity?: "attention" | "idle" | "working";
-  createdAt?: string;
-  environmentId?: string;
-  lifecycleState?: NonNullable<GxserverUpdateSessionParams["lifecycleState"]>;
-  preserveExplicitTitle?: boolean;
-  serverOrigin?: string;
-  t3ProjectId?: string;
-  t3SidebarMode?: GhostexT3SidebarMode;
-  threadId?: string;
-  title?: string;
-  titleSource?: GxserverSyncT3EmbeddedSessionParams["titleSource"];
-  workspaceRoot?: string;
-};
-
-type NativeT3SidebarRenameTitleSource = Extract<
-  NonNullable<TerminalSessionRecord["titleSource"]>,
-  "generated" | "user"
->;
-
-function createNativeT3AgentActivityMetadata(
-  activity: NonNullable<NativeT3GxserverMetadataInput["activity"]>,
-): Record<string, unknown> {
-  const now = new Date().toISOString();
-  return {
-    activity,
-    hasSeenWorking: activity === "working",
-    isAcknowledged: activity !== "attention",
-    lastChangedAt: now,
-    suppressedUntil: now,
-  };
-}
-
-function createNativeT3GxserverRuntimeMetadata(
-  projectId: string,
-  sessionId: string | undefined,
-  input: NativeT3GxserverMetadataInput,
-): Record<string, unknown> {
-  const threadId = normalizeNativeT3ThreadId(input.threadId);
-  const t3: Record<string, unknown> = {
-    ghostexProjectId: projectId,
-  };
-  if (sessionId) {
-    t3.ghostexSessionId = sessionId;
-  }
-  if (input.t3ProjectId?.trim()) {
-    t3.projectId = input.t3ProjectId.trim();
-  }
-  if (threadId) {
-    t3.boundThreadId = threadId;
-    t3.threadId = threadId;
-  }
-  if (input.serverOrigin?.trim()) {
-    t3.serverOrigin = input.serverOrigin.trim();
-  }
-  if (input.environmentId?.trim()) {
-    t3.environmentId = input.environmentId.trim();
-  }
-  if (input.workspaceRoot?.trim()) {
-    t3.workspaceRoot = input.workspaceRoot.trim();
-  }
-  if (input.createdAt?.trim()) {
-    t3.createdAt = input.createdAt.trim();
-  }
-  t3.createdBy = "ghostex-embedded";
-  t3.t3SidebarMode = input.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE;
-  return {
-    ...(input.activity
-      ? { agentActivity: createNativeT3AgentActivityMetadata(input.activity) }
-      : {}),
-    provider: "t3code",
-    t3,
-    titleSource: input.titleSource,
-  };
-}
-
-function createNativeT3GxserverProviderState(
-  input: NativeT3GxserverMetadataInput,
-): GxserverUpdateSessionParams["providerState"] {
-  const threadId = normalizeNativeT3ThreadId(input.threadId);
-  const t3: Record<string, unknown> = {};
-  if (input.t3ProjectId?.trim()) {
-    t3.projectId = input.t3ProjectId.trim();
-  }
-  if (threadId) {
-    t3.boundThreadId = threadId;
-    t3.threadId = threadId;
-  }
-  if (input.serverOrigin?.trim()) {
-    t3.serverOrigin = input.serverOrigin.trim();
-  }
-  if (input.environmentId?.trim()) {
-    t3.environmentId = input.environmentId.trim();
-  }
-  if (input.workspaceRoot?.trim()) {
-    t3.workspaceRoot = input.workspaceRoot.trim();
-  }
-  if (input.createdAt?.trim()) {
-    t3.createdAt = input.createdAt.trim();
-  }
-  t3.createdBy = "ghostex-embedded";
-  t3.t3SidebarMode = input.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE;
-  return {
-    lifecycleState: input.lifecycleState === "stopped" ? "missing" : "unknown",
-    provider: "t3code",
-    t3,
-  };
-}
-
-function createGxserverT3RecordForNativeCreate(
-  project: NativeProject,
-  title: string,
-  input: NativeT3GxserverMetadataInput = {},
-): GxserverSessionDomainState | undefined {
-  /*
-  CDXC:T3Code 2026-06-23-06:19:
-  New embedded T3 sessions must get their durable G-session id from gxserver
-  before the sidebar creates the local card, but the actual T3 thread is still
-  created by the managed upstream runtime. Store only workspace/runtime intent
-  at creation time, then overwrite the metadata with the resolved T3 project
-  and thread after native emits t3ThreadReady.
-  */
-  try {
-    const session = gxserverClient.createTerminalSessionSync({
-      cwd: project.path,
-      kind: "t3",
-      lifecycleState: "running",
-      providerState: createNativeT3GxserverProviderState({
-        lifecycleState: "running",
-        serverOrigin: input.serverOrigin ?? NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-        t3ProjectId: input.t3ProjectId,
-        threadId: input.threadId,
-        workspaceRoot: input.workspaceRoot ?? project.path,
-      }),
-      projectId: project.projectId as never,
-      runtimeSettings: createNativeT3GxserverRuntimeMetadata(project.projectId, undefined, {
-        lifecycleState: "running",
-        serverOrigin: input.serverOrigin ?? NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-        t3ProjectId: input.t3ProjectId,
-        threadId: input.threadId,
-        titleSource: input.titleSource ?? "placeholder",
-        workspaceRoot: input.workspaceRoot ?? project.path,
-      }),
-      surface: "workspace",
-      title,
-    });
-    return session;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    appendTerminalLaunchDebugLog("nativeSidebar.gxserverCreateT3Session.failed", {
-      hasMessage: message.length > 0,
-      projectId: project.projectId,
-      titleLength: title.length,
-    });
-    showNativeMessage("error", message);
-    return undefined;
-  }
-}
-
-function syncGxserverNativeT3Session(
-  projectId: string,
-  sessionId: string,
-  input: NativeT3GxserverMetadataInput,
-  reason: string,
-): void {
-  if (!isCanonicalGxserverProjectSession(projectId, sessionId)) {
-    return;
-  }
-  const project = findProject(projectId);
-  const session = project ? findSessionRecordInProject(project, sessionId) : undefined;
-  const t3 = session?.kind === "t3" ? session.t3 : undefined;
-  const title = input.preserveExplicitTitle
-    ? (normalizeSessionRenameTitle(input.title ?? "") ?? input.title?.trim())
-    : normalizeNativeT3ThreadTitle(input.title);
-  const metadataInput: NativeT3GxserverMetadataInput = {
-    activity: input.activity ?? terminalStateById.get(sessionId)?.activity,
-    createdAt: input.createdAt ?? t3?.createdAt,
-    environmentId: input.environmentId ?? t3?.environmentId,
-    lifecycleState: input.lifecycleState,
-    serverOrigin: input.serverOrigin ?? t3?.serverOrigin,
-    t3ProjectId: input.t3ProjectId ?? t3?.projectId,
-    t3SidebarMode: input.t3SidebarMode ?? t3?.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-    threadId: input.threadId ?? t3?.boundThreadId ?? t3?.threadId,
-    title,
-    titleSource: input.titleSource,
-    workspaceRoot: input.workspaceRoot ?? t3?.workspaceRoot ?? project?.path,
-  };
-  const update: GxserverSyncT3EmbeddedSessionParams = {
-    ghostexProjectId: projectId as never,
-    ghostexSessionId: sessionId as never,
-    ...(metadataInput.activity ? { activity: metadataInput.activity } : {}),
-    ...(metadataInput.createdAt ? { createdAt: metadataInput.createdAt } : {}),
-    ...(metadataInput.environmentId ? { environmentId: metadataInput.environmentId } : {}),
-    ...(metadataInput.lifecycleState ? { lifecycleState: metadataInput.lifecycleState } : {}),
-    ...(metadataInput.serverOrigin ? { serverOrigin: metadataInput.serverOrigin } : {}),
-    ...(metadataInput.t3ProjectId ? { t3ProjectId: metadataInput.t3ProjectId } : {}),
-    ...(metadataInput.t3SidebarMode ? { t3SidebarMode: metadataInput.t3SidebarMode } : {}),
-    ...(metadataInput.threadId ? { threadId: metadataInput.threadId } : {}),
-    ...(title ? { title } : {}),
-    ...(metadataInput.titleSource ? { titleSource: metadataInput.titleSource } : {}),
-    ...(metadataInput.workspaceRoot ? { workspaceRoot: metadataInput.workspaceRoot } : {}),
-  };
-  void gxserverClient
-    .rpc<{ session: GxserverSessionDomainState }>(
-      "/api/syncT3EmbeddedSession",
-      update as unknown as Record<string, unknown>,
-    )
-    .catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      appendAgentDetectionDebugLog("nativeSidebar.gxserver.t3SessionSyncFailed", {
-        hasMessage: message.length > 0,
-        hasThreadId: Boolean(normalizeNativeT3ThreadId(metadataInput.threadId)),
-        lifecycleState: metadataInput.lifecycleState,
-        projectId,
-        reason,
-        sessionId,
-      });
-    });
-}
-
-function isNativeT3SessionCleanupProtected(project: NativeProject, sessionId: string): boolean {
-  const terminalState = terminalStateById.get(sessionId);
-  if (terminalState?.activity === "working" || terminalState?.activity === "attention") {
-    return true;
-  }
-  if (
-    project.commandsPanel.activeSessionId === sessionId ||
-    (project.commandsPanel.isVisible && commandPanelContainsSession(project, sessionId))
-  ) {
-    return true;
-  }
-  return project.workspace.groups.some((group) => {
-    const snapshot = group.snapshot;
-    return (
-      snapshot.focusedSessionId === sessionId || snapshot.visibleSessionIds.includes(sessionId)
-    );
-  });
-}
-
-function removeNativeT3EmptySessionLocally(projectId: string, sessionId: string): void {
-  const project = findProject(projectId);
-  if (!project) {
-    return;
-  }
-  const nativeSessionId = forgetNativeSessionMappingForProject(projectId, sessionId);
-  updateProjectWorkspace(
-    projectId,
-    (workspace) =>
-      removeSessionInSimpleWorkspace(workspace, sessionId, {
-        wakeReplacement: false,
-      }).snapshot,
-  );
-  if (commandPanelContainsSession(project, sessionId)) {
-    updateProjectCommandsPanel(projectId, (panel) => {
-      const nextSessions = panel.sessions.filter((session) => session.sessionId !== sessionId);
-      return {
-        ...panel,
-        activeSessionId:
-          panel.activeSessionId === sessionId ? nextSessions[0]?.sessionId : panel.activeSessionId,
-        sessions: nextSessions,
-      };
-    });
-  }
-  terminalStateById.delete(sessionId);
-  forgetRemoteAttachLocalSessionForSidebarSession(
-    createCombinedProjectSessionId(projectId, sessionId),
-  );
-  clearSettledTerminalTitleSync(sessionId);
-  forgetProviderSessionState(projectId, sessionId);
-  pendingNativeTerminalStartupTextBySessionId.delete(sessionId);
-  nativeActivitySuppressedUntilBySessionId.delete(sessionId);
-  nativeWorkingStartedAtBySessionId.delete(sessionId);
-  clearNativeSessionAttentionTracking(sessionId);
-  nativeAttentionNotificationLastSentAtBySessionId.delete(sessionId);
-  clearDelayedSendTimer(sessionId, projectId);
-  clearCloseAfterDoneTimer(sessionId, projectId, "t3EmptySessionObserved");
-  postNative({
-    sessionId: nativeSessionId,
-    type: "closeWebPane",
-  });
-  publish();
-}
-
-function handleNativeT3EmptySessionObserved(
-  projectId: string,
-  sessionId: string,
-  threadId: string,
-): void {
-  if (!isCanonicalGxserverProjectSession(projectId, sessionId)) {
-    return;
-  }
-  const project = findProject(projectId);
-  const session = project ? findSessionRecordInProject(project, sessionId) : undefined;
-  if (!project || session?.kind !== "t3") {
-    return;
-  }
-  const eventThreadId = normalizeNativeT3ThreadId(threadId);
-  const boundThreadId = normalizeNativeT3ThreadId(session.t3.boundThreadId ?? session.t3.threadId);
-  if (eventThreadId && boundThreadId && eventThreadId !== boundThreadId) {
-    return;
-  }
-  if (isNativeT3SessionCleanupProtected(project, sessionId)) {
-    return;
-  }
-  /*
-  CDXC:T3EmbeddedCleanup 2026-07-01-02:17:
-  T3 deletes or clears its empty Ghostex-created draft first, then the native sidebar removes only the matching gxserver `kind: "t3"` row. Do not create fallback rows, infer targets from titles, or delete focused, visible, working, or attention sessions.
-  */
-  void gxserverClient
-    .removeSession({
-      projectId: projectId as never,
-      reason: "t3-empty-embedded-cleanup",
-      sessionId: sessionId as never,
-    })
-    .then(() => {
-      removeNativeT3EmptySessionLocally(projectId, sessionId);
-    })
-    .catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      appendAgentDetectionDebugLog("nativeSidebar.gxserver.t3EmptySessionRemoveFailed", {
-        errorType: error instanceof Error ? error.name : typeof error,
-        hasMessage: message.length > 0,
-        hasThreadId: Boolean(eventThreadId),
-        projectId,
-        sessionId,
-      });
-    });
-}
-
 function createTerminal(
   title = DEFAULT_TERMINAL_SESSION_TITLE,
   initialInput = "",
@@ -25146,993 +24573,6 @@ function splitFocusedNativePane(
       targetSessionId,
     },
   });
-}
-
-function createNativeT3Session(
-  groupId?: string,
-  options?: {
-    visiblePlacement?: VisibleSessionPlacement;
-  },
-): T3SessionRecord | undefined {
-  let project = activeProject();
-  if (!shouldKeepProjectEditorOpenForNewSession(project.projectId)) {
-    activateWorkspaceSurfaceForProject(project.projectId);
-  }
-  const canonicalProject = ensureNativeProjectRegisteredWithGxserver(project, "createT3");
-  if (!canonicalProject) {
-    return undefined;
-  }
-  project = canonicalProject;
-  const targetWorkspace = groupId
-    ? focusGroupInSimpleWorkspace(project.workspace, groupId).snapshot
-    : project.workspace;
-  const gxserverSession = createGxserverT3RecordForNativeCreate(project, "T3 Code", {
-    serverOrigin: NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-    workspaceRoot: project.path,
-  });
-  if (!gxserverSession) {
-    return undefined;
-  }
-  const pendingThreadId = stableGhostexT3DraftThreadId(gxserverSession.sessionId);
-  appendPaneLayoutTraceDebugLog("createT3.request", {
-    activeProjectId,
-    groupId,
-    pendingThreadId,
-    projectId: project.projectId,
-    targetGroup: summarizeWorkspaceGroupForPaneLayoutTrace(targetWorkspace, groupId),
-    visiblePlacement: summarizeVisiblePlacement(options?.visiblePlacement),
-  });
-  /**
-   * CDXC:T3Code 2026-04-30-02:24
-   * Native T3 Code buttons must create T3 pane records, matching the reference
-   * app's special T3 path. Do not launch `npx --yes t3` in a terminal because
-   * the CLI opens its own browser instead of becoming an embedded ghostex pane.
-   */
-  const result = createSessionInSimpleWorkspace(
-    targetWorkspace,
-    {
-      kind: "t3",
-      sessionId: gxserverSession.sessionId,
-      t3: {
-        createdAt: gxserverSession.createdAt,
-        boundThreadId: pendingThreadId,
-        ghostexProjectId: project.projectId,
-        ghostexSessionId: gxserverSession.sessionId,
-        projectId: "",
-        serverOrigin: NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-        t3SidebarMode: GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-        threadId: pendingThreadId,
-        workspaceRoot: project.path,
-      },
-      title: gxserverSession.title || "T3 Code",
-    },
-    options?.visiblePlacement ? { visiblePlacement: options.visiblePlacement } : undefined,
-  );
-  const session = result.session?.kind === "t3" ? result.session : undefined;
-  if (!session) {
-    appendPaneLayoutTraceDebugLog("createT3.noSession", {
-      activeProjectId,
-      groupId,
-      pendingThreadId,
-      projectId: project.projectId,
-      visiblePlacement: summarizeVisiblePlacement(options?.visiblePlacement),
-    });
-    return undefined;
-  }
-
-  const nativeSessionId = rememberNativeSessionMapping(project.projectId, session.sessionId);
-  const t3ThreadId = getNativeT3SessionBoundThreadId(session) ?? pendingThreadId;
-  updateActiveProjectWorkspace(() => result.snapshot);
-  terminalStateById.set(session.sessionId, {
-    activity: "idle",
-    lifecycleState: "running",
-    terminalTitle: session.title || "T3 Code",
-  });
-  syncGxserverNativeT3Session(
-    project.projectId,
-    session.sessionId,
-    {
-      activity: "idle",
-      createdAt: gxserverSession.createdAt,
-      lifecycleState: "running",
-      serverOrigin: NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-      t3SidebarMode: GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      threadId: pendingThreadId,
-      workspaceRoot: project.path,
-    },
-    "create-t3-draft-binding",
-  );
-  appendPaneLayoutTraceDebugLog("createT3.created", {
-    activeProjectId,
-    nativeSessionId,
-    projectId: project.projectId,
-    sessionId: session.sessionId,
-    targetGroup: summarizeWorkspaceGroupForPaneLayoutTrace(
-      result.snapshot,
-      result.snapshot.activeGroupId,
-    ),
-    threadId: t3ThreadId,
-    visiblePlacement: summarizeVisiblePlacement(options?.visiblePlacement),
-  });
-  postNative({ cwd: project.path, type: "startT3CodeRuntime" });
-  postNative(
-    createNativeT3WebPaneCommand({
-      cwd: project.path,
-      projectId: session.t3.projectId,
-      sessionId: nativeSessionId,
-      threadId: t3ThreadId,
-      title: "T3 Code",
-      url: "http://127.0.0.1:3774",
-    }),
-  );
-  postNative({ sessionId: nativeSessionId, type: "focusWebPane" });
-  publish();
-  return session;
-}
-
-function restoreNativeT3Session(
-  project: NativeProject,
-  session: T3SessionRecord,
-  reason: string,
-  options: { focusAfterRestore?: boolean } = {},
-): void {
-  /**
-   * CDXC:T3Code 2026-04-30-09:33
-   * Persisted native T3 cards outlive their WKWebView surfaces across app
-   * restarts. Focusing a restored T3 card must recreate the embedded web pane
-   * and managed runtime instead of only sending focus to a missing native id.
-   */
-  const nativeSessionId = rememberNativeSessionMapping(project.projectId, session.sessionId);
-  const t3ThreadId = getNativeT3SessionBoundThreadId(session);
-  const workspaceRoot = session.t3?.workspaceRoot ?? project.path;
-  const serverOrigin =
-    session.t3?.serverOrigin?.startsWith("http") && !session.t3.serverOrigin.endsWith(":0")
-      ? session.t3.serverOrigin
-      : "http://127.0.0.1:3774";
-  if (!terminalStateById.has(session.sessionId)) {
-    terminalStateById.set(session.sessionId, {
-      activity: "idle",
-      lifecycleState: "running",
-      terminalTitle: session.title || "T3 Code",
-    });
-  }
-  postNative({ cwd: workspaceRoot, type: "startT3CodeRuntime" });
-  postNative(
-    createNativeT3WebPaneCommand({
-      cwd: workspaceRoot,
-      projectId: session.t3.projectId,
-      sessionId: nativeSessionId,
-      ...(t3ThreadId ? { threadId: t3ThreadId } : {}),
-      title: session.title || "T3 Code",
-      url: serverOrigin,
-    }),
-  );
-  syncGxserverNativeT3Session(
-    project.projectId,
-    session.sessionId,
-    {
-      activity: terminalStateById.get(session.sessionId)?.activity ?? "idle",
-      createdAt: session.t3.createdAt ?? session.createdAt,
-      environmentId: session.t3.environmentId,
-      lifecycleState: "running",
-      serverOrigin,
-      t3SidebarMode: session.t3.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      t3ProjectId: session.t3.projectId,
-      ...(t3ThreadId ? { threadId: t3ThreadId } : {}),
-      workspaceRoot,
-    },
-    reason,
-  );
-  if (options.focusAfterRestore !== false) {
-    postNative({ sessionId: nativeSessionId, type: "focusWebPane" });
-  }
-  appendAgentDetectionDebugLog("nativeSidebar.t3Session.restored", {
-    nativeSessionId,
-    reason,
-    sessionId: session.sessionId,
-    workspaceRoot,
-  });
-}
-
-function findNativeT3SessionBoundToThread(
-  project: NativeProject,
-  threadId: string,
-  options: { excludeSessionId?: string } = {},
-): T3SessionRecord | undefined {
-  activateWorkspaceSurfaceForProject(project.projectId);
-  /**
-   * CDXC:T3Code 2026-05-04-03:06
-   * Native T3 sidebar cards are durable bindings to one T3 thread. When the
-   * embedded T3 UI navigates to a different thread, ghostex must first look for an
-   * existing card bound to that thread instead of replacing the current card's
-   * stored thread metadata.
-   */
-  const normalizedThreadId = normalizeNativeT3ThreadId(threadId);
-  if (!normalizedThreadId) {
-    return undefined;
-  }
-
-  for (const group of project.workspace.groups) {
-    for (const session of group.snapshot.sessions) {
-      if (session.kind !== "t3" || session.sessionId === options.excludeSessionId) {
-        continue;
-      }
-      const sessionThreadId = normalizeNativeT3ThreadId(
-        session.t3.boundThreadId || session.t3.threadId,
-      );
-      if (sessionThreadId === normalizedThreadId) {
-        return session;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function createNativeT3SessionForBoundThread(
-  project: NativeProject,
-  sourceSession: T3SessionRecord,
-  threadId: string,
-  title?: string,
-): T3SessionRecord | undefined {
-  /**
-   * CDXC:T3Code 2026-05-04-03:06
-   * Opening a different T3 thread from inside an embedded pane should create a
-   * sibling T3 pane/card linked to the new thread. This preserves the original
-   * sidebar card as a stable shortcut to its bound thread while keeping multiple
-   * T3 threads visible in ghostex at the same time.
-   */
-  const canonicalProject = ensureNativeProjectRegisteredWithGxserver(
-    project,
-    "createT3BoundThread",
-  );
-  if (!canonicalProject) {
-    return undefined;
-  }
-  project = canonicalProject;
-  const groupId = project.workspace.groups.find((group) =>
-    group.snapshot.sessions.some((session) => session.sessionId === sourceSession.sessionId),
-  )?.groupId;
-  const targetWorkspace = groupId
-    ? focusGroupInSimpleWorkspace(project.workspace, groupId).snapshot
-    : project.workspace;
-  const resolvedTitle = normalizeNativeT3ThreadTitle(title) ?? "T3 Code";
-  const gxserverSession = createGxserverT3RecordForNativeCreate(project, resolvedTitle, {
-    serverOrigin: sourceSession.t3.serverOrigin || NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-    t3ProjectId: sourceSession.t3.projectId,
-    threadId,
-    titleSource: normalizeNativeT3ThreadTitle(title) ? "generated" : "placeholder",
-    workspaceRoot: sourceSession.t3.workspaceRoot || project.path,
-  });
-  if (!gxserverSession) {
-    return undefined;
-  }
-  const result = createSessionInSimpleWorkspace(targetWorkspace, {
-    kind: "t3",
-    sessionId: gxserverSession.sessionId,
-    t3: {
-      ...sourceSession.t3,
-      createdAt: gxserverSession.createdAt,
-      boundThreadId: threadId,
-      ghostexProjectId: project.projectId,
-      ghostexSessionId: gxserverSession.sessionId,
-      t3SidebarMode: GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      threadId,
-    },
-    title: resolvedTitle,
-  });
-  const session = result.session?.kind === "t3" ? result.session : undefined;
-  if (!session) {
-    return undefined;
-  }
-
-  const nativeSessionId = rememberNativeSessionMapping(project.projectId, session.sessionId);
-  const t3ThreadId =
-    getNativeT3SessionBoundThreadId(session) ??
-    normalizeNativeT3ThreadId(threadId) ??
-    threadId.trim();
-  updateProjectWorkspace(project.projectId, () => result.snapshot);
-  terminalStateById.set(session.sessionId, {
-    activity: "idle",
-    lifecycleState: "running",
-    terminalTitle: resolvedTitle,
-  });
-  postNative({ cwd: session.t3.workspaceRoot || project.path, type: "startT3CodeRuntime" });
-  postNative(
-    createNativeT3WebPaneCommand({
-      cwd: session.t3.workspaceRoot || project.path,
-      projectId: session.t3.projectId,
-      sessionId: nativeSessionId,
-      threadId: t3ThreadId,
-      title: resolvedTitle,
-      url: session.t3.serverOrigin || NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-    }),
-  );
-  syncGxserverNativeT3Session(
-    project.projectId,
-    session.sessionId,
-    {
-      activity: "idle",
-      createdAt: gxserverSession.createdAt,
-      lifecycleState: "running",
-      serverOrigin: session.t3.serverOrigin || NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-      t3SidebarMode: GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      t3ProjectId: session.t3.projectId,
-      threadId: t3ThreadId,
-      title: normalizeNativeT3ThreadTitle(resolvedTitle),
-      titleSource: normalizeNativeT3ThreadTitle(resolvedTitle) ? "generated" : "placeholder",
-      workspaceRoot: session.t3.workspaceRoot || project.path,
-    },
-    "create-bound-thread",
-  );
-  postNative({ sessionId: nativeSessionId, type: "focusWebPane" });
-  return session;
-}
-
-function createNativeT3WebPaneCommand(input: {
-  cwd: string;
-  projectId?: string;
-  sessionId: string;
-  threadId?: string;
-  title: string;
-  url: string;
-}): Extract<NativeHostCommand, { type: "createWebPane" }> {
-  /*
-  CDXC:T3Code 2026-06-23-06:19:
-  Pending sidebar thread ids are placeholders only.
-
-  CDXC:T3SessionOwnership 2026-07-01-02:17:
-  Brand-new embedded T3 panes now pass `ghostex-thread-<ghostexSessionId>` so the draft route, T3 promotion, and gxserver row all share one durable Ghostex-owned binding. Do not pass legacy `pending-*` ids to native.
-  */
-  const projectId = input.projectId?.trim();
-  const threadId = normalizeNativeT3ThreadId(input.threadId);
-  return {
-    cwd: input.cwd,
-    ...(projectId && !projectId.startsWith("native-") ? { projectId } : {}),
-    sessionId: input.sessionId,
-    ...(threadId ? { threadId } : {}),
-    title: input.title,
-    type: "createWebPane",
-    url: input.url,
-  };
-}
-
-function normalizeNativeT3ThreadId(threadId: string | undefined): string | undefined {
-  const normalized = threadId?.trim();
-  if (!normalized || normalized.startsWith("pending-")) {
-    return undefined;
-  }
-  return normalized.toLowerCase();
-}
-
-function getNativeT3SessionBoundThreadId(session: T3SessionRecord): string | undefined {
-  /*
-  CDXC:T3SessionRestore 2026-07-01-19:25:
-  A Ghostex T3 sidebar card owns `boundThreadId`; `threadId` is legacy/runtime metadata. Native launches must reopen the bound T3 thread so restored or refocused sessions cannot fall back to the generic picker or a stale draft route.
-  */
-  return normalizeNativeT3ThreadId(session.t3.boundThreadId || session.t3.threadId);
-}
-
-function isNativeT3DraftRouteThreadId(threadId: string | undefined): boolean {
-  /*
-  CDXC:T3Code 2026-06-23-06:22:
-  Ghostex draft T3 panes load `/draft/<draftId>` so chat can start without
-  creating an upstream thread. That route id is not a durable T3 thread binding;
-  treating `ghostex-draft-*` as `t3ThreadChanged` creates a new Ghostex T3
-  session, which reloads another draft route and repeats until the sidebar lags.
-  */
-  return normalizeNativeT3ThreadId(threadId)?.startsWith("ghostex-draft-") === true;
-}
-
-function normalizeNativeT3ThreadTitle(title: string | undefined): string | undefined {
-  const normalized = title?.replace(/\s+/g, " ").trim();
-  const lower = normalized?.toLowerCase();
-  if (
-    !normalized ||
-    lower === "t3 code" ||
-    lower === "t3 code (alpha)" ||
-    lower === "no active thread" ||
-    lower === "pick a thread to continue"
-  ) {
-    return undefined;
-  }
-  return normalized;
-}
-
-function persistNativeT3SessionTitle(
-  projectId: string,
-  sessionId: string,
-  title: string | undefined,
-  options: {
-    preserveExplicitTitle?: boolean;
-    titleSource?: TerminalSessionRecord["titleSource"];
-  } = {},
-): boolean {
-  const normalizedTitle = options.preserveExplicitTitle
-    ? (normalizeSessionRenameTitle(title ?? "") ?? title?.trim())
-    : normalizeNativeT3ThreadTitle(title);
-  if (!normalizedTitle) {
-    return false;
-  }
-
-  updateProjectWorkspace(
-    projectId,
-    (workspace) =>
-      setSessionTitleInSimpleWorkspace(workspace, sessionId, normalizedTitle, {
-        titleSource: options.titleSource ?? "generated",
-      }).snapshot,
-  );
-  return true;
-}
-
-function createNativeT3ThreadMetaUpdateCommandId(): string {
-  const randomUuid =
-    typeof globalThis.crypto?.randomUUID === "function"
-      ? globalThis.crypto.randomUUID()
-      : undefined;
-  const suffix = randomUuid ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `ghostex-thread-meta-update-${suffix}`;
-}
-
-function isNativeT3ThreadMetaUpdateResult(stdout: string): boolean {
-  try {
-    const parsed = JSON.parse(stdout) as { sequence?: unknown };
-    return typeof parsed.sequence === "number" && Number.isFinite(parsed.sequence);
-  } catch {
-    return false;
-  }
-}
-
-async function renameNativeT3ThreadTitle(
-  project: NativeProject,
-  session: T3SessionRecord,
-  title: string,
-  titleSource: NativeT3SidebarRenameTitleSource,
-  source: string,
-): Promise<boolean> {
-  /*
-  CDXC:T3SidebarRename 2026-07-01-14:29:
-  Sidebar Rename and Generate Name on T3 Code sessions must update T3's `thread.meta.update` database path before Ghostex accepts the new sidebar title.
-  Do not send terminal `/rename` commands for T3 panes and do not store a local-only title when the upstream thread is missing or the dispatch fails.
-  */
-  const normalizedTitle = normalizeSessionRenameTitle(title) ?? title.trim();
-  const threadId = normalizeNativeT3ThreadId(session.t3.boundThreadId || session.t3.threadId);
-  if (!normalizedTitle || !threadId || isNativeT3DraftRouteThreadId(threadId)) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.rename.skipped", {
-      hasThreadId: Boolean(threadId),
-      projectId: project.projectId,
-      reason: !normalizedTitle ? "empty-title" : !threadId ? "missing-thread" : "draft-thread",
-      sessionId: session.sessionId,
-      source,
-      titleSource,
-    });
-    return false;
-  }
-
-  postNative({ cwd: session.t3.workspaceRoot || project.path, type: "startT3CodeRuntime" });
-
-  let ownerBearerToken: string;
-  try {
-    ownerBearerToken = await waitForNativeT3OwnerBearerToken();
-  } catch (error) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.rename.authFailed", {
-      hasMessage: error instanceof Error ? error.message.length > 0 : String(error).length > 0,
-      projectId: project.projectId,
-      sessionId: session.sessionId,
-      source,
-      titleSource,
-    });
-    return false;
-  }
-
-  const requestBody = JSON.stringify({
-    commandId: createNativeT3ThreadMetaUpdateCommandId(),
-    threadId,
-    title: normalizedTitle,
-    type: "thread.meta.update",
-  });
-  let result: NativeProcessResult;
-  try {
-    result = await runNativeProcess(
-      "/bin/sh",
-      [
-        "-lc",
-        [
-          "/usr/bin/curl",
-          "--fail",
-          "--silent",
-          "--show-error",
-          "--max-time",
-          "5",
-          "-X",
-          "POST",
-          '"$T3_ORIGIN/api/orchestration/dispatch"',
-          "-H",
-          '"authorization: Bearer $T3_OWNER_BEARER"',
-          "-H",
-          '"content-type: application/json"',
-          "--data-binary",
-          '"$T3_THREAD_META_UPDATE_BODY"',
-        ].join(" "),
-      ],
-      {
-        env: {
-          T3_ORIGIN: session.t3.serverOrigin || NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-          T3_OWNER_BEARER: ownerBearerToken,
-          T3_THREAD_META_UPDATE_BODY: requestBody,
-        },
-        timeoutMs: 10_000,
-      },
-    );
-  } catch (error) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.rename.processFailed", {
-      hasMessage: error instanceof Error ? error.message.length > 0 : String(error).length > 0,
-      projectId: project.projectId,
-      sessionId: session.sessionId,
-      source,
-      titleSource,
-    });
-    return false;
-  }
-
-  if (result.exitCode !== 0 || !isNativeT3ThreadMetaUpdateResult(result.stdout)) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.rename.dispatchFailed", {
-      exitCode: result.exitCode,
-      hasStderr: result.stderr.length > 0,
-      hasStdout: result.stdout.length > 0,
-      projectId: project.projectId,
-      sessionId: session.sessionId,
-      source,
-      titleSource,
-    });
-    return false;
-  }
-
-  persistNativeT3SessionTitle(project.projectId, session.sessionId, normalizedTitle, {
-    preserveExplicitTitle: true,
-    titleSource,
-  });
-  const terminalState = terminalStateById.get(session.sessionId);
-  if (terminalState) {
-    terminalState.terminalTitle = normalizedTitle;
-  }
-  syncGxserverNativeT3Session(
-    project.projectId,
-    session.sessionId,
-    {
-      lifecycleState: "running",
-      serverOrigin: session.t3.serverOrigin || NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-      t3ProjectId: session.t3.projectId,
-      t3SidebarMode: session.t3.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      threadId,
-      title: normalizedTitle,
-      preserveExplicitTitle: true,
-      titleSource,
-      workspaceRoot: session.t3.workspaceRoot || project.path,
-    },
-    titleSource === "generated" ? "generated-t3-thread-rename" : "manual-t3-thread-rename",
-  );
-  appendSessionTitleRenameTraceDebugLog("nativeSidebar.renameSession.t3ThreadMetaUpdated", {
-    projectId: project.projectId,
-    requestedTitleLength: normalizedTitle.length,
-    sessionId: session.sessionId,
-    source,
-    titleSource,
-  });
-  return true;
-}
-
-async function resolveNativeT3ThreadTitle(
-  threadId: string,
-  fallbackTitle?: string,
-): Promise<string | undefined> {
-  const normalizedFallback = normalizeNativeT3ThreadTitle(fallbackTitle);
-  if (normalizedFallback) {
-    return normalizedFallback;
-  }
-
-  try {
-    return await fetchNativeT3ThreadTitle(threadId);
-  } catch (error) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.fetch.failed", {
-      error: error instanceof Error ? error.message : String(error),
-      threadId,
-    });
-    return undefined;
-  }
-}
-
-function findNativeT3ProjectSession(
-  projectId: string,
-  sessionId: string,
-): T3SessionRecord | undefined {
-  const project = findProject(projectId);
-  const session = project ? findSessionRecordInProject(project, sessionId) : undefined;
-  return session?.kind === "t3" ? session : undefined;
-}
-
-async function syncNativeT3ProjectSessionTitleFromRuntime(
-  projectId: string,
-  sessionId: string,
-  threadId: string,
-  fallbackTitle?: string,
-): Promise<boolean> {
-  const title = await resolveNativeT3ThreadTitle(threadId, fallbackTitle);
-  const normalizedTitle = normalizeNativeT3ThreadTitle(title);
-  if (!persistNativeT3SessionTitle(projectId, sessionId, normalizedTitle)) {
-    return false;
-  }
-  syncGxserverNativeT3Session(
-    projectId,
-    sessionId,
-    {
-      lifecycleState: "running",
-      threadId,
-      title: normalizedTitle,
-      titleSource: "generated",
-    },
-    "t3-title-sync",
-  );
-  publish();
-  return true;
-}
-
-function scheduleNativeT3SessionTitleSync(
-  projectId: string,
-  sessionId: string,
-  threadId: string,
-  fallbackTitle?: string,
-): void {
-  /**
-   * CDXC:T3Code 2026-05-04-04:41
-   * Binding a newly opened T3 thread and naming its ghostex sidebar card are
-   * separate concerns. If T3 has not projected the thread title yet, retry the
-   * snapshot lookup for the bound session without changing its thread binding.
-   */
-  const fallback = normalizeNativeT3ThreadTitle(fallbackTitle);
-  void (async () => {
-    for (const delayMs of NATIVE_T3_TITLE_SYNC_RETRY_DELAYS_MS) {
-      await delay(delayMs);
-      const session = findNativeT3ProjectSession(projectId, sessionId);
-      if (!session) {
-        return;
-      }
-      const boundThreadId = normalizeNativeT3ThreadId(
-        session.t3.boundThreadId || session.t3.threadId,
-      );
-      if (boundThreadId !== normalizeNativeT3ThreadId(threadId)) {
-        return;
-      }
-      const synced = await syncNativeT3ProjectSessionTitleFromRuntime(
-        projectId,
-        sessionId,
-        threadId,
-        fallback,
-      );
-      if (synced) {
-        return;
-      }
-    }
-  })().catch((error) => {
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadTitle.retry.failed", {
-      error: error instanceof Error ? error.message : String(error),
-      projectId,
-      sessionId,
-      threadId,
-    });
-  });
-}
-
-async function fetchNativeT3ThreadTitle(threadId: string): Promise<string | undefined> {
-  const normalizedThreadId = normalizeNativeT3ThreadId(threadId);
-  if (!normalizedThreadId) {
-    return undefined;
-  }
-
-  const ownerBearerToken = await waitForNativeT3OwnerBearerToken();
-  const result = await runNativeProcess(
-    "/bin/sh",
-    [
-      "-lc",
-      [
-        "/usr/bin/curl",
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--max-time",
-        "5",
-        "-H",
-        '"authorization: Bearer $T3_OWNER_BEARER"',
-        '"$T3_ORIGIN/api/orchestration/snapshot"',
-      ].join(" "),
-    ],
-    {
-      env: {
-        T3_ORIGIN: NATIVE_T3_REMOTE_ACCESS_ORIGIN,
-        T3_OWNER_BEARER: ownerBearerToken,
-      },
-    },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || result.stdout || "T3 snapshot request failed.");
-  }
-
-  const snapshot = JSON.parse(result.stdout) as {
-    threads?: Array<{ deletedAt?: unknown; id?: unknown; title?: unknown }>;
-  };
-  const thread = snapshot.threads?.find((candidate) => {
-    if (typeof candidate.id !== "string" || candidate.deletedAt != null) {
-      return false;
-    }
-    return normalizeNativeT3ThreadId(candidate.id) === normalizedThreadId;
-  });
-  return typeof thread?.title === "string" ? normalizeNativeT3ThreadTitle(thread.title) : undefined;
-}
-
-function handleNativeT3ThreadReady(
-  sidebarSessionId: string,
-  hostEvent: Extract<NativeHostEvent, { type: "t3ThreadReady" }>,
-): void {
-  const reference = resolveSidebarSessionReference(sidebarSessionId);
-  const currentSession = findSessionRecordInProject(reference.project, reference.sessionId);
-  if (
-    currentSession?.kind === "t3" &&
-    normalizeNativeT3ThreadId(currentSession.t3.boundThreadId || currentSession.t3.threadId) ===
-      normalizeNativeT3ThreadId(hostEvent.threadId) &&
-    currentSession.t3.projectId === hostEvent.projectId &&
-    currentSession.t3.serverOrigin === hostEvent.serverOrigin &&
-    currentSession.t3.workspaceRoot === hostEvent.workspaceRoot
-  ) {
-    /**
-     * CDXC:T3Code 2026-06-23-06:09:
-     * T3 startup can replay t3ThreadReady while WebKit is still retrying the
-     * same native pane load. Treat identical bindings as no-ops so retries do
-     * not republish workspace state or look like new T3 session creation.
-     */
-    return;
-  }
-  updateProjectWorkspace(
-    reference.project.projectId,
-    (workspace) =>
-      setT3SessionMetadataInSimpleWorkspace(workspace, reference.sessionId, {
-        ...(currentSession?.kind === "t3" ? currentSession.t3 : {}),
-        boundThreadId: hostEvent.threadId,
-        createdAt:
-          currentSession?.kind === "t3"
-            ? (currentSession.t3.createdAt ?? currentSession.createdAt)
-            : undefined,
-        environmentId: hostEvent.environmentId,
-        ghostexProjectId: reference.project.projectId,
-        ghostexSessionId: reference.sessionId,
-        projectId: hostEvent.projectId,
-        serverOrigin: hostEvent.serverOrigin,
-        t3SidebarMode:
-          currentSession?.kind === "t3"
-            ? (currentSession.t3.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE)
-            : GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-        threadId: hostEvent.threadId,
-        workspaceRoot: hostEvent.workspaceRoot,
-      }).snapshot,
-  );
-  syncGxserverNativeT3Session(
-    reference.project.projectId,
-    reference.sessionId,
-    {
-      createdAt:
-        currentSession?.kind === "t3"
-          ? (currentSession.t3.createdAt ?? currentSession.createdAt)
-          : undefined,
-      environmentId: hostEvent.environmentId,
-      lifecycleState: "running",
-      serverOrigin: hostEvent.serverOrigin,
-      t3SidebarMode:
-        currentSession?.kind === "t3"
-          ? (currentSession.t3.t3SidebarMode ?? GHOSTEX_T3_DEFAULT_SIDEBAR_MODE)
-          : GHOSTEX_T3_DEFAULT_SIDEBAR_MODE,
-      t3ProjectId: hostEvent.projectId,
-      threadId: hostEvent.threadId,
-      workspaceRoot: hostEvent.workspaceRoot,
-    },
-    "t3-thread-ready",
-  );
-  publish();
-  void syncNativeT3SessionTitleFromRuntime(sidebarSessionId, hostEvent.threadId);
-}
-
-async function syncNativeT3SessionTitleFromRuntime(
-  sidebarSessionId: string,
-  threadId: string,
-  fallbackTitle?: string,
-): Promise<void> {
-  const reference = resolveSidebarSessionReference(sidebarSessionId);
-  const synced = await syncNativeT3ProjectSessionTitleFromRuntime(
-    reference.project.projectId,
-    reference.sessionId,
-    threadId,
-    fallbackTitle,
-  );
-  if (!synced) {
-    scheduleNativeT3SessionTitleSync(
-      reference.project.projectId,
-      reference.sessionId,
-      threadId,
-      fallbackTitle,
-    );
-  }
-}
-
-async function relinkNativeT3SessionThread(
-  sidebarSessionId: string,
-  threadId: string,
-): Promise<void> {
-  const normalizedThreadId = normalizeNativeT3ThreadId(threadId);
-  if (!normalizedThreadId) {
-    return;
-  }
-
-  const reference = resolveSidebarSessionReference(sidebarSessionId);
-  const session = findSessionRecordInProject(reference.project, reference.sessionId);
-  if (session?.kind !== "t3") {
-    return;
-  }
-
-  const title = await resolveNativeT3ThreadTitle(threadId);
-  updateProjectWorkspace(
-    reference.project.projectId,
-    (workspace) =>
-      setT3SessionMetadataInSimpleWorkspace(workspace, reference.sessionId, {
-        ...session.t3,
-        boundThreadId: threadId.trim(),
-        threadId: threadId.trim(),
-      }).snapshot,
-  );
-  persistNativeT3SessionTitle(reference.project.projectId, reference.sessionId, title);
-  syncGxserverNativeT3Session(
-    reference.project.projectId,
-    reference.sessionId,
-    {
-      lifecycleState: "running",
-      threadId: threadId.trim(),
-      title,
-      titleSource: normalizeNativeT3ThreadTitle(title) ? "generated" : undefined,
-    },
-    "manual-thread-link",
-  );
-  const refreshedProject = findProject(reference.project.projectId) ?? reference.project;
-  const refreshedSession = findSessionRecordInProject(refreshedProject, reference.sessionId);
-  if (refreshedSession?.kind === "t3") {
-    restoreNativeT3Session(refreshedProject, refreshedSession, "manual-thread-link");
-  }
-  publish();
-}
-
-async function handleNativeT3ThreadChanged(
-  sidebarSessionId: string,
-  threadId: string,
-  title?: string,
-): Promise<void> {
-  /**
-   * CDXC:T3Code 2026-05-04-03:06
-   * T3's in-app navigation changes the web route inside one WKWebView. ghostex keeps
-   * card identity stable by focusing/creating the card for the navigated thread,
-   * then re-routing the source WKWebView back to its bound thread without taking
-   * focus back from the user's selected target thread.
-   */
-  if (isNativeT3DraftRouteThreadId(threadId)) {
-    return;
-  }
-  const normalizedThreadId = normalizeNativeT3ThreadId(threadId);
-  if (!normalizedThreadId || nativeT3ThreadChangeInFlightBySessionId.has(sidebarSessionId)) {
-    return;
-  }
-
-  const reference = resolveSidebarSessionReference(sidebarSessionId);
-  const session = findSessionRecordInProject(reference.project, reference.sessionId);
-  if (session?.kind !== "t3") {
-    return;
-  }
-
-  const currentBoundThreadId = session.t3.boundThreadId || session.t3.threadId;
-  if (normalizeNativeT3ThreadId(currentBoundThreadId) === normalizedThreadId) {
-    await syncNativeT3SessionTitleFromRuntime(sidebarSessionId, threadId, title);
-    return;
-  }
-
-  nativeT3ThreadChangeInFlightBySessionId.add(sidebarSessionId);
-  try {
-    const resolvedTitle = await resolveNativeT3ThreadTitle(threadId, title);
-    let targetSession = findNativeT3SessionBoundToThread(reference.project, threadId, {
-      excludeSessionId: reference.sessionId,
-    });
-
-    appendAgentDetectionDebugLog("nativeSidebar.t3ThreadChanged.bindingPreservationStart", {
-      currentSessionId: reference.sessionId,
-      currentThreadId: currentBoundThreadId,
-      nextThreadId: threadId,
-      reusedSessionId: targetSession?.sessionId,
-      title: resolvedTitle,
-    });
-
-    if (targetSession) {
-      if (
-        !persistNativeT3SessionTitle(
-          reference.project.projectId,
-          targetSession.sessionId,
-          resolvedTitle,
-        )
-      ) {
-        scheduleNativeT3SessionTitleSync(
-          reference.project.projectId,
-          targetSession.sessionId,
-          threadId,
-          title,
-        );
-      }
-    } else {
-      targetSession = createNativeT3SessionForBoundThread(
-        reference.project,
-        session,
-        threadId.trim(),
-        resolvedTitle,
-      );
-      if (targetSession && !normalizeNativeT3ThreadTitle(resolvedTitle)) {
-        scheduleNativeT3SessionTitleSync(
-          reference.project.projectId,
-          targetSession.sessionId,
-          threadId,
-          title,
-        );
-      }
-    }
-
-    const refreshedSource = findSessionRecordInProject(reference.project, reference.sessionId);
-    if (refreshedSource?.kind === "t3") {
-      restoreNativeT3Session(reference.project, refreshedSource, "thread-switch-restored-binding", {
-        focusAfterRestore: false,
-      });
-    }
-
-    if (targetSession) {
-      if (activeProjectId !== reference.project.projectId) {
-        focusProject(reference.project.projectId);
-      }
-      focusTerminal(targetSession.sessionId);
-    } else {
-      publish();
-    }
-  } finally {
-    nativeT3ThreadChangeInFlightBySessionId.delete(sidebarSessionId);
-  }
-}
-
-function handleNativeT3ActivityChanged(
-  sidebarSessionId: string,
-  activity: "attention" | "idle" | "working",
-): void {
-  const reference = resolveSidebarSessionReference(sidebarSessionId);
-  const session = findSessionRecordInProject(reference.project, reference.sessionId);
-  if (session?.kind !== "t3") {
-    return;
-  }
-  terminalStateById.set(reference.sessionId, {
-    ...(terminalStateById.get(reference.sessionId) ?? {
-      lifecycleState: "running" as const,
-      terminalTitle: session.title || "T3 Code",
-    }),
-    activity,
-    lifecycleState: session.isSleeping === true ? "sleeping" : "running",
-    terminalTitle: session.title || "T3 Code",
-  });
-  syncGxserverNativeT3Session(
-    reference.project.projectId,
-    reference.sessionId,
-    {
-      activity,
-      lifecycleState: session.isSleeping === true ? "sleeping" : "running",
-    },
-    "t3-activity-changed",
-  );
-  publish();
 }
 
 function restoreNativeBrowserSession(
@@ -28017,7 +26457,7 @@ function applyGxserverSessionTransition(
     session?.kind === "terminal"
       ? (getTerminalProviderSessionInfo(session)?.provider ?? session.sessionPersistenceProvider)
       : undefined;
-  const canTransitionLocalSession = session?.kind === "terminal" || session?.kind === "t3";
+  const canTransitionLocalSession = session?.kind === "terminal";
   const canTransitionPresentationSession =
     session === undefined && hasGxserverPresentationZmxRuntime(presentationSession);
   if (
@@ -28052,23 +26492,12 @@ function applyGxserverSessionTransition(
     presentation: presentationSession,
   });
   if (!useProviderTransition) {
-    if (session?.kind === "t3") {
-      syncGxserverNativeT3Session(
-        reference.project.projectId,
-        reference.sessionId,
-        {
-          lifecycleState: action === "sleep" ? "sleeping" : "stopped",
-        },
-        action === "sleep" ? "sleepSession" : "closeTerminal",
-      );
-    } else {
-      updateGxserverSessionLifecycleOnly(
-        reference.project.projectId,
-        reference.sessionId,
-        action === "sleep" ? "sleeping" : "stopped",
-        action === "sleep" ? "sleepSession" : "closeTerminal",
-      );
-    }
+    updateGxserverSessionLifecycleOnly(
+      reference.project.projectId,
+      reference.sessionId,
+      action === "sleep" ? "sleeping" : "stopped",
+      action === "sleep" ? "sleepSession" : "closeTerminal",
+    );
     appendTerminalFocusDebugLog("nativeSidebar.gxserverLifecycleOnly.applied", {
       action,
       focusTarget,
@@ -28350,9 +26779,7 @@ function closeTerminal(
     preservePersistenceSession: options.preservePersistenceSession || shouldStopZmxThroughGxserver,
     sessionId: nativeSessionId,
     type:
-      sessionRecord?.kind === "t3" || sessionRecord?.kind === "browser"
-        ? "closeWebPane"
-        : "closeTerminal",
+      sessionRecord?.kind === "browser" ? "closeWebPane" : "closeTerminal",
   });
   if (shouldRemoveProjectAfterClose) {
     /*
@@ -28633,13 +27060,9 @@ function focusTerminal(sessionId: string, options: { forceNativeLayoutSync?: boo
     },
     { force: forceSidebarCardFocusTrace },
   );
-  if (sessionRecord?.kind === "t3" || sessionRecord?.kind === "browser") {
+  if (sessionRecord?.kind === "browser") {
     if (!nativeSessionIdBySidebarSessionId.has(reference.sessionId)) {
-      if (sessionRecord.kind === "t3") {
-        restoreNativeT3Session(activeProject(), sessionRecord, "focus-restored-session");
-      } else {
-        restoreNativeBrowserSession(activeProject(), sessionRecord, "focus-restored-session");
-      }
+      restoreNativeBrowserSession(activeProject(), sessionRecord, "focus-restored-session");
     }
     if (shouldKeepProjectEditorOpen) {
       appendSidebarWakeScrollDebugLog("nativeFocusPublishProjectEditorRestoredWebPane", {
@@ -30567,14 +28990,14 @@ function findTerminalSessionInProject(
   return undefined;
 }
 
-type NativeSidebarRenameSessionRecord = TerminalSessionRecord | T3SessionRecord;
+type NativeSidebarRenameSessionRecord = TerminalSessionRecord;
 
 function findRenameableSidebarSessionInProject(
   project: NativeProject,
   sessionId: string,
 ): NativeSidebarRenameSessionRecord | undefined {
   const session = findSessionRecordInProject(project, sessionId);
-  if (session?.kind === "terminal" || session?.kind === "t3") {
+  if (session?.kind === "terminal") {
     return session;
   }
   return undefined;
@@ -30694,29 +29117,12 @@ async function renameNativeSidebarTerminalSession(
     }
   }
 
-  const titleSource: NativeT3SidebarRenameTitleSource = shouldGenerateTitle ? "generated" : "user";
-  if (session.kind === "t3") {
-    const didRename = await renameNativeT3ThreadTitle(
-      reference.project,
-      session,
-      requestedTitle,
-      titleSource,
-      source,
-    );
-    setNativeManualGeneratedRenameInProgress(reference.sessionId, false);
-    if (!didRename) {
-      showNativeMessage("error", "Could not rename the T3 Code thread in T3.");
-      return;
-    }
-    publish();
-    return;
-  }
-
   const nativeSessionId = nativeSessionIdForProjectSidebarSession(
     reference.project.projectId,
     reference.sessionId,
   );
   const normalizedRenameTitle = normalizeTerminalTitle(requestedTitle) ?? requestedTitle;
+  const titleSource: "generated" | "user" = shouldGenerateTitle ? "generated" : "user";
   const agentName = terminalState?.agentName ?? session.agentName;
   const shouldUseGxserverRenameRequest = isCanonicalGxserverProjectSession(
     reference.project.projectId,
@@ -30944,69 +29350,6 @@ function stopNativeSleepingSessionRuntime(
   });
 }
 
-function setNativeT3SessionSleeping(
-  reference: { project: NativeProject; sessionId: string },
-  session: T3SessionRecord,
-  sleeping: boolean,
-  options: {
-    focusTransition?: boolean;
-    publish?: boolean;
-    transitionOrigin?: NativeGxserverSessionTransitionOrigin;
-  } = {},
-): void {
-  /*
-  CDXC:T3Code 2026-06-23-06:19:
-  T3 web panes use the same visible sleep/wake semantics as native panes: sleep
-  closes the WKWebView surface but keeps the sidebar card and gxserver row,
-  while wake recreates the embedded pane against the stored T3 thread binding.
-  */
-  const wasSleeping = session.isSleeping === true;
-  if (sleeping && wasSleeping) {
-    return;
-  }
-  const transitionOrigin =
-    options.transitionOrigin ?? createProjectSessionListTransitionOrigin(reference.project);
-  const transitionResult: NativeGxserverSessionTransitionResult = sleeping
-    ? applyGxserverSessionTransition(reference, session, "sleep", transitionOrigin)
-    : { handled: false, committed: false };
-  updateProjectWorkspace(
-    reference.project.projectId,
-    (workspace) =>
-      setSessionSleepingInSimpleWorkspace(workspace, reference.sessionId, sleeping).snapshot,
-  );
-  if (sleeping) {
-    const nativeSessionId = forgetNativeSessionMappingForProject(
-      reference.project.projectId,
-      reference.sessionId,
-    );
-    postNative({ sessionId: nativeSessionId, type: "closeWebPane" });
-    setGxserverPresentationSessionLifecycleLocally(
-      reference.project.projectId,
-      reference.sessionId,
-      "sleeping",
-      "sleep-t3-session",
-    );
-  } else {
-    syncGxserverNativeT3Session(
-      reference.project.projectId,
-      reference.sessionId,
-      { lifecycleState: "running" },
-      "wake-t3-session",
-    );
-    const refreshedProject = findProject(reference.project.projectId) ?? reference.project;
-    const refreshedSession = findSessionRecordInProject(refreshedProject, reference.sessionId);
-    if (refreshedSession?.kind === "t3") {
-      restoreNativeT3Session(refreshedProject, refreshedSession, "wake-t3-session");
-    }
-  }
-  if (options.publish !== false) {
-    publish();
-  }
-  if (sleeping && options.focusTransition !== false) {
-    focusGxserverSessionTransitionTarget(transitionResult.focusTarget, transitionOrigin.kind);
-  }
-}
-
 function setNativeSessionSleeping(
   sessionId: string,
   sleeping: boolean,
@@ -31020,10 +29363,6 @@ function setNativeSessionSleeping(
   const sessionRecord = findSessionRecordInProject(reference.project, reference.sessionId);
   if (sessionRecord?.kind === "browser") {
     setNativeBrowserSessionSleeping(reference.project.projectId, reference.sessionId, sleeping);
-    return;
-  }
-  if (sessionRecord?.kind === "t3") {
-    setNativeT3SessionSleeping(reference, sessionRecord, sleeping, options);
     return;
   }
   const session = sessionRecord?.kind === "terminal" ? sessionRecord : undefined;
@@ -34178,7 +32517,7 @@ function listNativeCliSessionsFromSidebarMessage(
   for (const group of sidebarMessage.groups) {
     const projectContext = group.projectContext;
     for (const sidebarSession of group.sessions) {
-      if (sidebarSession.sessionKind !== "terminal" && sidebarSession.sessionKind !== "t3") {
+      if (sidebarSession.sessionKind !== "terminal") {
         continue;
       }
       const combinedReference = parseCombinedProjectSessionId(sidebarSession.sessionId);
@@ -34659,9 +32998,6 @@ async function runCliAgent(agentId: string, groupId?: string): Promise<SessionRe
   const agent = agents.find((candidate) => candidate.agentId === agentId);
   if (!agent?.command) {
     throw new Error(`Unknown or unconfigured agent: ${agentId}`);
-  }
-  if (agent.agentId === "t3") {
-    return createNativeT3Session(groupId);
   }
   return launchAgentTerminal(agent, groupId);
 }
@@ -36763,226 +35099,6 @@ function focusExistingRemoteAttachTerminal(target: RemoteAttachTarget): boolean 
   return true;
 }
 
-function resolveNativeBrowserAccessT3Session(
-  preferredSessionId?: string,
-): T3SessionRecord | undefined {
-  const preferredReference = preferredSessionId
-    ? resolveSidebarSessionReference(preferredSessionId)
-    : undefined;
-  const project = preferredReference?.project ?? activeProject();
-  const candidateSessionIds = new Set<string>();
-  if (preferredReference) {
-    candidateSessionIds.add(preferredReference.sessionId);
-  }
-
-  for (const group of project.workspace.groups) {
-    if (group.snapshot.focusedSessionId) {
-      candidateSessionIds.add(group.snapshot.focusedSessionId);
-    }
-  }
-
-  for (const sessionId of candidateSessionIds) {
-    const sessionRecord = findSessionRecordInProject(project, sessionId);
-    if (sessionRecord?.kind === "t3") {
-      return sessionRecord;
-    }
-  }
-
-  for (const group of project.workspace.groups) {
-    const sessionRecord = group.snapshot.sessions.find(
-      (candidate): candidate is T3SessionRecord => candidate.kind === "t3",
-    );
-    if (sessionRecord) {
-      return sessionRecord;
-    }
-  }
-
-  return undefined;
-}
-
-function resolveOrCreateNativeBrowserAccessT3Session(
-  preferredSessionId?: string,
-): T3SessionRecord | undefined {
-  const existingSession = resolveNativeBrowserAccessT3Session(preferredSessionId);
-  if (existingSession) {
-    return existingSession;
-  }
-
-  const preferredReference = preferredSessionId
-    ? resolveSidebarSessionReference(preferredSessionId)
-    : undefined;
-  if (preferredReference && activeProjectId !== preferredReference.project.projectId) {
-    focusProject(preferredReference.project.projectId);
-  }
-  return createNativeT3Session();
-}
-
-async function requestNativeT3SessionBrowserAccess(preferredSessionId?: string): Promise<void> {
-  /**
-   * CDXC:T3RemoteAccess 2026-05-02-01:18
-   * Native ghostex cannot delegate Remote Access to the extension controller. It
-   * must reuse the managed desktop T3 runtime, issue a one-time pairing link,
-   * and send the QR payload through the shared sidebar modal contract.
-   */
-  const sessionRecord = resolveOrCreateNativeBrowserAccessT3Session(preferredSessionId);
-  if (!sessionRecord) {
-    showNativeMessage("error", "Could not start T3 Code for remote access.");
-    return;
-  }
-
-  postNative({ cwd: sessionRecord.t3.workspaceRoot, type: "startT3CodeRuntime" });
-
-  try {
-    const ownerBearerToken = await waitForNativeT3OwnerBearerToken();
-    const credential = await issueNativeT3PairingCredential(ownerBearerToken);
-    const localPairingUrl = buildT3PairingUrl(NATIVE_T3_REMOTE_ACCESS_ORIGIN, credential);
-    const accessLink = await resolveNativeT3BrowserAccessLink(localPairingUrl);
-    sidebarBus.post({
-      endpointUrl: accessLink.endpointUrl,
-      localUrl: accessLink.localUrl,
-      mode: accessLink.mode,
-      note: accessLink.note,
-      sessionId: sessionRecord.sessionId,
-      sessionTitle: sessionRecord.title,
-      tailscaleEnabled: accessLink.tailscaleEnabled,
-      type: "showT3BrowserAccess",
-    });
-  } catch (error) {
-    appendAgentDetectionDebugLog("nativeSidebar.t3BrowserAccess.failed", {
-      error: error instanceof Error ? error.message : String(error),
-      sessionId: sessionRecord.sessionId,
-    });
-    showNativeMessage(
-      "error",
-      error instanceof Error ? error.message : "Could not create the T3 remote access link.",
-    );
-  }
-}
-
-async function waitForNativeT3OwnerBearerToken(): Promise<string> {
-  for (let attempt = 0; attempt < NATIVE_T3_REMOTE_ACCESS_AUTH_ATTEMPTS; attempt += 1) {
-    const token = await readNativeT3OwnerBearerToken();
-    if (token) {
-      return token;
-    }
-    await delay(NATIVE_T3_REMOTE_ACCESS_AUTH_RETRY_MS);
-  }
-
-  throw new Error("T3 Code is still starting. Try Remote Access again in a moment.");
-}
-
-async function readNativeT3OwnerBearerToken(): Promise<string | undefined> {
-  const ghostexHomeDir = window.__ghostex_NATIVE_HOST__?.ghostexHomeDir;
-  if (!ghostexHomeDir) {
-    return undefined;
-  }
-
-  const authStatePath = `${ghostexHomeDir.replace(/\/+$/, "")}/t3-runtime/auth-state.json`;
-  const result = await runNativeProcess("/bin/cat", [authStatePath]);
-  if (result.exitCode !== 0) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(result.stdout) as { ownerBearerToken?: unknown; provider?: unknown };
-    return parsed.provider === "t3code" && typeof parsed.ownerBearerToken === "string"
-      ? parsed.ownerBearerToken.trim() || undefined
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function issueNativeT3PairingCredential(ownerBearerToken: string): Promise<string> {
-  const requestBody = JSON.stringify({ label: "Ghostex Remote Access" });
-  const result = await runNativeProcess(
-    "/bin/sh",
-    [
-      "-lc",
-      [
-        "/usr/bin/curl",
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--max-time",
-        "5",
-        "-X",
-        "POST",
-        `${NATIVE_T3_REMOTE_ACCESS_ORIGIN}/api/auth/pairing-token`,
-        "-H",
-        '"authorization: Bearer $T3_OWNER_BEARER"',
-        "-H",
-        '"content-type: application/json"',
-        "--data",
-        '"$T3_PAIRING_BODY"',
-      ].join(" "),
-    ],
-    {
-      env: {
-        T3_OWNER_BEARER: ownerBearerToken,
-        T3_PAIRING_BODY: requestBody,
-      },
-    },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(`Could not create the T3 pairing link: ${result.stderr || result.stdout}`);
-  }
-
-  const parsed = JSON.parse(result.stdout) as { credential?: unknown };
-  if (typeof parsed.credential !== "string" || !parsed.credential.trim()) {
-    throw new Error("T3 pairing link response did not include a credential.");
-  }
-  return parsed.credential.trim();
-}
-
-async function resolveNativeT3BrowserAccessLink(localUrl: string): Promise<{
-  endpointUrl: string;
-  localUrl: string;
-  mode: "external" | "local-network" | "local-only" | "tailscale";
-  note: string;
-  tailscaleEnabled: boolean;
-}> {
-  const parsedLocalUrl = new URL(localUrl);
-  const [tailscaleHost, localNetworkHost] = await Promise.all([
-    detectNativeTailscaleIpv4(),
-    detectNativeLocalNetworkIpv4(),
-  ]);
-  const localNetworkUrl = localNetworkHost
-    ? replaceT3AccessUrlHost(parsedLocalUrl, localNetworkHost)
-    : undefined;
-
-  if (tailscaleHost) {
-    return {
-      endpointUrl: replaceT3AccessUrlHost(parsedLocalUrl, tailscaleHost),
-      localUrl: localNetworkUrl ?? localUrl,
-      mode: "tailscale",
-      note: localNetworkUrl
-        ? "QR code and Copy link use your machine's Tailscale address. Open link uses your machine's local network address."
-        : "QR code and Copy link use your machine's Tailscale address. No local network address was detected, so Open link falls back to this machine only.",
-      tailscaleEnabled: true,
-    };
-  }
-
-  if (localNetworkHost) {
-    const resolvedLocalNetworkUrl = replaceT3AccessUrlHost(parsedLocalUrl, localNetworkHost);
-    return {
-      endpointUrl: resolvedLocalNetworkUrl,
-      localUrl: resolvedLocalNetworkUrl,
-      mode: "local-network",
-      note: "Tailscale is not connected, so QR code, Copy link, and Open link all use your machine's local network address.",
-      tailscaleEnabled: false,
-    };
-  }
-
-  return {
-    endpointUrl: localUrl,
-    localUrl,
-    mode: "local-only",
-    note: "No Tailscale or local network address was detected, so QR code, Copy link, and Open link only work on this machine for now.",
-    tailscaleEnabled: false,
-  };
-}
-
 async function detectNativeTailscaleIpv4(): Promise<string | undefined> {
   const result = await runNativeProcess("/usr/bin/env", ["tailscale", "ip", "-4"]);
   if (result.exitCode !== 0) {
@@ -37013,18 +35129,6 @@ async function detectNativeLocalNetworkIpv4(): Promise<string | undefined> {
     .find(isIpv4Host);
 }
 
-function buildT3PairingUrl(origin: string, credential: string): string {
-  const url = new URL("/pair", origin);
-  url.hash = `token=${encodeURIComponent(credential)}`;
-  return url.toString();
-}
-
-function replaceT3AccessUrlHost(url: URL, host: string): string {
-  const nextUrl = new URL(url.toString());
-  nextUrl.hostname = host;
-  return nextUrl.toString();
-}
-
 function isIpv4Host(value: string): boolean {
   const parts = value.split(".");
   if (parts.length !== 4) {
@@ -37049,13 +35153,12 @@ function refreshDaemonSessionsState(): void {
   const now = new Date().toISOString();
   /*
   CDXC:RunningSessionsModal 2026-06-02-20:10:
-  The Running Ghostex Sessions modal is a user-visible inventory. Once gxserver presentation is active, terminal rows must come from the same hydrate groups as the sidebar so stale native project/session storage cannot appear as another canonical session list. T3 panes remain macOS-hosted local surfaces and are still collected from native pane storage.
+  The Running Ghostex Sessions modal is a user-visible inventory. Once gxserver presentation is active, terminal rows must come from the same hydrate groups as the sidebar so stale native project/session storage cannot appear as another canonical session list.
   */
   const sidebarMessage = gxserverStartupSnapshot?.presentation ? buildSidebarMessage() : undefined;
   const sessions = sidebarMessage
     ? createDaemonTerminalSessionsFromSidebarMessage(sidebarMessage, now)
     : createDaemonTerminalSessionsFromNativeProjects(now);
-  const t3Sessions = createDaemonT3SessionsFromNativeProjects(now);
   const message: SidebarDaemonSessionsStateMessage = {
     daemon: {
       pid: 0,
@@ -37064,15 +35167,6 @@ function refreshDaemonSessionsState(): void {
       startedAt: now,
     },
     sessions,
-    t3Server:
-      t3Sessions.length > 0
-        ? {
-            pid: 0,
-            port: 3774,
-            startedAt: now,
-          }
-        : undefined,
-    t3Sessions,
     type: "daemonSessionsState",
   };
   sidebarBus.post(message);
@@ -37194,39 +35288,6 @@ function createDaemonTerminalSessionsFromNativeProjects(now: string): SidebarDae
     }
   }
   return sessions;
-}
-
-function createDaemonT3SessionsFromNativeProjects(now: string): SidebarT3SessionItem[] {
-  const t3Sessions: SidebarT3SessionItem[] = [];
-  for (const project of projects) {
-    for (const group of project.workspace.groups) {
-      for (const session of group.snapshot.sessions) {
-        if (session.kind !== "t3") {
-          continue;
-        }
-        const isSleeping = session.isSleeping === true;
-        const nativeT3State = terminalStateById.get(session.sessionId);
-        const t3ThreadId = getNativeT3SessionBoundThreadId(session);
-        t3Sessions.push({
-          activity: nativeT3State?.activity ?? "idle",
-          detail: session.t3?.serverOrigin ?? "Native T3 Code pane",
-          isCurrentWorkspace: project.projectId === activeProjectId,
-          isFocused: group.snapshot.focusedSessionId === session.sessionId,
-          isLocalOnly: true,
-          isRunning: !isSleeping,
-          isSleeping,
-          lastInteractionAt: now,
-          ownership: "local",
-          sessionId: session.sessionId,
-          ...(t3ThreadId ? { threadId: t3ThreadId } : {}),
-          title: session.title,
-          workspaceId: project.projectId,
-          workspaceRoot: session.t3?.workspaceRoot ?? project.path,
-        });
-      }
-    }
-  }
-  return t3Sessions;
 }
 
 function closeAllNativeSessions(): void {
@@ -39154,7 +37215,7 @@ async function createNativeChat(title = "chat"): Promise<void> {
 async function createNativeAgentChat(agent: SidebarAgentButton): Promise<void> {
   /**
    * CDXC:QuickAgents 2026-06-08-18:25:
-   * Quick's section-header agent picker is projectless even though it reuses the project-header picker UI. Create and focus a new Quick chat workspace first, then launch the selected provider through the existing T3 or terminal-backed agent path so the agent never lands in the active code project.
+   * Quick's section-header agent picker is projectless even though it reuses the project-header picker UI. Create and focus a new Quick chat workspace first, then launch the selected terminal-backed provider so the agent never lands in the active code project.
    */
   const createdAt = new Date();
   const chatTitle = agent.name.trim() || "agent";
@@ -39189,10 +37250,6 @@ async function createNativeAgentChat(agent: SidebarAgentButton): Promise<void> {
     writeStoredProjects("createNativeAgentChat");
   }
   focusProject(projectId);
-  if (agent.agentId === "t3") {
-    createNativeT3Session();
-    return;
-  }
   if (agent.command) {
     await launchAgentTerminal(agent);
     return;
@@ -44162,7 +42219,7 @@ function disposeNativeRecentProjectSessionSurface(
   clearNativeSessionAttentionTracking(session.sessionId);
   postNative({
     sessionId: nativeSessionId,
-    type: session.kind === "t3" || session.kind === "browser" ? "closeWebPane" : "closeTerminal",
+    type: session.kind === "browser" ? "closeWebPane" : "closeTerminal",
   });
 }
 
@@ -44399,9 +42456,6 @@ function focusProject(projectId: string): void {
     loadActiveProjectCommands();
   }
   writeStoredProjects("focusProject");
-  if (didSwitchProject) {
-    scheduleNativeT3RuntimePrewarm(projectId, "focusProject");
-  }
   void refreshGitState();
   void refreshProjectDiffStats(projectId);
   const focusedSessionId = activeSnapshot().focusedSessionId;
@@ -44433,42 +42487,6 @@ function focusProject(projectId: string): void {
     return;
   }
   publish();
-}
-
-function scheduleNativeT3RuntimePrewarm(projectId: string, reason: string): void {
-  /**
-   * CDXC:T3Code 2026-05-24-17:35:
-   * The first T3 agent click should not pay the full Bun/server cold-start path.
-   * Prewarm the managed runtime shortly after startup and project focus; the native wrapper still self-exits after the existing idle window when no awake T3 session refreshes the heartbeat.
-   */
-  window.clearTimeout(pendingNativeT3RuntimePrewarmTimeout);
-  pendingNativeT3RuntimePrewarmTimeout = window.setTimeout(() => {
-    pendingNativeT3RuntimePrewarmTimeout = undefined;
-    const project = findProject(projectId);
-    const cwd = project?.path.trim();
-    /*
-     * CDXC:Automations 2026-07-01-01:13:
-     * Opening Quick utility surfaces such as Automations Overview must not start
-     * the managed T3 Code runtime. T3 prewarm is only for user-owned code
-     * projects, while direct T3 session creation still starts the runtime on
-     * demand.
-     */
-    if (!project || !cwd || isQuickProject(project) || project.isRecentProject === true) {
-      return;
-    }
-    const now = Date.now();
-    const lastPrewarmAt = lastNativeT3RuntimePrewarmAtByProjectId.get(project.projectId) ?? 0;
-    if (now - lastPrewarmAt < NATIVE_T3_RUNTIME_PREWARM_COOLDOWN_MS) {
-      return;
-    }
-    lastNativeT3RuntimePrewarmAtByProjectId.set(project.projectId, now);
-    appendAgentDetectionDebugLog("nativeSidebar.t3Runtime.prewarm", {
-      cwd,
-      projectId: project.projectId,
-      reason,
-    });
-    postNative({ cwd, type: "startT3CodeRuntime" });
-  }, NATIVE_T3_RUNTIME_PREWARM_DELAY_MS);
 }
 
 function createCodeServerProjectEditorUrl(
@@ -46474,7 +44492,7 @@ function runSidebarGitActionFromTitlebar(action: SidebarGitAction): void {
    * Titlebar Git actions must reuse the sidebar git action pipeline so status refresh, file selection, generated commit messages, push, and PR creation have one implementation.
    *
    * CDXC:TitlebarGit 2026-05-24-20:52:
-   * Clicking a titlebar Git action that would create a commit must show the t3code-style review modal before committing, even when the sidebar's optional commit-confirmation setting is off. Push-only flows can still run without a modal when there are no working tree changes.
+   * Clicking a titlebar Git action that would create a commit must show the review modal before committing, even when the sidebar's optional commit-confirmation setting is off. Push-only flows can still run without a modal when there are no working tree changes.
    */
   void runSidebarGitAction(action, { forceCommitReview: true });
 }
@@ -46660,7 +44678,7 @@ function shouldKeepProjectEditorOpenForSessionFocus(projectId: string): boolean 
 function shouldKeepProjectEditorOpenForNewSession(projectId: string): boolean {
   /**
    * CDXC:ProjectEditorCompanion 2026-05-15-01:39:
-   * Creating a new terminal/browser/T3/command session from the sidebar while
+   * Creating a new terminal/browser/command session from the sidebar while
    * embedded VS Code is open should behave like selecting an existing session:
    * keep the editor surface open and let the native focus command retarget the
    * left companion pane. Do not call activateWorkspaceSurfaceForProject here,
@@ -47205,7 +45223,7 @@ async function browseRemoteProjectDirectoriesFromModal(
    * CDXC:RemoteProjectPicker 2026-06-03-00:18:
    * Directory browsing for Remote machines uses that machine's gxserver through
    * the native SSH tunnel bridge. Native owns the token and tunnel, while React
-   * receives only the typed browse result needed by the copied T3 picker.
+   * receives only the typed browse result needed by the remote picker.
    */
   try {
     const response = (await requestRemoteGxserver<Record<string, unknown>>(
@@ -48076,20 +46094,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       closeAllNativeSessions();
       refreshDaemonSessionsState();
       return;
-    case "killT3RuntimeServer":
-      /**
-       * CDXC:T3Code 2026-04-30-09:23
-       * The native Running modal must control the same embedded T3 resources
-       * that T3 panes create. Killing the T3 server asks Swift to stop the
-       * managed localhost runtime instead of only refreshing modal state.
-       */
-      postNative({ type: "stopT3CodeRuntime" });
-      refreshDaemonSessionsState();
-      return;
-    case "killT3RuntimeSession":
-      closeTerminal(message.sessionId);
-      refreshDaemonSessionsState();
-      return;
     case "killDaemonSession":
       closeTerminal(message.sessionId);
       refreshDaemonSessionsState();
@@ -48377,7 +46381,7 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       }
       /*
       CDXC:LocalFirstSidebar 2026-06-12-06:22:
-      Sidebar closeSession messages can be posted after React has already hidden the row locally. Keep native teardown out of the synchronous message handler so one terminal/browser/T3 close cannot block the sidebar click, hover, or repaint path.
+      Sidebar closeSession messages can be posted after React has already hidden the row locally. Keep native teardown out of the synchronous message handler so one terminal/browser close cannot block the sidebar click, hover, or repaint path.
       */
       closeNativeSessionsInBackground([message.sessionId]);
       return;
@@ -48498,12 +46502,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       return;
     case "copySessionDetails":
       void navigator.clipboard?.writeText(message.detailsText).catch(() => undefined);
-      return;
-    case "requestT3SessionBrowserAccess":
-      if (parseRemotePresentationSessionId(message.sessionId)) {
-        return;
-      }
-      void requestNativeT3SessionBrowserAccess(message.sessionId);
       return;
     case "closeGroup": {
       if (parseRemotePresentationGroupId(message.groupId)) {
@@ -48854,12 +46852,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
     case "searchPreviousSessionsByText":
       void searchPreviousSessionsByText();
       return;
-    case "setT3SessionThreadId":
-      if (parseRemotePresentationSessionId(message.sessionId)) {
-        return;
-      }
-      void relinkNativeT3SessionThread(message.sessionId, message.threadId);
-      return;
     case "runSidebarGitAction":
       if (message.groupId && parseRemotePresentationGroupId(message.groupId)) {
         void runRemoteSidebarGitAction(message.action, message.groupId);
@@ -48923,9 +46915,6 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       return;
     case "openSidebarGitChangedFileDiff":
       void openSidebarGitChangedFileDiff(message.filePath, message.requestId);
-      return;
-    case "openT3SessionBrowserAccessLink":
-      openNativeExternalUrl(message.url);
       return;
     case "runBrowserPaneAction": {
       const reference = resolveSidebarSessionReference(message.sessionId);
@@ -49028,9 +47017,7 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       }
       const groupId = groupReference?.groupId;
       const visiblePlacement = createFocusedTabGroupPlacement(groupId);
-      if (agent?.agentId === "t3") {
-        createNativeT3Session(groupId, { visiblePlacement });
-      } else if (agent?.command) {
+      if (agent?.command) {
         /**
          * CDXC:PaneTabs 2026-05-11-11:51
          * Project-header agent buttons create terminal-backed agent sessions.
@@ -49518,7 +47505,7 @@ function syncNativeLayout(
   /**
    * CDXC:BrowserPanes 2026-05-02-11:59
    * Browser-pane mode must feed browser sessions into the same native AppKit
-   * layout tree as terminals and T3 panes. Creating the WKWebView is not
+   * layout tree as terminals. Creating the WKWebView is not
    * enough; omitting the browser id from setActiveTerminalSet makes Swift move
    * the loaded web pane offscreen during the next layout sync.
    *
@@ -51160,12 +49147,6 @@ window.addEventListener("ghostex-native-host-event", (event) => {
     });
     return;
   }
-  if (hostEvent.type === "t3RuntimeStartFailed") {
-    showAppToast("error", "T3 Code failed", compactT3RuntimeToastMessage(hostEvent.message), {
-      toastId: T3_RUNTIME_TOAST_ID,
-    });
-    return;
-  }
   if (hostEvent.type === "projectEditorLoadState") {
     setProjectEditorLoadState(hostEvent.projectId, hostEvent.status, hostEvent.message);
     return;
@@ -51298,35 +49279,7 @@ window.addEventListener("ghostex-native-host-event", (event) => {
     recoverMissingNativeSessionSurface(hostEvent.sessionId);
     return;
   }
-  if (hostEvent.type === "t3EmptySessionObserved") {
-    handleNativeT3EmptySessionObserved(
-      hostEvent.projectId,
-      hostEvent.sessionId,
-      hostEvent.threadId,
-    );
-    return;
-  }
   const sidebarSessionId = sidebarSessionIdForNativeSession(hostEvent.sessionId);
-  if (hostEvent.type === "t3ThreadReady") {
-    /**
-     * CDXC:T3Code 2026-05-01-13:31
-     * Native T3 panes must persist the resolved project/thread metadata that
-     * Swift ensured from the T3 orchestration API. This mirrors the reference
-     * controller's `ensureThreadSession` path so restoring a T3 card reopens
-     * its bound thread and only creates a replacement thread when that bound
-     * thread no longer exists.
-     */
-    handleNativeT3ThreadReady(sidebarSessionId, hostEvent);
-    return;
-  }
-  if (hostEvent.type === "t3ThreadChanged") {
-    void handleNativeT3ThreadChanged(sidebarSessionId, hostEvent.threadId, hostEvent.title);
-    return;
-  }
-  if (hostEvent.type === "t3ActivityChanged") {
-    handleNativeT3ActivityChanged(sidebarSessionId, hostEvent.activity);
-    return;
-  }
   if (hostEvent.type === "terminalTitleChanged") {
     const browserReference = resolveNativeHostEventSessionReference(hostEvent.sessionId);
     const session = findSessionRecordInProject(
@@ -51444,7 +49397,7 @@ window.addEventListener("ghostex-native-host-event", (event) => {
      * Browser panes use the shared native title-bar action event, but they do
      * not have terminal runtime state. Handle title-bar actions before the
      * terminal-only state guard so the browser close button removes the pane
-     * through the same workspace/session path as T3 Code and terminals.
+     * through the same workspace/session path as terminals.
      */
     handleNativeTerminalTitleBarAction(sidebarSessionId, hostEvent.action);
     return;
@@ -51459,7 +49412,7 @@ window.addEventListener("ghostex-native-host-event", (event) => {
      * session the user is actually typing in instead of stale sidebar focus.
      *
      * CDXC:NativeWebPaneFocus 2026-05-03-06:59
-     * T3 Code and browser panes use the same native focus event even though
+     * Browser panes use the same native focus event even though
      * they do not have terminal runtime state. Handle focus before the
      * terminal-only state guard so clicking a WKWebView updates the active
      * sidebar card instead of only drawing the AppKit border.
@@ -51979,7 +49932,7 @@ function handleNativePaneReorderRequested(
   });
   /**
    * CDXC:NativePaneReorder 2026-05-02-17:33
-   * AppKit title bars own pointer events for native Ghostty, T3, and browser
+   * AppKit title bars own pointer events for native Ghostty and browser
    * panes. When Swift reports a header drop, mutate the active sidebar
    * workspace order so the next native layout sync moves the panes and
    * persists the same order used by sidebar/session state.
@@ -51987,7 +49940,7 @@ function handleNativePaneReorderRequested(
    * CDXC:NativePaneReorder 2026-05-03-06:38
    * A pane drop swaps only the two currently surfaced panes. Hidden sessions
    * must stay hidden; using the full session list here can make a background
-   * T3/browser/terminal pane appear when the visible split is reordered.
+   * browser/terminal pane appear when the visible split is reordered.
    */
   updateActiveProjectWorkspace(
     (workspace) =>
@@ -52109,7 +50062,7 @@ function handleNativePaneTabSelected(
   const wasMissingNativeTerminalState =
     selectedSessionBefore?.kind === "terminal" && !terminalStateById.has(sessionId);
   const wasMissingNativeWebSurface =
-    (selectedSessionBefore?.kind === "browser" || selectedSessionBefore?.kind === "t3") &&
+    selectedSessionBefore?.kind === "browser" &&
     !nativeSessionIdBySidebarSessionId.has(sessionId);
   const shouldKeepSleepingPlaceholder = settings.clickToWakeSleepingSessions && wasSleeping;
   const shouldRestoreSelectedSurface =
@@ -52335,10 +50288,6 @@ function restoreNativeSessionSurfaceForWake(
   reason: string,
   options: { forceTerminalRestore?: boolean } = {},
 ): void {
-  if (session?.kind === "t3") {
-    restoreNativeT3Session(project, session, reason);
-    return;
-  }
   if (session?.kind === "browser") {
     restoreNativeBrowserSession(project, session, reason);
     return;
@@ -52796,19 +50745,6 @@ function handleNativeTerminalTitleBarAction(
         },
       });
       return;
-    case "newT3Chat":
-      /**
-       * CDXC:PaneTabs 2026-07-01-02:07:
-       * The native tab bar chat-bubble button must create an embedded T3 chat in the clicked pane's tab group, placed beside the source tab like New Terminal and Open Browser, instead of opening a projectless Quick chat folder.
-       */
-      createNativeT3Session(findSessionGroupId(sessionId), {
-        visiblePlacement: {
-          kind: "appendToTabGroup",
-          position: "after",
-          targetSessionId: sessionId,
-        },
-      });
-      return;
     case "openBrowser":
       createNativeBrowserSession(DEFAULT_BROWSER_LAUNCH_URL, findSessionGroupId(sessionId), {
         visiblePlacement: {
@@ -52898,10 +50834,6 @@ function handleNativeTerminalTitleBarAction(
         void forkNativeSession(sessionId);
       } else if (session.kind === "browser") {
         createNativeBrowserSession(session.browser.url, findSessionGroupId(sessionId), {
-          visiblePlacement: { kind: "appendToTabGroup", targetSessionId: sessionId },
-        });
-      } else if (session.kind === "t3") {
-        createNativeT3Session(findSessionGroupId(sessionId), {
           visiblePlacement: { kind: "appendToTabGroup", targetSessionId: sessionId },
         });
       }
@@ -53138,7 +51070,6 @@ if (rootElement && !isStorybookPreview && rootElement.dataset.ghostexNativeSideb
     recoverAutomationRunSessionIndex();
     rearmAutomationTimers();
     runNativeAutoSleepMonitor("startup");
-    scheduleNativeT3RuntimePrewarm(activeProjectId, "startup");
     openTipsAndTricksOnFirstLaunch();
     showOSIntegrationOnboardingOnFirstLaunch();
   });

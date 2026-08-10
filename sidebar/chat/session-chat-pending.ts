@@ -281,13 +281,31 @@ function filterPendingSends(
     stillOpen,
     texts(messages),
   );
+  const embeddedRepresented = new Set<number>();
+  stillOpen.forEach((entry, index) => {
+    const pendingText = normalizeSessionChatPendingText(entry.text);
+    // Codex's steering bundle separator is preserved in the optimistic text,
+    // while the authoritative turn can prepend an already-staged input. That
+    // makes the pending text an exact suffix rather than an exact whole-turn
+    // match. Only apply this rule to an actual steering bundle so ordinary
+    // suffixes ("fun" in "jokes are fun") cannot consume an echo.
+    if (!pendingText.includes(" --- ")) {
+      return;
+    }
+    const represented = texts(messagesAfterPendingBoundary(messages, entry)).some(
+      (userText) => userText !== pendingText && userText.endsWith(pendingText),
+    );
+    if (represented) {
+      embeddedRepresented.add(index);
+    }
+  });
   let openIndex = -1;
   const next = pending.filter((_, index) => {
     if (!exactKeep[index]) {
       return false;
     }
     openIndex += 1;
-    return !gluedRepresented.has(openIndex);
+    return !gluedRepresented.has(openIndex) && !embeddedRepresented.has(openIndex);
   });
   return next.length === pending.length ? pending : next;
 }

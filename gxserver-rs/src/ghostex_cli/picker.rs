@@ -162,20 +162,6 @@ const AGENT_PICKER_INDICATORS: &[(&str, AgentIndicator)] = &[
         },
     ),
     (
-        "t3",
-        AgentIndicator {
-            color: "#ff6af3",
-            label: "T3C",
-        },
-    ),
-    (
-        "t3-code",
-        AgentIndicator {
-            color: "#ff6af3",
-            label: "T3C",
-        },
-    ),
-    (
         "work-codex",
         AgentIndicator {
             color: "#a991ff",

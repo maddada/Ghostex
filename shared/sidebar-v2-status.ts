@@ -2,7 +2,7 @@ import type { SidebarV2Session } from "./sidebar-v2-session";
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `Sidebar.logic.ts` (`resolveSidebarV2Status`,
+Sidebar inbox status resolution (`resolveSidebarV2Status`,
 `formatWorkingDurationLabel`, `resolveWorkingStartedAt`, `hasUnseenCompletion`,
 `firstValidTimestampMs`).
 
@@ -100,7 +100,7 @@ export type ResolveSidebarV2StatusOptions = {
   /**
    * When the user last opened/focused this session. A visit after the last
    * activity retires the "Done" label back to the receding relative-time
-   * state, mirroring t3code's unread-completion behavior.
+   * state, preserving unread-completion behavior.
    */
   lastVisitedAtMs?: number | null;
   nowMs: number;
@@ -148,7 +148,7 @@ export function formatSidebarV2RelativeTime(elapsedMs: number): string {
 }
 
 /**
- * A completion the user has not looked at yet. Faithful port of t3code's
+ * A completion the user has not looked at yet.
  * `hasUnseenCompletion`: a session that was NEVER visited does not count as
  * unseen, because the user was presumably watching it happen. Feeds the unread
  * marker, not the status label.
@@ -174,9 +174,9 @@ export function hasUnseenCompletion(
 }
 
 /**
- * Ghostex twin of t3code's `resolveSidebarV2Status`.
+ * Resolves the Ghostex sidebar inbox status.
  *
- * Precedence mirrors t3code exactly: blocked-on-user first, then in-motion,
+ * Precedence is blocked-on-user first, then in-motion,
  * then broken, then the resting states. "Done" is Ghostex-specific — an idle
  * session whose last activity is still recent and unvisited — and everything
  * older recedes to a relative-time label with no hue.
@@ -191,7 +191,7 @@ export function resolveSidebarV2Status(
     /*
      * Ghostex cannot tell an approval prompt from a plain input prompt: gxserver
      * publishes one `attention` activity and no `attentionKind`, and attention
-     * always means "act now". So the DEFAULT attention hue is amber, and t3code's
+     * always means "act now". So the DEFAULT attention hue is amber, and the
      * quieter indigo half of the split only applies once a host actually
      * publishes `attentionKind: "input"` (P2+ can start doing that without any
      * further change here).

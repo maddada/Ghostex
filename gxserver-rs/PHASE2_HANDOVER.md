@@ -65,7 +65,7 @@ Additional note:
 bun run test
 ```
 
-This failed outside the Phase 2 surface because root Vitest includes `t3code/apps/web` tests without that app's `~/*` alias, causing imports such as `~/lib/utils` and `~/composerDraftStore` to fail. The targeted Phase 2 Vitest command passed.
+The targeted Phase 2 Vitest command passed.
 
 ## Next Tasks
 

@@ -23,8 +23,6 @@ pub fn focus_gpui_root_view(_native_view: *mut std::ffi::c_void) {}
 
 pub type BrowserPopupOpenHandler = Rc<dyn Fn(String)>;
 
-pub type T3WorkspaceBridgeEventHandler = Rc<dyn Fn(String)>;
-
 pub enum BrowserPageMetadataEvent {
     AddressChanged(String),
     FaviconUrlChanged(Option<String>),
@@ -98,8 +96,6 @@ pub enum SidebarBridgeEvent {
     GxserverPresentationFocusState(String),
     CreateProjectTerminal(String),
     WorkspaceTerminalFocus(String),
-    T3SessionFocus(String),
-    T3SessionCreate(String),
     WorkspaceTerminalRenameCommand(String),
     WorkspaceTerminalEnter(String),
     WorkspaceTerminalLifecycleResult(String),
@@ -110,7 +106,6 @@ pub enum SidebarBridgeEvent {
     TitlebarGitMenuState(String),
     OpenBrowserUrl(String),
     BrowserTabFocus(String),
-    T3BrowserAccessRequest(String),
     ProjectBoardConversationResponse(String),
 }
 
@@ -195,7 +190,6 @@ impl CefBrowser {
         _manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         _app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
         _app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
-        _t3_workspace_bridge_event_handler: Option<T3WorkspaceBridgeEventHandler>,
     ) -> Self {
         Self
     }

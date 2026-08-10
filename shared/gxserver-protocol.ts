@@ -190,7 +190,6 @@ export type GxserverEndpointPath =
   | "/api/removeProject"
   | "/api/deleteWorktreeProject"
   | "/api/updateSession"
-  | "/api/syncT3EmbeddedSession"
   | "/api/updateSessionOrder"
   | "/api/settleSession"
   | "/api/unsettleSession"
@@ -656,6 +655,8 @@ export interface GxserverSaveStashedPromptParams {
 }
 
 export interface GxserverSaveStashedPromptResult {
+  /** True only when this save inserted a new stash row. */
+  created: boolean;
   prompt: GxserverStashedPrompt;
 }
 
@@ -1273,13 +1274,7 @@ export type GxserverMixedStateArea =
   | "projectIcons"
   | "theme";
 
-/*
-CDXC:T3Code 2026-06-23-06:19:
-Embedded T3 sessions need daemon-owned G-session identity just like terminal
-and agent sessions, while their runtime thread is created by the managed T3
-server and stored as metadata after native reports the real thread id.
-*/
-export type GxserverSessionKind = "terminal" | "agent" | "t3";
+export type GxserverSessionKind = "terminal" | "agent";
 export type GxserverSessionSurface = "workspace" | "commands";
 export type GxserverSessionTag =
   | "favorite"
@@ -1764,32 +1759,6 @@ export interface GxserverRemoveSessionWorktreeResult {
   warnings?: readonly string[];
 }
 
-export type GxserverT3EmbeddedActivityState = "attention" | "idle" | "working";
-
-export interface GxserverSyncT3EmbeddedSessionParams {
-  /*
-  CDXC:T3SessionOwnership 2026-07-01-02:17:
-  Embedded T3 sync is keyed by the durable Ghostex gxserver row, not by T3 thread ids. Payloads may update provider binding, title provenance, lifecycle, and activity, but they must not carry prompts, commands, stdout/stderr, paths unrelated to the owning workspace, URLs with query strings, tokens, cookies, or raw T3 responses.
-  */
-  activity?: GxserverT3EmbeddedActivityState;
-  createdAt?: string;
-  environmentId?: string;
-  ghostexProjectId: GxserverProjectId;
-  ghostexSessionId: GxserverSessionId;
-  lifecycleState?: GxserverDomainLifecycleState;
-  serverOrigin?: string;
-  t3ProjectId?: string;
-  t3SidebarMode?: "collapsed" | "normal";
-  threadId?: string;
-  title?: string;
-  titleSource?: GxserverSessionTitleSource;
-  workspaceRoot?: string;
-}
-
-export interface GxserverSyncT3EmbeddedSessionResult {
-  session: GxserverSessionDomainState;
-}
-
 export interface GxserverForkSessionParams extends GxserverSessionLifecycleParams {}
 
 export interface GxserverAgentForkPlan {
@@ -1963,9 +1932,8 @@ export interface GxserverPresentationProject {
   /*
   CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
   The icon the PROJECT ITSELF ships, discovered server-side inside the checkout
-  and shipped as a `data:` URL. Discovery mirrors t3code's
-  `ProjectFaviconResolver`: the repository's `t3.json` `iconPath` first, then the
-  well-known favicon / app-icon locations, then an icon declared by an HTML entry
+  and shipped as a `data:` URL. Discovery checks well-known favicon and app-icon
+  locations, then an icon declared by an HTML entry
   point's `<link rel="icon">`. Keyed on the worktree FAMILY ROOT like
   `gitRemoteOriginUrl`, so a worktree shows its parent checkout's icon.
 

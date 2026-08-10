@@ -108,7 +108,6 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
   pi: null,
   qoder: null,
   rovodev: null,
-  t3: null,
 };
 
 export function normalizeAgentAcceptAllMode(candidate: unknown): AgentAcceptAllMode | undefined {

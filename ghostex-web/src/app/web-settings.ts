@@ -5,6 +5,7 @@ import {
 } from "@/shared/ghostex-settings";
 
 const WEB_SETTINGS_STORAGE_KEY = "ghostexWeb.settings.v1";
+export const WEB_SETTINGS_CHANGED_EVENT = "ghostex-web:settings-changed";
 
 export function readWebSettings(): ghostexSettings {
   try {
@@ -18,5 +19,10 @@ export function readWebSettings(): ghostexSettings {
 export function writeWebSettings(settings: ghostexSettings): ghostexSettings {
   const normalized = normalizeghostexSettings(settings);
   window.localStorage.setItem(WEB_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+  window.dispatchEvent(
+    new CustomEvent<ghostexSettings>(WEB_SETTINGS_CHANGED_EVENT, {
+      detail: normalized,
+    }),
+  );
   return normalized;
 }

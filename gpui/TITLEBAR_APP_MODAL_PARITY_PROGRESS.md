@@ -79,8 +79,8 @@ Bring the GPUI app titlebar and related modal UI/UX to production parity with th
 
 - Added the GPUI Running Sessions app-modal kind, titlebar NativeMenu action, and action listener so GPUI opens the existing shared React `daemonSessions` modal in the owned CEF app-modal window.
 - Routed app-modal `refreshDaemonSessions` to a transient `daemonSessionsState` sidebarState payload built from real local gxserver `/api/health/server` and `/api/readPresentationSnapshot` data when available, without replacing the stored Settings hydrate snapshot.
-- Projected gxserver workspace terminal/agent presentation rows into `SidebarDaemonSessionItem` metadata with `ownership: "gxserver"`, live restore state, stable ids, public cwd/project path fields when present, and explicit zero dimensions until gxserver exposes real terminal geometry. GPUI has no local T3 inventory in this bridge slice, so T3 rows remain empty and no T3 server is advertised.
-- Handled `killDaemonSession` through gxserver `/api/transitionSession` with `action: "close"` for rows carrying project/session ids, then refreshed state. `killTerminalDaemon`, `killT3RuntimeServer`, and `killT3RuntimeSession` refresh with explicit unsupported error messages instead of fake success.
+- Projected gxserver workspace terminal/agent presentation rows into `SidebarDaemonSessionItem` metadata with `ownership: "gxserver"`, live restore state, stable ids, public cwd/project path fields when present, and explicit zero dimensions until gxserver exposes real terminal geometry.
+- Handled `killDaemonSession` through gxserver `/api/transitionSession` with `action: "close"` for rows carrying project/session ids, then refreshed state. `killTerminalDaemon` refreshes with an explicit unsupported error message instead of fake success.
 - Exact files touched: `gpui/src/main.rs` and `gpui/TITLEBAR_APP_MODAL_PARITY_PROGRESS.md`.
 - Verification: no verification commands were run; no build, test, format, typecheck, app launch/restart, browser automation, or `bun run start` command was run.
 
@@ -156,7 +156,7 @@ GPUI's Rust-owned titlebar Actions button now mirrors the shared command-palette
 - User-facing behavior delivered: the visible GPUI titlebar Resources button is no longer inert. Left click and right click both open the existing shared React Running Sessions/`daemonSessions` app modal through the GPUI CEF app-modal host.
 - High-level technical approach: reused the already-implemented `GpuiAppModalKind::DaemonSessions` route, which refreshes daemon session state from gxserver on open, instead of adding a separate Resources overlay, hidden hit region, transparent view, synthetic coordinate route, placeholder panel, or duplicate React UI.
 - Exact files touched: `gpui/src/main.rs` and `gpui/TITLEBAR_APP_MODAL_PARITY_PROGRESS.md`.
-- Remaining Resources dropdown gaps: this is not full macOS Resources dropdown/process monitor parity. GPUI still does not implement process CPU/RAM sampling, dev-server bundles, Portless resources rows, browser/Code resource bundles, gxserver restart controls, local T3 resource inventory, or bulk quit/sleep from the Resources titlebar control.
+- Remaining Resources dropdown gaps: this is not full macOS Resources dropdown/process monitor parity. GPUI still does not implement process CPU/RAM sampling, dev-server bundles, Portless resources rows, browser/Code resource bundles, gxserver restart controls, or bulk quit/sleep from the Resources titlebar control.
 - Verification: no verification commands were run; no build, test, format, typecheck, app launch/restart, browser automation, or `bun run start` command was run.
 
 ### 2026-06-24-13:16 Worker 14 - Titlebar Keep Awake Runtime Slice

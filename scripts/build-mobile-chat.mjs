@@ -29,6 +29,28 @@ const agentsOutFile = path.join(
 );
 
 /*
+The app's Vite/Bun builds deliberately import SVG source text with an import
+attribute. esbuild only accepts the standardized JSON value for a `type`
+attribute, so remove that source-only hint in this single-file build; the SVG
+dataurl loader below remains compatible with the logo helpers.
+*/
+const mobileChatTextImportPlugin = {
+  name: "mobile-chat-text-imports",
+  setup(build) {
+    build.onLoad(
+      { filter: /sidebar\/(?:agent-logos\.ts|brand-icons\.tsx)$/ },
+      async (args) => ({
+        contents: (await fs.promises.readFile(args.path, "utf8")).replace(
+          /\s+with\s+\{\s*type:\s*["']text["']\s*\}/g,
+          "",
+        ),
+        loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
+      }),
+    );
+  },
+};
+
+/*
 The mobile submodule cannot import shared/session-chat.ts, so the set of
 chat-capable agent ids used to be hand-copied into the RN bridge and drifted
 from the shared source. Emit it from the real export instead: the bundle is
@@ -73,6 +95,7 @@ const result = await esbuild.build({
   },
   minify: true,
   outdir: "out",
+  plugins: [mobileChatTextImportPlugin],
   target: ["safari16", "chrome110"],
   write: false,
 });
@@ -100,7 +123,7 @@ const html = `<!doctype html>
     <style>
       html,
       body {
-        background: #0e0e0e;
+        background: #111111;
         height: 100%;
         margin: 0;
         overscroll-behavior: none;

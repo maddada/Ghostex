@@ -6,7 +6,7 @@
  * from `sidebar/styles.css` so V2 wins over any shared rule it deliberately
  * re-specifies.
  *
- * Design ported from t3code's SidebarV2. Two rules carry the whole look and
+ * Two rules carry the whole look and
  * must survive future edits:
  *
  * 1. ONE surface model. Background is reserved for interaction state (hover,
@@ -31,7 +31,7 @@
    * Three-hue discipline: color is spent only on "act now" (amber/indigo),
    * "in motion" (sky), and "broken" (red). Done gets a quiet emerald because it
    * is information, not a demand. Everything else is neutral by construction.
-   * Values are the dark-theme ends of t3code's ladder; the light block below
+   * Values are the dark-theme ends of the color ladder; the light block below
    * swaps in the darker stops.
    */
   --sv2-status-approval: #fcd34d;
@@ -509,7 +509,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
 /*
  * The badge is a low-chroma pill: enough tint to state the review state at a
  * glance, not enough to outrank an amber "act now" status two lines above it.
- * Merged deliberately gets violet (t3code parity) instead of the done-emerald,
+ * Merged deliberately gets violet instead of the done-emerald,
  * so "the branch landed" never reads as "the agent finished a turn".
  */
 [data-sidebar-version="v2"] .sidebar-v2-row-pr {
@@ -654,7 +654,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
  * 1. NOTHING MOVES ON HOVER. The status keeps its box (`visibility: hidden`,
  *    never `display: none` or a width change), and the action bar never
  *    participates in layout at all, so the project name's box is identical at
- *    rest and on hover. An in-flow swap — t3code's original — reflows the name
+ *    rest and on hover. An in-flow swap reflows the name
  *    every time the pointer crosses a row.
  * 2. THE NAME TRUNCATES ONLY WHEN IT RUNS OUT OF ROW. The earlier fix for (1)
  *    stacked status and actions in one grid cell, which made the slot as wide
@@ -855,7 +855,7 @@ body[data-sidebar-theme^="light-"] [data-sidebar-version="v2"],
   opacity: 0.55;
 }
 
-/* A snoozed row's return ticket. Blue, matching t3code: it is a scheduled
+/* A snoozed row's return ticket. Blue because it is a scheduled
    fact, not a status, so it must not borrow any of the three status hues. */
 [data-sidebar-version="v2"] .sidebar-v2-wake-label {
   color: var(--sv2-status-working);

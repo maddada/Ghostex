@@ -1,5 +1,4 @@
 import type { SidebarSessionTag } from "./session-tags";
-import type { GhostexT3SidebarMode } from "./t3-session-binding";
 
 export const GRID_COLUMN_COUNT = 3;
 export const MAX_GROUP_COUNT = 20;
@@ -97,24 +96,11 @@ export type SidebarThemeSetting =
 
 export type SidebarThemeVariant = "light" | "dark";
 
-export type SessionKind = "browser" | "terminal" | "t3";
+export type SessionKind = "browser" | "terminal";
 export type TerminalSurface = "workspace" | "commands";
 export type CommandsPanelMode = "floating" | "pinned";
 export type TerminalEngine = "ghostty-native";
 export type TerminalSessionPersistenceProvider = "tmux" | "zmx" | "zellij";
-
-export type T3SessionMetadata = {
-  boundThreadId?: string;
-  createdAt?: string;
-  environmentId?: string;
-  ghostexProjectId?: string;
-  ghostexSessionId?: string;
-  projectId: string;
-  serverOrigin: string;
-  t3SidebarMode?: GhostexT3SidebarMode;
-  threadId: string;
-  workspaceRoot: string;
-};
 
 export type BrowserSessionMetadata = {
   faviconDataUrl?: string;
@@ -146,7 +132,7 @@ export type BaseSessionRecord = {
   isPinned?: boolean;
   /**
    * CDXC:PanePopOut 2026-05-11-09:35
-   * Popped-out panes keep their terminal/browser/T3 runtime alive in a native
+   * Popped-out panes keep their terminal or browser runtime alive in a native
    * ghostex window while the original workspace slot stays visible as a reattach
    * placeholder. This is presentation state, not sleep state.
    */
@@ -240,17 +226,12 @@ export type TerminalSessionRecord = BaseSessionRecord & {
   tmuxSessionName?: string;
 };
 
-export type T3SessionRecord = BaseSessionRecord & {
-  kind: "t3";
-  t3: T3SessionMetadata;
-};
-
 export type BrowserSessionRecord = BaseSessionRecord & {
   browser: BrowserSessionMetadata;
   kind: "browser";
 };
 
-export type SessionRecord = BrowserSessionRecord | TerminalSessionRecord | T3SessionRecord;
+export type SessionRecord = BrowserSessionRecord | TerminalSessionRecord;
 
 export type CreateSessionRecordOptions =
   | {
@@ -284,15 +265,7 @@ export type CreateSessionRecordOptions =
       title?: string;
       titleSource?: SessionTitleSource;
     }
-  | {
-      displayId?: string;
-      initialPresentation?: "background" | "focused";
-      kind: "t3";
-      sessionId?: string;
-      t3: T3SessionMetadata;
-      title?: string;
-      titleSource?: SessionTitleSource;
-    };
+  ;
 
 export type SessionGridSnapshot = {
   focusedSessionId?: string;

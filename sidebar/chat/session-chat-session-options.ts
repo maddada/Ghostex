@@ -303,7 +303,7 @@ export type SessionChatOptionState = Readonly<
 >;
 
 export const SESSION_CHAT_DISPATCHED_HINT = "Sent to the agent — not confirmed";
-export const SESSION_CHAT_DETECTED_HINT = "Read from the agent's terminal";
+export const SESSION_CHAT_DETECTED_HINT = "Read from the terminal";
 export const SESSION_CHAT_TRANSCRIPT_HINT = "Confirmed by the agent transcript";
 
 /**

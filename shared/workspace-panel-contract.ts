@@ -4,7 +4,6 @@ import type {
   SidebarSessionActivityState,
   TerminalViewMode,
   TerminalSessionRecord,
-  T3SessionRecord,
 } from "./session-grid-contract";
 import type { TerminalSessionSnapshot } from "./terminal-host-protocol";
 
@@ -34,11 +33,6 @@ export type WorkspacePanelLayoutAppearance = {
   paneGap: number;
 };
 
-export type WorkspacePanelT3Appearance = {
-  provider: "t3code";
-  zoomPercent: number;
-};
-
 export type WorkspacePanelAutoFocusRequest = {
   requestId: number;
   sessionId: string;
@@ -61,19 +55,7 @@ export type WorkspacePanelTerminalPane = {
   terminalTitle?: string;
 };
 
-export type WorkspacePanelT3Pane = {
-  activity?: SidebarSessionActivityState;
-  lifecycleState?: SessionLifecycleState;
-  kind: "t3";
-  isVisible: boolean;
-  visibleSlotIndex?: number;
-  renderNonce: number;
-  sessionId: string;
-  sessionRecord: T3SessionRecord;
-  html: string;
-};
-
-export type WorkspacePanelPane = WorkspacePanelTerminalPane | WorkspacePanelT3Pane;
+export type WorkspacePanelPane = WorkspacePanelTerminalPane;
 
 export type WorkspacePanelHydrateMessage = {
   type: "hydrate";
@@ -87,7 +69,6 @@ export type WorkspacePanelHydrateMessage = {
   panes: WorkspacePanelPane[];
   shouldShowWelcomeModal?: boolean;
   terminalAppearance: WorkspacePanelTerminalAppearance;
-  t3Appearance: WorkspacePanelT3Appearance;
   viewMode: TerminalViewMode;
   visibleCount: number;
   workspaceSnapshot: GroupedSessionWorkspaceSnapshot;
@@ -249,15 +230,6 @@ export type WorkspacePanelResetTerminalFontSizeMessage = {
   type: "resetTerminalFontSize";
 };
 
-export type WorkspacePanelAdjustT3ZoomPercentMessage = {
-  delta: -1 | 1;
-  type: "adjustT3ZoomPercent";
-};
-
-export type WorkspacePanelResetT3ZoomPercentMessage = {
-  type: "resetT3ZoomPercent";
-};
-
 export type WorkspacePanelForkSessionMessage = {
   type: "forkSession";
   sessionId: string;
@@ -292,11 +264,6 @@ export type WorkspacePanelReloadMessage = {
   type: "reloadWorkspacePanel";
 };
 
-export type WorkspacePanelReloadT3SessionMessage = {
-  sessionId: string;
-  type: "reloadT3Session";
-};
-
 export type WorkspacePanelResolveClipboardImagePathMessage = {
   path: string;
   requestId: number;
@@ -308,19 +275,6 @@ export type WorkspacePanelReadNativeClipboardPayloadMessage = {
   requestId: number;
   sessionId: string;
   type: "readNativeClipboardPayload";
-};
-
-export type WorkspacePanelT3ThreadChangedMessage = {
-  sessionId: string;
-  threadId: string;
-  title?: string;
-  type: "t3ThreadChanged";
-};
-
-export type WorkspacePanelT3WorkingStartedAtChangedMessage = {
-  sessionId: string;
-  type: "t3WorkingStartedAtChanged";
-  workingStartedAt?: string;
 };
 
 export type WorkspacePanelCompleteWelcomeMessage = {
@@ -350,8 +304,6 @@ export type WorkspacePanelToExtensionMessage =
   | WorkspacePanelCancelFirstPromptAutoRenameMessage
   | WorkspacePanelAdjustTerminalFontSizeMessage
   | WorkspacePanelResetTerminalFontSizeMessage
-  | WorkspacePanelAdjustT3ZoomPercentMessage
-  | WorkspacePanelResetT3ZoomPercentMessage
   /*
    * CDXC:WorkspaceActions 2026-05-27-07:32:
    * Workspace panels no longer emit the removed IDE-attachment message. Project
@@ -362,11 +314,9 @@ export type WorkspacePanelToExtensionMessage =
   | WorkspacePanelSyncPaneOrderMessage
   | WorkspacePanelSyncSessionOrderMessage
   | WorkspacePanelReloadMessage
-  | WorkspacePanelReloadT3SessionMessage
   | WorkspacePanelResolveClipboardImagePathMessage
   | WorkspacePanelReadNativeClipboardPayloadMessage
-  | WorkspacePanelT3ThreadChangedMessage
-  | WorkspacePanelT3WorkingStartedAtChangedMessage;
+  ;
 
 export function stripWorkspacePanelTransientFields(
   message: ExtensionToWorkspacePanelMessage,

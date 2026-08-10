@@ -26,6 +26,13 @@ export function resolveSessionChatTranscriptAgent(
 
 export type SessionChatSource = "transcript" | "hook" | "client";
 
+/** Visual palette for the shared chat surface, independent of app chrome. */
+export type SessionChatTheme = "light" | "dark";
+
+export function normalizeSessionChatTheme(value: unknown): SessionChatTheme {
+  return value === "light" ? "light" : "dark";
+}
+
 // Higher wins when the same message id/turn arrives from two sources.
 export const SESSION_CHAT_SOURCE_PRIORITY: Record<SessionChatSource, number> = {
   transcript: 3,

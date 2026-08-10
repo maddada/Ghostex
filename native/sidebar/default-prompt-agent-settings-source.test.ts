@@ -90,6 +90,5 @@ describe("default prompt agent settings source", () => {
 
     expect(resolver).toContain("return undefined;");
     expect(resolver).not.toContain("resolveSidebarAgentButtonById(DEFAULT_PROMPT_AGENT_ID)");
-    expect(resolver).not.toContain("agents.find((agent) => agent.agentId !== \"t3\"");
   });
 });

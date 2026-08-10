@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import { formatRelativeTime, formatRelativeTimeLabel, getRelativeTimeColor } from "./relative-time";
 
 describe("formatRelativeTime", () => {
-  test("should mirror the T3 just-now threshold", () => {
+  test("should use the compact just-now threshold", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-06T12:00:00.000Z"));
 

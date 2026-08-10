@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { T3CODE_ENABLED } from "../../shared/feature-flags";
 import { AddProjectModal } from "../../sidebar/add-project-modal/add-project-modal";
 import type {
   AddProjectAddResult,
@@ -30,7 +29,7 @@ import { PreviousSessionsModal } from "../../sidebar/previous-sessions-modal";
 import { RecentProjectsModal } from "../../sidebar/recent-projects-modal";
 import { RemoteGxserverInstallModal } from "../../sidebar/remote-gxserver-install-modal";
 import { RemoteProjectPickerModal } from "../../sidebar/remote-project-picker/remote-project-picker-modal";
-import type { T3FilesystemBrowseResult } from "../../sidebar/remote-project-picker/t3-filesystem";
+import type { RemoteFilesystemBrowseResult } from "../../sidebar/remote-project-picker/remote-filesystem";
 import { ScratchPadModal } from "../../sidebar/scratch-pad-modal";
 import {
   SettingsModal,
@@ -38,8 +37,6 @@ import {
   type SettingsModalTab,
 } from "../../sidebar/settings-modal";
 import { SessionRenameModal } from "../../sidebar/session-rename-modal";
-import { T3BrowserAccessModal } from "../../sidebar/t3-browser-access-modal";
-import { T3ThreadIdModal } from "../../sidebar/t3-thread-id-modal";
 import { WatchGhostexVideoModal } from "../../sidebar/watch-ghostex-video-modal";
 import {
   UpdateAvailableModal,
@@ -69,6 +66,7 @@ import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
   SidebarGhostexFolderStatsMessage,
+  SidebarPluginSettingsStatusMessage,
   SidebarOSIntegrationStatusMessage,
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state flows to Settings through the modal-state relay.
   SidebarAppIconStateMessage,
@@ -122,8 +120,6 @@ type AppModalKind =
   | "scratchPad"
   | "settings"
   | "stashedPrompts"
-  | "t3BrowserAccess"
-  | "t3ThreadId"
   | "worktree"
   | "tipsAndTricks"
   | "updateAvailable"
@@ -158,8 +154,6 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
   remoteGxserverInstall: ".remote-gxserver-install-modal",
   remoteProjectPicker: ".remote-project-picker-dialog",
   renameSession: ".session-rename-modal-shadcn",
-  t3BrowserAccess: ".t3-browser-access-modal",
-  t3ThreadId: ".t3-thread-id-modal",
   worktree: ".worktree-create-modal-shadcn",
   updateAvailable: ".update-available-modal",
 };
@@ -202,7 +196,6 @@ function measureOneShotNativeFitHeight(modal: AppModalKind): number | undefined 
   return Number.isFinite(height) && height > 0 ? height : undefined;
 }
 
-type T3BrowserAccessMessage = Extract<ExtensionToSidebarMessage, { type: "showT3BrowserAccess" }>;
 type AgentsHubCatalogMessage = Extract<ExtensionToSidebarMessage, { type: "agentsHubCatalog" }>;
 type AgentsHubFileContentMessage = Extract<
   ExtensionToSidebarMessage,
@@ -211,6 +204,7 @@ type AgentsHubFileContentMessage = Extract<
 type AgentHookStatusMessage = Extract<ExtensionToSidebarMessage, { type: "agentHookStatus" }>;
 type GhostexCliStatusMessage = Extract<ExtensionToSidebarMessage, { type: "ghostexCliStatus" }>;
 type OSIntegrationStatusMessage = Extract<ExtensionToSidebarMessage, { type: "osIntegrationStatus" }>;
+type PluginSettingsStatusMessage = Extract<ExtensionToSidebarMessage, { type: "pluginSettingsStatus" }>;
 // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state message threaded through modal state into Settings.
 type AppIconStateMessage = Extract<ExtensionToSidebarMessage, { type: "appIconState" }>;
 
@@ -218,7 +212,6 @@ type AppModalHostMessage =
   | {
       agentDraft?: AgentConfigDraft;
       agentIcon?: SidebarAgentIcon;
-      access?: T3BrowserAccessMessage;
       closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
@@ -284,7 +277,7 @@ type AppModalHostMessage =
       error?: string;
       ok: boolean;
       requestId: string;
-      result?: T3FilesystemBrowseResult;
+      result?: RemoteFilesystemBrowseResult;
       type: "remoteProjectDirectoryBrowseResult";
     }
   | {
@@ -411,11 +404,6 @@ type MissingProjectFolderModalState = {
  * chrome while preserving the bottom-center stack behavior.
  */
 const APP_MODAL_TOAST_BOTTOM_OFFSET_PX = 47;
-type T3ThreadIdModalState = {
-  currentThreadId: string;
-  sessionId: string;
-};
-
 type WorktreeModalState = {
   projectId?: string;
   projectName?: string;
@@ -655,7 +643,7 @@ function resolvePromptAgentModalSelection(
   savedAgentId: string | undefined,
   defaultAgentId: string | undefined,
 ): string | undefined {
-  const commandAgents = agents.filter((agent) => agent.agentId !== "t3" && agent.command?.trim());
+  const commandAgents = agents.filter((agent) => agent.command?.trim());
   return (
     commandAgents.find((agent) => agent.agentId === savedAgentId)?.agentId ??
     commandAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ??
@@ -669,7 +657,7 @@ function createRemoteProjectRequestId(kind: "add" | "browse"): string {
 
 function waitForRemoteProjectDirectoryBrowseResult(
   requestId: string,
-): Promise<T3FilesystemBrowseResult> {
+): Promise<RemoteFilesystemBrowseResult> {
   return new Promise((resolve, reject) => {
     let timeoutId = 0;
     const handleMessage = (event: Event) => {
@@ -684,7 +672,7 @@ function waitForRemoteProjectDirectoryBrowseResult(
       }
       window.clearTimeout(timeoutId);
       window.removeEventListener("ghostex-app-modal-host-message", handleMessage);
-      if (!message.ok || !isT3FilesystemBrowseResult(message.result)) {
+      if (!message.ok || !isRemoteFilesystemBrowseResult(message.result)) {
         reject(new Error(message.error || "Remote directory browse failed."));
         return;
       }
@@ -847,7 +835,7 @@ function readAddProjectMachineOptions(value: unknown): readonly AddProjectMachin
 }
 
 function readAddProjectBrowseResult(value: unknown): AddProjectBrowseResult {
-  if (!isT3FilesystemBrowseResult(value)) {
+  if (!isRemoteFilesystemBrowseResult(value)) {
     throw new Error("The machine returned an unexpected answer.");
   }
   return { entries: value.entries, parentPath: value.parentPath };
@@ -912,11 +900,11 @@ function readAddProjectCloneJob(value: unknown): AddProjectCloneJob {
   };
 }
 
-function isT3FilesystemBrowseResult(value: unknown): value is T3FilesystemBrowseResult {
+function isRemoteFilesystemBrowseResult(value: unknown): value is RemoteFilesystemBrowseResult {
   if (!value || typeof value !== "object") {
     return false;
   }
-  const candidate = value as Partial<T3FilesystemBrowseResult>;
+  const candidate = value as Partial<RemoteFilesystemBrowseResult>;
   return (
     typeof candidate.parentPath === "string" &&
     Array.isArray(candidate.entries) &&
@@ -956,13 +944,12 @@ function AppModalHost() {
     renameSession,
     stashedPrompts,
     updateAvailable,
-    t3BrowserAccess,
-    t3ThreadId,
     worktree,
     agentHookStatus,
     ghostexCliStatus,
     ghostexFolderStats,
     osIntegrationStatus,
+    pluginSettingsStatus,
     // CDXC:AppIconPicker 2026-06-25-21:50: Pull relayed App Icon state for the Settings modal.
     appIconState,
     portlessSetup,
@@ -975,6 +962,7 @@ function AppModalHost() {
   const [ghostexCliStatusLoading, setGhostexCliStatusLoading] = useState(false);
   const [ghostexFolderStatsLoading, setGhostexFolderStatsLoading] = useState(false);
   const [osIntegrationStatusLoading, setOSIntegrationStatusLoading] = useState(false);
+  const [pluginSettingsStatusLoading, setPluginSettingsStatusLoading] = useState(false);
   const [isPreviousSessionsInitialLoadReady, setIsPreviousSessionsInitialLoadReady] = useState(false);
   const [isRecentProjectsInitialLoadReady, setIsRecentProjectsInitialLoadReady] = useState(false);
   const sentNativeFitHeightMeasurementKeysRef = useRef<Set<string>>(new Set());
@@ -1063,8 +1051,6 @@ function AppModalHost() {
     stashedPrompts,
     updateAvailable,
     settings,
-    t3BrowserAccess,
-    t3ThreadId,
     worktree,
     portlessSetup,
   });
@@ -1412,6 +1398,20 @@ function AppModalHost() {
       setOSIntegrationStatusLoading(false);
     }
   }, [osIntegrationStatus]);
+
+  useEffect(() => {
+    if (pluginSettingsStatus) {
+      setPluginSettingsStatusLoading(false);
+    }
+  }, [pluginSettingsStatus]);
+
+  useEffect(() => {
+    if (activeModal !== "settings" || pluginSettingsStatus || pluginSettingsStatusLoading) {
+      return;
+    }
+    setPluginSettingsStatusLoading(true);
+    vscode.postMessage({ type: "requestPluginSettingsStatus" });
+  }, [activeModal, pluginSettingsStatus, pluginSettingsStatusLoading]);
 
   useEffect(() => {
     if (activeModal !== "firstLaunchSetup" && activeModal !== "tipsAndTricks") {
@@ -2085,6 +2085,14 @@ function AppModalHost() {
           setOSIntegrationStatusLoading(true);
           vscode.postMessage({ type: "requestOSIntegrationStatus" });
         }}
+        onRequestPluginSettingsStatus={() => {
+          setPluginSettingsStatusLoading(true);
+          vscode.postMessage({ type: "requestPluginSettingsStatus" });
+        }}
+        onReinstallPlugin={(pluginId) => {
+          setPluginSettingsStatusLoading(true);
+          vscode.postMessage({ pluginId, type: "reinstallPlugin" });
+        }}
         onInstallAgentHooks={() => {
           setAgentHookStatusLoading(true);
           vscode.postMessage({ type: "installAgentHooks" });
@@ -2115,6 +2123,8 @@ function AppModalHost() {
         ghostexFolderStatsLoading={ghostexFolderStatsLoading}
         osIntegrationStatus={osIntegrationStatus}
         osIntegrationStatusLoading={osIntegrationStatusLoading}
+        pluginSettingsStatus={pluginSettingsStatus}
+        pluginSettingsStatusLoading={pluginSettingsStatusLoading}
         // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state for Settings (mirrors osIntegrationStatus).
         appIconState={appIconState}
       />
@@ -2207,35 +2217,6 @@ function AppModalHost() {
         settings={settings}
         theme={theme}
         vscode={vscode}
-      />
-      <T3ThreadIdModal
-        currentThreadId={t3ThreadId?.currentThreadId ?? ""}
-        isOpen={T3CODE_ENABLED && activeModal === "t3ThreadId" && t3ThreadId !== undefined}
-        onCancel={closeModal}
-        onConfirm={(threadId) => {
-          if (!t3ThreadId) {
-            return;
-          }
-          vscode.postMessage({
-            sessionId: t3ThreadId.sessionId,
-            threadId,
-            type: "setT3SessionThreadId",
-          });
-          closeModal();
-        }}
-      />
-      <T3BrowserAccessModal
-        access={t3BrowserAccess}
-        isOpen={
-          T3CODE_ENABLED && activeModal === "t3BrowserAccess" && t3BrowserAccess !== undefined
-        }
-        onClose={closeModal}
-        onOpenLink={(url) => {
-          vscode.postMessage({
-            type: "openT3SessionBrowserAccessLink",
-            url,
-          });
-        }}
       />
       <SessionRenameModal
         agents={agents}
@@ -2405,8 +2386,6 @@ function useModalStateFromNative() {
   const [recentProjects, setRecentProjects] = useState<RecentProjectsModalState>();
   const [renameSession, setRenameSession] = useState<RenameSessionModalState>();
   const [stashedPrompts, setStashedPrompts] = useState<StashedPromptsModalState>();
-  const [t3BrowserAccess, setT3BrowserAccess] = useState<T3BrowserAccessMessage>();
-  const [t3ThreadId, setT3ThreadId] = useState<T3ThreadIdModalState>();
   const [worktree, setWorktree] = useState<WorktreeModalState>();
   const [portlessSetup, setPortlessSetup] = useState<PortlessSetupModalState>();
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
@@ -2417,6 +2396,7 @@ function useModalStateFromNative() {
   const [ghostexCliStatus, setGhostexCliStatus] = useState<GhostexCliStatusMessage>();
   const [ghostexFolderStats, setGhostexFolderStats] = useState<SidebarGhostexFolderStatsMessage>();
   const [osIntegrationStatus, setOSIntegrationStatus] = useState<OSIntegrationStatusMessage>();
+  const [pluginSettingsStatus, setPluginSettingsStatus] = useState<PluginSettingsStatusMessage>();
   // CDXC:AppIconPicker 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
   const [settingsInitialSection, setSettingsInitialSection] =
@@ -2444,13 +2424,12 @@ function useModalStateFromNative() {
     setRecentProjects(undefined);
     setRenameSession(undefined);
     setStashedPrompts(undefined);
-    setT3BrowserAccess(undefined);
-    setT3ThreadId(undefined);
     setWorktree(undefined);
     setPortlessSetup(undefined);
     setUpdateAvailable(undefined);
     setGhostexFolderStats(undefined);
     setOSIntegrationStatus(undefined);
+    setPluginSettingsStatus(undefined);
     // CDXC:AppIconPicker 2026-06-25-21:50: Drop stale App Icon state when the modal closes.
     setAppIconState(undefined);
     setAgentsHubCatalog(undefined);
@@ -2637,8 +2616,6 @@ function useModalStateFromNative() {
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2659,8 +2636,6 @@ function useModalStateFromNative() {
             setFirstUserMessage(undefined);
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2677,8 +2652,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2707,8 +2680,6 @@ function useModalStateFromNative() {
             setFirstUserMessage(undefined);
                     setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2739,8 +2710,6 @@ function useModalStateFromNative() {
             setFirstUserMessage(undefined);
                     setRemoteGxserverInstall(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2776,47 +2745,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
-            setWorktree(undefined);
-            setPortlessSetup(undefined);
-            setWorktreeDelete(undefined);
-          } else if (T3CODE_ENABLED && message.modal === "t3BrowserAccess") {
-            if (!message.access) {
-              throw new Error("T3 browser access modal request is missing access details.");
-            }
-            /**
-             * CDXC:T3RemoteAccess 2026-05-02-00:57
-             * The Remote Access QR dialog must be owned by the full-window app
-             * modal host so the QR code centers over ghostex instead of rendering
-             * inside the narrow sidebar webview.
-             */
-            setT3BrowserAccess(message.access);
-            setConfig({});
-            setDelayedSend(undefined);
-            setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
-            setRemoteProjectPicker(undefined);
-            setRenameSession(undefined);
-            setT3ThreadId(undefined);
-            setWorktree(undefined);
-            setPortlessSetup(undefined);
-            setWorktreeDelete(undefined);
-          } else if (T3CODE_ENABLED && message.modal === "t3ThreadId") {
-            if (!message.sessionId || typeof message.threadId !== "string") {
-              throw new Error("T3 thread id modal request is missing sessionId or threadId.");
-            }
-            setT3ThreadId({
-              currentThreadId: message.threadId,
-              sessionId: message.sessionId,
-            });
-            setConfig({});
-            setDelayedSend(undefined);
-            setFirstUserMessage(undefined);
-                    setRemoteGxserverInstall(undefined);
-            setRemoteProjectPicker(undefined);
-            setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2834,8 +2762,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setGitCommit(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2856,8 +2782,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setGitCommit(undefined);
             setWorktreeDelete(undefined);
@@ -2872,8 +2796,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setGitCommit(undefined);
@@ -2888,8 +2810,6 @@ function useModalStateFromNative() {
             setFirstUserMessage(undefined);
                     setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2909,8 +2829,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -2921,8 +2839,6 @@ function useModalStateFromNative() {
                     setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
             setRenameSession(undefined);
-            setT3BrowserAccess(undefined);
-            setT3ThreadId(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -3140,6 +3056,10 @@ function useModalStateFromNative() {
             setOSIntegrationStatus(message.message);
             return;
           }
+          if (isPluginSettingsStatusMessage(message.message)) {
+            setPluginSettingsStatus(message.message);
+            return;
+          }
           // CDXC:AppIconPicker 2026-06-25-21:50: Route relayed App Icon state into Settings modal state.
           if (isAppIconStateMessage(message.message)) {
             setAppIconState(message.message);
@@ -3200,14 +3120,13 @@ function useModalStateFromNative() {
     stashedPrompts,
     updateAvailable,
     remoteGxserverInstall,
-    t3BrowserAccess,
-    t3ThreadId,
     worktree,
     portlessSetup,
     agentHookStatus,
     ghostexCliStatus,
     ghostexFolderStats,
     osIntegrationStatus,
+    pluginSettingsStatus,
     // CDXC:AppIconPicker 2026-06-25-21:50: Expose App Icon state to the modal component.
     appIconState,
     settingsInitialSection,
@@ -3250,6 +3169,17 @@ function isOSIntegrationStatusMessage(message: unknown): message is SidebarOSInt
       typeof message === "object" &&
       "type" in message &&
       message.type === "osIntegrationStatus",
+  );
+}
+
+function isPluginSettingsStatusMessage(
+  message: unknown,
+): message is SidebarPluginSettingsStatusMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      "type" in message &&
+      message.type === "pluginSettingsStatus",
   );
 }
 
@@ -3351,8 +3281,6 @@ function isModalRenderable({
   stashedPrompts,
   updateAvailable,
   settings,
-  t3BrowserAccess,
-  t3ThreadId,
   worktree,
   portlessSetup,
 }: {
@@ -3372,8 +3300,6 @@ function isModalRenderable({
   stashedPrompts: StashedPromptsModalState | undefined;
   updateAvailable: UpdateAvailableModalState | undefined;
   settings: unknown;
-  t3BrowserAccess: T3BrowserAccessMessage | undefined;
-  t3ThreadId: T3ThreadIdModalState | undefined;
   worktree: WorktreeModalState | undefined;
   portlessSetup: PortlessSetupModalState | undefined;
 }): boolean {
@@ -3419,10 +3345,6 @@ function isModalRenderable({
     case "hotkeys":
     case "openTargets":
       return settings !== undefined;
-    case "t3BrowserAccess":
-      return t3BrowserAccess !== undefined;
-    case "t3ThreadId":
-      return t3ThreadId !== undefined;
     case "worktree":
       return worktree !== undefined;
     case "portlessSetup":

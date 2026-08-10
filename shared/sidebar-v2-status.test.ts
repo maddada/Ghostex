@@ -151,7 +151,7 @@ describe("resolveSidebarV2Status", () => {
     );
   });
 
-  test("attention outranks working, matching t3code precedence", () => {
+  test("attention outranks working", () => {
     expect(
       resolveSidebarV2Status(
         session({ activity: "attention", workingStartedAt: new Date(NOW_MS).toISOString() }),
@@ -240,7 +240,7 @@ describe("resolveSidebarV2Status", () => {
 });
 
 describe("hasUnseenCompletion", () => {
-  test("a never-visited session does not count as unseen (t3code parity)", () => {
+  test("a never-visited session does not count as unseen", () => {
     expect(
       hasUnseenCompletion(
         { activity: "idle", lastInteractionAt: new Date(NOW_MS).toISOString() },
@@ -292,7 +292,7 @@ describe("resolveSidebarV2GroupStatus", () => {
     ).toBeNull();
   });
 
-  test("priority keeps t3code's approval > input > working > failed order", () => {
+  test("priority keeps approval > input > working > failed order", () => {
     expect(sidebarV2StatusPriority("approval")).toBeGreaterThan(sidebarV2StatusPriority("input"));
     expect(sidebarV2StatusPriority("input")).toBeGreaterThan(sidebarV2StatusPriority("working"));
     expect(sidebarV2StatusPriority("working")).toBeGreaterThan(sidebarV2StatusPriority("failed"));

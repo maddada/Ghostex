@@ -31,7 +31,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { SidebarProjectGroupingMode } from "../../shared/ghostex-settings";
-import { T3CODE_ENABLED } from "../../shared/feature-flags";
 import type {
   SidebarSessionItem,
   SidebarSessionTag,
@@ -161,12 +160,11 @@ export type SidebarV2ContextMenuHandlers = {
   onGenerateTitle?: () => void;
   /**
    * CDXC:SidebarV2Worktree 2026-07-29:
-   * t3code parity: start another session in the checkout this row already
+   * Start another session in the checkout this row already
    * lives in. It is an OPEN-EXISTING create (the worktree is right there), so
    * it never cuts a new branch.
    */
   onNewSessionOnBranch?: () => void;
-  onRemoteAccess?: () => void;
   onRename: () => void;
   onSetPinned: (pinned: boolean) => void;
   /** `undefined` clears the tag. Re-picking the tag a session already carries is
@@ -347,16 +345,6 @@ export function createSidebarV2ContextMenuSections(
       key: "viewFirstMessage",
       label: "View 1st message",
       onClick: handlers.onViewFirstMessage,
-    });
-  }
-  if (T3CODE_ENABLED && eligibility?.isT3Session === true && handlers.onRemoteAccess) {
-    sessionActions.push({
-      icon: (
-        <IconDeviceMobile aria-hidden="true" className={CONTEXT_MENU_ICON_CLASS} size={16} stroke={1.8} />
-      ),
-      key: "remoteAccess",
-      label: "Remote Access",
-      onClick: handlers.onRemoteAccess,
     });
   }
   if (eligibility?.canCopyResumeCommand === true && handlers.onCopyResumeCommand) {

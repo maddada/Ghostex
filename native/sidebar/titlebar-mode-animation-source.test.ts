@@ -65,7 +65,7 @@ describe("titlebar mode active state source", () => {
      */
     const titlebarModesSource = sourceBetween(
       titlebarHostSource,
-      "const titlebarModes = [",
+      "const configuredTitlebarModes = [",
       "const resolveTitlebarDropdownPanelSize = useCallback",
     );
 

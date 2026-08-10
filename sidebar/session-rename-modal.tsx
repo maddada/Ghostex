@@ -77,7 +77,7 @@ export function SessionRenameModal({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const userInteractedAfterOpenRef = useRef(false);
   const promptAgents = useMemo(
-    () => agents.filter((agent) => agent.agentId !== "t3" && agent.command?.trim()),
+    () => agents.filter((agent) => agent.command?.trim()),
     [agents],
   );
   const promptAgentSelectItems = useMemo(

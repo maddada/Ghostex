@@ -68,18 +68,6 @@ export function SidebarV2SessionIcon({
     );
   }
 
-  if (agentIcon === "t3") {
-    return (
-      <IconMessageCircle
-        aria-hidden="true"
-        className="sidebar-v2-session-icon"
-        data-icon-variant="glyph"
-        size={16}
-        stroke={1.8}
-      />
-    );
-  }
-
   if (!agentIcon) {
     return (
       <IconTerminal2
@@ -135,7 +123,7 @@ export type SidebarV2ProjectIconProps = {
   /**
    * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
    * The icon the project's OWN repository ships, discovered by gxserver from
-   * the checkout (its `t3.json` `iconPath`, its favicon, or the icon its HTML
+   * the checkout (its favicon or the icon its HTML
    * entry point declares) and carried as a data URL. Ranks below a user-attached
    * image and above the typed glyph — see the chain above.
    */

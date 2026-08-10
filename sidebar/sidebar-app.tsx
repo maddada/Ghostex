@@ -55,7 +55,6 @@ import {
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
-import { T3CODE_ENABLED } from "../shared/feature-flags";
 import {
   MAX_GROUP_COUNT,
   type SidebarActiveSessionsSortMode,
@@ -1906,21 +1905,6 @@ export function SidebarApp({
       return;
     }
 
-    if (T3CODE_ENABLED && event.data.type === "showT3BrowserAccess") {
-      /**
-       * CDXC:T3RemoteAccess 2026-05-02-00:57
-       * Remote Access is launched from sidebar session actions, but the QR
-       * modal must render in the app-level host so it is centered over the
-       * whole workspace instead of being constrained to the sidebar.
-       */
-      openAppModal({
-        access: event.data,
-        modal: "t3BrowserAccess",
-        type: "open",
-      });
-      return;
-    }
-
     if (event.data.type === "showSessionRenameModal") {
       dismissAppModalForSidebarNavigation("SettingsDismissal:renameSession");
       openAppModal({
@@ -1928,16 +1912,6 @@ export function SidebarApp({
         modal: "renameSession",
         sessionAgentIcon: event.data.sessionAgentIcon,
         sessionId: event.data.sessionId,
-        type: "open",
-      });
-      return;
-    }
-
-    if (T3CODE_ENABLED && event.data.type === "showT3ThreadIdModal") {
-      openAppModal({
-        modal: "t3ThreadId",
-        sessionId: event.data.sessionId,
-        threadId: event.data.currentThreadId,
         type: "open",
       });
       return;
@@ -5314,9 +5288,6 @@ export function SidebarApp({
         sessionDropIndicator={sessionDropIndicator}
         sessionTagListItems={sidebarSessionTagListItems}
         showHeaderActions={true}
-        showAgentGuiAction={
-          T3CODE_ENABLED && typeof window !== "undefined" && "ghostexGpui" in window
-        }
         showSessionDropPositionIndicators={true}
         useColoredAgentIcons={effectiveSettings.useColoredSessionAgentIcons}
         vscode={vscode}

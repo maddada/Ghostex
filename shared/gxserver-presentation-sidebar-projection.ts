@@ -389,19 +389,11 @@ export function createGxserverPresentationSidebarSession({
     nativePaneState === "mounting";
   const closeAfterDone = resolveCloseAfterDone?.(projectId, presentation.sessionId);
   const delayedSend = resolveDelayedSend?.(projectId, presentation.sessionId);
-  const agentIcon =
-    presentation.kind === "t3"
-      ? "t3"
-      : resolveAgentIcon(presentation.agentIcon ?? presentation.agentName ?? presentation.agentId);
+  const agentIcon = resolveAgentIcon(
+    presentation.agentIcon ?? presentation.agentName ?? presentation.agentId,
+  );
   return {
     activity: presentation.activity,
-    /*
-    CDXC:T3CodeSidebar 2026-07-02-00:54:
-    Presentation-backed T3 Code rows can have `kind: "t3"` without agent
-    metadata. Project the T3 sidebar identity from the kind itself so real
-    app rows render the requested message-circle icon instead of relying on
-    Storybook-only fixture agentIcon data.
-    */
     agentIcon,
     agentSessionId: presentation.agentSessionId ?? localSession?.agentSessionId,
     alias: presentation.title,

@@ -7,6 +7,7 @@ import { IconRobot } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { cn } from "../../lib/utils";
+import type { SessionChatTheme } from "../../shared/session-chat";
 import { getDefaultSidebarAgentById } from "../../shared/sidebar-agents";
 import { getBrandAgentLogoStyle } from "../agent-logos";
 import { TooltipProvider } from "../app-tooltip";
@@ -60,6 +61,18 @@ const INTERACTIVE_TARGET_SELECTOR = [
 
 export type { SessionChatHostAction, SessionChatHostActions, SessionChatHostLinks };
 
+export interface SessionChatHostComposerActions {
+  focus: () => void;
+  handoffToTerminal: () => Promise<string>;
+  insertPrompt: (content: string) => boolean;
+  requestStash: () => void;
+}
+
+export interface SessionChatHostComposerBridge {
+  register: (actions: SessionChatHostComposerActions) => () => void;
+  stashPrompt: (content: string, options?: { transient?: boolean }) => Promise<void>;
+}
+
 export interface SessionChatViewProps {
   /** Host-injected transport scoped to one (projectId, sessionId). */
   transport: SessionChatTransport;
@@ -75,12 +88,14 @@ export interface SessionChatViewProps {
   commandCatalog?: readonly string[];
   /**
    * Stable identity of this conversation, used to persist the last chosen
-   * session options (model/effort) per session. Hosts that cannot name the
-   * session omit it, which simply means the pills start from the defaults.
+   * session options and the unsent composer draft per session. Hosts that
+   * cannot name the session omit it, which keeps both values per mount.
    */
   sessionKey?: string;
   /** Top-right Terminal View / Agent Actions cluster (see the type doc). */
   hostActions?: SessionChatHostActions;
+  /** Native-host requests that must act on this chat composer's draft. */
+  hostComposerBridge?: SessionChatHostComposerBridge;
   /**
    * What the host does with links in the conversation (web URLs, machine file
    * paths). Omitted means browser defaults: URLs open in a new tab and file
@@ -93,6 +108,8 @@ export interface SessionChatViewProps {
    * sibling assets (the mobile single-file bundle) omit it.
    */
   monacoVsBaseUrl?: string;
+  /** Chat-only palette. It does not change the host application's chrome. */
+  theme?: SessionChatTheme;
   className?: string;
 }
 
@@ -148,13 +165,40 @@ function NewSessionWelcome({ agentLabel }: { agentLabel?: string | null }) {
       <div className="ghostex-chat-new-session-title">
         {agentName ? (
           <>
-            What should we build with{" "}
-            <span className="ghostex-chat-new-session-agent-name">{agentName}</span>?
+            What should we build with {agentName}?
           </>
         ) : (
           "What should we work on?"
         )}
       </div>
+    </div>
+  );
+}
+
+function SessionAgentIdentity({ agentLabel }: { agentLabel?: string | null }) {
+  const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
+  const agentName = displayAgentName(agentLabel);
+  if (!agentName) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-label={`Agent ${agentName}`}
+      className="flex min-w-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground"
+    >
+      {agent?.icon ? (
+        <span
+          aria-hidden="true"
+          className="block size-3.5 shrink-0"
+          style={getBrandAgentLogoStyle(agent.icon)}
+        />
+      ) : (
+        <IconRobot aria-hidden="true" className="size-3.5 shrink-0" stroke={1.8} />
+      )}
+      <span className="min-w-0 truncate" style={{ maxWidth: "6rem" }}>
+        {agentName}
+      </span>
     </div>
   );
 }
@@ -165,13 +209,20 @@ export function SessionChatView({
   className,
   commandCatalog,
   hostActions,
+  hostComposerBridge,
   hostLinks,
   monacoVsBaseUrl,
   previewText,
   sessionKey,
+  theme = "dark",
   transport,
   working,
 }: SessionChatViewProps) {
+  useEffect(() => {
+    // Chat dropdowns are portaled outside this root. Stamp the chat-only
+    // palette on body so those explicitly scoped popup surfaces match.
+    document.body.dataset.sessionChatTheme = theme;
+  }, [theme]);
   const slashCommands = useMemo(
     () => sessionChatSlashCommandsForAgent(agentLabel ?? null),
     [agentLabel],
@@ -213,6 +264,52 @@ export function SessionChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyDetectedOptions, detectedAt]);
   const composerRef = useRef<SessionChatComposerHandle | null>(null);
+  const stashComposerDraft = useCallback((): void => {
+    const composer = composerRef.current;
+    const draft = composer?.getDraft() ?? "";
+    if (!hostComposerBridge || !draft.trim()) {
+      return;
+    }
+    void hostComposerBridge
+      .stashPrompt(draft)
+      .then(() => {
+        // A save can overlap more typing. Move only the exact saved snapshot;
+        // never clear text the user added while gxserver was answering.
+        composerRef.current?.clearDraft(draft);
+      })
+      .catch(() => {
+        // Keep the draft intact so a failed stash can be retried.
+      });
+  }, [hostComposerBridge]);
+  const handoffComposerDraft = useCallback(async (): Promise<string> => {
+    const composer = composerRef.current;
+    const draft = composer?.getDraft() ?? "";
+    if (!hostComposerBridge || !draft.trim()) {
+      if (draft.length > 0) {
+        composer?.clearDraft(draft);
+      }
+      return "";
+    }
+    await hostComposerBridge.stashPrompt(draft, { transient: true });
+    // The exact snapshot that became durable must still own the composer.
+    // If more text arrived during the save, remain in chat with all text
+    // intact instead of switching with a partial draft.
+    if (composerRef.current?.clearDraft(draft) !== true) {
+      throw new Error("The draft changed while it was being moved.");
+    }
+    return draft;
+  }, [hostComposerBridge]);
+  useEffect(() => {
+    if (!hostComposerBridge) {
+      return;
+    }
+    return hostComposerBridge.register({
+      focus: () => composerRef.current?.focus(),
+      handoffToTerminal: handoffComposerDraft,
+      insertPrompt: (content) => composerRef.current?.insertTypedText(content) ?? false,
+      requestStash: stashComposerDraft,
+    });
+  }, [handoffComposerDraft, hostComposerBridge, stashComposerDraft]);
   const pasteImage = useMemo(() => {
     const saveImage = transport.saveImage?.bind(transport);
     return saveImage
@@ -302,8 +399,8 @@ export function SessionChatView({
       : chat.view.kind === "error"
         ? ("error" as const)
         : chat.view.kind;
-  const showNewSessionWelcome =
-    emptyKind === "loading" || emptyKind === "starting" || emptyKind === "empty";
+  const hideUnresolvedState = emptyKind === "loading" || emptyKind === "starting";
+  const showNewSessionWelcome = emptyKind === "empty";
 
   return (
     <TooltipProvider>
@@ -314,8 +411,10 @@ export function SessionChatView({
         // rounded look. The scope class lifts the SquareTheme border-radius
         // override (sidebar/styles.css) for controls inside the chat.
         "ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]",
+        theme === "dark" && "dark",
         className,
       )}
+        data-chat-theme={theme}
         onKeyDownCapture={handleKeyDownCapture}
         tabIndex={-1}
       >
@@ -346,7 +445,7 @@ export function SessionChatView({
             messages={chat.messages}
             onLoadEarlier={chat.loadEarlier}
           />
-        ) : showNewSessionWelcome ? (
+        ) : hideUnresolvedState ? null : showNewSessionWelcome ? (
           <NewSessionWelcome agentLabel={agentLabel} />
         ) : emptyKind ? (
           chat.view.kind === "error" ? (
@@ -375,7 +474,10 @@ export function SessionChatView({
           <SessionChatComposer
             disabled={!canSend}
             isWorking={chat.working}
+            key={sessionKey}
             monacoVsBaseUrl={monacoVsBaseUrl}
+            sessionKey={sessionKey}
+            theme={theme}
             onAttachFile={attachFile}
             onInterrupt={interrupt}
             onLoadImagePreview={loadImageDataUrl}
@@ -383,19 +485,24 @@ export function SessionChatView({
             onPickPaths={pickPaths}
             onSend={send}
             optionPills={
-              <SessionChatSessionOptionPills
-                canSend={canSend}
-                canSendKey={chat.sendKey !== undefined}
-                controller={sessionOptions}
-                isWorking={chat.working}
-                onDispatchCommand={send}
-                onDispatchKey={async (key, marker) => {
-                  await chat.sendKey?.(key, marker);
-                }}
-                {...(hostActions?.onSwitchToTerminal
-                  ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
-                  : {})}
-              />
+              <>
+                {chat.view.kind === "ready" ? (
+                  <SessionAgentIdentity agentLabel={agentLabel} />
+                ) : null}
+                <SessionChatSessionOptionPills
+                  canSend={canSend}
+                  canSendKey={chat.sendKey !== undefined}
+                  controller={sessionOptions}
+                  isWorking={chat.working}
+                  onDispatchCommand={send}
+                  onDispatchKey={async (key, marker) => {
+                    await chat.sendKey?.(key, marker);
+                  }}
+                  {...(hostActions?.onSwitchToTerminal
+                    ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
+                    : {})}
+                />
+              </>
             }
             placeholder={canSend ? undefined : "Input is held by another device."}
             ref={composerRef}

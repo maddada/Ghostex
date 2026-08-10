@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionChatMessage } from "../../shared/session-chat";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
+import { Separator } from "../../components/ui/separator";
 import {
   Attachment,
   AttachmentContent,
@@ -46,7 +47,12 @@ import {
   MessageScrollerViewport,
 } from "../../components/ui/message-scroller";
 import { orderSessionChatMessages } from "./session-chat-assembler";
+import {
+  centerSessionChatExpansion,
+  SessionChatExpansion,
+} from "./session-chat-expansion";
 import { SessionChatMarkdown } from "./session-chat-markdown";
+import { isSessionChatPendingMessageId } from "./session-chat-pending";
 import {
   dropSessionChatHiddenMessages,
   sessionChatSuppressedTurnLabel,
@@ -175,12 +181,19 @@ function CopyFooter({ markdown }: { markdown: string }) {
  */
 function SuppressedTurn({ label, text }: { label: string; text: string }) {
   const [expanded, setExpanded] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-1.5">
+    <div className="flex w-full min-w-0 flex-col gap-1.5 pb-2">
       <button
         aria-expanded={expanded}
         className="flex min-w-0 items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => {
+          if (!expanded) {
+            centerSessionChatExpansion(triggerRef.current);
+          }
+          setExpanded((value) => !value);
+        }}
+        ref={triggerRef}
         type="button"
       >
         <IconChevronRight
@@ -191,12 +204,80 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
         <span className="truncate">{label}</span>
       </button>
       {expanded ? (
-        <div className="min-w-0 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {text}
-        </div>
+        <SessionChatExpansion
+          label={`Collapse ${label}`}
+          onCollapse={() => setExpanded(false)}
+        >
+          <div className="min-w-0 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            {text}
+          </div>
+        </SessionChatExpansion>
       ) : null}
     </div>
   );
+}
+
+function ReasoningRow({ markdown }: { markdown: string }) {
+  const text = markdown
+    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, "")
+    .replace(/(?:\*\*|__|\*|_|~~)/g, "")
+    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, "$1")
+    .trim();
+
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="ghostex-chat-thinking-row">
+      {lines.map((line, index) => (
+        <div className="ghostex-chat-thinking-line" key={index}>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/*
+Codex can fold rapid/steered inputs into one transcript turn with a line that
+contains only "---". Rendering that transport separator as Markdown turns the
+entire preceding paragraph into a Setext h2. It can also repeat an earlier
+input after the separator (the repeated part is normally a prefix of the
+combined part). Present those inputs as ordinary paragraphs and collapse the
+repeated prefix instead of exposing transport syntax in the user's bubble.
+*/
+const USER_TURN_SEPARATOR = /\r?\n[\t ]*---[\t ]*(?:\r?\n|$)/;
+
+function normalizeUserMessageMarkdown(markdown: string): string {
+  const parts = markdown.split(USER_TURN_SEPARATOR).map((part) => part.trim());
+  if (parts.length === 1) {
+    return markdown;
+  }
+
+  const visible: string[] = [];
+  for (const part of parts) {
+    if (!part) {
+      continue;
+    }
+    const containingIndex = visible.findIndex((candidate) =>
+      candidate.startsWith(part),
+    );
+    if (containingIndex < 0) {
+      visible.push(part);
+      continue;
+    }
+
+    const remainder =
+      visible[containingIndex]?.slice(part.length).trimStart() ?? "";
+    visible[containingIndex] = remainder ? `${part}\n\n${remainder}` : part;
+  }
+  return visible.join("\n\n");
 }
 
 function MessageRow({
@@ -230,51 +311,56 @@ function MessageRow({
 
   if (isSystem) {
     return (
-      <Marker>
+      <Marker className="pb-2">
         <MarkerContent>{markdown}</MarkerContent>
       </Marker>
     );
   }
 
+  if (
+    isReasoning &&
+    markdown.length > 0 &&
+    images.length === 0 &&
+    tools.length === 0
+  ) {
+    return <ReasoningRow markdown={markdown} />;
+  }
+
   if (isUser) {
+    const userMarkdown = normalizeUserMessageMarkdown(markdown);
     // Optimistic echoes render IDENTICALLY to real turns — no muting, no
     // "Queued" label — so replacement by the transcript turn causes no
     // visible state change.
     return (
-      <Message align="end" data-role="user">
+      <Message align="end" className="pb-4" data-role="user">
         <MessageContent>
           {/* justify-end keeps wrapped rows against the user's side. */}
           <ImageAttachments blocks={images} className="self-end justify-end" />
-          {markdown.length > 0 ? (
+          {userMarkdown.length > 0 ? (
             <Bubble
               align="end"
-              className="*:data-[slot=bubble-content]:bg-[#141414] *:data-[slot=bubble-content]:text-[#f4f4f4]"
+              className="ghostex-chat-user-bubble"
               variant="default"
             >
               <BubbleContent>
-                <SessionChatMarkdown markdown={markdown} />
+                <SessionChatMarkdown markdown={userMarkdown} />
               </BubbleContent>
             </Bubble>
           ) : null}
-          {showControls ? <CopyFooter markdown={markdown} /> : null}
+          {showControls ? <CopyFooter markdown={userMarkdown} /> : null}
         </MessageContent>
       </Message>
     );
   }
 
   return (
-    <Message align="start" data-role={message.role}>
+    <Message align="start" className="pb-4" data-role={message.role}>
       <MessageContent>
         <ImageAttachments blocks={images} />
         {markdown.length > 0 ? (
-          <Bubble
-            className={isReasoning ? "text-muted-foreground" : undefined}
-            variant="ghost"
-          >
-            <BubbleContent className={isReasoning ? "text-[0.8125rem]" : undefined}>
-              <SessionChatMarkdown markdown={markdown} />
-            </BubbleContent>
-          </Bubble>
+          <div className="ghostex-chat-agent-message">
+            <SessionChatMarkdown markdown={markdown} />
+          </div>
         ) : null}
         {tools.length > 0 ? (
           <SessionChatToolRun blocks={tools} expandSignal={expandToolRuns} />
@@ -282,6 +368,176 @@ function MessageRow({
         {showControls ? <CopyFooter markdown={markdown} /> : null}
       </MessageContent>
     </Message>
+  );
+}
+
+interface CompletedWorkTurn {
+  final: SessionChatMessage;
+  user: SessionChatMessage;
+  work: SessionChatMessage[];
+}
+
+type SessionChatRenderItem =
+  | { kind: "message"; message: SessionChatMessage }
+  | { kind: "completed-work"; turn: CompletedWorkTurn };
+
+function hasAgentResponseContent(message: SessionChatMessage): boolean {
+  return (
+    message.role === "assistant" &&
+    message.id !== SESSION_CHAT_STREAMING_ID &&
+    message.blocks.some(
+      (block) =>
+        block.type === "image-ref" ||
+        (block.type === "text" && block.text.trim().length > 0),
+    )
+  );
+}
+
+/**
+ * A completed interaction keeps the user's message and the agent's final
+ * response in the normal transcript flow. Everything the agent emitted in
+ * between becomes one collapsed work section. The newest interaction stays
+ * expanded while the agent is still working.
+ */
+function completedWorkRenderItems(
+  messages: readonly SessionChatMessage[],
+  isWorking: boolean,
+): SessionChatRenderItem[] {
+  const items: SessionChatRenderItem[] = [];
+  let index = 0;
+  while (index < messages.length) {
+    const message = messages[index];
+    if (!message || message.role !== "user") {
+      if (message) {
+        items.push({ kind: "message", message });
+      }
+      index += 1;
+      continue;
+    }
+
+    let nextUserIndex = index + 1;
+    while (
+      nextUserIndex < messages.length &&
+      messages[nextUserIndex]?.role !== "user"
+    ) {
+      nextUserIndex += 1;
+    }
+    const turnMessages = messages.slice(index + 1, nextUserIndex);
+    let finalIndex = -1;
+    for (let turnIndex = turnMessages.length - 1; turnIndex >= 0; turnIndex -= 1) {
+      const candidate = turnMessages[turnIndex];
+      if (candidate && hasAgentResponseContent(candidate)) {
+        finalIndex = turnIndex;
+        break;
+      }
+    }
+    const isNewestTurn = nextUserIndex === messages.length;
+    if (finalIndex < 0 || (isNewestTurn && isWorking)) {
+      items.push({ kind: "message", message });
+      for (const turnMessage of turnMessages) {
+        items.push({ kind: "message", message: turnMessage });
+      }
+      index = nextUserIndex;
+      continue;
+    }
+
+    const final = turnMessages[finalIndex];
+    if (!final) {
+      items.push({ kind: "message", message });
+      index += 1;
+      continue;
+    }
+    items.push({ kind: "message", message });
+    items.push({
+      kind: "completed-work",
+      turn: {
+        final,
+        user: message,
+        work: turnMessages.filter((_, turnIndex) => turnIndex !== finalIndex),
+      },
+    });
+    index = nextUserIndex;
+  }
+  return items;
+}
+
+function workedDurationLabel(
+  startedAt: number | null,
+  completedAt: number | null,
+): string {
+  if (startedAt === null || completedAt === null || completedAt < startedAt) {
+    return "Worked";
+  }
+  const seconds = Math.max(1, Math.round((completedAt - startedAt) / 1000));
+  if (seconds < 60) {
+    return `Worked for ${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `Worked for ${minutes}m${remainder > 0 ? ` ${remainder}s` : ""}`;
+}
+
+function CompletedWork({
+  expandSignal,
+  turn,
+}: {
+  expandSignal: boolean;
+  turn: CompletedWorkTurn;
+}) {
+  const [open, setOpen] = useState(expandSignal);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => setOpen(expandSignal), [expandSignal]);
+  const hasWork = turn.work.length > 0;
+
+  return (
+    <div className="ghostex-chat-completed-turn">
+      <div className="ghostex-chat-completed-work">
+        <Button
+          aria-expanded={hasWork ? open : undefined}
+          className="ghostex-chat-completed-work-trigger"
+          disabled={!hasWork}
+          onClick={() => {
+            if (hasWork) {
+              if (!open) {
+                centerSessionChatExpansion(triggerRef.current);
+              }
+              setOpen((value) => !value);
+            }
+          }}
+          ref={triggerRef}
+          size="xs"
+          type="button"
+          variant="ghost"
+        >
+          <span>{workedDurationLabel(turn.user.timestamp, turn.final.timestamp)}</span>
+          {hasWork ? (
+            <IconChevronRight
+              aria-hidden="true"
+              className={cn(open && "rotate-90")}
+              data-icon="inline-end"
+              stroke={2}
+            />
+          ) : null}
+        </Button>
+        <Separator />
+        {hasWork && open ? (
+          <SessionChatExpansion
+            bodyClassName="ghostex-chat-completed-work-content"
+            label="Collapse completed work"
+            onCollapse={() => setOpen(false)}
+          >
+            {turn.work.map((message) => (
+              <MessageRow
+                expandToolRuns={expandSignal}
+                key={message.id}
+                message={message}
+              />
+            ))}
+          </SessionChatExpansion>
+        ) : null}
+      </div>
+      <MessageRow expandToolRuns={expandSignal} message={turn.final} />
+    </div>
   );
 }
 
@@ -349,6 +605,10 @@ export function SessionChatMessageList({
 
   const showTypingIndicator =
     isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+  const renderItems = useMemo(
+    () => completedWorkRenderItems(rendered, isWorking),
+    [isWorking, rendered],
+  );
 
   return (
     <MessageScrollerProvider
@@ -375,19 +635,40 @@ export function SessionChatMessageList({
               </Button>
             </div>
           ) : null}
-          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-5 px-4 pt-8 pb-4 [direction:ltr]">
-            {rendered.map((message) => (
+          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]">
+            {renderItems.map((item) => (
               <MessageScrollerItem
-                key={message.id}
-                messageId={message.id}
-                // Collapsed harness markers are user-role rows but must never
-                // become the scroll anchor for a turn.
+                key={
+                  item.kind === "message"
+                    ? item.message.id
+                    : `completed-work:${item.turn.user.id}:${item.turn.final.id}`
+                }
+                messageId={
+                  item.kind === "message"
+                    ? item.message.id
+                    : item.turn.final.id
+                }
+                // Anchor the optimistic row exactly once when a local send is
+                // appended. The authoritative transcript replaces that row
+                // with a new id shortly afterwards; anchoring the replacement
+                // makes message-scroller treat reconciliation as another new
+                // turn and jump the viewport back to that message.
                 scrollAnchor={
-                  message.role === "user" &&
-                  sessionChatSuppressedTurnLabel(message) === null
+                  item.kind === "message" &&
+                  isSessionChatPendingMessageId(item.message.id)
                 }
               >
-                <MessageRow expandToolRuns={expandToolRuns} message={message} />
+                {item.kind === "message" ? (
+                  <MessageRow
+                    expandToolRuns={expandToolRuns}
+                    message={item.message}
+                  />
+                ) : (
+                  <CompletedWork
+                    expandSignal={expandToolRuns}
+                    turn={item.turn}
+                  />
+                )}
               </MessageScrollerItem>
             ))}
             {showTypingIndicator ? (
@@ -408,7 +689,7 @@ export function SessionChatMessageList({
             ) : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <MessageScrollerButton />
+        <MessageScrollerButton className="ghostex-chat-scroll-bottom-button" />
       </MessageScroller>
     </MessageScrollerProvider>
   );

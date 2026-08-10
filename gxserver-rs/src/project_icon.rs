@@ -21,23 +21,16 @@ Both sidebar versions render this value. Icon discovery therefore follows the
 published-project lifecycle itself and must never be gated by which sidebar
 layout happens to be selected.
 
-The discovery logic is a faithful port of t3code's
-`apps/server/src/project/ProjectFaviconResolver.ts` (the reference implementation
-named in `plans/009-sidebar-v2-inbox.md`), including its candidate list and its
-precedence:
+The discovery logic uses a stable candidate list and precedence:
 
-  1. `t3.json` -> `iconPath`, a workspace-relative path the repository declares
-     for itself. Ghostex reads the SAME file and the SAME key, because the schema
-     already exists and repositories that carry it (this one included) should not
-     need a second, Ghostex-only spelling of the same fact.
-  2. The well-known favicon / app-icon locations, in the fixed order below.
-  3. An icon declared by a source file: `<link rel="icon" href="...">` in an HTML
+  1. The well-known favicon / app-icon locations, in the fixed order below.
+  2. An icon declared by a source file: `<link rel="icon" href="...">` in an HTML
      entry point, or the same shape written as object metadata in a TanStack /
      Remix style root route. The href resolves against `public/` first and then
-     against the root, exactly like t3code.
+     against the root.
 
 Everything Ghostex adds on top exists because Ghostex ships the BYTES over a
-protocol rather than serving a signed file URL like t3code does:
+protocol rather than serving a signed file URL:
 
 - A hard size cap (`MAX_PROJECT_ICON_BYTES`), matching the cap gpui already
   applies to browser-tab favicons, so no presentation snapshot can be inflated by
@@ -45,7 +38,7 @@ protocol rather than serving a signed file URL like t3code does:
 - An extension allowlist, because the data URL carries a MIME type and a file we
   cannot name a type for is not renderable anyway.
 - Containment: a candidate must be a regular file that resolves INSIDE the
-  project after symlinks, so neither a hostile `iconPath` nor a symlinked
+  project after symlinks, so neither a hostile relative path nor a symlinked
   `favicon.svg` can make the daemon read `~/.ssh/id_rsa` and publish it.
 
 Cost rules mirror `project_git_remote` exactly, because it is the same kind of
@@ -90,26 +83,13 @@ whose `assets/logo.png` is a 4 MB export still gets its 3 KB `favicon.svg`.
 */
 pub const MAX_PROJECT_ICON_BYTES: u64 = 64 * 1024;
 
-/// Cap on the `t3.json` read. The file is a small hand-written config; anything
-/// larger is not one, and refusing to parse it keeps a pathological repository
-/// from costing the pass a multi-megabyte read.
-pub const MAX_PROJECT_FILE_BYTES: u64 = 64 * 1024;
-
 /// Cap on an icon-source file (an HTML entry point or a root route module) that
 /// is scanned for a `<link rel="icon">`. Generous enough for a real bundled
 /// `index.html`, bounded enough that a generated megabyte file is skipped.
 pub const MAX_ICON_SOURCE_BYTES: u64 = 512 * 1024;
 
-/// t3code's `T3_PROJECT_FILE_PATH_MAX_LENGTH`, kept byte for byte so a repository
-/// that satisfies the published `t3.json` schema is accepted here too.
-pub const MAX_ICON_PATH_CHARS: usize = 512;
-
-/// The checked-in project file, same name and same key as t3code.
-pub const PROJECT_FILE_NAME: &str = "t3.json";
-
 /*
-Well-known favicon paths checked in order — a byte-for-byte port of t3code's
-`FAVICON_CANDIDATES`. The order IS the contract: `favicon.svg` before
+Well-known favicon paths checked in order. The order is the contract: `favicon.svg` before
 `favicon.ico` because a vector icon scales to any chrome size, root before
 `public/` before framework-specific app directories.
 */
@@ -139,7 +119,7 @@ pub const FAVICON_CANDIDATES: &[&str] = &[
 
 /*
 Files that may declare an icon through `<link rel="icon">` or the equivalent
-object metadata — t3code's `ICON_SOURCE_FILES`, in its order.
+object metadata, in order.
 */
 pub const ICON_SOURCE_FILES: &[&str] = &[
     "index.html",
@@ -152,8 +132,7 @@ pub const ICON_SOURCE_FILES: &[&str] = &[
 ];
 
 /*
-The renderable formats. t3code never needs this list because it serves the file
-and lets the browser sniff it; Ghostex has to name a MIME type inside the data
+The renderable formats. Ghostex has to name a MIME type inside the data
 URL, so a candidate whose extension is not here is not a usable icon.
 
 Every entry renders in the sidebar's Chromium (CEF) surface.
@@ -404,7 +383,7 @@ The path a project's icon is discovered from, and the cache key everywhere.
 It is deliberately THE SAME key the `origin` probe uses: a registered worktree
 project resolves to its FAMILY ROOT, so a project and all of its worktrees share
 one probe and show one icon. A worktree is a checkout of the same repository —
-it ships the same `t3.json` and the same favicon — so probing each one separately
+it ships the same favicon — so probing each one separately
 would spend N filesystem scans to reach N identical answers.
 */
 pub fn project_icon_key(project: &Value) -> Option<String> {
@@ -481,20 +460,13 @@ impl ProjectIconProber for SystemProjectIconProber {
 }
 
 /*
-The discovery itself: t3code's `ProjectFaviconResolver.resolvePath` precedence,
-with the file actually loaded instead of a path returned.
+The discovery itself, with the file loaded into a bounded data URL.
 */
 pub fn discover_project_icon(root: &Path) -> Option<ProjectIcon> {
     // The root is canonicalized ONCE, and every candidate is measured against
     // that canonical root. Doing it here rather than per candidate also means a
     // project path that no longer exists costs one failed syscall, not thirty.
     let canonical_root = std::fs::canonicalize(root).ok()?;
-
-    if let Some(declared) = read_declared_icon_path(&canonical_root) {
-        if let Some(icon) = load_project_icon_candidate(&canonical_root, &declared) {
-            return Some(icon);
-        }
-    }
 
     for candidate in FAVICON_CANDIDATES {
         if let Some(icon) = load_project_icon_candidate(&canonical_root, candidate) {
@@ -510,8 +482,8 @@ pub fn discover_project_icon(root: &Path) -> Option<ProjectIcon> {
         let Some(href) = extract_icon_href(&source) else {
             continue;
         };
-        // t3code resolves a declared href against `public/` first and then
-        // against the root, because the href is a SERVED url ("/favicon.png")
+        // Resolve a declared href against `public/` first and then against the
+        // root, because the href is a served URL ("/favicon.png")
         // and `public/` is what most frameworks serve from.
         let clean = href.trim_start_matches('/').to_string();
         for candidate in [format!("public/{clean}"), clean.clone()] {
@@ -522,18 +494,6 @@ pub fn discover_project_icon(root: &Path) -> Option<ProjectIcon> {
     }
 
     None
-}
-
-/// `t3.json` -> `iconPath`, trimmed, non-empty, and within the schema's length
-/// bound. A malformed or absent file is simply no declaration.
-fn read_declared_icon_path(canonical_root: &Path) -> Option<String> {
-    let raw = read_capped_text(canonical_root, PROJECT_FILE_NAME, MAX_PROJECT_FILE_BYTES)?;
-    let parsed: Value = serde_json::from_str(&raw).ok()?;
-    let icon_path = parsed.get("iconPath")?.as_str()?.trim();
-    if icon_path.is_empty() || icon_path.chars().count() > MAX_ICON_PATH_CHARS {
-        return None;
-    }
-    Some(icon_path.to_string())
 }
 
 /*
@@ -569,7 +529,7 @@ fn load_project_icon_candidate(canonical_root: &Path, relative_path: &str) -> Op
     })
 }
 
-/// A capped UTF-8 read of a project-relative file, used for `t3.json` and for
+/// A capped UTF-8 read of a project-relative source file, used for
 /// the icon-source scan. Binary or oversized files read as absent.
 fn read_capped_text(canonical_root: &Path, relative_path: &str, max_bytes: u64) -> Option<String> {
     let absolute = resolve_within_root(canonical_root, relative_path)?;
@@ -585,9 +545,9 @@ Containment. A candidate must be a project-relative path that stays inside the
 project, and it must still be inside it AFTER symlinks are resolved.
 
 Both halves are load bearing and neither subsumes the other:
-- The lexical half (t3code's `resolveRelativePathWithinRoot`) rejects an absolute
+- The lexical half rejects an absolute
   path and any `..` segment before touching the filesystem, so a hostile
-  `iconPath` never even causes a stat outside the project.
+  path before it can cause a stat outside the project.
 - The canonical half rejects a `favicon.svg` that is a symlink to
   `~/.ssh/id_rsa`, which no amount of lexical checking can see.
 */
@@ -596,7 +556,7 @@ fn resolve_within_root(canonical_root: &Path, relative_path: &str) -> Option<Pat
     if trimmed.is_empty() || trimmed.contains('\0') {
         return None;
     }
-    // Declared paths are POSIX-shaped in `t3.json` and in HTML hrefs alike.
+    // Declared HTML paths are URL-shaped and therefore use forward slashes.
     let candidate = Path::new(&trimmed.replace('\\', "/")).to_path_buf();
     if candidate.is_absolute() {
         return None;
@@ -628,7 +588,7 @@ fn normalize_relative_display_path(relative_path: &str) -> String {
 `<link rel="icon" href="...">` in an HTML file, or the same pair written as
 object metadata (`{ rel: "icon", href: "..." }`) in a TanStack/Remix root route.
 
-t3code does this with two lookahead regexes; this is the same two shapes hand
+This recognizes the same two shapes without a regex dependency,
 scanned, because the crate has no regex dependency and the grammar being matched
 is two attribute pairs, not a language. Attribute ORDER must not matter (both
 spellings appear in the wild), and a query string is dropped exactly as the
@@ -820,68 +780,13 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // precedence (the t3code port)
+    // precedence
     // -----------------------------------------------------------------------
-
-    #[test]
-    fn a_declared_icon_path_in_the_project_file_wins_over_every_well_known_location() {
-        /*
-        The user's own case, reproduced in shape: this repository's root
-        `t3.json` declares `ghostex-web/public/favicon.png`, a path that appears
-        nowhere in the well-known candidate list. It must resolve, and it must
-        beat a favicon that DOES sit in a well-known location.
-        */
-        let temp = tempfile::tempdir().expect("tempdir");
-        let root = temp.path();
-        write(root, "favicon.svg", b"<svg/>");
-        write(root, "ghostex-web/public/favicon.png", PNG_BYTES);
-        write(
-            root,
-            "t3.json",
-            br#"{"$schema":"https://t3.codes/schema/t3.json","iconPath":"ghostex-web/public/favicon.png"}"#,
-        );
-
-        let icon = discovered(root).expect("declared icon");
-        assert_eq!(icon.source_relative_path, "ghostex-web/public/favicon.png");
-        assert_eq!(
-            icon.data_url,
-            format!(
-                "data:image/png;base64,{}",
-                BASE64_STANDARD.encode(PNG_BYTES)
-            ),
-            "the published value is the file's bytes, typed by extension"
-        );
-    }
-
-    #[test]
-    fn a_declared_path_that_does_not_resolve_falls_through_to_the_well_known_list() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let root = temp.path();
-        write(root, "public/favicon.png", PNG_BYTES);
-        write(root, "t3.json", br#"{"iconPath":"assets/missing.png"}"#);
-
-        assert_eq!(
-            discovered(root)
-                .expect("fallback icon")
-                .source_relative_path,
-            "public/favicon.png",
-            "a stale declaration must not blind the resolver to a real favicon"
-        );
-
-        // Same for a `t3.json` that is not valid JSON at all.
-        write(root, "t3.json", b"{ not json");
-        assert_eq!(
-            discovered(root)
-                .expect("fallback icon")
-                .source_relative_path,
-            "public/favicon.png"
-        );
-    }
 
     #[test]
     fn the_well_known_candidates_are_checked_in_the_reference_order() {
         /*
-        The order is the contract ported from t3code: a vector root favicon
+        The order is the contract: a vector root favicon
         outranks `favicon.ico`, root outranks `public/`, and `public/` outranks
         the framework app directories. Asserted by walking the list and removing
         the winner each time, which pins the WHOLE order rather than a sample.
@@ -1005,35 +910,6 @@ mod tests {
     // safety and limits
     // -----------------------------------------------------------------------
 
-    #[test]
-    fn a_declared_path_may_never_leave_the_project() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let outside = temp.path().join("outside");
-        std::fs::create_dir_all(&outside).expect("outside dir");
-        std::fs::write(outside.join("secret.png"), PNG_BYTES).expect("outside file");
-
-        let root = temp.path().join("project");
-        std::fs::create_dir_all(&root).expect("project dir");
-
-        for declared in [
-            "../outside/secret.png",
-            "./../outside/secret.png",
-            "nested/../../outside/secret.png",
-            "/etc/hosts.png",
-            "..\\outside\\secret.png",
-        ] {
-            std::fs::write(
-                root.join("t3.json"),
-                format!(r#"{{"iconPath":"{}"}}"#, declared.replace('\\', "\\\\")),
-            )
-            .expect("project file");
-            assert!(
-                discovered(&root).is_none(),
-                "{declared} must not resolve to a file outside the project"
-            );
-        }
-    }
-
     #[cfg(unix)]
     #[test]
     fn a_symlinked_candidate_that_points_outside_the_project_is_refused() {
@@ -1091,13 +967,6 @@ mod tests {
     fn unrenderable_and_empty_candidates_are_not_icons() {
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path();
-        write(root, "t3.json", br#"{"iconPath":"docs/logo.pdf"}"#);
-        write(root, "docs/logo.pdf", b"%PDF-1.7");
-        assert!(
-            discovered(root).is_none(),
-            "a format the sidebar cannot render is not an icon"
-        );
-
         write(root, "favicon.png", b"");
         assert!(
             discovered(root).is_none(),
@@ -1342,12 +1211,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path().join("repo");
         std::fs::create_dir_all(&root).expect("repo dir");
-        write(&root, "ghostex-web/public/favicon.png", PNG_BYTES);
-        write(
-            &root,
-            "t3.json",
-            br#"{"iconPath":"ghostex-web/public/favicon.png"}"#,
-        );
+        write(&root, "public/favicon.png", PNG_BYTES);
 
         let paths = crate::paths::get_gxserver_paths(Some(temp.path().join("home")));
         crate::storage::initialize_gxserver_storage(&paths).expect("storage init");

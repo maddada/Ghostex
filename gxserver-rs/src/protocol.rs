@@ -6,7 +6,6 @@ use crate::constants::{
     GXSERVER_REMOTE_API_HOST, GXSERVER_REMOTE_API_PORT,
 };
 use crate::portless::PortlessStatusPayload;
-use crate::t3_runtime::T3RuntimeStatusPayload;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApiPermission {
@@ -186,8 +185,6 @@ pub struct ServerHealthResponse {
     pub port: u16,
     pub server_id: String,
     pub started_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub t3_runtime: Option<T3RuntimeStatusPayload>,
     pub tools: Vec<ToolCapabilityStatus>,
 }
 
@@ -439,7 +436,6 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createWorktreeSession"
         | "/api/removeSessionWorktree"
         | "/api/updateSession"
-        | "/api/syncT3EmbeddedSession"
         | "/api/updateSessionOrder"
         /*
         CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
@@ -535,10 +531,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/installTool"
         | "/api/browseFilesystem"
         | "/api/destructiveAdminAction"
-        | "/api/t3Runtime/status"
-        | "/api/t3Runtime/start"
-        | "/api/t3Runtime/stop"
-        | "/api/t3Runtime/panes" => remote_blocked(path),
+        => return None,
         _ => return None,
     })
 }

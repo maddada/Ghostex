@@ -639,8 +639,9 @@ body {
 /*
  CDXC:StashedPrompts 2026-08-08:
  Saved Prompts is the fourth Ghostex Quick Access page. Its tabs, search,
- group heading, 36px rows, typography, padding, and selected background all
- come from the same Quick Access primitives as Command Pane.
+ group heading, typography, padding, and selected background all come from the
+ same Quick Access primitives as Command Pane. Saved Prompt rows use two lines
+ so prompt text never competes horizontally with its project and time.
 */
 .ghostex-stashed-prompts-command {
   position: relative;
@@ -666,8 +667,29 @@ body {
   display: none;
 }
 
+.ghostex-command-palette-dialog .ghostex-stashed-prompt-item {
+  height: 56px;
+  min-height: 56px;
+}
+
+.ghostex-stashed-prompt-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ghostex-stashed-prompt-top-line {
+  align-items: center;
+  display: flex;
+  height: 24px;
+  min-width: 0;
+}
+
 .ghostex-stashed-prompt-item .ghostex-command-palette-copy {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -676,16 +698,18 @@ body {
   align-items: center;
   color: var(--muted-foreground);
   display: flex;
-  flex: 0 0 42%;
   font-size: 12px;
-  gap: 6px;
-  margin-left: auto;
+  gap: 12px;
+  justify-content: space-between;
+  max-width: 100%;
   min-width: 0;
+  width: 100%;
 }
 
 .ghostex-stashed-prompt-project {
   align-items: center;
   display: flex;
+  flex: 1 1 auto;
   gap: 0.3125rem;
   min-width: 0;
 }
@@ -725,15 +749,10 @@ body {
 .ghostex-stashed-prompt-actions {
   align-items: center;
   display: none;
-  flex: 0 0 76px;
+  flex: 0 0 auto;
   gap: 2px;
   justify-content: flex-end;
-  margin-left: auto;
-}
-
-.ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-row-meta,
-.ghostex-stashed-prompt-item:focus-within .ghostex-stashed-prompt-row-meta {
-  display: none;
+  margin-left: 8px;
 }
 
 .ghostex-stashed-prompt-item:hover .ghostex-stashed-prompt-actions,

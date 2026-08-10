@@ -2,7 +2,7 @@
  * Format a relative time string from an ISO date.
  * Returns `{ value: "20s", suffix: "ago" }` or `{ value: "just now", suffix: null }`.
  *
- * This intentionally mirrors T3 Code's compact sidebar timestamp UX.
+ * This intentionally uses a compact sidebar timestamp.
  */
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;

@@ -224,7 +224,6 @@ for (const arch of ["x64", "arm64"]) {
     const forbidden = entries.find((entry) =>
       entry === "libcef.dll" ||
       entry.endsWith("/libcef.dll") ||
-      entry.includes("t3code-server") ||
       (entry.startsWith(`${velopackPayloadRoot}/resources/wsl/code-server-`) &&
         (entry.endsWith(`-linux-${arch}.tar.gz`) || entry.endsWith(`-linux-${arch}.tar.gz.sha256`))),
     );

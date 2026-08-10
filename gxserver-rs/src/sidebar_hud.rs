@@ -114,13 +114,6 @@ When an explicit active project ID resolves only to a parked recent row, the HUD
 */
 const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
     DefaultSidebarAgent {
-        agent_id: "t3",
-        command: "npx --yes t3",
-        hidden_by_default: false,
-        icon: "t3",
-        name: "T3 Code",
-    },
-    DefaultSidebarAgent {
         agent_id: "codex",
         command: "codex",
         hidden_by_default: false,

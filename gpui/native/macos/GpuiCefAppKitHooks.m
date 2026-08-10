@@ -47,8 +47,8 @@ int GhostexGpuiKeyboardRouteNativeEvent(
   uint64_t modifiers,
   const char* charactersIgnoringModifiers,
   const char* characters);
-int GhostexGpuiKeyboardOwnerIsSourceWorkareaCef(void* gpuiRootView);
 int GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(void* gpuiRootView);
+int GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys(void* gpuiRootView);
 bool GhostexGpuiNativeViewContainsResponder(void* rootNativeView, void* responder);
 
 // ABI contract with cef/shell.rs CefEditCommand::from_raw.
@@ -116,7 +116,9 @@ static void GhostexGpuiCEFBrowserViewCut(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewCopy(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewPaste(id self, SEL _cmd, id sender);
 static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent* event);
-static BOOL GhostexGpuiCEFSourceWorkareaOwnsKeyboardInWindow(NSWindow* window);
+static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent* event);
+static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent* event);
+static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent* event);
 static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent* event);
 static GhostexGpuiCEFZoomCommand GhostexGpuiCEFZoomCommandForEvent(NSEvent* event);
 static BOOL GhostexGpuiCEFHandleSelectAllForResponder(id responder);
@@ -239,15 +241,6 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
 }
 @end
 
-static BOOL GhostexGpuiCEFSourceWorkareaOwnsKeyboardInWindow(NSWindow* window) {
-  GhostexGpuiFirstResponderObserver* observer =
-    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView* gpuiRootView = observer.gpuiRootView;
-  return gpuiRootView &&
-    gpuiRootView.window == window &&
-    GhostexGpuiKeyboardOwnerIsSourceWorkareaCef((__bridge void*)gpuiRootView) != 0;
-}
-
 static BOOL GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSWindow* window) {
   GhostexGpuiFirstResponderObserver* observer =
     objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
@@ -255,6 +248,15 @@ static BOOL GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSWindow* windo
   return gpuiRootView &&
     gpuiRootView.window == window &&
     GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys((__bridge void*)gpuiRootView) != 0;
+}
+
+static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window) {
+  GhostexGpuiFirstResponderObserver* observer =
+    objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
+  NSView* gpuiRootView = observer.gpuiRootView;
+  return gpuiRootView &&
+    gpuiRootView.window == window &&
+    GhostexGpuiKeyboardOwnerUsesDocsEditorHotkeys((__bridge void*)gpuiRootView) != 0;
 }
 
 /*
@@ -370,20 +372,45 @@ static BOOL GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(NSWindow* windo
   }
 
   /*
+   CDXC:GPUIDocsRendererSearchHotkeys 2026-08-09:
+   GPUI and AppKit both have process-level meanings for editor chords before
+   Chromium's renderer sees them. When the exact Docs workarea is the proven
+   native keyboard owner, deliver its VS Code-compatible Command+F Find,
+   Option+Command+F Replace, and Command+Y Redo chords through the focused
+   Chromium responder's normal keyDown path before key-equivalent traversal.
+   The Rust router explicitly leaves these same chords unclaimed for Docs.
+   Other surfaces keep their normal application and browser shortcuts,
+   including macOS Command+H Hide.
+   */
+  NSWindow* docsShortcutWindow = event.window ?: NSApp.keyWindow;
+  if (event.type == NSEventTypeKeyDown &&
+      GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(docsShortcutWindow) &&
+      (GhostexGpuiCEFEventIsCommandF(event) ||
+       GhostexGpuiCEFEventIsCommandOptionF(event) ||
+       GhostexGpuiCEFEventIsCommandY(event))) {
+    id responder = docsShortcutWindow.firstResponder;
+    if (responder && [responder respondsToSelector:@selector(keyDown:)]) {
+      [responder keyDown:event];
+      return;
+    }
+  }
+
+  /*
    CDXC:GPUICefEditCommands 2026-06-14-17:25:
    GPUI can keep its address-input focus handle after Chromium has accepted a page click, so AppKit command-key dispatch may never invoke selectAll: on CEF's responder chain. When the active native target is a registered CEF view, mirror only Cmd+A in the existing CEF NSApplication sendEvent hook and call Chromium's Frame::select_all after normal dispatch; GPUI chrome clicks clear that active target before their own text shortcuts run.
    */
   /*
-   CDXC:GPUISourceViewHotkeyPassthrough 2026-08-03:
-   VS Code's Monaco editor owns Cmd+A as a renderer keybinding. Chromium's
-   generic Frame::select_all edit command does not execute that keybinding, so
-   the app-wide CEF Select All mirror must stay out of Source events once the
-   window keyboard router confirms that exact workarea owns first responder.
-   Other CEF surfaces retain the mirror used by ordinary web text controls.
+   CDXC:GPUICefRendererEditHotkeyPassthrough 2026-08-09:
+   Renderer editors such as Monaco own Cmd+A as a renderer keybinding.
+   Chromium's generic Frame::select_all edit command does not execute that
+   keybinding, so the app-wide CEF Select All mirror must stay out of those
+   events once the window keyboard router confirms that exact surface owns
+   first responder. Other CEF surfaces retain the mirror used by ordinary web
+   text controls.
    */
   BOOL shouldSelectAllInActiveCEF =
     GhostexGpuiCEFEventIsCommandA(event) &&
-    !GhostexGpuiCEFSourceWorkareaOwnsKeyboardInWindow(event.window ?: NSApp.keyWindow);
+    !GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow(event.window ?: NSApp.keyWindow);
 
   /*
    CDXC:GPUICefEditCommands 2026-07-09:
@@ -1278,7 +1305,7 @@ static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd, NSE
   }
 
   if (GhostexGpuiCEFEventIsCommandA(event)) {
-    if (!GhostexGpuiCEFSourceWorkareaOwnsKeyboardInWindow([self window]) &&
+    if (!GhostexGpuiCEFRendererEditHotkeysOwnKeyboardInWindow([self window]) &&
         GhostexGpuiCEFHandleSelectAllForResponder(self)) {
       return YES;
     }
@@ -1433,6 +1460,61 @@ static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent* event) {
   }
 
   return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"a"];
+}
+
+static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent* event) {
+  if (!event || event.type != NSEventTypeKeyDown) {
+    return NO;
+  }
+
+  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  if ((modifiers & NSEventModifierFlagCommand) == 0) {
+    return NO;
+  }
+
+  modifiers &= ~NSEventModifierFlagCommand;
+  if (modifiers != 0) {
+    return NO;
+  }
+
+  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+}
+
+static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent* event) {
+  if (!event || event.type != NSEventTypeKeyDown) {
+    return NO;
+  }
+
+  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSEventModifierFlags requiredModifiers = NSEventModifierFlagCommand | NSEventModifierFlagOption;
+  if ((modifiers & requiredModifiers) != requiredModifiers) {
+    return NO;
+  }
+
+  modifiers &= ~requiredModifiers;
+  if (modifiers != 0) {
+    return NO;
+  }
+
+  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+}
+
+static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent* event) {
+  if (!event || event.type != NSEventTypeKeyDown) {
+    return NO;
+  }
+
+  NSEventModifierFlags modifiers = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  if ((modifiers & NSEventModifierFlagCommand) == 0) {
+    return NO;
+  }
+
+  modifiers &= ~NSEventModifierFlagCommand;
+  if (modifiers != 0) {
+    return NO;
+  }
+
+  return [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"y"];
 }
 
 static GhostexGpuiCEFEditCommand GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent* event) {

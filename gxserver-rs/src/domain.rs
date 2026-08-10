@@ -74,8 +74,8 @@ impl DomainStateError {
 CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
 The durable settle/snooze state of one session. `settled_override_at` stamps
 when the current override was recorded and is server-internal: the lifecycle
-sweep compares it against gxserver's meaningful-activity clock to reproduce
-t3code's "real activity resets ANY override" rule without an event log.
+sweep compares it against gxserver's meaningful-activity clock so real activity
+resets any override without requiring an event log.
 */
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionLifecycleFields {
@@ -455,7 +455,7 @@ impl<'a> DomainRepository<'a> {
             let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
                 DomainStateError::corrupt_state("Saved prompt vanished during update.")
             })?;
-            return Ok(json!({ "prompt": prompt }));
+            return Ok(json!({ "created": false, "prompt": prompt }));
         }
         let existing_prompt_id: Option<String> = self
             .db
@@ -471,7 +471,7 @@ impl<'a> DomainRepository<'a> {
             )
             .optional()
             .map_err(sql_error)?;
-        let prompt_id = match existing_prompt_id {
+        let (prompt_id, created) = match existing_prompt_id {
             Some(prompt_id) => {
                 self.db
                     .execute(
@@ -485,7 +485,7 @@ impl<'a> DomainRepository<'a> {
                         params![prompt_id, session_id, cwd, timestamp],
                     )
                     .map_err(sql_error)?;
-                prompt_id
+                (prompt_id, false)
             }
             None => {
                 let prompt_id = create_unique_stashed_prompt_id(self.db)?;
@@ -512,13 +512,13 @@ impl<'a> DomainRepository<'a> {
                         params![MAX_STASHED_PROMPTS],
                     )
                     .map_err(sql_error)?;
-                prompt_id
+                (prompt_id, true)
             }
         };
         let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
             DomainStateError::corrupt_state("Stashed prompt vanished during save.")
         })?;
-        Ok(json!({ "prompt": prompt }))
+        Ok(json!({ "created": created, "prompt": prompt }))
     }
 
     pub fn list_stashed_prompts(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -3435,15 +3435,8 @@ fn normalize_optional_session_tag(value: Option<&Value>) -> DomainResult<Option<
 }
 
 fn normalize_session_kind(value: Option<&Value>) -> String {
-    /*
-    CDXC:T3Code 2026-06-23-06:19:
-    Native T3 panes are no longer sidebar-only records. Preserve kind=t3 in
-    gxserver so presentation, restore, and lifecycle writes address the same
-    daemon session that stores the resolved T3 thread binding.
-    */
     match value.and_then(Value::as_str) {
         Some("agent") => "agent".to_string(),
-        Some("t3") => "t3".to_string(),
         _ => "terminal".to_string(),
     }
 }
@@ -3837,7 +3830,7 @@ fn validate_project_path_for_session(project: &Value) -> DomainResult<()> {
 
 /*
 CDXC:AddProjectDialog 2026-07-30:
-The t3code-style Add Project dialog submits a typed path that may not exist yet
+The Add Project dialog submits a typed path that may not exist yet
 ("Create & Add"), so `/api/addProjectPath` accepts `createIfMissing` and creates
 the workspace root before registering it. The path syntax, absolute/`~` rules,
 and the not-found/not-a-directory messages stay exactly what they were, so the
@@ -4143,44 +4136,6 @@ mod tests {
             .expect_err("invalid update restore id rejected");
         assert_eq!(error.code, "badRequest");
         assert_eq!(error.message, "Invalid restoredFromSessionId:    .");
-    }
-
-    #[test]
-    fn t3_session_kind_is_preserved() {
-        let (_temp, db) = open_test_database();
-        let repository = DomainRepository::new(&db, "S7k");
-        let project = repository
-            .create_project(
-                json!({ "name": "T3 Project" })
-                    .as_object()
-                    .expect("project params"),
-            )
-            .expect("project created");
-        let project_id = value_str(&project, "projectId").to_string();
-        let session = repository
-            .create_session(
-                json!({
-                    "kind": "t3",
-                    "projectId": project_id,
-                    "runtimeSettings": {
-                        "provider": "t3code",
-                        "t3": { "threadId": "thread-1" }
-                    },
-                    "title": "T3 Code",
-                })
-                .as_object()
-                .expect("session params"),
-                false,
-            )
-            .expect("t3 session created");
-
-        assert_eq!(value_str(&session, "kind"), "t3");
-        assert_eq!(
-            object_field(&session, "runtimeSettings")
-                .get("provider")
-                .and_then(Value::as_str),
-            Some("t3code")
-        );
     }
 
     #[test]

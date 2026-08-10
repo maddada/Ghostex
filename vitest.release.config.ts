@@ -13,7 +13,7 @@ export default defineConfig({
      * Release verification must exercise Ghostex-owned Vitest suites without
      * walking imported, generated, packaged dependency, or alternate-runner
      * trees. The broad default Vitest discovery can pick up node:test files
-     * under gxserver and Jest/effect-package tests under code-server/t3code,
+     * under gxserver and Jest/effect-package tests under code-server,
      * then fail for reasons unrelated to the release candidate.
      */
     exclude: [
@@ -41,7 +41,6 @@ export default defineConfig({
       "gxserver/test/**",
       "storybook-static/**",
       "tmp/**",
-      "t3code/**",
     ],
   },
 });

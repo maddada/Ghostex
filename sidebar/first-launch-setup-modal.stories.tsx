@@ -12,7 +12,7 @@ import type {
 import { DEFAULT_SIDEBAR_AGENTS } from "../shared/sidebar-agents";
 
 const initialHookStatus: SidebarAgentHookStatusMessage = {
-  agents: DEFAULT_SIDEBAR_AGENTS.filter((agent) => agent.agentId !== "t3").map((agent, index) => {
+  agents: DEFAULT_SIDEBAR_AGENTS.map((agent, index) => {
     const status = index < 4 ? "installed" : index < 10 ? "missing" : "cliMissing";
     return {
       agentId: agent.agentId,

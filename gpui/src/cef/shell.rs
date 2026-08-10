@@ -1,12 +1,11 @@
 pub use super::sidebar_bridge_manifest::AppModalHostBridgeSurface;
 use super::sidebar_bridge_manifest::{
     APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS, APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME,
-    APP_MODAL_HOST_BRIDGE_SURFACE_SPECS,
-    APP_MODAL_HOST_ID_JS_FIELD, APP_MODAL_HOST_ID_VALUE, APP_MODAL_HOST_SURFACE_JS_FIELD,
-    APP_MODAL_HOST_SURFACE_VALUE, NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS,
-    NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS,
-    PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS,
-    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
+    APP_MODAL_HOST_BRIDGE_SURFACE_SPECS, APP_MODAL_HOST_ID_JS_FIELD, APP_MODAL_HOST_ID_VALUE,
+    APP_MODAL_HOST_SURFACE_JS_FIELD, APP_MODAL_HOST_SURFACE_VALUE,
+    NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS, NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME,
+    PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS, PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME,
+    PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS, PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, ProjectWorkareaBridgeFunctionId,
     SIDEBAR_BRIDGE_FUNCTION_SPECS, SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS,
     SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME, SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE,
@@ -21,32 +20,31 @@ use cef::rc::Rc as _;
 use cef::wrapper::resource_manager::{get_mime_type, get_url_without_query_or_fragment};
 use cef::{
     App, BrowserProcessHandler, BrowserSettings, Callback, CefString, Client, CommandLine,
-    ContentSettingTypes, ContentSettingValues, ContextMenuHandler, ContextMenuParams, Cookie,
+    ContentSettingTypes, ContentSettingValues, ContextMenuHandler, ContextMenuParams,
     DictionaryValue, DisplayHandler, EventFlags, FindHandler, FocusHandler, FocusSource, Frame,
     ImplApp, ImplBrowser as _, ImplBrowserHost as _, ImplBrowserProcessHandler, ImplClient,
     ImplCommandLine as _, ImplContextMenuHandler, ImplContextMenuParams as _,
-    ImplCookieManager as _, ImplDictionaryValue as _, ImplDisplayHandler, ImplFindHandler,
-    ImplFocusHandler, ImplFrame as _, ImplLifeSpanHandler, ImplListValue as _, ImplLoadHandler,
+    ImplDictionaryValue as _, ImplDisplayHandler, ImplFindHandler, ImplFocusHandler,
+    ImplFrame as _, ImplLifeSpanHandler, ImplListValue as _, ImplLoadHandler,
     ImplMediaAccessCallback as _, ImplMenuModel as _, ImplPermissionHandler,
     ImplPermissionPromptCallback as _, ImplProcessMessage as _, ImplRenderProcessHandler,
     ImplRequest as _, ImplRequestContext as _, ImplRequestHandler, ImplResourceHandler,
-    ImplResourceRequestHandler, ImplResponse as _, ImplSetCookieCallback, ImplStreamReader as _,
-    ImplTask, ImplV8Context as _, ImplV8Handler, ImplV8Value as _, LifeSpanHandler, LoadHandler,
+    ImplResourceRequestHandler, ImplResponse as _, ImplStreamReader as _, ImplTask,
+    ImplV8Context as _, ImplV8Handler, ImplV8Value as _, LifeSpanHandler, LoadHandler,
     MediaAccessCallback, MediaAccessPermissionTypes, MenuModel, PermissionHandler,
     PermissionPromptCallback, PermissionRequestResult, PermissionRequestTypes, PopupFeatures,
     ProcessId, ProcessMessage, RenderProcessHandler, Request, RequestHandler, ResourceHandler,
-    ResourceReadCallback, ResourceRequestHandler, Response, ReturnValue, SetCookieCallback, State,
-    StreamReader, Task, ThreadId, V8Handler, V8Propertyattribute, V8Value, ValueType, WindowInfo,
+    ResourceReadCallback, ResourceRequestHandler, Response, ReturnValue, State, StreamReader, Task,
+    ThreadId, V8Handler, V8Propertyattribute, V8Value, ValueType, WindowInfo,
     WindowOpenDisposition, WrapApp, WrapBrowserProcessHandler, WrapClient, WrapContextMenuHandler,
     WrapDisplayHandler, WrapFindHandler, WrapFocusHandler, WrapLifeSpanHandler, WrapLoadHandler,
     WrapPermissionHandler, WrapRenderProcessHandler, WrapRequestHandler, WrapResourceHandler,
-    WrapResourceRequestHandler, WrapSetCookieCallback, WrapTask, WrapV8Handler, ZoomCommand,
-    post_task, stream_reader_create_for_file, string_multimap_alloc, string_multimap_append,
-    wrap_app, wrap_browser_process_handler, wrap_client, wrap_context_menu_handler,
-    wrap_display_handler, wrap_find_handler, wrap_focus_handler, wrap_life_span_handler,
-    wrap_load_handler, wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
-    wrap_resource_handler, wrap_resource_request_handler, wrap_set_cookie_callback, wrap_task,
-    wrap_v8_handler,
+    WrapResourceRequestHandler, WrapTask, WrapV8Handler, ZoomCommand, post_task,
+    stream_reader_create_for_file, string_multimap_alloc, string_multimap_append, wrap_app,
+    wrap_browser_process_handler, wrap_client, wrap_context_menu_handler, wrap_display_handler,
+    wrap_find_handler, wrap_focus_handler, wrap_life_span_handler, wrap_load_handler,
+    wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
+    wrap_resource_handler, wrap_resource_request_handler, wrap_task, wrap_v8_handler,
 };
 use gpui::{Bounds, Pixels};
 use percent_encoding::percent_decode_str;
@@ -120,91 +118,6 @@ const SIDEBAR_GXSERVER_BOOTSTRAP_INITIAL_ACTIVE_PROJECT_ID_JS_FIELD: &str =
     "initialActiveProjectId";
 const SIDEBAR_GXSERVER_BOOTSTRAP_FOCUSED_SESSION_ID_JS_FIELD: &str = "focusedSessionId";
 const SIDEBAR_GXSERVER_BOOTSTRAP_VISIBLE_SESSION_IDS_JS_FIELD: &str = "visibleSessionIds";
-const T3_WORKSPACE_BRIDGE_INSTALL_MESSAGE_NAME: &str =
-    "ghostex.gpui.t3Workspace.installThreadBridge";
-const T3_WORKSPACE_BRIDGE_JS_OBJECT: &str = "ghostexGpuiT3";
-const T3_WORKSPACE_BRIDGE_JS_FUNCTION: &str = "postThreadChanged";
-const T3_WORKSPACE_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.t3Workspace.threadChanged";
-const T3_WORKSPACE_BRIDGE_PAYLOAD_MAX_CHARS: usize = 4096;
-const T3_WORKSPACE_BRIDGE_SCRIPT_URL: &str = "ghostex://gpui/t3-thread-bridge";
-const T3_WORKSPACE_BRIDGE_SCRIPT: &str = r#"
-(() => {
-  if (window.__ghostexGpuiT3ThreadBridgeInstalled) return;
-  const bridge = window.ghostexGpuiT3;
-  if (!bridge || typeof bridge.postThreadChanged !== "function") return;
-  window.__ghostexGpuiT3ThreadBridgeInstalled = true;
-  const normalize = (value) =>
-    typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
-  const usableTitle = (value) => {
-    const title = normalize(value);
-    const lower = title.toLowerCase();
-    return title && lower !== "t3 code" && lower !== "t3 code (alpha)" &&
-      lower !== "no active thread" && lower !== "pick a thread to continue";
-  };
-  const threadIdFromPath = () => {
-    const parts = location.pathname.split("/").filter(Boolean);
-    if (parts[0] === "draft") return "";
-    return parts.length >= 2 ? normalize(parts[1]) : "";
-  };
-  const visibleTitle = () => {
-    const candidates = [
-      window.__VSMUX_T3_ACTIVE_THREAD_TITLE__,
-      document.querySelector("header h2[title]")?.getAttribute("title"),
-      document.querySelector("header h2")?.textContent,
-      document.querySelector("header [title]")?.getAttribute("title")
-    ];
-    for (const candidate of candidates) {
-      if (usableTitle(candidate)) return normalize(candidate);
-    }
-    return "";
-  };
-  let lastThreadId = "";
-  let lastTitle = "";
-  const report = (payload) => {
-    const threadId = normalize(payload?.threadId) || threadIdFromPath();
-    if (!threadId || threadId.toLowerCase().startsWith("ghostex-draft-")) return;
-    const title = usableTitle(payload?.title)
-      ? normalize(payload.title)
-      : visibleTitle();
-    if (threadId === lastThreadId && title === lastTitle) return;
-    lastThreadId = threadId;
-    lastTitle = title;
-    try {
-      bridge.postThreadChanged(JSON.stringify({ threadId, title }));
-    } catch {}
-  };
-  const reportActive = () => report({ threadId: threadIdFromPath(), title: visibleTitle() });
-  window.addEventListener("message", (event) => {
-    const data = event?.data;
-    if (!data || typeof data !== "object") return;
-    if (data.type === "vsmuxT3ThreadChanged") {
-      report(data);
-      return;
-    }
-    if (data.type !== "ghostexT3EmbeddedEvent") return;
-    const embedded = data.event;
-    if (!embedded || typeof embedded !== "object") return;
-    if (["navigationRequested", "ready", "threadBound", "threadTitleChanged"].includes(embedded.kind)) {
-      report(embedded);
-    }
-  });
-  const wrapHistory = (method) => {
-    const original = history[method];
-    if (typeof original !== "function") return;
-    history[method] = function(...args) {
-      const result = original.apply(this, args);
-      setTimeout(reportActive, 0);
-      return result;
-    };
-  };
-  wrapHistory("pushState");
-  wrapHistory("replaceState");
-  window.addEventListener("popstate", () => setTimeout(reportActive, 0));
-  window.addEventListener("hashchange", () => setTimeout(reportActive, 0));
-  setTimeout(reportActive, 0);
-  setInterval(reportActive, 1000);
-})();
-"#;
 const CEF_BROWSER_PAGE_BACKGROUND_COLOR: u32 = 0xFFFF_FFFF;
 const CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID: c_int = 26_001;
 // Stable Chromium content-context commands used by the production macOS CEF
@@ -242,8 +155,6 @@ enum SidebarBridgeEventKind {
     GxserverPresentationFocusState,
     CreateProjectTerminal,
     WorkspaceTerminalFocus,
-    T3SessionFocus,
-    T3SessionCreate,
     WorkspaceTerminalRenameCommand,
     WorkspaceTerminalEnter,
     WorkspaceTerminalLifecycleResult,
@@ -254,7 +165,6 @@ enum SidebarBridgeEventKind {
     TitlebarGitMenuState,
     OpenBrowserUrl,
     BrowserTabFocus,
-    T3BrowserAccessRequest,
     ProjectBoardConversationResponse,
 }
 
@@ -286,8 +196,6 @@ impl SidebarBridgeEventKind {
             }
             SidebarBridgeFunctionId::CreateProjectTerminal => Self::CreateProjectTerminal,
             SidebarBridgeFunctionId::WorkspaceTerminalFocus => Self::WorkspaceTerminalFocus,
-            SidebarBridgeFunctionId::T3SessionFocus => Self::T3SessionFocus,
-            SidebarBridgeFunctionId::T3SessionCreate => Self::T3SessionCreate,
             SidebarBridgeFunctionId::WorkspaceTerminalRenameCommand => {
                 Self::WorkspaceTerminalRenameCommand
             }
@@ -302,7 +210,6 @@ impl SidebarBridgeEventKind {
             SidebarBridgeFunctionId::TitlebarGitMenuState => Self::TitlebarGitMenuState,
             SidebarBridgeFunctionId::OpenBrowserUrl => Self::OpenBrowserUrl,
             SidebarBridgeFunctionId::BrowserTabFocus => Self::BrowserTabFocus,
-            SidebarBridgeFunctionId::T3BrowserAccessRequest => Self::T3BrowserAccessRequest,
             SidebarBridgeFunctionId::ProjectBoardConversationResponse => {
                 Self::ProjectBoardConversationResponse
             }
@@ -396,7 +303,7 @@ thread_local! {
     static KEYBOARD_ZOOM_CEF_NATIVE_VIEWS: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
     static CEF_GLOBAL_REQUEST_CONTEXT: RefCell<Option<cef::RequestContext>> = const { RefCell::new(None) };
     static CEF_REQUEST_CONTEXTS_BY_PROFILE: RefCell<HashMap<String, cef::RequestContext>> = RefCell::new(HashMap::new());
-    static T3_BROWSER_SESSION_PROFILES: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
+    static APP_MODAL_HOST_BRIDGE_SURFACES_BY_BROWSER_ID: RefCell<HashMap<c_int, AppModalHostBridgeSurface>> = RefCell::new(HashMap::new());
     // Native views the app has explicitly hidden via CefBrowser::set_visible.
     // The focus handler consults this so a hidden surface can never take
     // native keyboard focus (see GhostexGpuiCefFocusHandler).
@@ -453,165 +360,6 @@ fn cef_native_view_is_hidden(native_view: *mut c_void) -> bool {
     HIDDEN_CEF_NATIVE_VIEWS.with(|views| views.borrow().contains(&(native_view as usize)))
 }
 
-#[derive(Clone)]
-pub struct T3BrowserSessionCookie {
-    pub name: String,
-    pub value: String,
-    pub domain: String,
-    pub path: String,
-    pub secure: bool,
-    pub http_only: bool,
-    pub expires_unix_seconds: Option<f64>,
-}
-
-struct T3BrowserSessionCookieInstallState {
-    profile: String,
-    generation: u64,
-    pending: usize,
-    failed: bool,
-    completion: Option<Box<dyn FnOnce(Result<(), String>)>>,
-}
-
-wrap_set_cookie_callback! {
-    struct T3BrowserSessionSetCookieCallback {
-        state: StdRc<RefCell<T3BrowserSessionCookieInstallState>>,
-    }
-
-    impl SetCookieCallback {
-        fn on_complete(&self, success: c_int) {
-            finish_t3_browser_session_cookie_install(&self.state, success != 0);
-        }
-    }
-}
-
-fn finish_t3_browser_session_cookie_install(
-    state: &StdRc<RefCell<T3BrowserSessionCookieInstallState>>,
-    success: bool,
-) {
-    let finished = {
-        let mut state = state.borrow_mut();
-        state.failed |= !success;
-        state.pending = state.pending.saturating_sub(1);
-        (state.pending == 0).then(|| {
-            (
-                state.profile.clone(),
-                state.generation,
-                state.failed,
-                state.completion.take(),
-            )
-        })
-    };
-    let Some((profile, generation, failed, completion)) = finished else {
-        return;
-    };
-    if !failed {
-        T3_BROWSER_SESSION_PROFILES.with(|profiles| {
-            profiles.borrow_mut().insert(profile, generation);
-        });
-    }
-    if let Some(completion) = completion {
-        completion(if failed {
-            Err("Could not install the T3 browser session cookie.".to_string())
-        } else {
-            Ok(())
-        });
-    }
-}
-
-pub fn t3_browser_session_installed_for_profile(profile: &str, generation: u64) -> bool {
-    let profile = cef_profile_cache_segment(profile).unwrap_or("default");
-    T3_BROWSER_SESSION_PROFILES
-        .with(|profiles| profiles.borrow().get(profile).copied() == Some(generation))
-}
-
-pub fn invalidate_t3_browser_session_for_profile(profile: &str) {
-    /*
-    CDXC:GPUIT3WorkspaceWebPanes 2026-07-10:
-    A per-session T3 CefSurface teardown invalidates the process-local install
-    proof for that exact in-memory profile. If the pane is recreated later it
-    must reinstall the browser-session cookie before CEF sees the T3 URL,
-    even when the thread-local request context still happens to be alive.
-    */
-    let profile = cef_profile_cache_segment(profile).unwrap_or("default");
-    T3_BROWSER_SESSION_PROFILES.with(|profiles| {
-        profiles.borrow_mut().remove(profile);
-    });
-}
-
-pub fn install_t3_browser_session_cookies_for_profile(
-    profile: &str,
-    origin: &str,
-    generation: u64,
-    cookies: Vec<T3BrowserSessionCookie>,
-    completion: impl FnOnce(Result<(), String>) + 'static,
-) {
-    /*
-    CDXC:GPUIT3BrowserAuth 2026-07-09:
-    Mirror `NativeT3RuntimeBrowserAuth.setCookies`: install the exchanged
-    browser-session cookies into the same in-memory request context used by
-    the target Browser profile, and report success only after every CEF
-    `set_cookie` callback has completed. This intentionally leaves request
-    context cache paths empty and session-cookie persistence disabled.
-    */
-    let profile = cef_profile_cache_segment(profile)
-        .unwrap_or("default")
-        .to_string();
-    if cookies.is_empty() {
-        completion(Err(
-            "T3 browser authorization did not return a session cookie.".to_string(),
-        ));
-        return;
-    }
-    let request_context = match cef_request_context_for_profile(&profile) {
-        Ok(request_context) => request_context,
-        Err(error) => {
-            completion(Err(format!(
-                "Could not prepare the T3 browser profile: {error}"
-            )));
-            return;
-        }
-    };
-    let Some(cookie_manager) = request_context.cookie_manager(None) else {
-        completion(Err(
-            "Could not access the T3 browser profile cookie store.".to_string()
-        ));
-        return;
-    };
-    let state = StdRc::new(RefCell::new(T3BrowserSessionCookieInstallState {
-        profile,
-        generation,
-        pending: cookies.len(),
-        failed: false,
-        completion: Some(Box::new(completion)),
-    }));
-    let origin = CefString::from(origin);
-    for source in cookies {
-        let mut cookie = Cookie {
-            name: CefString::from(source.name.as_str()),
-            value: CefString::from(source.value.as_str()),
-            domain: CefString::from(source.domain.as_str()),
-            path: CefString::from(source.path.as_str()),
-            secure: i32::from(source.secure),
-            httponly: i32::from(source.http_only),
-            ..Default::default()
-        };
-        if let Some(expires_unix_seconds) = source.expires_unix_seconds {
-            let mut expires = cef::Time::default();
-            let mut expires_basetime = cef::Basetime::default();
-            if cef::time_from_doublet(expires_unix_seconds, Some(&mut expires)) != 0
-                && cef::time_to_basetime(Some(&expires), Some(&mut expires_basetime)) != 0
-            {
-                cookie.has_expires = 1;
-                cookie.expires = expires_basetime;
-            }
-        }
-        let mut callback = T3BrowserSessionSetCookieCallback::new(state.clone());
-        if cookie_manager.set_cookie(Some(&origin), Some(&cookie), Some(&mut callback)) == 0 {
-            finish_t3_browser_session_cookie_install(&state, false);
-        }
-    }
-}
-
 pub fn prepare_application() {
     platform::prepare_application();
 }
@@ -660,8 +408,6 @@ pub fn native_view_contains_responder(
 
 pub type BrowserPopupOpenHandler = StdRc<dyn Fn(String)>;
 
-pub type T3WorkspaceBridgeEventHandler = StdRc<dyn Fn(String)>;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SidebarBridgeEvent {
     ActiveProjectContext(String),
@@ -677,8 +423,6 @@ pub enum SidebarBridgeEvent {
     GxserverPresentationFocusState(String),
     CreateProjectTerminal(String),
     WorkspaceTerminalFocus(String),
-    T3SessionFocus(String),
-    T3SessionCreate(String),
     WorkspaceTerminalRenameCommand(String),
     WorkspaceTerminalEnter(String),
     WorkspaceTerminalLifecycleResult(String),
@@ -689,7 +433,6 @@ pub enum SidebarBridgeEvent {
     TitlebarGitMenuState(String),
     OpenBrowserUrl(String),
     BrowserTabFocus(String),
-    T3BrowserAccessRequest(String),
     ProjectBoardConversationResponse(String),
 }
 
@@ -733,8 +476,6 @@ impl SidebarBridgeEventKind {
             }
             Self::CreateProjectTerminal => SidebarBridgeEvent::CreateProjectTerminal(payload),
             Self::WorkspaceTerminalFocus => SidebarBridgeEvent::WorkspaceTerminalFocus(payload),
-            Self::T3SessionFocus => SidebarBridgeEvent::T3SessionFocus(payload),
-            Self::T3SessionCreate => SidebarBridgeEvent::T3SessionCreate(payload),
             Self::WorkspaceTerminalRenameCommand => {
                 SidebarBridgeEvent::WorkspaceTerminalRenameCommand(payload)
             }
@@ -749,7 +490,6 @@ impl SidebarBridgeEventKind {
             Self::TitlebarGitMenuState => SidebarBridgeEvent::TitlebarGitMenuState(payload),
             Self::OpenBrowserUrl => SidebarBridgeEvent::OpenBrowserUrl(payload),
             Self::BrowserTabFocus => SidebarBridgeEvent::BrowserTabFocus(payload),
-            Self::T3BrowserAccessRequest => SidebarBridgeEvent::T3BrowserAccessRequest(payload),
             Self::ProjectBoardConversationResponse => {
                 SidebarBridgeEvent::ProjectBoardConversationResponse(payload)
             }
@@ -935,7 +675,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     let root_cache_path = cef_root_cache_path()?;
     /*
     CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
-    The built-in Default Browser profile and first-party app UI use the app-owned persistent global CEF store, while generated Browser profiles and T3 session contexts remain memory-backed. Keep CEF file logging disabled and Chromium runtime data out of support-bundle logs.
+    The built-in Default Browser profile and first-party app UI use the app-owned persistent global CEF store, while generated Browser profiles remain memory-backed. Keep CEF file logging disabled and Chromium runtime data out of support-bundle logs.
     */
     let mut settings = cef::Settings {
         no_sandbox: 1,
@@ -1574,7 +1314,6 @@ wrap_client! {
         sidebar_bridge_event_handler: Option<SidebarBridgeEventHandler>,
         project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
         app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
-        t3_workspace_bridge_event_handler: Option<T3WorkspaceBridgeEventHandler>,
         request_handler: Option<RequestHandler>,
         permission_handler: Option<PermissionHandler>,
         focus_handler: Option<FocusHandler>,
@@ -1658,14 +1397,11 @@ wrap_client! {
             let is_app_modal_host_message =
                 message_name == APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
             let is_native_host_message = message_name == NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
-            let is_t3_workspace_message =
-                message_name == T3_WORKSPACE_BRIDGE_PROCESS_MESSAGE_NAME;
             if sidebar_event_kind.is_none()
                 && !is_sidebar_editable_focus_message
                 && project_workarea_event_kind.is_none()
                 && !is_app_modal_host_message
                 && !is_native_host_message
-                && !is_t3_workspace_message
             {
                 return 0;
             }
@@ -1693,16 +1429,6 @@ wrap_client! {
                 no app data and never reaches the app event handler.
                 */
                 handle_sidebar_editable_focus(browser, &payload);
-                return 1;
-            }
-            if is_t3_workspace_message {
-                let Some(handler) = self.t3_workspace_bridge_event_handler.clone() else {
-                    return 0;
-                };
-                if payload.chars().count() > T3_WORKSPACE_BRIDGE_PAYLOAD_MAX_CHARS {
-                    return 1;
-                }
-                handler(payload);
                 return 1;
             }
             if let Some(event_kind) = sidebar_event_kind {
@@ -1788,34 +1514,6 @@ wrap_load_handler! {
                 can_go_back: can_go_back != 0,
                 can_go_forward: can_go_forward != 0,
             });
-        }
-    }
-}
-
-wrap_load_handler! {
-    struct GhostexGpuiT3WorkspaceLoadHandler;
-
-    impl LoadHandler {
-        fn on_load_end(
-            &self,
-            _browser: Option<&mut cef::Browser>,
-            frame: Option<&mut Frame>,
-            _http_status_code: c_int,
-        ) {
-            let Some(frame) = frame else {
-                return;
-            };
-            if frame.is_main() == 0 || !t3_workspace_bridge_url_is_allowed(&CefString::from(&frame.url()).to_string()) {
-                return;
-            }
-            let mut message =
-                match cef::process_message_create(Some(&CefString::from(
-                    T3_WORKSPACE_BRIDGE_INSTALL_MESSAGE_NAME,
-                ))) {
-                    Some(message) => message,
-                    None => return,
-                };
-            frame.send_process_message(ProcessId::RENDERER, Some(&mut message));
         }
     }
 }
@@ -1991,14 +1689,11 @@ wrap_render_process_handler! {
                 message_name == SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME;
             let is_project_workarea_install_message =
                 message_name == PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME;
-            let is_t3_workspace_install_message =
-                message_name == T3_WORKSPACE_BRIDGE_INSTALL_MESSAGE_NAME;
             if !is_install_message
                 && !is_runtime_settings_update
                 && !is_gxserver_bootstrap_update
                 && !is_session_chat_gxserver_bootstrap_message
                 && !is_project_workarea_install_message
-                && !is_t3_workspace_install_message
             {
                 return 0;
             }
@@ -2008,30 +1703,13 @@ wrap_render_process_handler! {
             if frame.is_main() == 0 {
                 return 1;
             }
-            if is_t3_workspace_install_message
-                && !t3_workspace_bridge_url_is_allowed(&CefString::from(&frame.url()).to_string())
-            {
-                return 1;
-            }
-
             let Some(mut context) = frame.v8_context() else {
                 return 1;
             };
             if context.enter() == 0 {
                 return 1;
             }
-            if is_t3_workspace_install_message {
-                /*
-                CDXC:GPUIT3TitleSync 2026-07-10:
-                Install the fixed T3 thread bridge through an explicit
-                browser-to-renderer handshake from the managed T3 client's
-                load handler. This avoids relying on browser extra-info state,
-                which is not retained for these CEF renderer contexts. Only
-                the exact loopback T3 origin receives the bridge; ordinary
-                Browser, sidebar, workarea, and modal clients cannot request it.
-                */
-                install_t3_workspace_v8_bridge(Some(&mut context));
-            } else if is_project_workarea_install_message {
+            if is_project_workarea_install_message {
                 let manage_docs_resource_base_url = message
                     .argument_list()
                     .filter(|arguments| {
@@ -2079,13 +1757,6 @@ wrap_render_process_handler! {
                 );
             }
             context.exit();
-            if is_t3_workspace_install_message {
-                frame.execute_java_script(
-                    Some(&CefString::from(T3_WORKSPACE_BRIDGE_SCRIPT)),
-                    Some(&CefString::from(T3_WORKSPACE_BRIDGE_SCRIPT_URL)),
-                    1,
-                );
-            }
             1
         }
     }
@@ -2189,39 +1860,6 @@ wrap_v8_handler! {
             };
 
             let sent = send_native_host_bridge_process_message(&payload);
-            set_v8_bool_return(retval, sent);
-            1
-        }
-    }
-}
-
-wrap_v8_handler! {
-    struct GhostexGpuiT3WorkspaceBridgeV8Handler;
-
-    impl V8Handler {
-        fn execute(
-            &self,
-            name: Option<&CefString>,
-            _object: Option<&mut V8Value>,
-            arguments: Option<&[Option<V8Value>]>,
-            retval: Option<&mut Option<V8Value>>,
-            _exception: Option<&mut CefString>,
-        ) -> c_int {
-            if name.map(CefString::to_string).as_deref()
-                != Some(T3_WORKSPACE_BRIDGE_JS_FUNCTION)
-            {
-                return 0;
-            }
-            let payload = arguments
-                .and_then(|arguments| arguments.first())
-                .and_then(Option::as_ref)
-                .filter(|argument| argument.is_string() != 0)
-                .map(|argument| CefString::from(&argument.string_value()).to_string());
-            let Some(payload) = payload else {
-                set_v8_bool_return(retval, false);
-                return 1;
-            };
-            let sent = send_t3_workspace_bridge_process_message(&payload);
             set_v8_bool_return(retval, sent);
             1
         }
@@ -2599,36 +2237,6 @@ fn install_app_modal_host_v8_bridge(
     global.set_value_bykey(
         Some(&webkit_key),
         Some(&mut webkit),
-        V8Propertyattribute::default(),
-    );
-}
-
-fn install_t3_workspace_v8_bridge(context: Option<&mut cef::V8Context>) {
-    let Some(context) = context else {
-        return;
-    };
-    let Some(global) = context.global() else {
-        return;
-    };
-    let Some(mut namespace) = cef::v8_value_create_object(None, None) else {
-        return;
-    };
-    let mut handler = GhostexGpuiT3WorkspaceBridgeV8Handler::new();
-    let function_name = CefString::from(T3_WORKSPACE_BRIDGE_JS_FUNCTION);
-    let Some(mut function) =
-        cef::v8_value_create_function(Some(&function_name), Some(&mut handler))
-    else {
-        return;
-    };
-    namespace.set_value_bykey(
-        Some(&function_name),
-        Some(&mut function),
-        V8Propertyattribute::default(),
-    );
-    let namespace_key = CefString::from(T3_WORKSPACE_BRIDGE_JS_OBJECT);
-    global.set_value_bykey(
-        Some(&namespace_key),
-        Some(&mut namespace),
         V8Propertyattribute::default(),
     );
 }
@@ -3269,31 +2877,6 @@ fn send_native_host_bridge_process_message(payload: &str) -> bool {
     true
 }
 
-fn send_t3_workspace_bridge_process_message(payload: &str) -> bool {
-    if payload.chars().count() > T3_WORKSPACE_BRIDGE_PAYLOAD_MAX_CHARS {
-        return false;
-    }
-    let Some(context) = cef::v8_context_get_current_context() else {
-        return false;
-    };
-    let Some(frame) = context.frame() else {
-        return false;
-    };
-    let mut message = match cef::process_message_create(Some(&CefString::from(
-        T3_WORKSPACE_BRIDGE_PROCESS_MESSAGE_NAME,
-    ))) {
-        Some(message) => message,
-        None => return false,
-    };
-    let Some(arguments) = message.argument_list() else {
-        return false;
-    };
-    arguments.set_size(1);
-    arguments.set_string(0, Some(&CefString::from(payload)));
-    frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
-    true
-}
-
 fn set_v8_bool_return(retval: Option<&mut Option<V8Value>>, value: bool) {
     if let Some(retval) = retval {
         *retval = cef::v8_value_create_bool(if value { 1 } else { 0 });
@@ -3317,7 +2900,6 @@ fn show_browser_dev_tools(
     let browser_settings = cef::BrowserSettings::default();
     let mut devtools_client = Some(GhostexGpuiCefClient::new(
         Some(GhostexGpuiLifeSpanHandler::new(None, true)),
-        None,
         None,
         None,
         None,
@@ -3657,7 +3239,7 @@ wrap_permission_handler! {
             Only device microphone/camera requests are answered by the shell;
             desktop capture bits keep CEF's default deny so a mixed request can
             never grant screen capture as a side effect of a microphone
-            decision. Surfaces without a media handler (sidebar, editor, T3)
+            decision. Surfaces without a media handler (sidebar and editor)
             also keep default handling.
             */
             let Some(handler) = self.media_access_handler.clone() else {
@@ -3705,7 +3287,7 @@ wrap_permission_handler! {
             wake) indefinitely.
             Accept only a pure local-network request on surfaces that were
             explicitly constructed with the sidebar gxserver bridge/bootstrap;
-            Browser, editor, project-workarea, modal, and T3 surfaces keep their
+            Browser, editor, project-workarea, and modal surfaces keep their
             existing permission behavior.
             */
             let local_network_permissions =
@@ -3802,13 +3384,6 @@ fn cef_origins_match(lhs: &str, rhs: &str) -> bool {
         (Some(lhs), Some(rhs)) => lhs == rhs,
         _ => false,
     }
-}
-
-fn t3_workspace_bridge_url_is_allowed(value: &str) -> bool {
-    matches!(
-        cef_normalized_origin(value).as_deref(),
-        Some("http://127.0.0.1:3774" | "http://localhost:3774")
-    )
 }
 
 #[allow(dead_code)]
@@ -3937,7 +3512,6 @@ impl CefBrowser {
         manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
         app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
-        t3_workspace_bridge_event_handler: Option<T3WorkspaceBridgeEventHandler>,
     ) -> Result<Self, String> {
         let keyboard_zoom_enabled =
             page_metadata_handler.is_some() || project_workarea_bridge_event_handler.is_some();
@@ -3948,7 +3522,7 @@ impl CefBrowser {
         app-ui profiles dodge via the pre-initialized global context — see
         CDXC:GPUIAppUiPersistence 2026-07-09). This used to be an `.expect`
         that hard-crashed the whole app (five "failed to create cef-rs child
-        browser" aborts on 2026-07-10, all from fresh T3/browser
+        browser" aborts on 2026-07-10, all from fresh browser
         profile contexts). Creation is now fallible; ensure-style callers skip
         the surface for this pass and naturally create it on their next
         reconcile once the context finishes initializing.
@@ -3980,8 +3554,7 @@ impl CefBrowser {
         }
         let requested_url = url.to_string();
         if let Some(expected_surface) = app_modal_host_bridge_surface
-            && app_modal_host_bridge_surface_for_frame_url(&requested_url)
-                != Some(expected_surface)
+            && app_modal_host_bridge_surface_for_frame_url(&requested_url) != Some(expected_surface)
         {
             return Err("app-modal CEF surface does not match its first-party entry URL".into());
         }
@@ -4027,34 +3600,33 @@ impl CefBrowser {
         let request_handler = manage_docs_resource_scope
             .as_ref()
             .map(ManageDocsResourceScope::request_handler);
-        let is_shared_sidebar_surface = t3_workspace_bridge_event_handler.is_none()
-            && sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some());
-        let load_handler = if t3_workspace_bridge_event_handler.is_some() {
-            Some(GhostexGpuiT3WorkspaceLoadHandler::new())
-        } else if sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some()) {
-            Some(GhostexGpuiSidebarProjectContextLoadHandler::new(
-                sidebar_runtime_settings.unwrap_or_default(),
-                sidebar_gxserver_bootstrap,
-            ))
-        } else if sidebar_gxserver_bootstrap.is_some() {
-            /*
-            CDXC:GPUISessionChatSurface 2026-07-31:
-            A bootstrap without the sidebar bridge handler identifies the
-            per-session Session Chat surface: it gets only the bootstrap
-            install message so the bundled chat page can reach the local
-            gxserver, while Browser, workarea, and modal clients keep passing
-            no bootstrap at all.
-            */
-            Some(GhostexGpuiSessionChatGxserverBootstrapLoadHandler::new(
-                sidebar_gxserver_bootstrap,
-            ))
-        } else if project_workarea_bridge_event_handler.is_some() {
-            Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
-                manage_docs_resource_base_url,
-            ))
-        } else {
-            page_metadata_handler.map(GhostexGpuiBrowserPageLoadHandler::new)
-        };
+        let is_shared_sidebar_surface =
+            sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some());
+        let load_handler =
+            if sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some()) {
+                Some(GhostexGpuiSidebarProjectContextLoadHandler::new(
+                    sidebar_runtime_settings.unwrap_or_default(),
+                    sidebar_gxserver_bootstrap,
+                ))
+            } else if sidebar_gxserver_bootstrap.is_some() {
+                /*
+                CDXC:GPUISessionChatSurface 2026-07-31:
+                A bootstrap without the sidebar bridge handler identifies the
+                per-session Session Chat surface: it gets only the bootstrap
+                install message so the bundled chat page can reach the local
+                gxserver, while Browser, workarea, and modal clients keep passing
+                no bootstrap at all.
+                */
+                Some(GhostexGpuiSessionChatGxserverBootstrapLoadHandler::new(
+                    sidebar_gxserver_bootstrap,
+                ))
+            } else if project_workarea_bridge_event_handler.is_some() {
+                Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
+                    manage_docs_resource_base_url,
+                ))
+            } else {
+                page_metadata_handler.map(GhostexGpuiBrowserPageLoadHandler::new)
+            };
         // Every GPUI CEF browser needs the client's life-span handler so
         // DoClose is always handled and CEF can never close the host GPUI
         // window when a browser is dropped.
@@ -4067,7 +3639,6 @@ impl CefBrowser {
             sidebar_bridge_event_handler,
             project_workarea_bridge_event_handler,
             app_modal_host_bridge_event_handler,
-            t3_workspace_bridge_event_handler.clone(),
             request_handler,
             permission_handler,
             Some(GhostexGpuiCefFocusHandler::new()),
@@ -4506,7 +4077,7 @@ impl Drop for CefBrowser {
 fn cef_root_cache_path() -> Result<PathBuf> {
     /*
     CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
-    The explicit CEF root cache path prevents Chromium from falling back to its platform default user-data folder. The built-in Default Browser profile and first-party app-UI surfaces use the durable global context, while generated Browser profiles and T3 contexts remain memory-backed.
+    The explicit CEF root cache path prevents Chromium from falling back to its platform default user-data folder. The built-in Default Browser profile and first-party app-UI surfaces use the durable global context, while generated Browser profiles remain memory-backed.
     */
     let os_default_root = Some(crate::shared_settings::ghostex_storage_paths().cef_cache_dir());
     let path = std::env::var_os("GHOSTEX_GPUI_CEF_CACHE_DIR")
@@ -4523,11 +4094,11 @@ fn cef_request_context_for_profile(profile: &str) -> Result<cef::RequestContext>
     Browser profile ids are app-global rather than project- or tab-scoped. The
     built-in Default profile uses CEF's pre-initialized durable global context,
     so ordinary logins survive app restarts and are visible from every
-    Default-profile tab/project. Generated profiles and T3's exchanged session
-    contexts remain separate and memory-backed.
+    Default-profile tab/project. Generated profiles remain separate and
+    memory-backed.
 
     CDXC:GPUIAppUiPersistence 2026-07-09-03:40:
-    First-party app-UI surfaces (sidebar, app modal, titlebar panels, project workareas) need durable localStorage for UI state (collapse state, Show more/less, project order), matching how the macOS sidebar WKWebViews use the persistent default WKWebsiteDataStore. They and the built-in Default Browser profile use CEF's global persistent request context, which is initialized with the runtime before synchronous browser creation. Creating a new disk-backed request context here races its asynchronous initialization and causes CreateBrowserSync to return null during app startup. Generated Browser profiles and T3 panes stay memory-backed.
+    First-party app-UI surfaces (sidebar, app modal, titlebar panels, project workareas) need durable localStorage for UI state (collapse state, Show more/less, project order), matching how the macOS sidebar WKWebViews use the persistent default WKWebsiteDataStore. They and the built-in Default Browser profile use CEF's global persistent request context, which is initialized with the runtime before synchronous browser creation. Creating a new disk-backed request context here races its asynchronous initialization and causes CreateBrowserSync to return null during app startup. Generated Browser profiles stay memory-backed.
     */
     let profile_segment = cef_profile_cache_segment(profile)
         .unwrap_or("default")

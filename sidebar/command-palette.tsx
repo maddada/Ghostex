@@ -145,6 +145,23 @@ type ProjectPaletteCommand = {
   slotNumber: number;
 };
 
+type CommandPaletteSearchItem =
+  | {
+      command: BuiltInPaletteCommand;
+      kind: 'builtIn';
+      searchText: string;
+    }
+  | {
+      command: HotkeyPaletteCommand;
+      kind: 'paneAction';
+      searchText: string;
+    }
+  | {
+      command: ProjectPaletteCommand;
+      kind: 'project';
+      searchText: string;
+    };
+
 type AppModalPaletteCommandId =
   | 'actions'
   | 'addProject'
@@ -458,6 +475,8 @@ export function CommandPalette({
   vscode,
 }: CommandPaletteProps) {
   const [inputValue, setInputValue] = useState(initialQuery);
+  const [selectedCommandValue, setSelectedCommandValue] = useState('');
+  const commandListRef = useRef<HTMLDivElement>(null);
   const commandRunStates = useSidebarStore((state) => state.commandRunStates);
   const normalizedHotkeys = useMemo(() => normalizeghostexHotkeySettings(hotkeys), [hotkeys]);
   const commandQuery = inputValue.trim();
@@ -537,26 +556,59 @@ export function CommandPalette({
         .filter(({ command }) => isRunnableOrConfigurableCommand(command)),
     [commands, normalizedHotkeys]
   );
-  const filteredBuiltInCommands = useMemo(
-    () => filterCommandPaletteItems(builtInCommands, commandQuery, (command) => command.searchText),
-    [builtInCommands, commandQuery]
+  const commandSearchItems = useMemo<CommandPaletteSearchItem[]>(
+    /*
+     * A query must rank every command in one population. Keeping the display
+     * sections as separate filtered lists would let section order beat fuzzy
+     * relevance, which is why Delayed Actions previously stayed below weak
+     * Ghostex matches.
+     */
+    () => [
+      ...builtInCommands.map((command) => ({
+        command,
+        kind: 'builtIn' as const,
+        searchText: command.searchText,
+      })),
+      ...paneActionCommands.map((command) => ({
+        command,
+        kind: 'paneAction' as const,
+        searchText: command.searchText,
+      })),
+      ...projectCommands.map((command) => ({
+        command,
+        kind: 'project' as const,
+        searchText: getProjectCommandSearchText(command),
+      })),
+    ],
+    [builtInCommands, paneActionCommands, projectCommands]
   );
-  const filteredPaneActionCommands = useMemo(
-    () => filterCommandPaletteItems(paneActionCommands, commandQuery, (command) => command.searchText),
-    [commandQuery, paneActionCommands]
+  const filteredCommandResults = useMemo(
+    () => filterCommandPaletteItems(commandSearchItems, commandQuery, (item) => item.searchText),
+    [commandQuery, commandSearchItems]
   );
-  const filteredProjectCommands = useMemo(
-    () =>
-      filterCommandPaletteItems(
-        projectCommands,
-        commandQuery,
-        ({ command, hotkey, slotNumber }) =>
-          `${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`
-      ),
-    [commandQuery, projectCommands]
-  );
-  const hasCommandResults =
-    filteredBuiltInCommands.length > 0 || filteredPaneActionCommands.length > 0 || filteredProjectCommands.length > 0;
+  const isSearchingCommands = commandQuery.length > 0;
+  const hasCommandResults = isSearchingCommands
+    ? filteredCommandResults.length > 0
+    : commandSearchItems.length > 0;
+  const topCommandValue = (
+    isSearchingCommands ? filteredCommandResults[0] : commandSearchItems[0]
+  )?.searchText ?? '';
+
+  useLayoutEffect(() => {
+    if (!isOpen || isPrewarm) {
+      return;
+    }
+    /*
+     * Filtering is React-owned because cmdk's built-in filter is disabled.
+     * Reset cmdk's controlled selection and the list viewport whenever the
+     * input changes so typing and deleting always target the newly ranked
+     * first visible command instead of preserving a stale row or scroll offset.
+     */
+    setSelectedCommandValue(topCommandValue);
+    if (commandListRef.current) {
+      commandListRef.current.scrollTop = 0;
+    }
+  }, [inputValue, isOpen, isPrewarm, topCommandValue]);
 
   const focusCommandPaletteInput = () => {
     const input = findCommandPaletteInput();
@@ -790,7 +842,12 @@ export function CommandPalette({
 
           CDXC:AddRepository 2026-05-29-11:45:
           Clone Repository should be available from the command palette as a Ghostex built-in command and open the same full-window clone modal as the Projects header button, without going through configurable project actions. */}
-      <Command className='quick-access-surface' shouldFilter={false}>
+      <Command
+        className='quick-access-surface'
+        shouldFilter={false}
+        value={selectedCommandValue}
+        onValueChange={setSelectedCommandValue}
+      >
         <QuickAccessHeader activeTab='commands' />
         {/*
          * CDXC:CommandPalette 2026-06-11-09:14:
@@ -824,70 +881,78 @@ export function CommandPalette({
           value={inputValue}
           onValueChange={setInputValue}
         />
-        <CommandList className='ghostex-command-palette-list'>
+        <CommandList className='ghostex-command-palette-list' ref={commandListRef}>
           {!hasCommandResults ? (
             <CommandEmpty>{isInitialLoadResolved ? 'No commands found.' : 'Loading commands…'}</CommandEmpty>
           ) : null}
-          {filteredBuiltInCommands.length > 0 ? (
+          {isSearchingCommands && filteredCommandResults.length > 0 ? (
+            <CommandGroup heading='Results'>
+              {filteredCommandResults.map((result) => {
+                if (result.kind === 'builtIn') {
+                  return (
+                    <BuiltInCommandRow
+                      command={result.command}
+                      key={`builtIn:${getBuiltInCommandKey(result.command)}`}
+                      onRun={runBuiltInCommand}
+                    />
+                  );
+                }
+                if (result.kind === 'paneAction') {
+                  return (
+                    <BuiltInCommandRow
+                      command={result.command}
+                      key={`paneAction:${result.command.definition.id}`}
+                      onRun={runBuiltInCommand}
+                    />
+                  );
+                }
+                return (
+                  <ProjectCommandRow
+                    item={result.command}
+                    key={`project:${result.command.command.commandId}`}
+                    onRun={runProjectCommand}
+                  />
+                );
+              })}
+            </CommandGroup>
+          ) : null}
+          {!isSearchingCommands && builtInCommands.length > 0 ? (
             <CommandGroup heading='Ghostex'>
-              {filteredBuiltInCommands.map((command) => (
-                <CommandItem
+              {builtInCommands.map((command) => (
+                <BuiltInCommandRow
+                  command={command}
                   key={getBuiltInCommandKey(command)}
-                  value={command.searchText}
-                  onSelect={() => runBuiltInCommand(command)}
-                >
-                  <BuiltInCommandIcon command={command} />
-                  <span className='ghostex-command-palette-copy'>
-                    <span className='ghostex-command-palette-title'>{command.title}</span>
-                  </span>
-                  {command.hotkey ? (
-                    <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut>
-                  ) : null}
-                </CommandItem>
+                  onRun={runBuiltInCommand}
+                />
               ))}
             </CommandGroup>
           ) : null}
-          {filteredPaneActionCommands.length > 0 ? (
+          {!isSearchingCommands && paneActionCommands.length > 0 ? (
             <>
-              {filteredBuiltInCommands.length > 0 ? <CommandSeparator /> : null}
+              {builtInCommands.length > 0 ? <CommandSeparator /> : null}
               <CommandGroup heading='Pane Actions'>
-                {filteredPaneActionCommands.map((command) => (
-                  <CommandItem
+                {paneActionCommands.map((command) => (
+                  <BuiltInCommandRow
+                    command={command}
                     key={command.definition.id}
-                    value={command.searchText}
-                    onSelect={() => runBuiltInCommand(command)}
-                  >
-                    <BuiltInCommandIcon command={command} />
-                    <span className='ghostex-command-palette-copy'>
-                      <span className='ghostex-command-palette-title'>{command.title}</span>
-                    </span>
-                    {command.hotkey ? (
-                      <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut>
-                    ) : null}
-                  </CommandItem>
+                    onRun={runBuiltInCommand}
+                  />
                 ))}
               </CommandGroup>
             </>
           ) : null}
-          {filteredProjectCommands.length > 0 ? (
+          {!isSearchingCommands && projectCommands.length > 0 ? (
             <>
-              {filteredBuiltInCommands.length > 0 || filteredPaneActionCommands.length > 0 ? (
+              {builtInCommands.length > 0 || paneActionCommands.length > 0 ? (
                 <CommandSeparator />
               ) : null}
               <CommandGroup heading='Project Actions'>
-                {filteredProjectCommands.map(({ command, hotkey, slotNumber }) => (
-                  <CommandItem
-                    key={command.commandId}
-                    value={`${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`}
-                    onSelect={() => runProjectCommand(command)}
-                  >
-                    <SidebarCommandIconGlyph icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON} stroke={1.8} />
-                    <span className='ghostex-command-palette-copy'>
-                      <span className='ghostex-command-palette-title'>{getCommandTitle(command)}</span>
-                      <span className='ghostex-command-palette-description'>{getCommandDescription(command)}</span>
-                    </span>
-                    {hotkey ? <CommandShortcut>{formatSidebarHotkeyLabel(hotkey)}</CommandShortcut> : null}
-                  </CommandItem>
+                {projectCommands.map((item) => (
+                  <ProjectCommandRow
+                    item={item}
+                    key={item.command.commandId}
+                    onRun={runProjectCommand}
+                  />
                 ))}
               </CommandGroup>
             </>
@@ -895,6 +960,44 @@ export function CommandPalette({
         </CommandList>
       </Command>
     </CommandDialog>
+  );
+}
+
+function BuiltInCommandRow({
+  command,
+  onRun,
+}: {
+  command: BuiltInPaletteCommand;
+  onRun: (command: BuiltInPaletteCommand) => void;
+}) {
+  return (
+    <CommandItem value={command.searchText} onSelect={() => onRun(command)}>
+      <BuiltInCommandIcon command={command} />
+      <span className='ghostex-command-palette-copy'>
+        <span className='ghostex-command-palette-title'>{command.title}</span>
+      </span>
+      {command.hotkey ? <CommandShortcut>{formatSidebarHotkeyLabel(command.hotkey)}</CommandShortcut> : null}
+    </CommandItem>
+  );
+}
+
+function ProjectCommandRow({
+  item,
+  onRun,
+}: {
+  item: ProjectPaletteCommand;
+  onRun: (command: SidebarCommandButton) => void;
+}) {
+  const { command, hotkey } = item;
+  return (
+    <CommandItem value={getProjectCommandSearchText(item)} onSelect={() => onRun(command)}>
+      <SidebarCommandIconGlyph icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON} stroke={1.8} />
+      <span className='ghostex-command-palette-copy'>
+        <span className='ghostex-command-palette-title'>{getCommandTitle(command)}</span>
+        <span className='ghostex-command-palette-description'>{getCommandDescription(command)}</span>
+      </span>
+      {hotkey ? <CommandShortcut>{formatSidebarHotkeyLabel(hotkey)}</CommandShortcut> : null}
+    </CommandItem>
   );
 }
 
@@ -1110,6 +1213,14 @@ function getCommandDescription(command: SidebarCommandButton): string {
     return `${typeLabel} - Not configured`;
   }
   return `${typeLabel} - ${target}`;
+}
+
+function getProjectCommandSearchText({
+  command,
+  hotkey,
+  slotNumber,
+}: ProjectPaletteCommand): string {
+  return `${getCommandTitle(command)} ${getCommandDescription(command)} ${hotkey} action ${slotNumber}`;
 }
 
 function getCommandTarget(command: SidebarCommandButton): string | undefined {

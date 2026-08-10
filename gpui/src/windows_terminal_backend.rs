@@ -127,81 +127,6 @@ printf '%s\n%s\n' "$ghostex_data_dir" "$ghostex_state_dir"
         state().lock().ok()?.auth_token.clone()
     }
 
-    pub(super) fn t3_runtime_launch_plan() -> Result<(PathBuf, PathBuf), String> {
-        /*
-        CDXC:GPUIWindowsT3Code 2026-07-26:
-        Windows does not execute the managed T3 server on the Win32 host. Resolve
-        the exact packaged Node/entrypoint paths from the selected WSL
-        distribution so the WSL gxserver can validate and own the launch plan.
-        Do not translate these paths through the Windows filesystem or probe a
-        second distribution.
-        */
-        let ResolvedWindowsTerminalBackend::Wsl { distribution } =
-            resolve(super::current_preference())?
-        else {
-            unreachable!("PowerShell is not a selectable Windows terminal backend")
-        };
-        let paths = resolve_wsl_ghostex_paths(&distribution)?;
-        let node_path = paths.data_path("source-runtime/package/t3code-server/lib/node");
-        let entrypoint_path = paths.data_path("source-runtime/package/t3code-server/dist/bin.mjs");
-        let output = run_wsl_capture(
-            &distribution,
-            &format!(
-                "set -eu; node={}; entrypoint={}; test -x \"$node\"; test -f \"$entrypoint\"; printf '%s\\n%s\\n' \"$node\" \"$entrypoint\"",
-                posix_single_quote(&node_path),
-                posix_single_quote(&entrypoint_path),
-            ),
-        )
-        .ok_or_else(|| {
-            "The managed T3 Code runtime is unavailable in the selected WSL2 distribution. Reinstall this Ghostex build."
-                .to_string()
-        })?;
-        let mut lines = output
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty());
-        let node_path = lines
-            .next()
-            .and_then(validated_wsl_path)
-            .ok_or_else(|| "WSL returned an invalid T3 Code Node path.".to_string())?;
-        let entrypoint_path = lines
-            .next()
-            .and_then(validated_wsl_path)
-            .ok_or_else(|| "WSL returned an invalid T3 Code entrypoint path.".to_string())?;
-        if lines.next().is_some() {
-            return Err("WSL returned an invalid T3 Code launch plan.".to_string());
-        }
-        Ok((PathBuf::from(node_path), PathBuf::from(entrypoint_path)))
-    }
-
-    pub(super) fn t3_owner_bearer_token() -> Result<String, String> {
-        let ResolvedWindowsTerminalBackend::Wsl { distribution } =
-            resolve(super::current_preference())?
-        else {
-            unreachable!("PowerShell is not a selectable Windows terminal backend")
-        };
-        let paths = resolve_wsl_ghostex_paths(&distribution)?;
-        let token_file = paths.data_path("t3-runtime/auth-state.json");
-        run_wsl_capture(
-            &distribution,
-            &format!(
-                "set -eu; token_file={}; test -r \"$token_file\"; cat \"$token_file\"",
-                posix_single_quote(&token_file),
-            ),
-        )
-        .and_then(|text| {
-            let value = serde_json::from_str::<serde_json::Value>(&text).ok()?;
-            let object = value.as_object()?;
-            (object.get("provider").and_then(serde_json::Value::as_str) == Some("t3code"))
-                .then_some(())?;
-            object
-                .get("ownerBearerToken")
-                .and_then(serde_json::Value::as_str)
-                .and_then(validated_t3_owner_bearer_token)
-        })
-        .ok_or_else(|| "T3 owner authorization is unavailable in WSL.".to_string())
-    }
-
     pub(super) fn resolve(
         _preference: WindowsTerminalBackendPreference,
     ) -> Result<ResolvedWindowsTerminalBackend, String> {
@@ -292,7 +217,7 @@ printf '%s\n%s\n' "$ghostex_data_dir" "$ghostex_state_dir"
         }
 
         let start_script = format!(
-            "set -eu; gxserver={}; test -x \"$gxserver\"; GHOSTEX_T3_RUNTIME_COMMAND_SHELL=/bin/sh \"$gxserver\" start --json >/dev/null",
+            "set -eu; gxserver={}; test -x \"$gxserver\"; \"$gxserver\" start --json >/dev/null",
             posix_single_quote(&gxserver_path),
         );
         if !run_wsl_status(distribution, &start_script) {
@@ -1347,14 +1272,6 @@ while kill -0 "$server_pid" 2>/dev/null; do sleep 5; done"#,
         .then(|| token.to_string())
     }
 
-    fn validated_t3_owner_bearer_token(value: &str) -> Option<String> {
-        let token = value.trim();
-        (!token.is_empty()
-            && token.chars().count() <= 16 * 1024
-            && !token.chars().any(char::is_control))
-        .then(|| token.to_string())
-    }
-
     fn decode_windows_command_output(bytes: &[u8]) -> String {
         if bytes.len() >= 2
             && (bytes.starts_with(&[0xff, 0xfe])
@@ -1401,15 +1318,6 @@ pub(crate) fn auth_token() -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn t3_runtime_launch_plan() -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
-    platform::t3_runtime_launch_plan()
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn t3_owner_bearer_token() -> Result<String, String> {
-    platform::t3_owner_bearer_token()
-}
-
 #[cfg(target_os = "windows")]
 pub(crate) fn resolve_current() -> Result<ResolvedWindowsTerminalBackend, String> {
     platform::resolve(current_preference())

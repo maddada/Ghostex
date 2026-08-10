@@ -19,6 +19,8 @@ builds install the skill version that matches their CLI commands.
 const GHOSTEX_BROWSER_SKILL_NAME: &str = "ghostex-browser-use";
 const GHOSTEX_EMBEDDED_BROWSER_SKILL_NAME: &str = "ghostex-embedded-browser-use";
 const GHOSTEX_COMPUTER_USE_SKILL_NAME: &str = "ghostex-computer-use";
+const GHOSTEX_CLI_SKILL_NAME: &str = "ghostex-cli";
+const GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME: &str = "ghostex-manage-automations";
 const GHOSTEX_AGENT_ORCHESTRATION_SKILL_NAME: &str = "ghostex-agent-orchestration";
 const GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-5.6-orchestration";
 const GHOSTEX_FIND_PREV_SESSION_SKILL_NAME: &str = "ghostex-find-prev-session";
@@ -321,6 +323,37 @@ pub fn install_computer_use_skill_command(args: &[String]) -> CliResult<()> {
         "cua-driver",
         &["GHOSTEX_COMPUTER_USE_SKILL_SOURCE"],
         GHOSTEX_COMPUTER_USE_SKILL_NAME,
+    )
+}
+
+pub fn cli_command(args: &[String]) -> CliResult<()> {
+    skill_surface_command(args, &usage::cli_usage(), "cli", &install_cli_skill_command)
+}
+
+pub fn install_cli_skill_command(args: &[String]) -> CliResult<()> {
+    install_ghostex_agent_skill(
+        args,
+        "ghostex --help",
+        &["GHOSTEX_CLI_SKILL_SOURCE"],
+        GHOSTEX_CLI_SKILL_NAME,
+    )
+}
+
+pub fn automations_command(args: &[String]) -> CliResult<()> {
+    skill_surface_command(
+        args,
+        &usage::automations_usage(),
+        "automations",
+        &install_manage_automations_skill_command,
+    )
+}
+
+pub fn install_manage_automations_skill_command(args: &[String]) -> CliResult<()> {
+    install_ghostex_agent_skill(
+        args,
+        "ghostex automations --help",
+        &["GHOSTEX_MANAGE_AUTOMATIONS_SKILL_SOURCE"],
+        GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME,
     )
 }
 

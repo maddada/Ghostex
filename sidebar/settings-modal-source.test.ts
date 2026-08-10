@@ -433,23 +433,6 @@ describe("settings modal source", () => {
     expect(agentsTab).not.toContain("promptAgentOptions.find");
   });
 
-  test("labels intentionally omitted local T3 runtime as not bundled", () => {
-    /*
-     * CDXC:ContributorStart 2026-06-22-23:23:
-     * Contributor local builds can intentionally omit the optional t3code
-     * checkout. Settings should label that state as Not bundled instead of
-     * Missing so users understand only the T3 feature is unavailable.
-     */
-    const integrationsTab = sourceBetween(
-      settingsModalSource,
-      "function IntegrationsSettingsTab",
-      "function IntegrationSettingsRow",
-    );
-
-    expect(integrationsTab).toContain('ghostexCliStatus?.t3RuntimeSource === "unavailable"');
-    expect(integrationsTab).toContain('"Not bundled"');
-  });
-
   test("routes settings select popups through the close-before-write wrapper", () => {
     /*
      * CDXC:SettingsDropdowns 2026-06-19-19:22:

@@ -58,8 +58,6 @@ case "$COMPONENT" in
     GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
     GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
       "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
-    # CDXC:T3CodeDisabled ghostex-mzp9: validation retained but disabled:
-    # required_path="gpui/runtime/macos/Web/t3code-server/dist/bin.mjs"
     for required_path in \
       "gpui/runtime/macos/Web/on-demand-resources.json" \
       "gpui/runtime/macos/Web/gxserver/bin/gxserver" \

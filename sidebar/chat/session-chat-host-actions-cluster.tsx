@@ -135,6 +135,9 @@ export function SessionChatHostActionsCluster({
   const [expanded, setExpanded] = useState(false);
   const [inputAction, setInputAction] = useState<SessionChatHostAction | null>(null);
   const [inputValue, setInputValue] = useState("");
+  const promptsAction = hostActions.actions?.find((action) => action.id === "stashedPrompts");
+  const menuActions = hostActions.actions?.filter((action) => action.id !== "stashedPrompts") ?? [];
+  const hasAgentActions = hostActions.onAgentActions !== undefined || menuActions.length > 0;
 
   return (
     <div className="pointer-events-none absolute right-[13px] top-[13px] z-20 flex flex-col items-end">
@@ -162,7 +165,7 @@ export function SessionChatHostActionsCluster({
           <>
             <HostActionButton
               label={surface === "chat" ? "Terminal View" : "Chat View"}
-              last={hostActions.onAgentActions === undefined && !hostActions.actions?.length}
+              last={promptsAction === undefined && !hasAgentActions}
               onClick={hostActions.onSwitchToTerminal}
             >
               {surface === "chat" ? (
@@ -171,7 +174,16 @@ export function SessionChatHostActionsCluster({
                 <IconMessage aria-hidden="true" size={14} stroke={2} />
               )}
             </HostActionButton>
-            {hostActions.onAgentActions !== undefined || hostActions.actions?.length ? (
+            {promptsAction ? (
+              <HostActionButton
+                label={promptsAction.label}
+                last={!hasAgentActions}
+                onClick={() => hostActions.onAction?.(promptsAction.id)}
+              >
+                {hostActionIcon(promptsAction.id)}
+              </HostActionButton>
+            ) : null}
+            {hasAgentActions ? (
               <HostActionButton
                 label="Agent Actions"
                 last
@@ -186,13 +198,13 @@ export function SessionChatHostActionsCluster({
         )}
       </div>
       {/* The Agent Actions menu opens as its own bar 13px below the cluster. */}
-      {expanded && !inputAction && hostActions.actions?.length ? (
+      {expanded && !inputAction && menuActions.length ? (
         <div className="pointer-events-auto mt-[13px] flex items-center shadow-[0_10px_22px_rgba(0,0,0,0.32)]">
-          {hostActions.actions.map((action, index) => (
+          {menuActions.map((action, index) => (
             <HostActionButton
               key={action.id}
               label={action.label}
-              last={index === (hostActions.actions?.length ?? 0) - 1}
+              last={index === menuActions.length - 1}
               onClick={() => {
                 if (action.input) {
                   setInputValue(action.input.initialValue ?? "");

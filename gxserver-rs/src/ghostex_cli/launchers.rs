@@ -1,5 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+#[cfg(any(target_os = "linux", test))]
+use std::process::Stdio;
 
 use serde_json::{json, Value};
 
@@ -9,8 +11,8 @@ use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 /*
 CDXC:GhostexRustCli 2026-07-13:
 Faithful port of the Node CLI's tool launchers: interactive shell resolution,
-bare-`gx` TUI launch, zehn/ghostex-history/bd/gxserver binary discovery, and
-the shared interactive process runner. Resolution order and error strings must
+desktop activation, explicit `gx tui` launch, zehn/ghostex-history/bd/gxserver
+binary discovery, and the shared interactive process runner. Resolution order and error strings must
 match scripts/ghostex-cli.mjs so installed bundles, remote Ubuntu packages,
 and source checkouts keep resolving the exact same binaries.
 */
@@ -368,8 +370,238 @@ pub fn run_interactive_shell_command(
 }
 
 // ---------------------------------------------------------------------------
-// TUI launch (bare `gx` / `gx 2`)
+// Desktop and TUI launch (`gx` / `gx tui`)
 // ---------------------------------------------------------------------------
+
+#[cfg(any(target_os = "macos", test))]
+const GHOSTEX_GPUI_BUNDLE_ID: &str = "com.madda.ghostex.gpui";
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+const WINDOWS_GHOSTEX_DESKTOP_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$running = @(Get-Process -Name 'Ghostex','ghostex-gpui-runtime' -ErrorAction SilentlyContinue)
+if ($running.Count -gt 0) {
+    $process = $null
+    for ($attempt = 0; $attempt -lt 20 -and -not $process; $attempt++) {
+        $process = Get-Process -Name 'Ghostex','ghostex-gpui-runtime' -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 } |
+            Select-Object -First 1
+        if ($process) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $process) {
+        throw 'Ghostex is running but its desktop window is not available yet.'
+    }
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class GhostexWindowActivation {
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+'@
+    [void][GhostexWindowActivation]::ShowWindowAsync($process.MainWindowHandle, 9)
+    [void][GhostexWindowActivation]::SetForegroundWindow($process.MainWindowHandle)
+    $shell = New-Object -ComObject WScript.Shell
+    [void]$shell.AppActivate($process.Id)
+    exit 0
+}
+$programFiles = $env:ProgramW6432
+if (-not $programFiles) {
+    $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+}
+$executable = Join-Path (Join-Path $programFiles 'Ghostex') 'Ghostex.exe'
+if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+    throw "Ghostex desktop app is not installed at $executable."
+}
+Start-Process -FilePath $executable -WorkingDirectory (Split-Path -Parent $executable)
+"#;
+
+#[cfg(any(target_os = "macos", test))]
+fn enclosing_macos_app_bundle(executable: &Path) -> Option<PathBuf> {
+    executable
+        .ancestors()
+        .find(|ancestor| {
+            ancestor
+                .extension()
+                .is_some_and(|extension| extension.to_string_lossy().eq_ignore_ascii_case("app"))
+        })
+        .map(Path::to_path_buf)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn resolve_macos_desktop_launch(executable: &Path) -> Launch {
+    let args = enclosing_macos_app_bundle(executable)
+        .map(|bundle| vec![bundle.to_string_lossy().to_string()])
+        .unwrap_or_else(|| vec!["-b".to_string(), GHOSTEX_GPUI_BUNDLE_ID.to_string()]);
+    Launch {
+        command: "/usr/bin/open".to_string(),
+        args,
+        cwd: None,
+        env: Vec::new(),
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn resolve_windows_desktop_launch() -> Launch {
+    Launch {
+        command: "powershell.exe".to_string(),
+        args: vec![
+            "-NoProfile".to_string(),
+            "-NonInteractive".to_string(),
+            "-Command".to_string(),
+            WINDOWS_GHOSTEX_DESKTOP_SCRIPT.to_string(),
+        ],
+        cwd: None,
+        env: Vec::new(),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn resolve_linux_desktop_launch_from_cli(executable: &Path) -> CliResult<Launch> {
+    let owning_app = executable
+        .parent()
+        .map(|bin_dir| js_path_resolve(&bin_dir.join("..").join("..").join("Ghostex")));
+    let executable = [owning_app, Some(PathBuf::from("/opt/ghostex/Ghostex"))]
+        .into_iter()
+        .flatten()
+        .find(|candidate| is_executable_file_sync(candidate))
+        .ok_or_else(|| {
+            CliError::Other(
+                "Ghostex desktop app was not found. Install the Ghostex Linux desktop package, or run `gx tui` for the terminal interface."
+                    .to_string(),
+            )
+        })?;
+    Ok(Launch {
+        command: executable.to_string_lossy().to_string(),
+        args: Vec::new(),
+        cwd: executable.parent().map(Path::to_path_buf),
+        env: Vec::new(),
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn is_wsl() -> bool {
+    std::env::var_os("WSL_INTEROP").is_some()
+        || std::env::var_os("WSL_DISTRO_NAME").is_some()
+        || std::fs::read_to_string("/proc/sys/kernel/osrelease")
+            .is_ok_and(|release| release.to_ascii_lowercase().contains("microsoft"))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_ghostex_window_id(listing: &str) -> Option<&str> {
+    listing.lines().find_map(|line| {
+        let mut fields = line.split_whitespace();
+        let window_id = fields.next()?;
+        let _desktop = fields.next()?;
+        let window_class = fields.next()?;
+        window_class
+            .split('.')
+            .any(|part| part.eq_ignore_ascii_case("ghostex"))
+            .then_some(window_id)
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn spawn_detached_desktop(launch: &Launch) -> CliResult<()> {
+    let mut command = Command::new(&launch.command);
+    command
+        .args(&launch.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(cwd) = launch.cwd.as_deref() {
+        command.current_dir(cwd);
+    }
+    for (name, value) in &launch.env {
+        command.env(name, value);
+    }
+    command.spawn().map_err(|error| {
+        CliError::Other(format!(
+            "Could not launch the Ghostex Linux desktop app: {error}"
+        ))
+    })?;
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn activate_or_launch_linux_desktop() -> CliResult<()> {
+    if !std::env::var("DISPLAY").is_ok_and(|display| !display.trim().is_empty()) {
+        return Err(CliError::Other(
+            "Ghostex desktop activation requires an X11 DISPLAY; run `gx tui` for the terminal interface."
+                .to_string(),
+        ));
+    }
+    let listing = Command::new("wmctrl").args(["-l", "-x"]).output().map_err(|error| {
+        CliError::Other(format!(
+            "Ghostex Linux desktop activation requires wmctrl. Install or reinstall the Ghostex desktop package: {error}"
+        ))
+    })?;
+    if !listing.status.success() {
+        return Err(CliError::Other(
+            "Could not inspect X11 windows to activate Ghostex.".to_string(),
+        ));
+    }
+    if let Some(window_id) = linux_ghostex_window_id(&String::from_utf8_lossy(&listing.stdout)) {
+        let status = Command::new("wmctrl")
+            .args(["-i", "-a", window_id])
+            .status()
+            .map_err(|error| {
+                CliError::Other(format!(
+                    "Could not activate the Ghostex Linux window: {error}"
+                ))
+            })?;
+        if !status.success() {
+            return Err(CliError::Other(
+                "Could not activate the existing Ghostex Linux window.".to_string(),
+            ));
+        }
+        return Ok(());
+    }
+    let launch = resolve_linux_desktop_launch_from_cli(&current_cli_executable())?;
+    spawn_detached_desktop(&launch)
+}
+
+pub fn resolve_ghostex_desktop_launch() -> CliResult<Launch> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(resolve_macos_desktop_launch(&current_cli_executable()));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(resolve_windows_desktop_launch());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if is_wsl() {
+            return Ok(resolve_windows_desktop_launch());
+        }
+        return resolve_linux_desktop_launch_from_cli(&current_cli_executable());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err(CliError::Other(
+            "Launching the Ghostex desktop app from ghostex/gx is not supported on this platform; run `gx tui` for the terminal interface."
+                .to_string(),
+        ))
+    }
+}
+
+pub fn ghostex_desktop_command() -> CliResult<()> {
+    #[cfg(target_os = "linux")]
+    if !is_wsl() {
+        return activate_or_launch_linux_desktop();
+    }
+    let launch = resolve_ghostex_desktop_launch()?;
+    run_interactive_process(
+        &launch.command,
+        &launch.args,
+        launch.cwd.as_deref(),
+        &launch.env,
+    )?;
+    Ok(())
+}
 
 fn is_interactive_terminal() -> bool {
     use crossterm::tty::IsTty;
@@ -379,7 +611,7 @@ fn is_interactive_terminal() -> bool {
 pub fn ghostex_tui_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     /*
-    Bare `ghostex` / `gx` launches the full Ghostex terminal TUI; without an
+    `ghostex tui` / `gx tui` launches the full Ghostex terminal TUI; without an
     interactive terminal it falls back to the plain session picker rows.
     */
     if !is_interactive_terminal() {
@@ -387,7 +619,7 @@ pub fn ghostex_tui_command(args: &[String]) -> CliResult<()> {
     }
     let tui = resolve_ghostex_tui_launch(&parsed.flags)?;
     /*
-    The bare `gx` launcher must pass TUI environment through the spawn env so
+    The explicit TUI launcher must pass TUI environment through the spawn env so
     the app build keeps the callback command the TUI uses to list and attach
     Ghostex sessions.
     */
@@ -398,15 +630,6 @@ pub fn ghostex_tui_command(args: &[String]) -> CliResult<()> {
     ));
     run_interactive_process(&tui.command, &tui.args, tui.cwd.as_deref(), &env)?;
     Ok(())
-}
-
-pub fn ghostex_tui2_command(args: &[String]) -> CliResult<()> {
-    /*
-    Keep `gx 2` as a compatibility alias after promoting TUI2 to bare `gx`.
-    It must share the same resolver as the public command so there is only one
-    launch contract to package and support.
-    */
-    ghostex_tui_command(args)
 }
 
 pub fn resolve_ghostex_tui_launch(flags: &Flags) -> CliResult<Launch> {
@@ -434,10 +657,6 @@ pub fn resolve_ghostex_tui_launch(flags: &Flags) -> CliResult<Launch> {
     Err(CliError::Other(
         "Ghostex TUI binary was not found. Build the TUI with `cargo build --bin ghostex-tui --manifest-path tui2/Cargo.toml`, pass `--tui-bin <path>`, or set GHOSTEX_TUI_BIN.".to_string(),
     ))
-}
-
-pub fn resolve_ghostex_tui2_launch(flags: &Flags) -> CliResult<Launch> {
-    resolve_ghostex_tui_launch(flags)
 }
 
 pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
@@ -490,15 +709,6 @@ pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
     })
 }
 
-pub fn resolve_ghostex_tui2_launch_from_root(root: &Path) -> Option<Launch> {
-    /*
-    `ghostex-tui2` is no longer a separate packaged app. Preserve the exported
-    resolver as a legacy alias while returning the canonical `ghostex-tui`
-    launch plan.
-    */
-    resolve_ghostex_tui_launch_from_root(root)
-}
-
 pub fn ghostex_tui_cargo_env() -> Vec<(String, String)> {
     /*
     On macOS 26.4+, unpatched Zig 0.15.2 cannot link libc from Xcode 26 SDKs;
@@ -515,7 +725,7 @@ pub fn ghostex_tui_cargo_env() -> Vec<(String, String)> {
 
 // ---------------------------------------------------------------------------
 // Non-interactive picker fallback (private copy of the row printer used by
-// the bare-`gx` launch when stdin/stdout are not TTYs; the interactive picker
+// `gx tui` when stdin/stdout are not TTYs; the interactive picker
 // itself is owned by the picker module).
 // ---------------------------------------------------------------------------
 
@@ -1255,9 +1465,63 @@ mod tests {
         touch(&bundled);
         let launch = resolve_ghostex_tui_launch_from_root(&root).expect("bundled launch");
         assert_eq!(launch.command, bundled.to_string_lossy());
-        // Legacy alias resolves the identical plan.
-        let alias = resolve_ghostex_tui2_launch_from_root(&root).expect("alias launch");
-        assert_eq!(alias.command, launch.command);
+    }
+
+    #[test]
+    fn desktop_launch_opens_the_bundle_that_owns_the_cli() {
+        let executable = Path::new("/Applications/Ghostex Dev.app/Contents/Resources/CLI/ghostex");
+        let launch = resolve_macos_desktop_launch(executable);
+        assert_eq!(launch.command, "/usr/bin/open");
+        assert_eq!(launch.args, vec!["/Applications/Ghostex Dev.app"]);
+    }
+
+    #[test]
+    fn desktop_launch_uses_the_gpui_bundle_id_outside_an_app_bundle() {
+        let launch = resolve_macos_desktop_launch(Path::new("/usr/local/bin/ghostex"));
+        assert_eq!(launch.args, vec!["-b", "com.madda.ghostex.gpui"]);
+    }
+
+    #[test]
+    fn windows_desktop_launch_activates_or_starts_the_installed_app() {
+        let launch = resolve_windows_desktop_launch();
+        assert_eq!(launch.command, "powershell.exe");
+        assert_eq!(
+            &launch.args[..3],
+            ["-NoProfile", "-NonInteractive", "-Command"]
+        );
+        let script = launch.args.last().expect("PowerShell script");
+        assert!(script.contains("Get-Process -Name 'Ghostex'"));
+        assert!(script.contains("SetForegroundWindow"));
+        assert!(script.contains("$env:ProgramW6432"));
+        assert!(script.contains("Start-Process -FilePath $executable"));
+    }
+
+    #[test]
+    fn linux_desktop_launch_resolves_the_app_owning_the_cli() {
+        let root = temp_root("linux-desktop");
+        let cli = root.join("Ghostex/gxserver/bin/ghostex");
+        let app = root.join("Ghostex/Ghostex");
+        touch(&cli);
+        touch(&app);
+        #[cfg(unix)]
+        make_executable(&app);
+
+        let launch = resolve_linux_desktop_launch_from_cli(&cli).expect("Linux app launch");
+        assert_eq!(launch.command, app.to_string_lossy());
+        assert_eq!(launch.cwd, app.parent().map(Path::to_path_buf));
+    }
+
+    #[test]
+    fn linux_window_listing_matches_only_the_ghostex_window_class() {
+        let _activation_entrypoint = activate_or_launch_linux_desktop as fn() -> CliResult<()>;
+        let _wsl_detector = is_wsl as fn() -> bool;
+        let listing =
+            "0x01  0 code.Code host Editor - Ghostex\n0x02  0 ghostex.Ghostex host Ghostex\n";
+        assert_eq!(linux_ghostex_window_id(listing), Some("0x02"));
+        assert_eq!(
+            linux_ghostex_window_id("0x01  0 code.Code host Ghostex"),
+            None
+        );
     }
 
     #[test]

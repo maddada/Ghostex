@@ -46,7 +46,6 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { AppTooltip } from "./app-tooltip";
 import { SidebarV2ProjectIcon } from "./v2/sidebar-v2-icons";
-import { T3CODE_ENABLED } from "../shared/feature-flags";
 import {
   getSidebarSessionLifecycleState,
   type SidebarTheme,
@@ -513,7 +512,6 @@ export type SessionGroupSectionProps = {
   projectCollectionOptions?: readonly { collectionId: string; color: string; title: string }[];
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   showHeaderActions?: boolean;
-  showAgentGuiAction?: boolean;
   showSessionDropPositionIndicators?: boolean;
   useColoredAgentIcons?: boolean;
   vscode: WebviewApi;
@@ -656,7 +654,6 @@ export function SessionGroupSection({
   sessionDraggingDisabled = false,
   sessionTagListItems,
   showHeaderActions = true,
-  showAgentGuiAction = false,
   showSessionDropPositionIndicators = true,
   useColoredAgentIcons = false,
   vscode,
@@ -1568,17 +1565,6 @@ export function SessionGroupSection({
     });
   };
 
-  const requestCreateAgentGui = () => {
-    if (!T3CODE_ENABLED || !projectContext) {
-      return;
-    }
-    vscode.postMessage({
-      agentId: "t3",
-      groupId: group.groupId,
-      type: "runSidebarAgent",
-    });
-  };
-
   const requestRunProjectRowCommand = (
     command: SidebarCommandButton,
     scope: SidebarCommandScope,
@@ -2245,7 +2231,7 @@ export function SessionGroupSection({
                        *
                        * CDXC:WorktreeMerge 2026-05-27-06:25:
                        * Worktree rows keep one Git affordance: Create PR opens the
-                       * T3-style review flow for commit/push/PR, and that modal now
+                       * review flow for commit/push/PR, and that modal now
                        * owns the optional direct merge-to-main path so the header does
                        * not imply two competing worktree completion flows.
                        *
@@ -2344,26 +2330,6 @@ export function SessionGroupSection({
                             type="button"
                           >
                             <IconWorld
-                              aria-hidden="true"
-                              className="group-add-icon"
-                              size={14}
-                              stroke={2}
-                            />
-                          </ProjectHeaderActionButton>
-                        ) : null}
-                        {T3CODE_ENABLED && projectHeaderActions === "all" && showAgentGuiAction ? (
-                          <ProjectHeaderActionButton
-                            aria-label={`Create a chat in ${group.title}`}
-                            className="group-add-button group-agent-gui-button"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              requestCreateAgentGui();
-                            }}
-                            tooltip="New Chat"
-                            type="button"
-                          >
-                            <IconMessageCircle
                               aria-hidden="true"
                               className="group-add-icon"
                               size={14}
@@ -2636,6 +2602,11 @@ export function SessionGroupSection({
                         }
                         vscode={vscode}
                       />
+                      {sessionsById[sessionId]?.isPinned === true &&
+                      orderedSessionIds[sessionIndex + 1] !== undefined &&
+                      sessionsById[orderedSessionIds[sessionIndex + 1]]?.isPinned !== true ? (
+                        <div aria-hidden className="pinned-sessions-divider" />
+                      ) : null}
                     </Fragment>
                   );
                 })}

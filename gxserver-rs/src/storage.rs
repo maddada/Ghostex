@@ -1,8 +1,8 @@
 use std::{fs, path::Path, time::Duration};
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
 use crate::{
     config::write_default_config_if_missing,
@@ -656,7 +656,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       CREATE TABLE IF NOT EXISTS sessions (
         projectId TEXT NOT NULL,
         sessionId TEXT NOT NULL,
-        kind TEXT NOT NULL CHECK (kind IN ('terminal', 'agent', 't3')),
+        kind TEXT NOT NULL CHECK (kind IN ('terminal', 'agent')),
         title TEXT NOT NULL,
         lifecycleState TEXT NOT NULL CHECK (lifecycleState IN ('running', 'sleeping', 'stopped', 'missing', 'unknown')),
         providerStateJson TEXT NOT NULL,
@@ -743,8 +743,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
             'rovo session',
             'rovo dev session',
             'rovodev session',
-            'search by text',
-            't3 code session'
+            'search by text'
           )
           OR trim(title) GLOB 'Session [0-9]*'
           OR trim(title) GLOB '👻*'
@@ -1032,7 +1031,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         (GPUI, web, mobile, CLI, remote machines) reads one durable answer
         instead of deriving a private inbox. `settledOverrideAt` is the
         server-internal stamp for the current override: real activity newer than
-        the stamp resets the override, which is how t3code's event-driven
+        the stamp resets the override, which is how the event-driven
         "activity un-settles" rule is expressed against gxserver's activity
         clock. It is deliberately not published in presentation.
         Old state.db files simply get NULL columns, which is the "no lifecycle
@@ -1106,6 +1105,142 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 18;
     "#,
     },
+    Migration {
+        id: "0019_remove_unsupported_session_kinds",
+        sql: r#"
+      DELETE FROM sessions
+      WHERE kind NOT IN ('terminal', 'agent');
+
+      CREATE TABLE sessions_next (
+        projectId TEXT NOT NULL,
+        sessionId TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('terminal', 'agent')),
+        title TEXT NOT NULL,
+        lifecycleState TEXT NOT NULL CHECK (lifecycleState IN ('running', 'sleeping', 'stopped', 'missing', 'unknown')),
+        providerStateJson TEXT NOT NULL,
+        zmxName TEXT NOT NULL,
+        cwd TEXT,
+        agentId TEXT,
+        commandId TEXT,
+        isPinned INTEGER NOT NULL DEFAULT 0 CHECK (isPinned IN (0, 1)),
+        isFavorite INTEGER NOT NULL DEFAULT 0 CHECK (isFavorite IN (0, 1)),
+        restoredFromSessionId TEXT,
+        restoredFromHistoryId TEXT,
+        launchSettingsJson TEXT NOT NULL DEFAULT '{}',
+        runtimeSettingsJson TEXT NOT NULL DEFAULT '{}',
+        completionRulesJson TEXT NOT NULL DEFAULT '{}',
+        attentionRulesJson TEXT NOT NULL DEFAULT '{}',
+        notificationRulesJson TEXT NOT NULL DEFAULT '{}',
+        worktreeJson TEXT NOT NULL DEFAULT '{}',
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        lastActiveAt TEXT,
+        sidebarOrder REAL,
+        sessionTag TEXT CHECK (
+          sessionTag IS NULL OR sessionTag IN (
+            'favorite',
+            'high-priority',
+            'research',
+            'todo',
+            'in-progress',
+            'testing',
+            'blocked',
+            'low-priority',
+            'on-hold',
+            'done',
+            'bug',
+            'feature',
+            'design'
+          )
+        ),
+        settledAt TEXT,
+        settledOverride TEXT CHECK (
+          settledOverride IS NULL OR settledOverride IN ('settled', 'active')
+        ),
+        settledOverrideAt TEXT,
+        snoozedAt TEXT,
+        snoozedUntil TEXT,
+        PRIMARY KEY (projectId, sessionId),
+        FOREIGN KEY (projectId) REFERENCES projects(projectId) ON DELETE CASCADE
+      );
+
+      INSERT INTO sessions_next (
+        projectId,
+        sessionId,
+        kind,
+        title,
+        lifecycleState,
+        providerStateJson,
+        zmxName,
+        cwd,
+        agentId,
+        commandId,
+        isPinned,
+        isFavorite,
+        restoredFromSessionId,
+        restoredFromHistoryId,
+        launchSettingsJson,
+        runtimeSettingsJson,
+        completionRulesJson,
+        attentionRulesJson,
+        notificationRulesJson,
+        worktreeJson,
+        createdAt,
+        updatedAt,
+        lastActiveAt,
+        sidebarOrder,
+        sessionTag,
+        settledAt,
+        settledOverride,
+        settledOverrideAt,
+        snoozedAt,
+        snoozedUntil
+      )
+      SELECT
+        projectId,
+        sessionId,
+        kind,
+        title,
+        lifecycleState,
+        providerStateJson,
+        zmxName,
+        cwd,
+        agentId,
+        commandId,
+        isPinned,
+        isFavorite,
+        restoredFromSessionId,
+        restoredFromHistoryId,
+        launchSettingsJson,
+        runtimeSettingsJson,
+        completionRulesJson,
+        attentionRulesJson,
+        notificationRulesJson,
+        worktreeJson,
+        createdAt,
+        updatedAt,
+        lastActiveAt,
+        sidebarOrder,
+        sessionTag,
+        settledAt,
+        settledOverride,
+        settledOverrideAt,
+        snoozedAt,
+        snoozedUntil
+      FROM sessions;
+
+      DROP TABLE sessions;
+      ALTER TABLE sessions_next RENAME TO sessions;
+
+      CREATE INDEX IF NOT EXISTS idx_sessions_project_updated
+        ON sessions(projectId, updatedAt);
+
+      CREATE INDEX IF NOT EXISTS idx_sessions_project_sidebar_order
+        ON sessions(projectId, sidebarOrder);
+
+      PRAGMA user_version = 19;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1154,10 +1289,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 18);
+        assert_eq!(user_version, 19);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 18);
+        assert_eq!(schema_migration_count(&db), 19);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1580,6 +1715,102 @@ mod tests {
             )
             .expect("session title");
         assert_eq!(title, "Pre-upgrade session");
+    }
+
+    #[test]
+    fn unsupported_session_kind_migration_removes_legacy_rows_before_tightening_schema() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        ensure_gxserver_storage_layout(&paths).expect("storage layout");
+        let mut db = open_gxserver_database(&paths).expect("open db");
+        apply_migration_range(&mut db, 0..18);
+        insert_project(&db, "P1kind", "Ghostex", "/repo/ghostex");
+        insert_session(&db, "P1kind", "G1keep", "Supported session");
+        insert_session(&db, "P1kind", "G2drop", "Retired session");
+        db.execute(
+            "UPDATE sessions SET kind = 't3' WHERE sessionId = 'G2drop'",
+            [],
+        )
+        .expect("mark retired session kind");
+        db.execute(
+            r#"
+            UPDATE sessions
+            SET settledAt = '2026-08-09T12:00:00.000Z',
+                settledOverride = 'settled',
+                settledOverrideAt = '2026-08-09T12:00:00.000Z',
+                snoozedAt = '2026-08-09T12:01:00.000Z',
+                snoozedUntil = '2026-08-10T12:01:00.000Z'
+            WHERE sessionId = 'G1keep'
+            "#,
+            [],
+        )
+        .expect("set supported lifecycle state");
+
+        apply_migration_range(&mut db, 18..19);
+
+        let rows = db
+            .prepare("SELECT sessionId, kind FROM sessions ORDER BY sessionId")
+            .expect("prepare session query")
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("query sessions")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("collect sessions");
+        assert_eq!(rows, vec![("G1keep".to_string(), "terminal".to_string())]);
+
+        let lifecycle: (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ) = db
+            .query_row(
+                r#"
+                SELECT settledAt, settledOverride, settledOverrideAt, snoozedAt, snoozedUntil
+                FROM sessions
+                WHERE sessionId = 'G1keep'
+                "#,
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("supported lifecycle state");
+        assert_eq!(
+            lifecycle,
+            (
+                Some("2026-08-09T12:00:00.000Z".to_string()),
+                Some("settled".to_string()),
+                Some("2026-08-09T12:00:00.000Z".to_string()),
+                Some("2026-08-09T12:01:00.000Z".to_string()),
+                Some("2026-08-10T12:01:00.000Z".to_string()),
+            )
+        );
+
+        let insert_retired = db.execute(
+            r#"
+            INSERT INTO sessions (
+              projectId, sessionId, kind, title, lifecycleState,
+              providerStateJson, zmxName, createdAt, updatedAt
+            ) VALUES (
+              'P1kind', 'G3reject', 't3', 'Rejected session', 'stopped',
+              '{}', 'G3reject', '2026-08-09T12:00:00.000Z', '2026-08-09T12:00:00.000Z'
+            )
+            "#,
+            [],
+        );
+        assert!(
+            insert_retired.is_err(),
+            "the rebuilt schema must reject t3 rows"
+        );
     }
 
     #[test]

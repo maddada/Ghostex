@@ -1422,8 +1422,6 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "delete the worktree project";
     case "/api/updateSession":
       return "update the session";
-    case "/api/syncT3EmbeddedSession":
-      return "sync the T3 session";
     case "/api/updateSessionOrder":
       return "save the session order";
     case "/api/settleSession":

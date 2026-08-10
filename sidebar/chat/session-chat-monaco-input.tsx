@@ -13,6 +13,7 @@
 // this component is never mounted there and the composer keeps its textarea.
 
 import { useEffect, useRef } from "react";
+import type { SessionChatTheme } from "../../shared/session-chat";
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from "./session-chat-composer";
 
 interface MonacoPositionLike {
@@ -79,7 +80,10 @@ interface MonacoWindowLike {
   require?: MonacoAmdRequire;
 }
 
-const CHAT_MONACO_THEME = "ghostex-session-chat";
+const CHAT_MONACO_THEMES: Record<SessionChatTheme, string> = {
+  dark: "ghostex-session-chat-dark",
+  light: "ghostex-session-chat-light",
+};
 const MIN_INPUT_HEIGHT_PX = 24;
 const MAX_INPUT_HEIGHT_PX = 160;
 
@@ -129,14 +133,24 @@ function loadSessionChatMonaco(vsBaseUrl: string): Promise<MonacoNamespaceLike> 
 
 let themeDefined = false;
 
-function ensureChatTheme(monaco: MonacoNamespaceLike): void {
+function ensureChatThemes(monaco: MonacoNamespaceLike): void {
   if (themeDefined) {
     return;
   }
   themeDefined = true;
   // Transparent background so the composer's bg-card container shows through.
-  monaco.editor.defineTheme(CHAT_MONACO_THEME, {
+  monaco.editor.defineTheme(CHAT_MONACO_THEMES.dark, {
     base: "vs-dark",
+    colors: {
+      "editor.background": "#00000000",
+      "editor.lineHighlightBackground": "#00000000",
+      "editorGutter.background": "#00000000",
+    },
+    inherit: true,
+    rules: [],
+  });
+  monaco.editor.defineTheme(CHAT_MONACO_THEMES.light, {
+    base: "vs",
     colors: {
       "editor.background": "#00000000",
       "editor.lineHighlightBackground": "#00000000",
@@ -156,6 +170,7 @@ export function SessionChatMonacoInput({
   onPasteData,
   placeholder,
   registerApi,
+  theme,
   vsBaseUrl,
 }: {
   disabled: boolean;
@@ -167,11 +182,14 @@ export function SessionChatMonacoInput({
   onPasteData: (data: DataTransfer) => boolean;
   placeholder: string;
   registerApi: (api: SessionChatComposerInputApi | null) => void;
+  theme: SessionChatTheme;
   vsBaseUrl: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MonacoEditorInstanceLike | null>(null);
   const suppressChangeRef = useRef(false);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
   const callbacksRef = useRef({ onChange, onKeyDown, onLoadFailed, onPasteData });
   callbacksRef.current = { onChange, onKeyDown, onLoadFailed, onPasteData };
 
@@ -184,7 +202,7 @@ export function SessionChatMonacoInput({
         if (disposed || !container) {
           return;
         }
-        ensureChatTheme(monaco);
+        ensureChatThemes(monaco);
         const editor = monaco.editor.create(container, {
           autoClosingBrackets: "never",
           automaticLayout: true,
@@ -218,7 +236,7 @@ export function SessionChatMonacoInput({
             verticalScrollbarSize: 3,
           },
           suggestOnTriggerCharacters: false,
-          theme: CHAT_MONACO_THEME,
+          theme: CHAT_MONACO_THEMES[themeRef.current],
           unicodeHighlight: { ambiguousCharacters: false },
           value: initialValue,
           wordBasedSuggestions: "off",
@@ -322,6 +340,10 @@ export function SessionChatMonacoInput({
   useEffect(() => {
     editorRef.current?.updateOptions({ placeholder });
   }, [placeholder]);
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({ theme: CHAT_MONACO_THEMES[theme] });
+  }, [theme]);
 
   /*
   CDXC:MonacoPasteCapture 2026-08-01:

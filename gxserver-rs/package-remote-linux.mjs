@@ -159,7 +159,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
      * fallbacks.
      *
      * CDXC:RemoteUbuntuTui 2026-06-25-19:33:
-     * Bare `ghostex` on Ubuntu is the documented terminal UI entry point, so the
+     * `ghostex tui` on Ubuntu is the documented terminal UI entry point, so the
      * remote package must include `bin/ghostex-tui` instead of telling users to
      * build from a source checkout or a Homebrew-only Zig path after install.
      *
@@ -171,8 +171,8 @@ async function buildLinuxPackageForArch({ arch, options }) {
      *
      * CDXC:RemoteUbuntuTui 2026-07-01-02:10:
      * GX 2 is now the canonical remote terminal UI. Build it from `tui2/` while
-     * still staging the package contract as `bin/ghostex-tui`, because bare
-     * `ghostex` on Ubuntu and the macOS uploader already resolve that name.
+     * still staging the package contract as `bin/ghostex-tui`, because
+     * `ghostex tui` on Ubuntu and the macOS uploader already resolve that name.
      */
     await buildPackage({ config, outputDir, workRoot });
     console.log(`Remote gxserver Linux ${arch} package written to ${outputDir}`);

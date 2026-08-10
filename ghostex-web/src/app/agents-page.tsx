@@ -119,7 +119,7 @@ export function IntegratedAgentsPage() {
 
   const availableWorkspaceSessions = useMemo(
     () => connections.flatMap((state) => state.presentation?.sessions.flatMap((session) =>
-      session.surface === "workspace" && session.kind !== "t3"
+      session.surface === "workspace"
         ? [presentationSessionToWorkspaceSession(state.machine.machineId, session)]
         : []
     ) ?? []),
@@ -137,7 +137,7 @@ export function IntegratedAgentsPage() {
     const merged = new Map<string, WorkspaceSession>();
     for (const state of connections) {
       for (const session of state.presentation?.sessions ?? []) {
-        if (session.surface === "commands" && session.kind !== "t3") {
+        if (session.surface === "commands") {
           const workspace = presentationSessionToWorkspaceSession(
             state.machine.machineId,
             session,
@@ -377,12 +377,11 @@ export function IntegratedAgentsPage() {
     const reusableSession = action
       ? commandSessions.find((session) =>
           session.commandId === action.commandId
-          && session.activity === "idle"
           && session.presentationState !== "mounting"
           && session.presentationState !== "startup-failed"
         )
       : undefined;
-    if (reusableSession && startupText) {
+    if (reusableSession) {
       const id = workspaceSessionId(reusableSession);
       setHiddenCommandSessions((current) => {
         const next = new Set(current);
@@ -395,14 +394,15 @@ export function IntegratedAgentsPage() {
       });
 
       /*
-       * CDXC:WebCommandPaneActions 2026-08-08:
-       * An idle command session with the same commandId is the Action's pane.
-       * Running owners can receive the command through gxserver immediately;
-       * sleeping/restored owners first wake their existing provider without
-       * startup text, then use the same interaction API exactly once. No
-       * replacement session is created and no provider-start race can run the
-       * Action twice.
+       * CDXC:WebCommandPaneActions 2026-08-09:
+       * The stable commandId owns one command pane across client reloads. A
+       * non-idle owner is selected without submitting the Action a second time;
+       * an idle running owner receives the next run directly, while an idle
+       * sleeping/restored owner wakes first and receives it exactly once.
        */
+      if (!startupText || reusableSession.activity !== "idle") {
+        return;
+      }
       if (reusableSession.presentationState === "running") {
         await sendCommandSessionText(reusableSession, startupText);
         return;

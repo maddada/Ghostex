@@ -25,6 +25,8 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-browser-use",
     "ghostex-embedded-browser-use",
     "ghostex-computer-use",
+    "ghostex-cli",
+    "ghostex-manage-automations",
     "ghostex-agent-orchestration",
     "ghostex-fable-5.6-orchestration",
     "ghostex-find-prev-session",
@@ -1225,6 +1227,11 @@ mod tests {
         assert_eq!(
             skill_installed(skills, "ghostex-auto-rename-session"),
             Some(true)
+        );
+        assert_eq!(skill_installed(skills, "ghostex-cli"), Some(false));
+        assert_eq!(
+            skill_installed(skills, "ghostex-manage-automations"),
+            Some(false)
         );
         assert_eq!(skill_installed(skills, "ghostex-manage-beads"), Some(false));
         let roots = status

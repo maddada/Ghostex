@@ -177,7 +177,7 @@ function PillTrigger({
         render={
           <Button
             aria-label={ariaLabel}
-            className="max-w-40 text-muted-foreground"
+            className="ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground"
             disabled={disabled}
             size="xs"
             variant="ghost"
@@ -238,8 +238,8 @@ export function SessionChatSessionOptionPills({
           return;
         }
         if (delivery.kind === "agent-picker") {
-          await onDispatchCommand(delivery.command);
           onSwitchToTerminal?.();
+          await onDispatchCommand(delivery.command);
           return;
         }
         await onDispatchKey(delivery.key, delivery.marker);
@@ -312,6 +312,12 @@ export function SessionChatSessionOptionPills({
 
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
   const optionsLabel = sessionChatOptionsPillLabel(visibleOptions, state);
+  const combinedPickerEffort = visibleOptions.find(
+    (descriptor) =>
+      descriptor.id === "effort" && descriptor.dispatch.kind === "agent-picker",
+  );
+  const usesCombinedAgentPicker =
+    catalog.model.dispatch.kind === "agent-picker" && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
   const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : "Options";
   /*
@@ -335,10 +341,50 @@ export function SessionChatSessionOptionPills({
     }
     return detectedValues.length > 0 ? SESSION_CHAT_DETECTED_HINT : null;
   };
-  const withHint = (title: string, hint: string | null): string =>
-    hint ? `${title} — ${hint}` : title;
+  const tooltipText = (title: string, hint: string | null): string => hint ?? title;
   const modelHint = hintFor([catalog.model]);
   const optionsHint = hintFor(visibleOptions);
+
+  if (usesCombinedAgentPicker) {
+    const effortLabel = sessionChatOptionValueLabel(combinedPickerEffort, state);
+    const selectedLabel = [modelLabel, effortLabel].filter(Boolean).join(" · ");
+    const combinedLabel = selectedLabel || "Model & Effort";
+    const combinedTitle = selectedLabel
+      ? `Model & Effort ${selectedLabel}`
+      : "Model & Effort";
+    const combinedHint = hintFor([catalog.model, combinedPickerEffort]);
+
+    return (
+      <>
+        {failure ? (
+          <AppTooltip content={failure}>
+            <span className="max-w-32 truncate text-[11px] text-destructive/80" role="status">
+              {failure}
+            </span>
+          </AppTooltip>
+        ) : null}
+        <DropdownMenu>
+          <PillTrigger
+            ariaLabel={combinedTitle}
+            disabled={disabled}
+            label={combinedLabel}
+            title={tooltipText(combinedTitle, combinedHint)}
+          />
+          <DropdownMenuContent
+            align="start"
+            className="ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]"
+          >
+            <DropdownMenuItem
+              className="rounded-md"
+              onClick={() => dispatch(catalog.model)}
+            >
+              Select Model &amp; Effort in CLI
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    );
+  }
 
   return (
     <>
@@ -354,7 +400,7 @@ export function SessionChatSessionOptionPills({
           ariaLabel={modelTitle}
           disabled={disabled}
           label={modelLabel ?? catalog.model.label}
-          title={withHint(modelTitle, modelHint)}
+          title={tooltipText(modelTitle, modelHint)}
         />
         <DropdownMenuContent
           align="end"
@@ -378,7 +424,7 @@ export function SessionChatSessionOptionPills({
             ariaLabel={optionsTitle}
             disabled={disabled}
             label={optionsLabel ?? "Options"}
-            title={withHint(optionsTitle, optionsHint)}
+            title={tooltipText(optionsTitle, optionsHint)}
           />
           <DropdownMenuContent
             align="end"

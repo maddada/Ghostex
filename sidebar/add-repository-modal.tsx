@@ -18,9 +18,9 @@ import { postAppModalHostMessage } from "./app-modal-host-bridge";
 import { canSubmitAddRepositoryClone } from "./add-repository-modal-state";
 import { RemoteProjectPickerModal } from "./remote-project-picker/remote-project-picker-modal";
 import type {
-  T3FilesystemBrowseInput,
-  T3FilesystemBrowseResult,
-} from "./remote-project-picker/t3-filesystem";
+  RemoteFilesystemBrowseInput,
+  RemoteFilesystemBrowseResult,
+} from "./remote-project-picker/remote-filesystem";
 
 const ADD_REPOSITORY_LAST_LOCATION_STORAGE_KEY = "ghostex.addRepository.lastLocation";
 const ADD_REPOSITORY_OPTION_HELP_TOOLTIP_STYLE = {
@@ -49,7 +49,9 @@ export type AddRepositoryModalProps = {
   onCancel: () => void;
   onClone: (request: AddRepositoryCloneRequest) => void;
   onCloneSuccess: () => void;
-  onRemoteBrowse?: (input: T3FilesystemBrowseInput) => Promise<T3FilesystemBrowseResult | null>;
+  onRemoteBrowse?: (
+    input: RemoteFilesystemBrowseInput,
+  ) => Promise<RemoteFilesystemBrowseResult | null>;
   onPreview: (request: AddRepositoryClonePreviewRequest) => void;
   remoteMachineId?: string;
   remoteMachineName?: string;
@@ -521,7 +523,7 @@ export function AddRepositoryModal({
         {isRemoteClone ? (
           /*
            * CDXC:RemoteClone 2026-06-02-23:53:
-           * Remote Clone Repository must use the copied T3-style browse picker
+           * Remote Clone Repository uses the shared path-aware browse picker
            * for destination selection. The local macOS folder picker stays
            * local-only; remote browsing is machine-scoped through gxserver.
            */

@@ -770,6 +770,10 @@ impl ComponentStore {
         Ok(destination)
     }
 
+    pub fn has_release_asset(&self, asset_key: &str) -> bool {
+        self.manifest.assets.contains_key(asset_key)
+    }
+
     pub fn query_release_asset_cache(
         &self,
         asset_key: &str,

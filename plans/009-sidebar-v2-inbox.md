@@ -7,8 +7,8 @@ user's commit decision.
 
 - 2026-07-29 (post-ship): V2 card polish round — (a) resting rows no longer reserve
   hover-action width (actions float over a theme-matched scrim; hover-reflow invariant
-  still holds); (b) project icons: t3code's ProjectFaviconResolver ported as
-  `gxserver-rs/src/project_icon.rs` (t3.json iconPath → 21 well-known paths → link-rel
+  still holds); (b) project icons: the favicon resolver in
+  `gxserver-rs/src/project_icon.rs` checks well-known paths and link-rel
   scan; 64KiB cap, traversal-safe, family-root keyed, content-hash deltas) publishing
   `GxserverPresentationProject.discoveredIconDataUrl`. Icon precedence (deliberate,
   user-confirmed intent): user-set IMAGE → DISCOVERED repo icon → typed Tabler glyph →
@@ -22,25 +22,11 @@ doc, flag it to the orchestrator instead of improvising.
 
 ## Vision
 
-A t3code-style "Sidebar V2": a flat, position-stable inbox of sessions across all projects,
+A flat, position-stable "Sidebar V2" inbox of sessions across all projects,
 selectable as an opt-in alternative to the current sidebar. The current sidebar (V1) stays
 EXACTLY as it is and remains the default. V2 is a presentation layer plus new lifecycle
 state — it must never break existing gpui behaviors (session activation, browser tab
 activation, pane focus, wake flows all keep using the same message paths).
-
-Reference implementation: `t3code/` (fork of pingdotgg/t3code, branch ghostex, freshly synced
-to upstream v0.0.30). Read its code for design/behavior parity; do NOT import from it at
-runtime — port and adapt.
-
-Key t3code reference files:
-- `t3code/apps/web/src/components/SidebarV2.tsx` — the whole V2 UI (cards, slim rows, shelves, tooltip, snooze popover)
-- `t3code/apps/web/src/components/Sidebar.logic.ts` — pure status/sort logic (v2 fns: resolveSidebarV2Status, sortThreadsForSidebarV2, sortSettledThreadsForSidebarV2, resolveSettledTimestamp, formatWorkingDurationLabel, …)
-- `t3code/packages/client-runtime/src/state/threadSettled.ts` — effectiveSettled/effectiveSnoozed/canSettle/canSnooze/threadWokeAt predicates
-- `t3code/apps/web/src/components/Sidebar.snooze.ts` — DST-safe snooze presets
-- `t3code/apps/web/src/sidebarProjectGrouping.ts` + `logicalProject.ts` — cross-machine logical project grouping
-- `t3code/apps/web/src/worktreeCleanup.ts`, `t3code/packages/shared/src/git.ts` — orphan detection, temp-branch naming (`t3code/<8hex>`)
-- `t3code/apps/server/src/ws.ts:818-870` — atomic lazy worktree bootstrap
-- `t3code/apps/web/src/index.css` `[data-sidebar-version]` theming
 
 ## Decisions (agreed with user — do not relitigate)
 
@@ -48,7 +34,7 @@ Key t3code reference files:
    PLUS a **"Group by Project"** sub-mode: collapsible project groups instead of the header
    scope dropdown. In grouped mode each project has its own collapsed **Settled** shelf at the
    bottom of its group. Worktrees roll up under their parent project (no sibling project rows).
-2. **Lifecycle**: FULL t3code parity — settle AND snooze. Server-owned state in gxserver-rs:
+2. **Lifecycle**: settle AND snooze. Server-owned state in gxserver-rs:
    `settledAt`, `settledOverride`, `snoozedUntil`, `snoozedAt` per session. Manual
    settle/un-settle (hover ✓ / ↩), snooze presets popover (In 1 hour / This evening /
    Tomorrow 9am / Next week), Snoozed shelf sorted soonest-wake-first, exact-boundary wake
@@ -60,7 +46,7 @@ Key t3code reference files:
    (gxserver-rs probes it, ships in presentation), per-project override (by repo / by
    repo+path / keep separate) stored in the shared settings file. Machine badge on sessions
    from non-local machines. Non-git projects never merge.
-4. **Worktree model**: worktree = ATTRIBUTE of a session (cwd + branch), t3code-style, not a
+4. **Worktree model**: worktree = ATTRIBUTE of a session (cwd + branch), not a
    registered sibling project. Created lazily and atomically server-side; deleting the last
    session pointing at a worktree offers cleanup (with dirty-status awareness). Old
    worktree-as-project registrations keep working in V1 and display merged under the parent in V2.
@@ -72,7 +58,7 @@ Key t3code reference files:
    Auto-rename branch to a descriptive slug later (reuse existing auto-rename machinery).
    Also an "open existing worktree/branch" path (ideas salvaged from the old
    `sidebar/worktree-create-modal.tsx`, which this flow eventually retires). Per-project
-   "default new sessions to worktree" setting (mirror of t3code `defaultThreadEnvMode`).
+   "default new sessions to worktree" setting.
 6. **Rollout**: V1 default everywhere; V2 pure opt-in. Toggle surfaced in BOTH: (a) the
    sidebar Sort & Filter menu, (b) the app Settings — as the FIRST setting at the very top,
    marked with a "New" badge. Setting key `sidebarVersion` in `shared/ghostex-settings.ts`
@@ -162,7 +148,7 @@ commits unless the orchestrator says so. See AGENTS.md.
   "Group by Project" toggle item appears; the Manual Sorting radio is hidden/disabled.
 - V2 render tree in new files (e.g. `sidebar/v2/`): flat inbox (position-stable
   creation-order, newest first; pinned float on top; attention/working statuses shown with
-  t3code's three-hue system), Group-by-Project mode (collapsible groups, browser tabs above
+  the three-hue system), Group-by-Project mode (collapsible groups, browser tabs above
   agent sessions per group, per-project Settled shelf placeholder), Browser section (flat
   mode), scope filter dropdown fed by projects (+ "Quick"), search + tag filters applied,
   session click / context menu / rename delegate to the SAME message handlers V1 uses.
@@ -194,7 +180,7 @@ commits unless the orchestrator says so. See AGENTS.md.
 
 ### P5 — cross-machine logical projects
 - Per decision 3. Remote-URL probe in gxserver-rs → presentation; client logical grouping +
-  overrides UI (project context menu / project actions dialog pattern from t3code); machine
+  overrides UI (project context menu / project actions dialog pattern); machine
   badges; scope filter shows logical projects; Group-by-Project groups merge across machines.
 
 ## Status log
@@ -216,7 +202,7 @@ commits unless the orchestrator says so. See AGENTS.md.
 - ACCEPTED DEVIATIONS — do NOT "fix" these, they are deliberate:
   - Snooze expiry is DERIVED client-side from retained `snoozedUntil` (wake-to-the-ms);
     server GCs spent snooze fields only after +24h so the "Woke" indicator survives.
-  - Snoozing a settled session does NOT un-settle it (matches t3code's decider).
+  - Snoozing a settled session does NOT un-settle it.
   - Auto-settle sets `settledOverride:"settled"` but leaves `settledAt` NULL (so settled
     sort falls back to the activity clock); manual settle stamps `settledAt`.
   - `settledOverride` values are `"settled" | "active"`. Server keeps an internal
@@ -231,7 +217,7 @@ commits unless the orchestrator says so. See AGENTS.md.
   `watch-ghostex-video-modal-source`; V1 interaction stories broken at HEAD by a concurrent
   top-row/command-palette rework; `LightOrange` settings story ignores its theme setting.
 - 2026-07-29: **P2 COMPLETE and verified clean** (server + client, live isolated-daemon
-  matrix passed). Further accepted items: the Woke pill is amber BY DESIGN (t3code parity);
+  matrix passed). Further accepted items: the Woke pill is amber BY DESIGN;
   activity-reset lag on the Settled shelf (≤60s, server-owned override stamp) is inherent
   and correct; client-side auto-settle window vs remote machines' own windows is a known
   P5 item (fix by trusting the remote server's classification / carrying the window
@@ -339,7 +325,7 @@ commits unless the orchestrator says so. See AGENTS.md.
   remote-probe abandoned-reader log gets its own event name. Accepted (documented, no
   fix): probe-on-create bounded blocking, 24-probes/pass saturation ~240 projects,
   non-`git@` scp spellings not canonicalized, literal "local" machine-id collision,
-  Woke/Approval both amber (t3code parity), shelf-header style asymmetry, 260px truncation
+  Woke/Approval both amber, shelf-header style asymmetry, 260px truncation
   (SUPERSEDED — fixed 2026-07-29, see the row-1 entry at the end of this log),
   Storybook light-theme harness limitation.
 - 2026-07-29: **FINAL FIX ROUND COMPLETE** (all four items, non-vacuously tested).
@@ -386,7 +372,7 @@ commits unless the orchestrator says so. See AGENTS.md.
   fitting name (scrollWidth ≤ clientWidth), a genuinely-too-long name (still truncates), and
   zero reflow across the reveal driven through the SHIPPED `data-menu-open` rules; both
   halves were confirmed to FAIL with their fix temporarily removed (in-flow bar → name box
-  20px; t3code-style in-flow reveal → 162px→20px on hover). 42/42 V2 stories green,
+  20px; in-flow reveal → 162px→20px on hover). 42/42 V2 stories green,
   typecheck clean, 630 shared + 365 sidebar tests green (only the two documented foreign
   modal-source failures), V1 suite unchanged at its 10 documented failures.
 
@@ -409,7 +395,7 @@ these.
    drop the meta line. Root-cause and fix why `gitStatus` never reaches the user's local
    cards (diagnosis agent report; suspects: v2-gating from perf batch 4a59b50d7 or the
    `gitStatusCapabilityByGroupId` keying at sidebar-v2-root.tsx:940-950).
-4. **Single create control (t3code shape).** In V2 mode the shared V1 header trio
+4. **Single create control.** In V2 mode the shared V1 header trio
    (Quick Browser Tab, Quick Terminal, agent split button) is no longer rendered; V2's
    split "+" is the only create control. Main click = primary-agent session in the
    resolved target project (see 6). Chevron menu: agent picker, "New worktree session…",
@@ -630,7 +616,7 @@ these.
   `canFocusMode`; V2 showed it unconditionally before), New session on `<branch>`
   (unchanged worktree gate).
   (2) NEW per-session section, in V1's order — View 1st message (`firstUserMessage`),
-  Remote Access (`isT3Session`), Copy resume (`showSessionCommandCopyActions` + a
+  Copy resume (`showSessionCommandCopyActions` + a
   resume-capable agent), Copy attach command (same flag + a stored provider/name pair),
   Copy details (`showSessionDetailsCopyAction`; V1 gates this on "is a concrete row", NOT on
   having an agent, so it is the one parity item a browser tab keeps), Delayed Send

@@ -136,6 +136,8 @@ completion_sound_assets=(
 bundled_cli_skill_assets=(
 	ghostex-browser-use
 	ghostex-computer-use
+	ghostex-cli
+	ghostex-manage-automations
 	ghostex-agent-orchestration
 	ghostex-fable-5.6-orchestration
 	ghostex-find-prev-session
@@ -228,12 +230,6 @@ validate_portless_admin_runtime_resources() {
 		echo "Missing GPUI Portless CLI payload: $WEB_SOURCE_DIR/portless/dist/cli.js" >&2
 		missing=1
 	fi
-	# CDXC:T3CodeDisabled ghostex-mzp9: Retain the validation for a future
-	# re-enable, but disabled builds intentionally have no staged T3 runtime.
-	# if [[ ! -f "$WEB_SOURCE_DIR/t3code-server/dist/bin.mjs" ]]; then
-	# 	echo "Missing GPUI T3 Code server entrypoint: $WEB_SOURCE_DIR/t3code-server/dist/bin.mjs" >&2
-	# 	missing=1
-	# fi
 
 	if [[ "$missing" == "1" ]]; then
 		exit 1
@@ -1007,7 +1003,7 @@ done
 # GPUI local starts seal the freshly built app-owned gxserver package and shared
 # Web/bin tools into Contents/Resources/Web, matching the native start command's
 # daemon ownership instead of launching against the main Ghostex.app bundle.
-rm -rf "$WEB_DIR/bin" "$WEB_DIR/code-server" "$WEB_DIR/gxserver" "$WEB_DIR/portless" "$WEB_DIR/t3code-server"
+rm -rf "$WEB_DIR/bin" "$WEB_DIR/code-server" "$WEB_DIR/gxserver" "$WEB_DIR/portless"
 mkdir -p "$WEB_DIR/portless"
 rsync -a --delete "$WEB_BIN_SOURCE_DIR/" "$WEB_DIR/bin/"
 rsync -a --delete "$GXSERVER_SOURCE_DIR/" "$WEB_DIR/gxserver/"
@@ -1017,9 +1013,6 @@ if [[ "$GHOSTEX_ON_DEMAND_ASSETS" != "1" ]]; then
 fi
 rsync -a --delete "$WEB_SOURCE_DIR/portless/" "$WEB_DIR/portless/"
 chmod 755 "$WEB_DIR/portless/dist/cli.js"
-# CDXC:T3CodeDisabled ghostex-mzp9: Keep the staging command ready for a future
-# re-enable; current bundles must not contain Web/t3code-server.
-# rsync -a --delete "$WEB_SOURCE_DIR/t3code-server/" "$WEB_DIR/t3code-server/"
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
 	stage_on_demand_remote_gxserver_manifest
 else

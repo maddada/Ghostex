@@ -81,8 +81,6 @@ fi
 # invoking the retired Swift host build.
 if [[ "$USE_PREPARED_RUNTIME" == "1" ]]; then
   PREPARED_WEB="$REPO_ROOT/gpui/runtime/macos/Web"
-  # CDXC:T3CodeDisabled ghostex-mzp9: validation retained but disabled:
-  # required_path="$PREPARED_WEB/t3code-server/dist/bin.mjs"
   for required_path in \
     "$PREPARED_WEB/bin/zmx" \
     "$PREPARED_WEB/on-demand-resources.json" \

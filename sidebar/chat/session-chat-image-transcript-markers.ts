@@ -1,7 +1,13 @@
-import type { SessionChatBlock, SessionChatMessage, SessionChatTextBlock } from '../../shared/session-chat';
+import type {
+  SessionChatBlock,
+  SessionChatImageRefBlock,
+  SessionChatMessage,
+  SessionChatTextBlock,
+} from '../../shared/session-chat';
 
 const IMAGE_SOURCE_MARKER = /^\[Image:\s*source:\s*(.+?)\]\s*$/;
 const IMAGE_PROMPT_MARKER = /^\[Image #\d+\]\s*/;
+const LINKED_IMAGE_MARKER = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
 
 function isTextBlock(block: SessionChatBlock): block is SessionChatTextBlock {
   return block.type === 'text';
@@ -41,6 +47,47 @@ function imagePromptMarkerStartsMessage(message: SessionChatMessage): boolean {
   return firstText ? IMAGE_PROMPT_MARKER.test(firstText.text) : false;
 }
 
+function linkedImageBlock(href: string): SessionChatImageRefBlock {
+  if (/^(?:https?:|data:)/i.test(href)) {
+    return { type: 'image-ref', url: href };
+  }
+  try {
+    return { type: 'image-ref', path: decodeURI(href) };
+  } catch {
+    return { type: 'image-ref', path: href };
+  }
+}
+
+function extractLinkedImageMarkers(message: SessionChatMessage): SessionChatMessage | null {
+  const images: SessionChatImageRefBlock[] = [];
+  const seen = new Set<string>();
+  const blocks: SessionChatBlock[] = [];
+  let changed = false;
+
+  for (const block of message.blocks) {
+    if (!isTextBlock(block)) {
+      blocks.push(block);
+      continue;
+    }
+    const text = block.text.replace(LINKED_IMAGE_MARKER, (_marker, rawHref: string) => {
+      const href = rawHref.trim();
+      const image = linkedImageBlock(href);
+      const key = image.url ?? image.path ?? href;
+      if (!seen.has(key)) {
+        seen.add(key);
+        images.push(image);
+      }
+      changed = true;
+      return '';
+    });
+    if (text.trim()) {
+      blocks.push({ ...block, text: text.trim() });
+    }
+  }
+
+  return changed ? { ...message, blocks: [...images, ...blocks] } : null;
+}
+
 export function normalizeSessionChatImageTranscriptMessages(
   messages: readonly SessionChatMessage[]
 ): SessionChatMessage[] {
@@ -48,7 +95,15 @@ export function normalizeSessionChatImageTranscriptMessages(
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
     if (message.role !== 'user' || message.source !== 'transcript') {
-      normalized.push(message);
+      normalized.push(
+        message.role === 'user' ? extractLinkedImageMarkers(message) ?? message : message
+      );
+      continue;
+    }
+
+    const linkedImageMessage = extractLinkedImageMarkers(message);
+    if (linkedImageMessage) {
+      normalized.push(linkedImageMessage);
       continue;
     }
 

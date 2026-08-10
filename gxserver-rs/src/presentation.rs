@@ -438,7 +438,7 @@ fn project_presentation_project(project: &Value) -> Value {
     );
     /*
     CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
-    The icon the PROJECT itself ships — its `t3.json` `iconPath`, its favicon, or
+    The icon the project itself ships through a favicon, app icon, or
     the icon its HTML entry point declares — discovered server-side and published
     as a data URL. Another pure cache READ (`project_icon`), keyed on the same
     family root as the remote probe so a worktree inherits its parent checkout's
@@ -1796,7 +1796,6 @@ fn is_ignored_placeholder_session_title_text(lower: &str) -> bool {
             | "rovo session"
             | "rovo dev session"
             | "rovodev session"
-            | "t3 code session"
     )
 }
 

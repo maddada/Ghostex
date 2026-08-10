@@ -833,7 +833,7 @@ fn stash_saved_prompt_editor_content(
     }
     let content_chars = content.chars().count();
     match stash_prompt_content_via_gxserver(&content, originating_session_id) {
-        Ok(()) => append_prompt_editor_timeline_log(
+        Ok(_) => append_prompt_editor_timeline_log(
             "cli.monaco.promptStashed",
             json!({ "contentChars": content_chars, "ok": true, "requestId": request_id }),
         ),
@@ -852,7 +852,7 @@ fn stash_saved_prompt_editor_content(
 fn stash_prompt_content_via_gxserver(
     content: &str,
     originating_session_id: Option<&str>,
-) -> Result<(), CliError> {
+) -> Result<Value, CliError> {
     let mut params = json!({ "content": content });
     let parts: Vec<&str> = originating_session_id.unwrap_or("").split(':').collect();
     if parts.len() == 2
@@ -867,13 +867,42 @@ fn stash_prompt_content_via_gxserver(
     }
     let mut flags = Flags::default();
     flags.insert_text("timeoutMs", "3000");
-    call_gxserver_rpc("/api/saveStashedPrompt", &params, &flags).map(|_| ())
+    call_gxserver_rpc("/api/saveStashedPrompt", &params, &flags)
 }
 
 /// A stash request older than this is an orphan from a Ctrl+G the agent CLI
 /// never answered (plain shell pane, editor already open); the next real
 /// prompt-editor invocation must not be silently swallowed by it.
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
+const PROMPT_HANDOFF_MARKER_PREFIX: &str = "handoff:";
+
+fn valid_prompt_handoff_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 96
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn prompt_handoff_response_path(request_id: &str) -> Option<PathBuf> {
+    valid_prompt_handoff_request_id(request_id).then(|| {
+        rpc::ghostex_home()
+            .join("prompt-handoffs")
+            .join(format!("{request_id}.json"))
+    })
+}
+
+fn write_prompt_handoff_response(request_id: &str, response: &Value) {
+    let Some(path) = prompt_handoff_response_path(request_id) else {
+        return;
+    };
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_ok() {
+        let _ = std::fs::write(path, response.to_string());
+    }
+}
 
 fn prompt_stash_request_marker_path(originating_session_id: &str) -> Option<PathBuf> {
     let parts: Vec<&str> = originating_session_id.split(':').collect();
@@ -906,27 +935,52 @@ fn consume_prompt_stash_request(
         .ok()
         .and_then(|modified| modified.elapsed().ok())
         .is_some_and(|age| age <= PROMPT_STASH_REQUEST_FRESHNESS);
+    let marker = std::fs::read_to_string(&marker_path).unwrap_or_default();
+    let handoff_request_id = marker
+        .trim()
+        .strip_prefix(PROMPT_HANDOFF_MARKER_PREFIX)
+        .filter(|value| valid_prompt_handoff_request_id(value))
+        .map(str::to_string);
     let _ = std::fs::remove_file(&marker_path);
     if !fresh {
         return false;
     }
     let content = std::fs::read_to_string(resolved_file_path).unwrap_or_default();
     if content.trim().is_empty() {
+        if let Some(request_id) = handoff_request_id.as_deref() {
+            write_prompt_handoff_response(request_id, &json!({ "empty": true, "ok": true }));
+        }
         append_prompt_editor_timeline_log("cli.stashRequest.skippedEmpty", json!({ "ok": true }));
         return true;
     }
     let content_chars = content.chars().count();
     match stash_prompt_content_via_gxserver(&content, originating_session_id) {
-        Ok(()) => {
+        Ok(result) => {
             // Clear the composer only after the stash is durable; on failure
             // the file (and therefore the composer) stays untouched.
             let _ = std::fs::write(resolved_file_path, b"");
+            if let Some(request_id) = handoff_request_id.as_deref() {
+                write_prompt_handoff_response(
+                    request_id,
+                    &json!({
+                        "created": result.get("created").and_then(Value::as_bool).unwrap_or(false),
+                        "ok": true,
+                        "promptId": result
+                            .get("prompt")
+                            .and_then(|prompt| prompt.get("promptId"))
+                            .and_then(Value::as_str),
+                    }),
+                );
+            }
             append_prompt_editor_timeline_log(
                 "cli.stashRequest.stashed",
                 json!({ "contentChars": content_chars, "ok": true }),
             );
         }
         Err(error) => {
+            if let Some(request_id) = handoff_request_id.as_deref() {
+                write_prompt_handoff_response(request_id, &json!({ "ok": false }));
+            }
             append_prompt_editor_timeline_log(
                 "cli.stashRequest.stashed",
                 json!({

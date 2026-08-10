@@ -1,5 +1,8 @@
 use std::{
     collections::HashMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
@@ -7,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 
@@ -52,8 +55,11 @@ pub const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}"; // Ctrl+U — clear towar
 pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear toward end
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
+const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
+const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
 const BRACKETED_PASTE_END: &str = "\u{1b}[201~";
+static SESSION_CHAT_DRAFT_PRESERVE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 // Ask-answer keystrokes (upstream chat spec §8.4/§8.5).
 const ASK_ENTER: &str = "\r";
@@ -343,6 +349,12 @@ pub fn has_ask_answer(selections: &[SessionChatQuestionSelection]) -> bool {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionChatSendStep {
+    /// Move any existing agent-TUI composer draft into Saved Prompts before
+    /// chat takes ownership of the input line. The prompt-editor handshake
+    /// answers only after the CLI has durably stashed and cleared that draft.
+    PreserveTerminalDraft {
+        state_dir: PathBuf,
+    },
     /// One `zmx send` stdin burst.
     Write(String),
     SleepMs(u64),
@@ -414,6 +426,7 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
 // ---------------------------------------------------------------------------
 
 struct SessionChatSendJob {
+    completion: Option<oneshot::Sender<Result<(), String>>>,
     project_id: String,
     session_id: String,
     source: &'static str,
@@ -450,13 +463,49 @@ pub fn enqueue_session_chat_send(
     source: &'static str,
     steps: Vec<SessionChatSendStep>,
 ) {
+    let _ = queue_session_chat_send(project_id, session_id, zmx_name, source, steps, None);
+}
+
+/// Enqueues one sequence on the same per-session worker as fire-and-forget
+/// sends, but resolves only after every preservation/write step has completed.
+/// Chat message HTTP calls use this so the composer is cleared only after the
+/// terminal draft is safe and the new prompt was actually submitted.
+pub async fn execute_session_chat_send(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &'static str,
+    steps: Vec<SessionChatSendStep>,
+) -> Result<(), String> {
+    let (completion_tx, completion_rx) = oneshot::channel();
+    queue_session_chat_send(
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        steps,
+        Some(completion_tx),
+    )?;
+    completion_rx.await.map_err(|_| {
+        "The session chat send worker stopped before completing the message.".to_string()
+    })?
+}
+
+fn queue_session_chat_send(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &'static str,
+    steps: Vec<SessionChatSendStep>,
+    completion: Option<oneshot::Sender<Result<(), String>>>,
+) -> Result<(), String> {
     if steps.is_empty() {
-        return;
+        return Ok(());
     }
     let queues = SESSION_CHAT_SEND_QUEUES.get_or_init(|| Mutex::new(HashMap::new()));
-    let Ok(mut map) = queues.lock() else {
-        return;
-    };
+    let mut map = queues
+        .lock()
+        .map_err(|_| "The session chat send queue is unavailable.".to_string())?;
     let queue = map
         .entry(queue_key(project_id, session_id))
         .or_insert_with(|| {
@@ -466,6 +515,7 @@ pub fn enqueue_session_chat_send(
             SessionChatSendQueue { tx, generation }
         });
     let job = SessionChatSendJob {
+        completion,
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
         source,
@@ -473,7 +523,10 @@ pub fn enqueue_session_chat_send(
         generation: queue.generation.load(Ordering::SeqCst),
         steps,
     };
-    let _ = queue.tx.send(job);
+    queue
+        .tx
+        .send(job)
+        .map_err(|_| "The session chat send worker is unavailable.".to_string())
 }
 
 /// Cancels every queued (and the remaining steps of any in-flight) send for a
@@ -495,37 +548,172 @@ async fn run_session_chat_send_worker(
     generation: Arc<AtomicU64>,
 ) {
     while let Some(job) = rx.recv().await {
-        if job.generation != generation.load(Ordering::SeqCst) {
+        let SessionChatSendJob {
+            mut completion,
+            project_id,
+            session_id,
+            source,
+            zmx_name,
+            generation: job_generation,
+            steps,
+        } = job;
+        if job_generation != generation.load(Ordering::SeqCst) {
+            if let Some(completion) = completion.take() {
+                let _ = completion.send(Err("The session chat send was cancelled.".to_string()));
+            }
             continue; // cancelled while queued
         }
-        for step in job.steps {
-            if job.generation != generation.load(Ordering::SeqCst) {
+        let mut outcome = Ok(());
+        for step in steps {
+            if job_generation != generation.load(Ordering::SeqCst) {
+                outcome = Err("The session chat send was cancelled.".to_string());
                 break; // cancelled mid-sequence
             }
             match step {
                 SessionChatSendStep::SleepMs(delay_ms) => {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
+                SessionChatSendStep::PreserveTerminalDraft { state_dir } => {
+                    if let Err(error) = preserve_terminal_draft(
+                        &state_dir,
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &generation,
+                        job_generation,
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
+                        break;
+                    }
+                }
                 SessionChatSendStep::Write(payload) => {
                     crate::zmx::log_temporary_zmx_input_write(
-                        &job.project_id,
-                        &job.session_id,
-                        &job.zmx_name,
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
                         "sessionChatQueueWrite",
-                        job.source,
+                        source,
                         &payload,
                     );
-                    let zmx_name = job.zmx_name.clone();
+                    let zmx_name = zmx_name.clone();
                     let write = tokio::task::spawn_blocking(move || {
                         crate::zmx::session_chat_zmx_write(&zmx_name, &payload)
                     })
                     .await;
                     if !matches!(write, Ok(Ok(_))) {
+                        outcome =
+                            Err("The session terminal did not accept the chat input.".to_string());
                         break;
                     }
                 }
             }
         }
+        if let Some(completion) = completion.take() {
+            let _ = completion.send(outcome);
+        }
+    }
+}
+
+fn prompt_stash_request_path(state_dir: &Path, project_id: &str, session_id: &str) -> PathBuf {
+    state_dir
+        .join("prompt-stash-requests")
+        .join(format!("{project_id}-{session_id}"))
+}
+
+fn prompt_handoff_response_path(state_dir: &Path, request_id: &str) -> PathBuf {
+    state_dir
+        .join("prompt-handoffs")
+        .join(format!("{request_id}.json"))
+}
+
+async fn preserve_terminal_draft(
+    state_dir: &Path,
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    generation: &AtomicU64,
+    job_generation: u64,
+) -> Result<(), String> {
+    let request_id = format!(
+        "chat-{}-{}",
+        std::process::id(),
+        SESSION_CHAT_DRAFT_PRESERVE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+    );
+    let marker_path = prompt_stash_request_path(state_dir, project_id, session_id);
+    let response_path = prompt_handoff_response_path(state_dir, &request_id);
+    let Some(marker_parent) = marker_path.parent() else {
+        return Err("The terminal draft stash path is unavailable.".to_string());
+    };
+    fs::create_dir_all(marker_parent)
+        .map_err(|_| "The terminal draft stash path could not be created.".to_string())?;
+    if let Some(response_parent) = response_path.parent() {
+        fs::create_dir_all(response_parent)
+            .map_err(|_| "The terminal draft response path could not be created.".to_string())?;
+    }
+    let _ = fs::remove_file(&response_path);
+    let stale_marker = fs::metadata(&marker_path)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|age| age > PROMPT_STASH_REQUEST_FRESHNESS);
+    if stale_marker {
+        let _ = fs::remove_file(&marker_path);
+    }
+    let mut marker = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&marker_path)
+        .map_err(|_| "The terminal draft is already being moved or stashed.".to_string())?;
+    if marker
+        .write_all(format!("handoff:{request_id}\n").as_bytes())
+        .is_err()
+    {
+        let _ = fs::remove_file(&marker_path);
+        return Err("The terminal draft stash request could not be written.".to_string());
+    }
+
+    crate::zmx::log_temporary_zmx_input_write(
+        project_id,
+        session_id,
+        zmx_name,
+        "sessionChatPreserveTerminalDraft",
+        "session-chat-preserve-draft",
+        "\u{7}",
+    );
+    let zmx_name_owned = zmx_name.to_string();
+    let delivered = tokio::task::spawn_blocking(move || {
+        crate::zmx::session_chat_zmx_write(&zmx_name_owned, "\u{7}")
+    })
+    .await;
+    if !matches!(delivered, Ok(Ok(_))) {
+        let _ = fs::remove_file(&marker_path);
+        return Err("The terminal could not start preserving its current draft.".to_string());
+    }
+
+    let started = std::time::Instant::now();
+    loop {
+        if job_generation != generation.load(Ordering::SeqCst) {
+            let _ = fs::remove_file(&marker_path);
+            let _ = fs::remove_file(&response_path);
+            return Err("The session chat send was cancelled.".to_string());
+        }
+        if let Ok(text) = fs::read_to_string(&response_path) {
+            if let Ok(response) = serde_json::from_str::<serde_json::Value>(&text) {
+                let _ = fs::remove_file(&response_path);
+                if response.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+                    return Ok(());
+                }
+                return Err("The terminal draft could not be saved.".to_string());
+            }
+        }
+        if started.elapsed() >= SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT {
+            let _ = fs::remove_file(&marker_path);
+            let _ = fs::remove_file(&response_path);
+            return Err("The terminal did not finish preserving its current draft.".to_string());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
 

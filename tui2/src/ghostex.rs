@@ -298,7 +298,6 @@ pub(crate) fn agent_indicator(session: &SessionItem) -> &'static str {
         "pi" | "pi-agent" | "π" => "PIA",
         "qoder" | "qodercli" => "QDR",
         "rovo" | "rovo-dev" | "rovodev" => "RVO",
-        "t3" | "t3-code" => "T3C",
         _ => "UNK",
     }
 }

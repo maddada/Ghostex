@@ -364,7 +364,7 @@ pub(crate) fn resolve_start_work_agent(
 }
 
 /// The configured agents a board prompt can run: the sidebar HUD registry
-/// minus T3 and commandless entries, matching the board's agent dropdown.
+/// minus commandless entries, matching the board's agent dropdown.
 fn board_prompt_agent_options(projects: &[Value]) -> Vec<Value> {
     sidebar_agent_buttons_from_projects(projects)
         .as_array()
@@ -372,9 +372,8 @@ fn board_prompt_agent_options(projects: &[Value]) -> Vec<Value> {
         .unwrap_or_default()
         .into_iter()
         .filter(|button| {
-            let agent_id = button.get("agentId").and_then(Value::as_str).unwrap_or("");
             let command = button.get("command").and_then(Value::as_str).unwrap_or("");
-            agent_id != "t3" && !command.trim().is_empty()
+            !command.trim().is_empty()
         })
         .collect()
 }

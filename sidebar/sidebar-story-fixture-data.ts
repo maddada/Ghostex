@@ -193,22 +193,6 @@ const AGENT_ICON_RENDER_GROUPS: SidebarStoryGroup[] = [
         shortcutLabel: "⌘⌥2",
         terminalTitle: "✳ Claude Code",
       }),
-      createStorySession({
-        /*
-         * CDXC:T3CodeSidebar 2026-07-01-23:27:
-         * Agent icon Storybook coverage needs a visible T3 Code chat row so the
-         * sidebar can verify the requested white IconMessageCircle treatment
-         * instead of only covering CLI agent logo masks.
-         */
-        alias: "New thread",
-        agentIcon: "t3",
-        detail: "T3 Code",
-        isVisible: true,
-        lastInteractionAt: secondsAgo(55),
-        sessionId: "agent-icon-t3",
-        shortcutLabel: "⌘⌥3",
-        terminalTitle: "New thread",
-      }),
     ],
     title: "Main",
   },

@@ -11,7 +11,7 @@ import type { WebviewApi } from "../webview-api";
  * channel.
  */
 
-/** Activate a session. Identical for terminal, agent, T3, and browser rows:
+/** Activate a session. Identical for terminal, agent, and browser rows:
     the host resolves the surface from the session id, exactly as V1 relies on. */
 export function postSidebarV2FocusSession(vscode: WebviewApi, sessionId: string): void {
   vscode.postMessage({ sessionId, type: "focusSession" });
@@ -108,13 +108,6 @@ export function postSidebarV2ForkSession(vscode: WebviewApi, sessionId: string):
 
 export function postSidebarV2FullReloadSession(vscode: WebviewApi, sessionId: string): void {
   vscode.postMessage({ sessionId, type: "fullReloadSession" });
-}
-
-export function postSidebarV2RequestT3BrowserAccess(
-  vscode: WebviewApi,
-  sessionId: string,
-): void {
-  vscode.postMessage({ sessionId, type: "requestT3SessionBrowserAccess" });
 }
 
 /** `undefined` is the CLEAR: the contract's explicit "no tag" value is `null`,

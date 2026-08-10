@@ -2,10 +2,7 @@ import type { AgentConfigDraft } from "./agent-config-modal";
 import { logAppModalError } from "./app-modal-error-log";
 import type { GitCommitModalDraft } from "./git-commit-modal";
 import type { SettingsModalTab } from "./settings-modal";
-import type { ExtensionToSidebarMessage } from "../shared/session-grid-contract";
 import type { SidebarAgentIcon } from "../shared/sidebar-agents";
-
-type T3BrowserAccessMessage = Extract<ExtensionToSidebarMessage, { type: "showT3BrowserAccess" }>;
 
 export type AppModalKind =
   | "addProject"
@@ -36,8 +33,6 @@ export type AppModalKind =
   | "scratchPad"
   | "settings"
   | "stashedPrompts"
-  | "t3BrowserAccess"
-  | "t3ThreadId"
   | "worktree"
   | "tipsAndTricks"
   | "firstLaunchSetup";
@@ -63,8 +58,6 @@ export type OpenAppModalMessage =
         | "renameSession"
         | "remoteProjectPicker"
         | "stashedPrompts"
-        | "t3BrowserAccess"
-        | "t3ThreadId"
         | "worktree"
       >;
       type: "open";
@@ -171,9 +164,7 @@ export type OpenAppModalMessage =
       modal: "settings";
       type: "open";
     }
-  | { access: T3BrowserAccessMessage; modal: "t3BrowserAccess"; type: "open" }
   | { gitCommitDraft: GitCommitModalDraft; modal: "gitCommit"; type: "open" }
-  | { modal: "t3ThreadId"; sessionId: string; threadId: string; type: "open" }
   | { agentDraft: AgentConfigDraft; modal: "agentConfig"; type: "open" }
   | {
       message: string;

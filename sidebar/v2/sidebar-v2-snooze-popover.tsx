@@ -8,7 +8,7 @@ import type { WebviewApi } from "../webview-api";
 
 /*
  * CDXC:SidebarV2Lifecycle 2026-07-29:
- * The snooze preset popover, ported from t3code's `SnoozePopoverButton`.
+ * The snooze preset popover.
  *
  * Two rules carried over from that port:
  * - Presets resolve when the popover OPENS, not when the row mounts. "In 1

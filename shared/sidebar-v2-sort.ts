@@ -8,7 +8,7 @@ import { firstValidTimestampMs, parseTimestampMs } from "./sidebar-v2-status";
 
 /*
 CDXC:SidebarV2 2026-07-29-00:00:
-Ported from t3code `Sidebar.logic.ts` (`sortThreadsForSidebarV2`,
+Sidebar inbox ordering (`sortThreadsForSidebarV2`,
 `sortSettledThreadsForSidebarV2`, `resolveSettledTimestamp`,
 `resolveAdjacentThreadId`, `orderItemsByPreferredIds`).
 
