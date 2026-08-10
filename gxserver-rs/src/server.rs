@@ -8264,6 +8264,32 @@ fn prepare_rename_worktree_project_plan(
         &state.paths.home_dir,
     )?;
 
+    /*
+    CDXC:WorktreeRename 2026-08-09-18:40:
+    The typed operation scopes every worktree command to "inside the parent's
+    family directory" and compares paths LEXICALLY, by design — it collapses
+    `.`/`..` but deliberately does not resolve symlinks. So two rows that
+    describe the same folder through different symlink forms fail that guard
+    with a sentence about `worktreePath`, which means nothing to whoever just
+    clicked Rename. It happens for real on macOS: register a project as
+    `/tmp/rt` and its worktree resolves to `/private/tmp/rt-old`, because
+    `git worktree list` reports the resolved path while the project kept the
+    typed one.
+
+    Catch it here, where both paths are known, and say which two disagree. The
+    typed-operation guard stays the backstop; this only replaces the message.
+    */
+    let family_root = Path::new(&parent_path)
+        .parent()
+        .map(path_to_string)
+        .unwrap_or_else(|| parent_path.clone());
+    if !worktree_path.starts_with(&format!("{family_root}/")) {
+        return Err(DomainStateError::bad_request(
+            "This worktree and its project are registered under different paths, so Ghostex cannot tell they are siblings. This usually means one path goes through a symlink. Re-add the project using the same path form as the worktree.",
+        )
+        .into());
+    }
+
     let destination_path = worktree_rename_destination_path(&parent_path, &params.name)
         .ok_or_else(|| {
             DomainStateError::bad_request(
@@ -15219,6 +15245,83 @@ mod tests {
         assert_eq!(nothing.response.status(), StatusCode::BAD_REQUEST);
         let body = response_json(nothing.response).await;
         assert_eq!(body["message"], json!("Nothing to rename."));
+    }
+
+    #[tokio::test]
+    async fn renaming_explains_a_worktree_registered_through_a_different_path_form() {
+        /*
+        CDXC:WorktreeRename 2026-08-09-18:40:
+        Reproduces a real failure from manual testing on macOS: the project was
+        registered as `/tmp/rt` while its worktree resolved to
+        `/private/tmp/rt-old`, because `git worktree list` reports the symlink-
+        resolved path and the project kept the typed one. The typed operation
+        compares paths lexically by design, so it refused with a sentence about
+        `worktreePath` that meant nothing to the user. The rename must explain
+        which two things disagree instead of forwarding that.
+        */
+        if !git_available() {
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let state = test_app_state(paths.clone());
+        let token = state.auth_token.clone();
+        let real_root = paths.root_dir.join("symlink-family");
+        fs::create_dir_all(&real_root).expect("real root");
+        let parent = real_root.join("rt");
+        let worktree = real_root.join("rt-old");
+        create_git_repository_for_server_test(&parent);
+        run_git_for_server_test(&parent, &["branch", "feat/old"]);
+        run_git_for_server_test(
+            &parent,
+            &[
+                "worktree",
+                "add",
+                path_to_string(&worktree).as_str(),
+                "feat/old",
+            ],
+        );
+
+        // The parent is registered through a symlinked alias of the same folder,
+        // exactly as `/tmp/rt` aliases `/private/tmp/rt`.
+        let alias_root = paths.root_dir.join("symlink-alias");
+        std::os::unix::fs::symlink(&real_root, &alias_root).expect("symlink");
+        let aliased_parent = alias_root.join("rt");
+
+        add_project_path_for_server_test(state.clone(), &token, &aliased_parent, Some("Parent"))
+            .await;
+        let worktree_project =
+            add_project_path_for_server_test(state.clone(), &token, &worktree, None).await;
+
+        let response = route_http(
+            state,
+            rpc_request(
+                "/api/renameWorktreeProject",
+                &token,
+                json!({
+                    "params": {
+                        "name": "renamed",
+                        "projectId": worktree_project["projectId"]
+                    }
+                }),
+            ),
+            "request-rename-symlinked-family".to_string(),
+        )
+        .await;
+
+        assert_eq!(response.response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response.response).await;
+        let message = body["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("registered under different paths"),
+            "expected the mismatch explained, got: {message}"
+        );
+        assert!(
+            !message.contains("worktreePath"),
+            "the internal typed-operation sentence must not reach the user: {message}"
+        );
+        assert!(worktree.is_dir(), "nothing was touched");
     }
 
     #[tokio::test]
