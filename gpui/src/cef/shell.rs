@@ -956,7 +956,15 @@ pub struct ManageDocsResourceRoot {
 enum ManageDocsResourceSource {
     Local {
         resolve_root: ManageDocsLocalRootResolver,
-        resolved_root: Arc<OnceLock<Option<Vec<ManageDocsResourceRoot>>>>,
+        /*
+        CDXC:DocsRootDirectory 2026-08-10:
+        Memoize only a successful resolution. The lookup reads the project's
+        Docs directory from the daemon, so it can answer `None` for a reason
+        that passes — daemon not reachable yet, project row not loaded. Sealing
+        that first answer would leave every image and stylesheet in the document
+        broken until the surface is recreated, with nothing shown to say why.
+        */
+        resolved_root: Arc<Mutex<Option<Vec<ManageDocsResourceRoot>>>>,
     },
     Remote {
         loader: ManageDocsRemoteResourceLoader,
@@ -973,7 +981,7 @@ impl ManageDocsResourceScope {
         Self {
             source: ManageDocsResourceSource::Local {
                 resolve_root,
-                resolved_root: Arc::new(OnceLock::new()),
+                resolved_root: Arc::new(Mutex::new(None)),
             },
         }
     }
@@ -1043,7 +1051,13 @@ fn open_manage_docs_resource(
             note in the mounted Docs directory resolves there and a path can
             never be resolved against the root it did not name.
             */
-            let mounts = resolved_root.get_or_init(|| resolve_root()).clone()?;
+            let mounts = {
+                let mut resolved = resolved_root.lock().ok()?;
+                if resolved.is_none() {
+                    *resolved = resolve_root();
+                }
+                resolved.clone()?
+            };
             // A named mount claims its own segment first; the project root owns
             // every path no mount claimed.
             let (mount, relative_path) = mounts

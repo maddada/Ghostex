@@ -135,7 +135,7 @@ pub struct ManageDocsResourceScope;
 /// CDXC:DocsRootDirectory 2026-08-09: parity with the CEF scope, whose mounted
 /// Docs roots and their allowed relative roots are resolved together, lazily,
 /// off the main thread.
-pub type ManageDocsLocalRootResolver =
+type ManageDocsLocalRootResolver =
     Arc<dyn Fn() -> Option<Vec<ManageDocsResourceRoot>> + Send + Sync>;
 
 /// CDXC:DocsRootAdditive 2026-08-09: parity with the CEF scope's mount record.
