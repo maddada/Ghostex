@@ -4864,6 +4864,11 @@ fn get_codex_session_id_from_title(title: &str) -> Option<String> {
     is_uuid(&normalized).then(|| normalized.to_ascii_lowercase())
 }
 
+pub(crate) fn terminal_title_indicates_agent_identity(title: &str) -> bool {
+    get_codex_session_id_from_title(title).is_some()
+        || get_terminal_title_detected_agent_name(title).is_some()
+}
+
 fn is_uuid(value: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.len() != 36 {

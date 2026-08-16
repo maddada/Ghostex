@@ -48,7 +48,8 @@ use crate::{
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
         normalize_agent_hook_activity, read_agent_settings, read_text_from_map,
         reconcile_agent_metadata_title_for_session, resolve_project_agent_config,
-        AgentEndpointError, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY,
+        terminal_title_indicates_agent_identity, AgentEndpointError,
+        FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY,
     },
     auth::{
         ensure_gxserver_auth_token, is_authorized_headers, is_expected_gxserver_auth_token,
@@ -2030,6 +2031,7 @@ async fn route_http(
                     db,
                     repository,
                     Some(project_id.as_str()),
+                    None,
                     "read-project-status",
                 )?;
                 let sessions = repository.list_sessions(Some(project_id.as_str()))?;
@@ -2186,6 +2188,7 @@ async fn route_http(
                     db,
                     repository,
                     project_id.as_deref(),
+                    None,
                     "list-sessions",
                 )?;
                 repository
@@ -2349,6 +2352,7 @@ async fn route_http(
                     &state,
                     db,
                     repository,
+                    None,
                     None,
                     "read-presentation-snapshot",
                 )?;
@@ -10404,7 +10408,32 @@ async fn run_zmx_title_observer(
                 Ok(Some(line)) => {
                     observed_output = true;
                     if let Some(title) = parse_zmx_title_line(&line) {
-                        ingest_zmx_title_observation(&state, &project_id, &session_id, &title);
+                        let should_probe_identity =
+                            ingest_zmx_title_observation(&state, &project_id, &session_id, &title);
+                        if should_probe_identity {
+                            /*
+                            CDXC:GxserverSessionIdentity 2026-08-16:
+                            A terminal-button row starts without agent identity.
+                            Supported CLIs announce themselves through the zmx
+                            title stream that gxserver already watches; use that
+                            event to run one targeted foreground-process repair
+                            off the async worker. This avoids a permanent `ps`
+                            poll while still publishing the canonical identity
+                            delta as soon as Codex (or another recognized CLI)
+                            starts in an existing terminal.
+                            */
+                            let probe_state = state.clone();
+                            let probe_project_id = project_id.clone();
+                            let probe_session_id = session_id.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                sync_title_signaled_zmx_process_identity(
+                                    &probe_state,
+                                    &probe_project_id,
+                                    &probe_session_id,
+                                )
+                            })
+                            .await;
+                        }
                     }
                 }
                 Ok(None) => break,
@@ -10434,11 +10463,23 @@ async fn delay_zmx_title_observer_retry(failure_count: usize) {
     tokio::time::sleep(Duration::from_millis(DELAYS_MS[delay_index])).await;
 }
 
-fn ingest_zmx_title_observation(state: &AppState, project_id: &str, session_id: &str, title: &str) {
+fn ingest_zmx_title_observation(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    title: &str,
+) -> bool {
     let Ok(db) = open_gxserver_database(&state.paths) else {
-        return;
+        return false;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let should_probe_identity = terminal_title_indicates_agent_identity(title)
+        && repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten()
+            .as_ref()
+            .is_some_and(should_probe_title_signaled_zmx_process_identity);
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("rawTitle".to_string(), json!(title));
@@ -10452,7 +10493,7 @@ fn ingest_zmx_title_observation(state: &AppState, project_id: &str, session_id: 
         &params,
         None,
     ) else {
-        return;
+        return false;
     };
     if let Some((project_id, session_id)) = output.presentation_session {
         let _ =
@@ -10465,6 +10506,7 @@ fn ingest_zmx_title_observation(state: &AppState, project_id: &str, session_id: 
             );
         }
     }
+    should_probe_identity
 }
 
 fn is_zmx_title_observable_session(session: &Value) -> bool {
@@ -12739,12 +12781,21 @@ fn sync_live_zmx_process_identities(
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
     project_id: Option<&str>,
+    target_session_id: Option<&str>,
     _reason: &str,
 ) -> std::result::Result<(), DomainStateError> {
     let sessions = repository.list_sessions(project_id)?;
     let candidates = sessions
         .iter()
         .filter(|session| should_sync_live_zmx_process_identity(session))
+        .filter(|session| match target_session_id {
+            None => true,
+            Some(target_session_id) => {
+                should_probe_title_signaled_zmx_process_identity(session)
+                    && read_session_text(session, "sessionId").as_deref()
+                        == Some(target_session_id)
+            }
+        })
         .filter_map(|session| {
             Some((
                 read_session_text(session, "projectId")?,
@@ -12836,6 +12887,26 @@ fn sync_live_zmx_process_identities(
         }
     }
     Ok(())
+}
+
+fn sync_title_signaled_zmx_process_identity(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> std::result::Result<(), DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    sync_live_zmx_process_identities(
+        state,
+        &db,
+        &repository,
+        Some(project_id),
+        Some(session_id),
+        "terminal-title-agent-signal",
+    )
 }
 
 /*
@@ -13128,6 +13199,15 @@ fn should_sync_live_zmx_process_identity(session: &Value) -> bool {
     session.get("lifecycleState").and_then(Value::as_str) == Some("running")
         && session.get("surface").and_then(Value::as_str) != Some("commands")
         && read_session_persistence_provider(session).as_deref() == Some("zmx")
+}
+
+fn should_probe_title_signaled_zmx_process_identity(session: &Value) -> bool {
+    should_sync_live_zmx_process_identity(session)
+        && matches!(
+            read_session_text(session, "kind").as_deref(),
+            Some("terminal" | "agent")
+        )
+        && read_runtime_text(session, "agentSessionId").is_none()
 }
 
 /*
@@ -13652,8 +13732,14 @@ fn send_presentation_snapshot_for_subscription(
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let _ = sync_session_state_sidecars(state, &db, &repository, None, "presentation-subscribe");
-    let _ =
-        sync_live_zmx_process_identities(state, &db, &repository, None, "presentation-subscribe");
+    let _ = sync_live_zmx_process_identities(
+        state,
+        &db,
+        &repository,
+        None,
+        None,
+        "presentation-subscribe",
+    );
     /*
     Own the producer sequencer at this delivery boundary rather than calling
     read_presentation_snapshot_in_sequence and dropping its guard before the
@@ -13986,6 +14072,64 @@ mod tests {
         Rust gxserver must accept the same renderer `renameCommand` action as the TypeScript daemon so a full cutover keeps Claude Code generated-title renames on the native Enter path.
         */
         assert!(RENDERER_COMMAND_ACTIONS.contains(&"renameCommand"));
+    }
+
+    #[test]
+    fn title_signaled_process_identity_sync_only_targets_incomplete_live_zmx_identity() {
+        assert!(terminal_title_indicates_agent_identity(
+            "01a00854-13cb-7500-bde7-3d8d2b03abdd"
+        ));
+        assert!(terminal_title_indicates_agent_identity("Codex"));
+        assert!(!terminal_title_indicates_agent_identity(
+            "⠦ Fix GPUI Chat Mode Switching"
+        ));
+
+        let candidate = json!({
+            "kind": "terminal",
+            "lifecycleState": "running",
+            "providerState": {
+                "lifecycleState": "exists",
+                "provider": "zmx",
+            },
+            "sessionId": "G9mmz",
+            "surface": "terminal",
+            "zmxName": "S9-P9-G9mmz",
+        });
+        assert!(should_probe_title_signaled_zmx_process_identity(
+            &candidate
+        ));
+
+        let mut promoted_agent = candidate.clone();
+        promoted_agent["kind"] = json!("agent");
+        promoted_agent["agentId"] = json!("codex");
+        assert!(should_probe_title_signaled_zmx_process_identity(
+            &promoted_agent
+        ));
+
+        promoted_agent["runtimeSettings"] = json!({
+            "agentSessionId": "01a00854-13cb-7500-bde7-3d8d2b03abdd",
+        });
+        assert!(!should_probe_title_signaled_zmx_process_identity(
+            &promoted_agent
+        ));
+
+        let mut stopped_terminal = candidate.clone();
+        stopped_terminal["lifecycleState"] = json!("stopped");
+        assert!(!should_probe_title_signaled_zmx_process_identity(
+            &stopped_terminal
+        ));
+
+        let mut command_surface = candidate.clone();
+        command_surface["surface"] = json!("commands");
+        assert!(!should_probe_title_signaled_zmx_process_identity(
+            &command_surface
+        ));
+
+        let mut non_zmx_terminal = candidate;
+        non_zmx_terminal["providerState"]["provider"] = json!("none");
+        assert!(!should_probe_title_signaled_zmx_process_identity(
+            &non_zmx_terminal
+        ));
     }
 
     #[test]
