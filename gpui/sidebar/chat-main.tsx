@@ -17,6 +17,8 @@ import {
   clampSessionChatTranscriptWidthPercent,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
 } from "../../shared/ghostex-settings";
+import { normalizeghostexHotkeySettings } from "../../shared/ghostex-hotkeys";
+import { formatSidebarHotkeyLabel } from "../../sidebar/hotkey-label";
 import {
   SessionChatView,
   type SessionChatHostActions,
@@ -135,7 +137,10 @@ async function rpc<TResult>(
   params: Record<string, unknown>,
 ): Promise<TResult> {
   const response = await fetch(`${bootstrap.baseUrl}${path}`, {
-    body: JSON.stringify({ params, protocolVersion: GXSERVER_PROTOCOL_VERSION }),
+    body: JSON.stringify({
+      params,
+      protocolVersion: GXSERVER_PROTOCOL_VERSION,
+    }),
     headers: {
       authorization: `Bearer ${bootstrap.authToken}`,
       "content-type": "application/json",
@@ -150,8 +155,7 @@ async function rpc<TResult>(
     body = undefined;
   }
   const envelope = body as
-    | { error?: { message?: string }; ok?: boolean; result?: TResult }
-    | undefined;
+    { error?: { message?: string }; ok?: boolean; result?: TResult } | undefined;
   if (!response.ok || !envelope || envelope.ok !== true) {
     const message =
       envelope && typeof envelope.error?.message === "string"
@@ -177,7 +181,10 @@ function createGpuiSessionChatTransport(
       });
     },
     async interrupt() {
-      await rpc(bootstrap, "/api/interruptSessionChat", { projectId, sessionId });
+      await rpc(bootstrap, "/api/interruptSessionChat", {
+        projectId,
+        sessionId,
+      });
     },
     read(params) {
       return rpc<GxserverReadSessionChatResult>(bootstrap, "/api/readSessionChat", {
@@ -188,11 +195,10 @@ function createGpuiSessionChatTransport(
       });
     },
     readSkills() {
-      return rpc<GxserverReadSessionChatSkillsResult>(
-        bootstrap,
-        "/api/readSessionChatSkills",
-        { projectId, sessionId },
-      );
+      return rpc<GxserverReadSessionChatSkillsResult>(bootstrap, "/api/readSessionChatSkills", {
+        projectId,
+        sessionId,
+      });
     },
     async send(text, imagePaths) {
       await rpc(bootstrap, "/api/sendSessionChatMessage", {
@@ -205,19 +211,19 @@ function createGpuiSessionChatTransport(
     // Raw keystroke (Claude's Shift+Tab mode cycle): same endpoint, `key`
     // instead of a body, so the server writes the bytes verbatim.
     async sendKey(key) {
-      await rpc(bootstrap, "/api/sendSessionChatMessage", { key, projectId, sessionId });
+      await rpc(bootstrap, "/api/sendSessionChatMessage", {
+        key,
+        projectId,
+        sessionId,
+      });
     },
     saveImage(params) {
-      return rpc<GxserverSaveSessionChatImageResult>(
-        bootstrap,
-        "/api/saveSessionChatImage",
-        {
-          projectId,
-          sessionId,
-          base64Data: params.base64Data,
-          ...(params.suggestedName ? { suggestedName: params.suggestedName } : {}),
-        },
-      );
+      return rpc<GxserverSaveSessionChatImageResult>(bootstrap, "/api/saveSessionChatImage", {
+        projectId,
+        sessionId,
+        base64Data: params.base64Data,
+        ...(params.suggestedName ? { suggestedName: params.suggestedName } : {}),
+      });
     },
     saveAttachment(params) {
       return rpc<GxserverSaveSessionChatAttachmentResult>(
@@ -232,11 +238,9 @@ function createGpuiSessionChatTransport(
       );
     },
     loadImage(params) {
-      return rpc<GxserverReadSessionChatImageResult>(
-        bootstrap,
-        "/api/readSessionChatImage",
-        { path: params.path },
-      );
+      return rpc<GxserverReadSessionChatImageResult>(bootstrap, "/api/readSessionChatImage", {
+        path: params.path,
+      });
     },
     // Native picker paths are valid only for sessions on this Mac. Remote
     // chats omit this hook so the composer uses byte upload through the
@@ -337,7 +341,11 @@ function createGpuiSessionChatTransport(
         if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
           try {
             activeSocket.send(
-              JSON.stringify({ projectId, sessionId, type: "unsubscribeSessionChat" }),
+              JSON.stringify({
+                projectId,
+                sessionId,
+                type: "unsubscribeSessionChat",
+              }),
             );
           } catch {
             // Socket teardown races are fine; the server refcounts followers.
@@ -362,10 +370,7 @@ interface AppModalHostMessageHandler {
   postMessage: (payload: string) => unknown;
 }
 
-function postSessionChatHostAction(
-  action: string,
-  fields?: Record<string, unknown>,
-): void {
+function postSessionChatHostAction(action: string, fields?: Record<string, unknown>): void {
   const target = window as unknown as {
     webkit?: {
       messageHandlers?: { ghostexAppModalHost?: AppModalHostMessageHandler };
@@ -398,7 +403,9 @@ function createGpuiSessionChatComposerBridge(
         void actions
           .handoffToTerminal()
           .then((content) => {
-            postSessionChatHostAction("draftHandoffToTerminalComplete", { content });
+            postSessionChatHostAction("draftHandoffToTerminalComplete", {
+              content,
+            });
           })
           .catch(() => {
             postSessionChatHostAction("draftHandoffToTerminalFailed");
@@ -414,10 +421,7 @@ function createGpuiSessionChatComposerBridge(
         if (namespace.onSessionChatFocusComposerRequested === requestFocus) {
           delete namespace.onSessionChatFocusComposerRequested;
         }
-        if (
-          namespace.onSessionChatHandoffToTerminalRequested ===
-          requestHandoffToTerminal
-        ) {
+        if (namespace.onSessionChatHandoffToTerminalRequested === requestHandoffToTerminal) {
           delete namespace.onSessionChatHandoffToTerminalRequested;
         }
         if (namespace.onSessionChatInsertPromptRequested === insertPrompt) {
@@ -463,18 +467,14 @@ window.ghostexGpui.onSessionChatAttachmentsPicked callback in this page with
 const ATTACHMENT_PICK_TIMEOUT_MS = 180_000;
 
 interface ChatAttachmentPickNamespace {
-  onSessionChatAttachmentsPicked?: (payload: {
-    requestId?: string;
-    paths?: unknown;
-  }) => void;
+  onSessionChatAttachmentsPicked?: (payload: { requestId?: string; paths?: unknown }) => void;
 }
 
 let attachmentPickSequence = 0;
 const pendingAttachmentPicks = new Map<string, (paths: string[]) => void>();
 
 function installAttachmentPickCallback(): void {
-  const namespace = chatBridgeNamespace() as ChatBridgeNamespace &
-    ChatAttachmentPickNamespace;
+  const namespace = chatBridgeNamespace() as ChatBridgeNamespace & ChatAttachmentPickNamespace;
   namespace.onSessionChatAttachmentsPicked = (payload) => {
     const requestId = typeof payload?.requestId === "string" ? payload.requestId : "";
     const resolve = pendingAttachmentPicks.get(requestId);
@@ -519,23 +519,62 @@ const GPUI_SESSION_CHAT_HOST_LINKS: SessionChatHostLinks = {
   openFile: (path) => postSessionChatHostAction("openFile", { path }),
 };
 
-const GPUI_SESSION_CHAT_HOST_ACTIONS: SessionChatHostActions = {
-  onSwitchToTerminal: () => postSessionChatHostAction("terminalView"),
-  onSwitchToTerminalForAgentPicker: () =>
-    postSessionChatHostAction("agentPickerTerminalView"),
-  actions: [
-    { id: "rename", label: "Rename" },
-    { id: "sleep", label: "Sleep" },
-    { id: "delayedActions", label: "Delayed Actions" },
-    { id: "fork", label: "Fork" },
-    { id: "fullReload", label: "Full Reload" },
-    { id: "promptEditor", label: "Prompt Editor" },
-    { id: "stashPrompt", label: "Stash Prompt" },
-    { id: "stashedPrompts", label: "Prompts" },
-    { id: "attachPath", label: "Attach File or Folder" },
-  ],
-  onAction: (id) => postSessionChatHostAction(id),
-};
+function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHostActions {
+  const hotkeys = normalizeghostexHotkeySettings(hotkeysValue);
+  const shortcut = (id: keyof typeof hotkeys): string | undefined => {
+    const value = hotkeys[id];
+    return value ? formatSidebarHotkeyLabel(value) : undefined;
+  };
+  return {
+    onSwitchToTerminal: () => postSessionChatHostAction("terminalView"),
+    onSwitchToTerminalForAgentPicker: () => postSessionChatHostAction("agentPickerTerminalView"),
+    switchViewShortcut: shortcut("toggleChatView"),
+    actions: [
+      {
+        id: "rename",
+        label: "Rename",
+        shortcut: shortcut("renameActiveSession"),
+      },
+      {
+        id: "sleep",
+        label: "Sleep",
+        shortcut: shortcut("sleepFocusedSession"),
+      },
+      {
+        id: "delayedActions",
+        label: "Delayed Actions",
+        shortcut: shortcut("delayedSend"),
+      },
+      { id: "fork", label: "Fork", shortcut: shortcut("forkSession") },
+      {
+        id: "fullReload",
+        label: "Full Reload",
+        shortcut: shortcut("reloadSession"),
+      },
+      {
+        id: "promptEditor",
+        label: "Prompt Editor",
+        shortcut: shortcut("promptEditor"),
+      },
+      {
+        id: "stashPrompt",
+        label: "Stash Prompt",
+        shortcut: shortcut("stashPrompt"),
+      },
+      {
+        id: "stashedPrompts",
+        label: "Prompts",
+        shortcut: shortcut("stashedPrompts"),
+      },
+      {
+        id: "attachPath",
+        label: "Attach File or Folder",
+        shortcut: shortcut("attachFileOrFolder"),
+      },
+    ],
+    onAction: (id) => postSessionChatHostAction(id),
+  };
+}
 
 function renderFailure(
   root: ReturnType<typeof createRoot>,
@@ -544,10 +583,7 @@ function renderFailure(
 ): void {
   root.render(
     <div className="native-sidebar-shell gpui-session-chat">
-      <div
-        className="ghostex-session-chat-scope ghostex-chat-empty-state"
-        data-chat-theme={theme}
-      >
+      <div className="ghostex-session-chat-scope ghostex-chat-empty-state" data-chat-theme={theme}>
         <div className="ghostex-chat-empty-title">Chat unavailable</div>
         <div className="ghostex-chat-empty-detail">{message}</div>
       </div>
@@ -565,6 +601,13 @@ const projectId = searchParams.get("projectId")?.trim() ?? "";
 const sessionId = searchParams.get("sessionId")?.trim() ?? "";
 const agentId = searchParams.get("agentId")?.trim() ?? "";
 const remote = searchParams.get("remote") === "true";
+let hotkeysValue: unknown;
+try {
+  hotkeysValue = JSON.parse(searchParams.get("hotkeys") ?? "{}");
+} catch {
+  hotkeysValue = {};
+}
+const GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(hotkeysValue);
 let chatTheme = normalizeSessionChatTheme(searchParams.get("theme"));
 let chatFontFamily = searchParams.get("fontFamily")?.trim() ?? "";
 let chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(
@@ -624,20 +667,9 @@ if (!projectId || !sessionId) {
 } else {
   waitForBootstrap()
     .then((bootstrap) => {
-      const transport = createGpuiSessionChatTransport(
-        bootstrap,
-        projectId,
-        sessionId,
-        remote,
-      );
-      const composerBridge = createGpuiSessionChatComposerBridge(
-        bootstrap,
-        projectId,
-        sessionId,
-      );
-      const agentLabel = agentId
-        ? resolveSessionChatTranscriptAgent(agentId) ?? agentId
-        : null;
+      const transport = createGpuiSessionChatTransport(bootstrap, projectId, sessionId, remote);
+      const composerBridge = createGpuiSessionChatComposerBridge(bootstrap, projectId, sessionId);
+      const agentLabel = agentId ? (resolveSessionChatTranscriptAgent(agentId) ?? agentId) : null;
       renderReadyChat = (theme) => {
         root.render(
           <div className="native-sidebar-shell gpui-session-chat">

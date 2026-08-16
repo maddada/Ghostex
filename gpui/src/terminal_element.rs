@@ -2676,6 +2676,7 @@ fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         "forkSession" => "ctrl+shift+f",
         "reloadSession" => "ctrl+shift+r",
         "promptEditor" => "ctrl+g",
+        "toggleChatView" => "alt+g",
         "attachFileOrFolder"
         | "stashPrompt"
         | "stashedPrompts"

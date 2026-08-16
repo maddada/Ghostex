@@ -17923,6 +17923,7 @@ fn agents_workspace_project_state_to_shell_state_json(
     workspace_project_id: Option<&str>,
     mappings: &HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     remote_mappings: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+    chat_mode_sessions: &HashSet<TerminalSessionId>,
     timers: &HashMap<TerminalSessionId, GpuiCommandDelayedSendTimer>,
     watchers: &HashMap<TerminalSessionId, GpuiAgentsSendWhenStoppedWatcher>,
     now: SystemTime,
@@ -17937,6 +17938,10 @@ fn agents_workspace_project_state_to_shell_state_json(
             remote_mappings,
             workspace,
             workspace_project_id,
+        ),
+        "chatModeSessions": agents_chat_mode_sessions_to_shell_state_json(
+            chat_mode_sessions,
+            workspace,
         ),
         "delayedSends": agents_delayed_sends_to_shell_state_json(
             mappings,
@@ -17955,13 +17960,18 @@ fn agents_workspace_project_state_from_shell_state(
     WorkspaceModel,
     HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+    HashSet<TerminalSessionId>,
     Vec<GpuiAgentsDelayedSendRestoreIntent>,
 )> {
     let object = value.as_object()?;
     if object.keys().any(|key| {
         !matches!(
             key.as_str(),
-            "workspace" | "sessionMappings" | "remoteSessionMappings" | "delayedSends"
+            "workspace"
+                | "sessionMappings"
+                | "remoteSessionMappings"
+                | "chatModeSessions"
+                | "delayedSends"
         )
     }) {
         return None;
@@ -17980,11 +17990,46 @@ fn agents_workspace_project_state_from_shell_state(
         )?,
         None => HashMap::new(),
     };
+    let chat_mode_sessions =
+        agents_chat_mode_sessions_from_shell_state(object.get("chatModeSessions"), &workspace);
     let delayed_sends = match object.get("delayedSends") {
         Some(value) => agents_delayed_send_restore_intents_from_shell_state(value, &mappings)?,
         None => Vec::new(),
     };
-    Some((workspace, mappings, remote_mappings, delayed_sends))
+    Some((
+        workspace,
+        mappings,
+        remote_mappings,
+        chat_mode_sessions,
+        delayed_sends,
+    ))
+}
+
+fn agents_chat_mode_sessions_to_shell_state_json(
+    sessions: &HashSet<TerminalSessionId>,
+    workspace: &WorkspaceModel,
+) -> serde_json::Value {
+    let mut session_ids = sessions
+        .iter()
+        .filter(|session_id| workspace.has_session(**session_id))
+        .map(|session_id| session_id.0)
+        .collect::<Vec<_>>();
+    session_ids.sort_unstable();
+    serde_json::json!(session_ids)
+}
+
+fn agents_chat_mode_sessions_from_shell_state(
+    value: Option<&serde_json::Value>,
+    workspace: &WorkspaceModel,
+) -> HashSet<TerminalSessionId> {
+    value
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_u64)
+        .map(TerminalSessionId)
+        .filter(|session_id| workspace.has_session(*session_id))
+        .collect()
 }
 
 fn local_workspace_session_mappings_from_shell_state(
@@ -24855,6 +24900,11 @@ pub struct GhostexGpuiApp {
     last-used view after an app restart. The CEF surfaces stay runtime-only.
     */
     agents_chat_mode_sessions: HashSet<TerminalSessionId>,
+    /// Sessions whose current compatibility state has already been considered
+    /// for the saved automatic Chat preference. Runtime-only so a later agent
+    /// detection in the same shell slot is still a fresh eligibility edge.
+    agents_chat_auto_switch_observed_sessions: HashSet<TerminalSessionId>,
+    agents_chat_auto_switch_preference: GpuiPreferredAgentInterface,
     /// One-shot launch requests waiting for the hidden terminal runtime to exist.
     pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
     agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
@@ -25510,6 +25560,10 @@ impl GhostexGpuiApp {
                     .local_workspace_session_mappings,
                 local_workspace_attach_pending: HashSet::new(),
                 agents_chat_mode_sessions: shell_layout_state.agents_chat_mode_sessions,
+                agents_chat_auto_switch_observed_sessions: HashSet::new(),
+                agents_chat_auto_switch_preference: gpui_preferred_agent_interface_from_settings(
+                    shared_settings_snapshot.object(),
+                ),
                 pending_agents_chat_launch_intents: HashSet::new(),
                 agents_chat_surfaces: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),
@@ -43690,6 +43744,15 @@ impl GhostexGpuiApp {
                 )
                 .to_string(),
             ),
+            (
+                "hotkeys",
+                shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .get("hotkeys")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::Value::Object(Default::default()))
+                    .to_string(),
+            ),
         ];
         if remote {
             params.push(("remote", "true".to_string()));
@@ -43863,6 +43926,7 @@ impl GhostexGpuiApp {
 
     fn remove_all_agents_chat_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
         self.agents_chat_mode_sessions.clear();
+        self.agents_chat_auto_switch_observed_sessions.clear();
         self.pending_agents_chat_launch_intents.clear();
         self.session_chat_composer_ready_sessions.clear();
         self.pending_session_chat_composer_focus = None;
@@ -46921,6 +46985,7 @@ impl GhostexGpuiApp {
             self.agents_workspace_project_id.as_deref(),
             &self.local_workspace_session_mappings,
             &self.remote_attach_sessions,
+            &self.agents_chat_mode_sessions,
             &self.agents_delayed_send_timers,
             &self.agents_send_when_stopped_watchers,
             SystemTime::now(),
@@ -46949,19 +47014,25 @@ impl GhostexGpuiApp {
                 .and_then(|state| {
                     agents_workspace_project_state_from_shell_state(&state, Some(project_id))
                 })
-                .filter(|(_, mappings, _, _)| {
+                .filter(|(_, mappings, _, _, _)| {
                     mappings.keys().all(|key| key.project_id == *project_id)
                 })
         });
-        let (workspace, mappings, remote_mappings, delayed_send_restore_intents) = restored_state
-            .unwrap_or_else(|| {
-                (
-                    WorkspaceModel::empty_default(),
-                    HashMap::new(),
-                    HashMap::new(),
-                    Vec::new(),
-                )
-            });
+        let (
+            workspace,
+            mappings,
+            remote_mappings,
+            chat_mode_sessions,
+            delayed_send_restore_intents,
+        ) = restored_state.unwrap_or_else(|| {
+            (
+                WorkspaceModel::empty_default(),
+                HashMap::new(),
+                HashMap::new(),
+                HashSet::new(),
+                Vec::new(),
+            )
+        });
         self.agents_workspace = workspace;
         self.local_workspace_session_mappings = mappings;
         self.remote_attach_sessions.extend(remote_mappings);
@@ -46992,6 +47063,7 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = None;
         self.local_app_shot_session_mappings.clear();
         self.remove_all_agents_chat_surfaces(cx);
+        self.agents_chat_mode_sessions = chat_mode_sessions;
         self.agents_terminal_startup_coordinator = AgentsTerminalStartupCoordinator::new();
         self.agents_terminal_surface_host = NativeTerminalSurfaceHost::new();
         self.agents_terminal_surface_lifecycle = NativeTerminalSurfaceLifecycleState::new();
@@ -51270,6 +51342,7 @@ impl GhostexGpuiApp {
             .copied()
             .filter(|session_id| self.agents_session_chat_eligible(*session_id))
             .collect::<HashSet<_>>();
+        self.reconcile_automatic_agents_chat_modes(&chat_view_session_ids, cx);
         for (session_id, record) in &self.agents_gpui_engine_terminals {
             // Companion side panes show the same Agents sessions, so the
             // focused companion terminal (top or bottom split) gets the same
@@ -51294,6 +51367,50 @@ impl GhostexGpuiApp {
                 view.set_chat_view_action_visible(false, cx);
             });
         }
+    }
+
+    fn reconcile_automatic_agents_chat_modes(
+        &mut self,
+        eligible_session_ids: &HashSet<TerminalSessionId>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let preferred_interface = gpui_preferred_agent_interface_from_settings(
+            shared_settings::shared_sidebar_settings_snapshot().object(),
+        );
+        let chat_preference_just_enabled = preferred_interface == GpuiPreferredAgentInterface::Chat
+            && self.agents_chat_auto_switch_preference != GpuiPreferredAgentInterface::Chat;
+        self.agents_chat_auto_switch_preference = preferred_interface;
+
+        let newly_eligible = eligible_session_ids
+            .iter()
+            .copied()
+            .filter(|session_id| {
+                chat_preference_just_enabled
+                    || !self
+                        .agents_chat_auto_switch_observed_sessions
+                        .contains(session_id)
+            })
+            .collect::<Vec<_>>();
+        self.agents_chat_auto_switch_observed_sessions = eligible_session_ids.clone();
+        if preferred_interface != GpuiPreferredAgentInterface::Chat {
+            return;
+        }
+
+        let mut changed = false;
+        for session_id in newly_eligible {
+            changed |= self.agents_chat_mode_sessions.insert(session_id);
+        }
+        if !changed {
+            return;
+        }
+        if let Some(focused_session_id) = self.focused_agents_or_companion_shell_session_id()
+            && eligible_session_ids.contains(&focused_session_id)
+        {
+            self.pending_session_chat_composer_focus = Some(focused_session_id);
+        }
+        self.reconcile_agents_chat_surfaces(cx);
+        self.persist_shell_layout_state();
+        cx.notify();
     }
 
     fn gpui_engine_terminal_view_for_target(
@@ -107466,6 +107583,16 @@ fn gpui_session_chat_verbose_mode_from_settings(
         .get("sessionChatVerboseMode")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
+}
+
+fn gpui_preferred_agent_interface_from_settings(
+    settings: &serde_json::Map<String, serde_json::Value>,
+) -> GpuiPreferredAgentInterface {
+    settings
+        .get("preferredAgentInterface")
+        .and_then(serde_json::Value::as_str)
+        .and_then(GpuiPreferredAgentInterface::from_str)
+        .unwrap_or_default()
 }
 
 fn gpui_session_chat_background_color() -> Hsla {

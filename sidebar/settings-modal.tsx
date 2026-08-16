@@ -643,17 +643,17 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
     "appIconSourceId",
   ],
   chat: [
+    "preferredAgentInterface",
     "sessionChatTheme",
     "sessionChatFontFamily",
     "sessionChatTranscriptWidthPercent",
     "sessionChatVerboseMode",
   ],
   sidebar: [
-    "preferredAgentInterface",
     /*
      * CDXC:SidebarV2 2026-07-29:
-     * Sidebar version follows the agent-interface preference near the top of
-     * General, ahead of its own V2-only sub-settings.
+     * Sidebar version stays near the top of General, ahead of its own V2-only
+     * sub-settings.
      */
     "sidebarVersion",
     "sidebarV2Layout",
@@ -1979,13 +1979,6 @@ export function SettingsModal({
         : [],
     ),
     sidebar: getSettingsSectionSearch(settingsSearchQuery, "Sidebar", [
-      {
-        key: "preferredAgentInterface",
-        options: PREFERRED_AGENT_INTERFACE_OPTIONS,
-        subtitle:
-          "Choose which interface opens first for newly launched agents that support chat. The terminal still starts in the background.",
-        title: "Preferred interface for agents",
-      },
       /*
        * CDXC:SidebarV2 2026-07-29:
        * Sidebar version must be findable by searching for the new Inbox
@@ -2144,6 +2137,13 @@ export function SettingsModal({
       },
     ]),
     chat: getSettingsSectionSearch(settingsSearchQuery, "Chat", [
+      {
+        key: "preferredAgentInterface",
+        options: PREFERRED_AGENT_INTERFACE_OPTIONS,
+        subtitle:
+          "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.",
+        title: "Default view for compatible agents",
+      },
       {
         key: "sessionChatTheme",
         options: SESSION_CHAT_THEME_OPTIONS,
@@ -3600,17 +3600,6 @@ export function SettingsModal({
             ) : null}
             {mainSubsectionVisible("sidebar", settingsSearch.sidebar) ? (
               <SettingsSection sectionRef={sidebarSectionRef} title="Sidebar">
-              {mainSettingVisible(settingsSearch.sidebar, "preferredAgentInterface") ? (
-              <PreferredAgentInterfaceField
-                description="Choose which interface opens first for newly launched agents that support chat. The terminal still starts in the background."
-                label="Preferred interface for agents"
-                {...getSettingModificationProps("preferredAgentInterface")}
-                onChange={(preferredAgentInterface) =>
-                  updateDraft("preferredAgentInterface", preferredAgentInterface)
-                }
-                value={draft.preferredAgentInterface}
-              />
-              ) : null}
               {/*
                * CDXC:SidebarV2 2026-07-29:
                * Sidebar version stays near the top of the General tab so the
@@ -3982,6 +3971,17 @@ export function SettingsModal({
 
             {mainSectionVisible("chat", settingsSearch.chat) ? (
               <SettingsSection sectionRef={chatSectionRef} title="Chat">
+                {mainSettingVisible(settingsSearch.chat, "preferredAgentInterface") ? (
+                  <PreferredAgentInterfaceField
+                    description="Chat switches on automatically as soon as Ghostex detects a compatible agent. The terminal stays live in the background, and you can switch back at any time."
+                    label="Default Agent View"
+                    {...getSettingModificationProps("preferredAgentInterface")}
+                    onChange={(preferredAgentInterface) =>
+                      updateDraft("preferredAgentInterface", preferredAgentInterface)
+                    }
+                    value={draft.preferredAgentInterface}
+                  />
+                ) : null}
                 {mainSettingVisible(settingsSearch.chat, "sessionChatTheme") ? (
                   <SessionChatThemeField
                     description="Changes chat content only; the surrounding Ghostex app remains dark."

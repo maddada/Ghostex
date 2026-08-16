@@ -35,6 +35,8 @@ export interface SessionChatHostAction {
   /** Host-defined action id, passed back verbatim to onAction. */
   id: string;
   label: string;
+  /** Formatted effective shortcut shown beside the label in the tooltip. */
+  shortcut?: string;
   /**
    * When set, clicking swaps the cluster to an inline text field (e.g.
    * Rename); onAction receives the submitted value as its second argument.
@@ -50,6 +52,8 @@ export interface SessionChatHostAction {
  */
 export interface SessionChatHostActions {
   onSwitchToTerminal: () => void;
+  /** Formatted shortcut for switching between Terminal View and Chat View. */
+  switchViewShortcut?: string;
   /** Optional plain switch reserved for opening an agent-owned model picker. */
   onSwitchToTerminalForAgentPicker?: () => void;
   /** Expanded Agent Actions row; omit to hide the Agent Actions button. */
@@ -92,11 +96,13 @@ function hostActionIcon(id: string): ReactNode {
 function HostActionButton({
   children,
   label,
+  shortcut,
   last = false,
   onClick,
 }: {
   children: ReactNode;
   label: string;
+  shortcut?: string;
   last?: boolean;
   onClick: () => void;
 }) {
@@ -104,7 +110,7 @@ function HostActionButton({
   // chrome in theme.css, which sets `background: transparent` and would beat the
   // layered Tailwind `bg-[#101010]` / `hover:bg-[#343434]` utilities.
   return (
-    <AppTooltip content={label}>
+    <AppTooltip content={shortcut ? `${label} (${shortcut})` : label}>
       <button
         aria-label={label}
         className={cn(
@@ -167,6 +173,7 @@ export function SessionChatHostActionsCluster({
           <>
             <HostActionButton
               label={surface === "chat" ? "Terminal View" : "Chat View"}
+              shortcut={hostActions.switchViewShortcut}
               last={promptsAction === undefined && !hasAgentActions}
               onClick={hostActions.onSwitchToTerminal}
             >
@@ -179,6 +186,7 @@ export function SessionChatHostActionsCluster({
             {promptsAction ? (
               <HostActionButton
                 label={promptsAction.label}
+                shortcut={promptsAction.shortcut}
                 last={!hasAgentActions}
                 onClick={() => hostActions.onAction?.(promptsAction.id)}
               >
@@ -189,9 +197,7 @@ export function SessionChatHostActionsCluster({
               <HostActionButton
                 label="Agent Actions"
                 last
-                onClick={
-                  hostActions.onAgentActions ?? (() => setExpanded((value) => !value))
-                }
+                onClick={hostActions.onAgentActions ?? (() => setExpanded((value) => !value))}
               >
                 <IconDots aria-hidden="true" size={14} stroke={2} />
               </HostActionButton>
@@ -206,6 +212,7 @@ export function SessionChatHostActionsCluster({
             <HostActionButton
               key={action.id}
               label={action.label}
+              shortcut={action.shortcut}
               last={index === menuActions.length - 1}
               onClick={() => {
                 if (action.input) {
