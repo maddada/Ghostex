@@ -134,6 +134,18 @@ describe("Ghostex release automation helpers", () => {
     ).toThrow(ReleaseError);
   });
 
+  test("requires every release-note item to occupy one physical bullet line", () => {
+    expect(() =>
+      validateMajorMinorReleaseNotes(
+        "- Major\n  - Session Chat controls.\n    Includes model and reasoning controls.\n- Minor\n  - Smaller fix.",
+        "9.9.9",
+      ),
+    ).toThrow(/every change item on one physical/u);
+    expect(() =>
+      validateMajorMinorReleaseNotes("- Major\n  - \n- Minor\n  - Smaller fix.", "9.9.9"),
+    ).toThrow(/every change item on one physical/u);
+  });
+
   test("selects the latest Android build tool without GNU sort", () => {
     expect(
       selectLatestAndroidBuildTool(

@@ -2097,7 +2097,7 @@ function validateMajorMinorReleaseNotes(notes, version) {
   const majorIndex = lines.findIndex((line) => line === "- Major");
   const minorIndex = lines.findIndex((line) => line === "- Minor");
   const gpuiIndex = lines.findIndex((line) => line === "- GPUI");
-  if (majorIndex === -1 || minorIndex === -1 || majorIndex > minorIndex) {
+  if (majorIndex !== 0 || minorIndex === -1 || majorIndex > minorIndex) {
     throw new ReleaseError(`CHANGELOG.md section for ${version} must use Major and Minor top-level bullets.`);
   }
   if (gpuiIndex !== -1 && gpuiIndex < minorIndex) {
@@ -2106,6 +2106,22 @@ function validateMajorMinorReleaseNotes(notes, version) {
   const topLevelBullets = lines.filter((line) => line.startsWith("- "));
   if (topLevelBullets.some((line) => line !== "- Major" && line !== "- Minor" && line !== "- GPUI")) {
     throw new ReleaseError(`CHANGELOG.md section for ${version} must keep Major, Minor, and optional GPUI as the only top-level bullets.`);
+  }
+  const sectionHeadings = new Set(["- Major", "- Minor", "- GPUI"]);
+  const invalidItemLines = lines.filter(
+    (line) => !sectionHeadings.has(line) && (!line.startsWith("  - ") || line.slice(4).trim().length === 0),
+  );
+  if (invalidItemLines.length > 0) {
+    throw new ReleaseError(
+      `CHANGELOG.md section for ${version} must keep every change item on one physical \`  - \` line.`,
+    );
+  }
+  if (
+    lines.filter((line) => line === "- Major").length !== 1 ||
+    lines.filter((line) => line === "- Minor").length !== 1 ||
+    lines.filter((line) => line === "- GPUI").length > 1
+  ) {
+    throw new ReleaseError(`CHANGELOG.md section for ${version} must not repeat release-note headings.`);
   }
   const majorSubBullets = lines.slice(majorIndex + 1, minorIndex).filter((line) => line.startsWith("  - "));
   const minorEndIndex = gpuiIndex === -1 ? lines.length : gpuiIndex;
