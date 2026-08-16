@@ -35,11 +35,23 @@ export const DEFAULT_POLL_SECONDS = 15;
  */
 export const MAX_CONSECUTIVE_LIST_FAILURES = 5;
 
+/*
+ * Producer-aware fast fail. Release 7.8.0 lost a 45-minute timeout (twice, one
+ * per Windows packager) because the code-server producer job had *finished* but
+ * had uploaded its artifact under a different identity name; nothing was ever
+ * going to satisfy the wait. When `--producer-pattern` names the jobs that can
+ * upload the awaited artifacts, the wait fails within one jobs-poll of the last
+ * matching job completing, and prints the run's actual artifact names so a
+ * naming mismatch is a one-glance diagnosis instead of a timeout autopsy.
+ */
+export const JOBS_CHECK_EVERY_POLLS = 4;
+
 export function parseAwaitArgs(argv) {
   const options = {
     dest: null,
     names: [],
     pollSeconds: DEFAULT_POLL_SECONDS,
+    producerPattern: null,
     repo: process.env.GITHUB_REPOSITORY ?? "maddada/Ghostex",
     runId: process.env.GITHUB_RUN_ID ?? "",
     timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
@@ -57,6 +69,7 @@ export function parseAwaitArgs(argv) {
     else if (argument === "--repo") options.repo = value;
     else if (argument === "--timeout-minutes") options.timeoutMinutes = Number(value);
     else if (argument === "--poll-seconds") options.pollSeconds = Number(value);
+    else if (argument === "--producer-pattern") options.producerPattern = new RegExp(String(value ?? ""), "u");
     else throw new Error(`Unknown option: ${argument}`);
     index += 1;
   }
@@ -85,17 +98,45 @@ export function missingArtifacts(names, available) {
   return names.filter((name) => !available.has(name));
 }
 
+/* Name/status/conclusion of every job in the run (latest attempt). */
+export function listRunJobs({ repo, runId, run = spawnSync }) {
+  const result = run("gh", ["api", `repos/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`], {
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(`gh api jobs failed: ${(result.stderr || result.stdout || "").trim()}`);
+  }
+  const payload = JSON.parse(result.stdout);
+  return (payload.jobs ?? []).map((job) => ({
+    conclusion: job.conclusion ?? null,
+    name: job.name ?? "",
+    status: job.status ?? "",
+  }));
+}
+
+function describeAvailable(available) {
+  const names = [...available].sort();
+  return names.length > 0 ? names.join(", ") : "(none)";
+}
+
 function sleepSeconds(seconds) {
   const shared = new Int32Array(new SharedArrayBuffer(4));
   Atomics.wait(shared, 0, 0, seconds * 1000);
 }
 
-export async function awaitRunArtifacts(options, { list = listRunArtifacts, sleep = sleepSeconds } = {}) {
+export async function awaitRunArtifacts(
+  options,
+  { list = listRunArtifacts, listJobs = listRunJobs, sleep = sleepSeconds } = {},
+) {
   const started = Date.now();
   const deadline = started + options.timeoutMinutes * 60_000;
   let pending = [...options.names];
+  let lastAvailable = new Set();
   let announced = false;
+  let warnedNoProducerMatch = false;
   let consecutiveListFailures = 0;
+  let poll = 0;
   while (true) {
     let available = null;
     try {
@@ -116,18 +157,51 @@ export async function awaitRunArtifacts(options, { list = listRunArtifacts, slee
       );
     }
     if (available) {
+      lastAvailable = available;
       pending = missingArtifacts(options.names, available);
       if (pending.length === 0) return { waitedMs: Date.now() - started };
     }
+    if (available && options.producerPattern && poll % JOBS_CHECK_EVERY_POLLS === 0) {
+      /* Job listing is an observation too: a failed poll is skipped, never fatal. */
+      let jobs = null;
+      try {
+        jobs = listJobs({ repo: options.repo, runId: options.runId });
+      } catch (error) {
+        process.stdout.write(
+          `::warning::Producer job listing failed, will retry: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+      if (jobs) {
+        const producers = jobs.filter((job) => options.producerPattern.test(job.name));
+        if (producers.length === 0) {
+          if (!warnedNoProducerMatch) {
+            process.stdout.write(
+              `::warning::No job of run ${options.runId} matches producer pattern ${options.producerPattern}; ` +
+                "falling back to the plain timeout\n",
+            );
+            warnedNoProducerMatch = true;
+          }
+        } else if (producers.every((job) => job.status === "completed")) {
+          const states = producers.map((job) => `${job.name} (${job.conclusion ?? "unknown"})`).join("; ");
+          throw new Error(
+            `Every producer job has completed but run ${options.runId} never uploaded: ${pending.join(", ")}. ` +
+              `Producer jobs: ${states}. Artifacts the run did upload: ${describeAvailable(lastAvailable)}. ` +
+              "A near-miss name in that list means the artifact identity diverged between runners.",
+          );
+        }
+      }
+    }
     if (Date.now() >= deadline) {
       throw new Error(
-        `Timed out after ${options.timeoutMinutes} minutes waiting for run ${options.runId} artifacts: ${pending.join(", ")}`,
+        `Timed out after ${options.timeoutMinutes} minutes waiting for run ${options.runId} artifacts: ` +
+          `${pending.join(", ")}. Artifacts the run did upload: ${describeAvailable(lastAvailable)}`,
       );
     }
     if (!announced) {
       process.stdout.write(`::notice::Waiting for run artifacts: ${pending.join(", ")}\n`);
       announced = true;
     }
+    poll += 1;
     sleep(options.pollSeconds);
   }
 }

@@ -237,6 +237,7 @@ jobs:
         run: |
           node scripts/release-gpui/await-run-artifacts.mjs \
             --names "release-gxserver-linux-x64,release-gxserver-linux-arm64,${{ steps.code_server_identity.outputs.artifact_name }},release-code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64" \
+            --producer-pattern '^(gxserver_x64|gxserver_arm64|code_server_x64|code_server_arm64|reuse)' \
             --timeout-minutes 45
       - uses: actions/download-artifact@v8
         if: ${{ inputs.runtime_artifacts_ready }}

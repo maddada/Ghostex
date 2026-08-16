@@ -132,6 +132,68 @@ describe("waiting for the current run's artifacts", () => {
     expect(poll).toBe(MAX_CONSECUTIVE_LIST_FAILURES);
   });
 
+  /*
+   * The 7.8.0 code-server identity mismatch: the producer job finished, but its
+   * artifact carried a different name, so the old wait burned its full timeout.
+   * With a producer pattern the wait fails as soon as every matching job has
+   * completed, and names the artifacts the run actually uploaded.
+   */
+  test("fails fast once every producer job completed without uploading the artifact", async () => {
+    await expect(
+      awaitRunArtifacts(
+        { ...options, producerPattern: /code_server_x64|reuse/u },
+        {
+          list: () => new Set(["code-server-otheridentity-x64"]),
+          listJobs: () => [
+            { conclusion: "success", name: "code_server_x64 / build", status: "completed" },
+            { conclusion: "success", name: "prepare", status: "completed" },
+          ],
+          sleep: () => {},
+        },
+      ),
+    ).rejects.toThrow(/Every producer job has completed .* code-server-otheridentity-x64/su);
+  });
+
+  test("keeps waiting while any producer job is still running", async () => {
+    let poll = 0;
+    await awaitRunArtifacts(
+      { ...options, producerPattern: /gxserver_/u },
+      {
+        list: () => {
+          poll += 1;
+          return poll < 3 ? new Set() : new Set(options.names);
+        },
+        listJobs: () => [{ conclusion: null, name: "gxserver_x64 / build", status: "in_progress" }],
+        sleep: () => {},
+      },
+    );
+    expect(poll).toBe(3);
+  });
+
+  test("falls back to the plain timeout when no job matches the producer pattern", async () => {
+    const write = process.stdout.write.bind(process.stdout);
+    const output = [];
+    process.stdout.write = (chunk) => {
+      output.push(String(chunk));
+      return true;
+    };
+    try {
+      await expect(
+        awaitRunArtifacts(
+          { ...options, producerPattern: /never_matches/u, timeoutMinutes: 1 / 60_000 },
+          {
+            list: () => new Set(["something-else"]),
+            listJobs: () => [{ conclusion: "success", name: "prepare", status: "completed" }],
+            sleep: () => {},
+          },
+        ),
+      ).rejects.toThrow(/Timed out .* Artifacts the run did upload: something-else/su);
+    } finally {
+      process.stdout.write = write;
+    }
+    expect(output.join("")).toMatch(/No job of run .* matches producer pattern/u);
+  });
+
   test("reports how long it actually waited", async () => {
     const result = await awaitRunArtifacts(options, {
       list: () => new Set(options.names),

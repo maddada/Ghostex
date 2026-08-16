@@ -65,6 +65,7 @@ jobs:
         run: |
           node scripts/release-gpui/await-run-artifacts.mjs \
             --names release-gxserver-linux-${{ inputs.arch }} \
+            --producer-pattern '^(gxserver_${{ inputs.arch }}|reuse)' \
             --timeout-minutes 45
       - uses: actions/download-artifact@v8
         if: ${{ inputs.source_run_id == '' }}
