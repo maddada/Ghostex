@@ -6,6 +6,22 @@ set -euo pipefail
 # child process after inheriting the environment (Windows error 206).
 unset GHOSTEX_RELEASE_PLAN
 
+# Windows CreateProcess refuses children once the inherited environment block
+# nears 32K chars; find then fails mid-archive with the unhelpful
+# "The environment is too large for exec()" (7.8.0 run 31879826641). Catch any
+# future oversized variable here, with the offenders named, before find runs.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    ENV_BYTES="$(env | wc -c | tr -d '[:space:]')"
+    if [[ "$ENV_BYTES" -gt 28000 ]]; then
+      echo "Environment is ${ENV_BYTES} bytes, too close to the Windows exec limit. Largest variables:" >&2
+      env | awk -F= '{ print length($0), $1 }' | sort -rn | head -5 >&2
+      echo "Unset or shrink these before creating deterministic archives." >&2
+      exit 2
+    fi
+    ;;
+esac
+
 SOURCE="${1:-}"
 OUTPUT="${2:-}"
 PLATFORM_MODE="${3:-}"
