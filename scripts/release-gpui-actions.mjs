@@ -411,6 +411,8 @@ const head = validateLocalSource(version, {
 });
 if ((command === "start" || command === "amend") && requiresGpuiReferenceContract(options)) {
   run("node", ["scripts/release-gpui/verify-reference-contract.mjs"], { capture: false });
+  /* Costs milliseconds here; discovering it on a runner cost 7.8.0 a 14-minute round. */
+  run("node", ["scripts/release-gpui/check-ghostty-zig-pin.mjs"], { capture: false });
 }
 const secrets = configuredSecrets();
 validateRequiredSecrets(options, secrets);

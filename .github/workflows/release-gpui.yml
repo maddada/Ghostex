@@ -180,6 +180,9 @@ jobs:
       - name: Verify clean GPUI release reference contract
         if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node scripts/release-gpui/verify-reference-contract.mjs --clean
+      - name: Check the Ghostty Zig toolchain pin against the vendored source
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.windows_x64 || inputs.windows_arm64 }}
+        run: node scripts/release-gpui/check-ghostty-zig-pin.mjs
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10

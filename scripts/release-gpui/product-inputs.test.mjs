@@ -246,7 +246,10 @@ describe("pinned toolchain values track the workflows", () => {
     expect(macos).toContain(`bun-version: ${TOOLCHAIN.bun}`);
     expect(macos).toContain(`zig@${TOOLCHAIN.zig015} zig@${TOOLCHAIN.zig016}`);
     expect(macos).toContain('"$ZIG_015" "$ZIG_016" "$ZIG_016" >> "$GITHUB_ENV"');
+    expect(workflow("release-gpui-linux.yml")).toContain(`zig@${TOOLCHAIN.zig015} zig@${TOOLCHAIN.zig016}`);
     expect(workflow("release-gpui-linux.yml")).toContain('"$ZIG_015" "$ZIG_016" >> "$GITHUB_ENV"');
+    expect(readFileSync("scripts/release-gpui/macos.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig016}"`);
+    expect(readFileSync("scripts/release-gpui/macos-prerequisite.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig016}"`);
     expect(macos).toContain(`RIPGREP_VERSION: ${TOOLCHAIN.ripgrepVersion}`);
     expect(macos).toContain(`RIPGREP_PACKAGE_VERSION: ${TOOLCHAIN.ripgrepPackageVersion}`);
     expect(macos).toContain(`RIPGREP_SHA256: ${TOOLCHAIN.ripgrepSha256}`);
@@ -259,6 +262,17 @@ describe("pinned toolchain values track the workflows", () => {
     expect(android).toContain(`"build-tools;${TOOLCHAIN.androidBuildTools}"`);
     expect(android).toContain(`"ndk;${TOOLCHAIN.androidNdk}"`);
     expect(readFileSync("scripts/release-gpui/prepare-zig.ps1", "utf8")).toContain(`$Version = "${TOOLCHAIN.zig016}"`);
+  });
+
+  /*
+   * The 7.8.0 Ghostty-sync guard: the vendored source's own minimum_zig_version
+   * is the authority for TOOLCHAIN.zig016. The standalone check script runs the
+   * same assertion pre-dispatch; this test keeps it from rotting.
+   */
+  test("the Ghostty Zig pin satisfies the vendored source's declared minimum", async () => {
+    const { checkGhosttyZigPin, readGhosttyMinimumZig } = await import("./check-ghostty-zig-pin.mjs");
+    expect(() => checkGhosttyZigPin({ minimum: readGhosttyMinimumZig(), pin: TOOLCHAIN.zig016 })).not.toThrow();
+    expect(() => checkGhosttyZigPin({ minimum: "0.17.0", pin: TOOLCHAIN.zig016 })).toThrow(/requires Zig 0\.17\.0/u);
   });
 
   test("Beads and code-server identity pins match their source of truth", () => {
