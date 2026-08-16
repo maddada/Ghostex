@@ -8,6 +8,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>7.9.0</title>
+            <pubDate>Sun, 16 Aug 2026 05:09:08 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.9.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>70900</sparkle:version>
+            <sparkle:shortVersionString>7.9.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.9.0
+
+## 7.9.0 - 2026-08-16
+
+- Major
+  - Remote terminals now reconnect automatically through network interruptions and system sleep, preserving the remote session and scrollback instead of dropping to a local shell, thanks to @NiTE.
+- Minor
+  - Session Chat adds a per-session Verbose control that remembers whether thinking and tool activity should start expanded, thanks to @banozz.
+  - Default Agent View now switches compatible agents into Chat automatically, remembers each session's chosen view across restarts, and keeps the terminal live in the background.
+  - Session Chat detects model and reasoning options during agent startup instead of leaving them blank until a later refresh.
+  - Supported agents launched inside an existing terminal are recognized as soon as their identity appears, making Chat available without reopening the session.
+  - Chat and terminal action tooltips now show the configured keyboard shortcuts for faster discovery.
+  - Large sidebars reduce CPU and remote traffic by rate-limiting project Git-stat checks and updating only rows whose state changed.
+  - Remote project groups show only the actually focused session instead of also exposing an unrelated first session, thanks to @NiTE.
+  - GitHub releases now link directly to every customer installer and explain how to request the iOS TestFlight through the Ghostex Discord.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.9.0/ghostex-7.9.0-arm64.dmg" length="114699750" type="application/octet-stream" sparkle:edSignature="dLVkQg22iLNIT5zpz/pCjCNOd6QrvMJlVz+kxq6qpPGLWu6k6QkhfU9hFuYTKuPMlwUar3x7EOJ5O6M2xMdnCQ=="/>
+        </item>
+        <item>
             <title>7.8.0</title>
             <pubDate>Sat, 15 Aug 2026 14:04:39 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.8.0</sparkle:fullReleaseNotesLink>
@@ -139,30 +165,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.5.0/ghostex-7.5.0-arm64.dmg" length="115241205" type="application/octet-stream" sparkle:edSignature="AjLfdUOMfGmZqYXgSkQy72X6hCZMy5WeFQc55QKrfDeO6NAVlu8XKIm2TugqfOnRz01DgkgvMvozW1j8yTYVAQ=="/>
         </item>
         <item>
-            <title>7.4.0</title>
-            <pubDate>Sat, 08 Aug 2026 05:27:34 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.4.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>70400</sparkle:version>
-            <sparkle:shortVersionString>7.4.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.4.0
-
-## 7.4.0 - 2026-08-08
-
-- Major
-  - Project Board now remembers your filters and sorting, offers both sort directions, shows ticket creators and assignees, and can resume linked conversations even after project or ticket names change.
-  - Quick Access can progressively load older sessions, while command panes and existing agent conversations reconnect more reliably when you return to them.
-- Minor
-  - Global Actions are available directly from project rows and refresh immediately after changes, thanks to @banozz.
-  - Stashed Prompts, Previous Sessions, project collections, session groups, and sidebar drag-and-drop have clearer controls and more dependable behavior.
-  - Project Board scrollbars can be clicked and dragged normally, and completed lanes default to showing the newest work first, thanks to @banozz.
-  - Session Chat loads images and completed Codex messages more smoothly, while the Android chat stays ready in the background and handles the on-screen keyboard more reliably.
-  - Windows terminal sessions, agent hooks, remote cloning, project icons, support diagnostics, and long-running gxserver connections are more dependable.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.4.0/ghostex-7.4.0-arm64.dmg" length="114564255" type="application/octet-stream" sparkle:edSignature="9qxEUeXKYRNimj8GOb8K2tzltSsSdfCTIIbrT0/flDrSzZJSWjzNxQ33DhrMx+SySVaSPm3oBGPs3sm1LjjRBg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -174,6 +176,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: n+E9AdOvPGJQV/yaLsIwcw7D5FBgaB3RNjUZQ7PCtcihtOsyIsSOO4EB8qyigsk2OFDkkSaBdol2uW9NIgdOCw==
-length: 12448
+edSignature: nYuEw+5/dmbe+Bjw6by3tH0u0+iIEENjvZ99UShpc3KxBqqsoQvGVlC+DEDz/oKz38UteepaXcdnvP/3q58fAg==
+length: 14011
 -->
