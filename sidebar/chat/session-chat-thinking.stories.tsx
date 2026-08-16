@@ -129,6 +129,73 @@ function horizontalCenter(element: Element): number {
   return rectangle.left + rectangle.width / 2;
 }
 
+function expectMarkerGeometry(canvasElement: HTMLElement): void {
+  const agentMessage = canvasElement.querySelector<HTMLElement>(
+    ".ghostex-chat-agent-message",
+  );
+  const thinkingLine = canvasElement.querySelector<HTMLElement>(
+    ".ghostex-chat-thinking-line",
+  );
+  const thinkingTrigger = canvasElement.querySelector<HTMLElement>(
+    ".ghostex-chat-thinking-trigger",
+  );
+  const thinkingIcon = canvasElement.querySelector<HTMLElement>(
+    ".ghostex-chat-thinking-icon",
+  );
+  const caret = canvasElement.querySelector<HTMLElement>(
+    ".ghostex-chat-thinking-caret",
+  );
+
+  expect(agentMessage).not.toBeNull();
+  expect(thinkingLine).not.toBeNull();
+  expect(thinkingTrigger).not.toBeNull();
+  expect(thinkingIcon).not.toBeNull();
+  expect(caret).not.toBeNull();
+
+  const agentBullet = getComputedStyle(agentMessage as HTMLElement, "::before");
+  const thinkingBullet = getComputedStyle(
+    thinkingLine as HTMLElement,
+    "::before",
+  );
+  expect(agentBullet.width).toBe("4px");
+  expect(agentBullet.height).toBe("4px");
+  expect(thinkingBullet.width).toBe(agentBullet.width);
+  expect(thinkingBullet.height).toBe(agentBullet.height);
+
+  const agentLineCenter =
+    (agentMessage as HTMLElement).getBoundingClientRect().top +
+    Number.parseFloat(getComputedStyle(agentMessage as HTMLElement).lineHeight) / 2;
+  const agentBulletCenter =
+    (agentMessage as HTMLElement).getBoundingClientRect().top +
+    Number.parseFloat(agentBullet.marginTop) +
+    Number.parseFloat(agentBullet.height) / 2;
+  expect(Math.abs(agentBulletCenter - agentLineCenter)).toBeLessThanOrEqual(0.5);
+
+  const thinkingLineCenter =
+    (thinkingLine as HTMLElement).getBoundingClientRect().top +
+    Number.parseFloat(getComputedStyle(thinkingLine as HTMLElement).lineHeight) / 2;
+  const thinkingBulletCenter =
+    (thinkingLine as HTMLElement).getBoundingClientRect().top +
+    Number.parseFloat(thinkingBullet.marginTop) +
+    Number.parseFloat(thinkingBullet.height) / 2;
+  expect(Math.abs(thinkingBulletCenter - thinkingLineCenter)).toBeLessThanOrEqual(
+    0.5,
+  );
+
+  const thinkingTriggerCenter =
+    (thinkingTrigger as HTMLElement).getBoundingClientRect().top +
+    Number.parseFloat(getComputedStyle(thinkingTrigger as HTMLElement).lineHeight) /
+      2;
+  const iconRectangle = (thinkingIcon as HTMLElement).getBoundingClientRect();
+  expect(
+    Math.abs(iconRectangle.top + iconRectangle.height / 2 - thinkingTriggerCenter),
+  ).toBeLessThanOrEqual(0.5);
+
+  const caretRectangle = (caret as HTMLElement).getBoundingClientRect();
+  expect(caretRectangle.width).toBeCloseTo(7, 1);
+  expect(caretRectangle.height).toBeCloseTo(9, 1);
+}
+
 const meta = {
   title: "Chat/Thinking and tool disclosures",
   component: SessionChatThinkingStory,
@@ -143,6 +210,7 @@ export const CollapsedAlignmentAndFinalCopy: Story = {
   args: { verboseMode: false },
   play: async ({ canvasElement }) => {
     expectAlignedThinkingAndSpacing(canvasElement);
+    expectMarkerGeometry(canvasElement);
     expect(
       within(canvasElement).getByRole("button", {
         name: "Checking alignment and command previews",

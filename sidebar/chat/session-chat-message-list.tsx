@@ -14,7 +14,6 @@
 // edge of the conversation.
 
 import {
-  IconCaretRightFilled,
   IconCheck,
   IconChevronRight,
   IconCopy,
@@ -280,9 +279,12 @@ function ReasoningRow({
           type="button"
         >
           <span className="ghostex-chat-thinking-icon">
-            <IconCaretRightFilled
+            <span
               aria-hidden="true"
-              className={cn(open && "rotate-90")}
+              className={cn(
+                "ghostex-chat-thinking-caret",
+                open && "is-open",
+              )}
             />
           </span>
           <span className="ghostex-chat-thinking-text">

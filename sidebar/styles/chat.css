@@ -226,12 +226,17 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-agent-message::before,
 .ghostex-chat-thinking-line::before {
-  content: "•";
-  line-height: inherit;
+  align-self: start;
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 0.25rem;
+  justify-self: center;
+  width: 0.25rem;
 }
 
-.ghostex-chat-thinking-line::before {
-  font-size: 2.5em;
+.ghostex-chat-agent-message::before {
+  margin-block-start: 0.5rem;
 }
 
 .ghostex-chat-thinking-row {
@@ -255,6 +260,10 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: grid;
   grid-template-columns: 0.375rem minmax(0, 1fr);
   min-width: 0;
+}
+
+.ghostex-chat-thinking-line::before {
+  margin-block-start: 0.484375rem;
 }
 
 .ghostex-chat-thinking-row.is-disclosure {
@@ -292,10 +301,18 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   width: 0.375rem;
 }
 
-.ghostex-chat-thinking-icon svg {
-  height: 2.1875rem;
+.ghostex-chat-thinking-caret {
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  display: block;
+  height: 0.5625rem;
+  flex: 0 0 auto;
   transition: transform 150ms ease;
-  width: 2.1875rem;
+  width: 0.4375rem;
+}
+
+.ghostex-chat-thinking-caret.is-open {
+  transform: rotate(90deg);
 }
 
 .ghostex-chat-thinking-text {
