@@ -1,5 +1,12 @@
 # Changelog
 
+## 7.9.1 - 2026-08-16
+
+- Major
+  - Windows upgrades and same-version repairs now install without the extra already-installed confirmation and reopen Ghostex automatically.
+- Minor
+  - Windows keeps downloaded runtime components across installer replacement and fetches them with its built-in HTTPS stack instead of relying on a system curl executable.
+
 ## 7.9.0 - 2026-08-16
 
 - Major
