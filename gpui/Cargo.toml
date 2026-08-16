@@ -19,6 +19,10 @@ path = "src/bin/ghostex_gpui_cef_helper.rs"
 name = "ghostex-gpui-cef-bootstrap"
 path = "src/bin/ghostex_gpui_cef_bootstrap.rs"
 
+[[bin]]
+name = "ghostex-windows-installer"
+path = "src/bin/ghostex_windows_installer.rs"
+
 # CDXC:GPUILibghosttyVt 2026-07-03: smoke/demo walkthrough for the libghostty-vt wrapper (see src/bin/ghostty_vt_smoke.rs), a deliverable demo path rather than a test harness.
 [[bin]]
 name = "ghostty-vt-smoke"
@@ -59,6 +63,7 @@ tar = "0.4"
 # major as gpui's own X11 backend dependency so both speak the protocol from one
 # crate lineage; x11rb needs no libX11/libxcb at link time.
 [target.'cfg(target_os = "linux")'.dependencies]
+ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
 x11rb = "0.13"
 
 # CDXC:GPUICefPlatformSeam 2026-07-04: the Windows CEF adapter (src/cef/windows.rs)
@@ -66,7 +71,7 @@ x11rb = "0.13"
 # windows-sys, pinned to the same major as the cef crate's own Windows dependency.
 [target.'cfg(target_os = "windows")'.dependencies]
 sysinfo = "0.31.4"
-velopack = "1.2.0"
+velopack = { version = "1.2.0", features = ["public-utils"] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
