@@ -335,16 +335,32 @@ describe("reuse verification", () => {
     ).toMatch(/is not an ancestor of the source commit/u);
   });
 
-  test("rejects a run that is not a successful dispatched Release Ghostex run", () => {
+  test("rejects a run that is not a completed dispatched Release Ghostex run", () => {
     const cases = [
-      { conclusion: "failure" },
+      { conclusion: null },
+      { conclusion: "action_required" },
       { event: "push" },
       { workflowName: "Some Other Workflow" },
       { artifactExpired: true },
+      { artifactMissing: true },
     ];
     for (const override of cases) {
       const result = accept({ candidate: runCandidate(androidRecord(), override) });
       expect(result.ok).toBe(false);
+    }
+  });
+
+  /*
+   * The 7.8.0 regression guard: a product whose job succeeded — provenance
+   * record uploaded, package artifact alive — stays reusable even when *other*
+   * jobs made the run's overall conclusion "failure" or "cancelled". Trust is
+   * product-scoped (digest, attestation, ancestry), never run-scoped.
+   */
+  test("accepts surviving products of a completed run that overall failed", () => {
+    for (const conclusion of ["failure", "cancelled"]) {
+      const result = accept({ candidate: runCandidate(androidRecord(), { conclusion }) });
+      expect(result.ok).toBe(true);
+      expect(result.verifiedChecks).toContain("origin");
     }
   });
 

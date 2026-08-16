@@ -308,7 +308,16 @@ export async function collectSourceRun({ repo, runId }) {
     rmSync(scratch, { force: true, recursive: true });
   }
 
+  if (run.conclusion && run.conclusion !== "success") {
+    const survivors = Object.keys(products);
+    notice(
+      `::notice::Run ${runId} concluded ${run.conclusion}; its ${survivors.length} product(s) with ` +
+        `surviving artifacts (${survivors.join(", ") || "none"}) remain reuse candidates`,
+    );
+  }
+
   return {
+    availableArtifacts: [...available],
     conclusion: run.conclusion ?? null,
     event: run.event ?? null,
     expiredArtifacts,

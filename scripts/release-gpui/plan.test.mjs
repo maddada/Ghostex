@@ -210,6 +210,41 @@ describe("Scenario D — Windows-only fix after a partial failure", () => {
     expect(plan.products.android.action).toBe("build");
     expect(plan.products.android.reason).toMatch(/artifacts have expired/u);
   });
+
+  /*
+   * 7.8.0 regression guard: the recovery run is dispatched against a *failed*
+   * run, and the whole point of `--reuse-from-run` is that the products whose
+   * jobs succeeded inside it stay reusable. A run-level "failure" conclusion
+   * must not poison per-product reuse.
+   */
+  test("reuses surviving products of a run whose overall conclusion is failure", () => {
+    const failedRun = { ...sourceRun, conclusion: "failure" };
+    const plan = planAt(fixedCommit, { reuseFromRunId: sourceRun.runId, sourceRun: failedRun, version: "7.8.0" });
+    expect(plan.products["macos-arm64"].action).toBe("reuse");
+    expect(plan.products.android.action).toBe("reuse");
+    expect(plan.products["windows-x64"].action).toBe("build");
+  });
+
+  test("falls back to building a product whose package artifact the failed run never uploaded", () => {
+    const partialRun = {
+      ...sourceRun,
+      availableArtifacts: Object.keys(sourceRun.products)
+        .filter((product) => product !== "android")
+        .map((product) => `release-${product}`),
+      conclusion: "failure",
+    };
+    const plan = planAt(fixedCommit, { sourceRun: partialRun, version: "7.8.0" });
+    expect(plan.products.android.action).toBe("build");
+    expect(plan.products.android.reason).toMatch(/never uploaded/u);
+    expect(plan.products["macos-arm64"].action).toBe("reuse");
+  });
+
+  test("rejects a source run that is still in progress", () => {
+    const runningRun = { ...sourceRun, conclusion: null };
+    const plan = planAt(fixedCommit, { sourceRun: runningRun, version: "7.8.0" });
+    expect(plan.products.android.action).toBe("build");
+    expect(plan.products.android.reason).toMatch(/not a completed release run/u);
+  });
 });
 
 /*

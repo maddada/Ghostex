@@ -299,9 +299,18 @@ export function buildReuseIndex({ baselines = [], sourceRun = null } = {}) {
 
   if (sourceRun) {
     const expired = new Set(sourceRun.expiredArtifacts ?? []);
+    const available = Array.isArray(sourceRun.availableArtifacts) ? new Set(sourceRun.availableArtifacts) : null;
     for (const [product, record] of Object.entries(sourceRun.products ?? {})) {
       push(product, {
         artifactExpired: expired.has(`release-${product}`),
+        /*
+         * A job can upload its provenance record and then die before uploading
+         * the package artifact itself. When the caller supplies the run's live
+         * artifact listing, require the package artifact to actually exist;
+         * without a listing (the materializer's path, where the download itself
+         * is the existence proof) the check is left to the download.
+         */
+        artifactMissing: available ? !available.has(`release-${product}`) : false,
         assets: [],
         commit: sourceRun.headSha ?? null,
         conclusion: sourceRun.conclusion ?? null,
@@ -338,10 +347,23 @@ function checkOrigin(candidate, evidence) {
     if (candidate.event !== "workflow_dispatch") {
       failures.push(`origin run event ${candidate.event ?? "(unknown)"} is not workflow_dispatch`);
     }
-    if (candidate.conclusion !== "success") {
-      failures.push(`origin run conclusion ${candidate.conclusion ?? "(unknown)"} is not success`);
+    /*
+     * The run-level conclusion only proves the run *finished*; it is not
+     * required to be "success". Trust in a run-tier candidate is entirely
+     * product-scoped: the product's own provenance artifact exists, its package
+     * artifact exists unexpired, the digests match the downloaded bytes, the
+     * attestation verifies, and the commit is an ancestor. Requiring a green
+     * run made the 7.8.0 release rebuild every already-successful product on
+     * each retry because *other* jobs in the same run had failed.
+     */
+    const conclusion = candidate.conclusion ?? null;
+    if (!["success", "failure", "cancelled"].includes(conclusion)) {
+      failures.push(`origin run conclusion ${conclusion ?? "(unknown)"} is not a completed release run`);
     }
     if (candidate.artifactExpired) failures.push("origin run artifacts have expired");
+    if (candidate.artifactMissing) {
+      failures.push("origin run never uploaded this product's package artifact");
+    }
   } else {
     failures.push(`unknown reuse tier ${candidate.tier}`);
   }
