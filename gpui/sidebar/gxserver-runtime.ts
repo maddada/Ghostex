@@ -540,6 +540,23 @@ const GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS = 250;
 const GPUI_AUTO_SLEEP_MONITOR_INTERVAL_MS = 60 * 1000;
 const GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS = 15 * 1000;
 /*
+CDXC:SidebarDiffStatsChurn 2026-08-16:
+Large sidebars (100+ project rows across local and remote machines) previously
+kept the 15s cycle fixed, which meant the stagger compressed to ~100ms and the
+runtime shelled out Git probes 8-16 times per second forever. Each background
+probe is at least one subprocess-spawning gxserver RPC (a network round trip
+for remote machines), so cap the global probe rate instead: the polling cycle
+stretches so consecutive probes are never closer than this spacing.
+*/
+const GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS = 1000;
+/*
+CDXC:SidebarDiffStatsChurn 2026-08-16:
+`countFileLines` sums every requested path server-side in one RPC. Batch the
+untracked-file fan-out instead of issuing one RPC per file, chunked only to
+keep a single request body bounded for repos with thousands of untracked files.
+*/
+const GPUI_UNTRACKED_LINE_COUNT_BATCH_SIZE = 200;
+/*
 CDXC:SidebarGitMemo 2026-07-29:
 GitHub CLI probes (`gh --version`, `gh pr view`) are the only networked calls in
 the sidebar Git fan-out, and `gh pr view` can hold a gxserver worker for many
@@ -1052,10 +1069,18 @@ class GpuiSidebarRuntime {
   private activeProjectContextRetryId: number | undefined;
   private titlebarGitMenuStateRetryId: number | undefined;
   private lastTitlebarGitMenuStatePayload: string | undefined;
-  private gitPollingIntervalId: number | undefined;
+  private gitPollingCycleTimeoutId: number | undefined;
   private gitPollingTimeoutIds = new Set<number>();
   private pendingProjectDiffRefreshProjectIds = new Set<string>();
   private projectDiffStatsByProjectId = new Map<string, SidebarProjectDiffStats>();
+  /*
+  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  Projects (plain local ids, machine-scoped remote ids) whose cwd answered
+  `isInsideWorkTree` with true. Repo-ness effectively never changes at runtime,
+  so steady-state polling skips that probe and goes straight to `diffNumstat`;
+  a failed numstat drops the entry so the next cycle re-probes from scratch.
+  */
+  private gitRepoProjectIds = new Set<string>();
   private activeGroupId: string | undefined;
   private activeProjectId: string | undefined;
   private appUserData: GxserverAppUserData = createEmptyGpuiAppUserData();
@@ -1620,13 +1645,10 @@ class GpuiSidebarRuntime {
    * once, matching the macOS refresh loop.
    */
   private startGitPollingDriver(): void {
-    if (this.gitPollingIntervalId !== undefined) {
+    if (this.gitPollingCycleTimeoutId !== undefined) {
       return;
     }
     this.scheduleGitPollingCycle();
-    this.gitPollingIntervalId = window.setInterval(() => {
-      this.scheduleGitPollingCycle();
-    }, GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS);
   }
 
   private scheduleGitPollingCycle(): void {
@@ -1635,10 +1657,18 @@ class GpuiSidebarRuntime {
     }
     this.gitPollingTimeoutIds.clear();
     const targets = this.getVisibleProjectDiffStatsRefreshTargets();
-    if (targets.length === 0) {
-      return;
-    }
-    const staggerStepMs = GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS / targets.length;
+    /*
+    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    The cycle stretches past the base interval once the sidebar renders more
+    project rows than the interval can hold at the capped probe rate, so a
+    sidebar with 100+ rows polls each row less often instead of probing many
+    times per second.
+    */
+    const cycleLengthMs = Math.max(
+      GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS,
+      targets.length * GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS,
+    );
+    const staggerStepMs = cycleLengthMs / Math.max(1, targets.length);
     targets.forEach((target, index) => {
       const timeoutId = window.setTimeout(
         () => {
@@ -1649,36 +1679,58 @@ class GpuiSidebarRuntime {
       );
       this.gitPollingTimeoutIds.add(timeoutId);
     });
+    this.gitPollingCycleTimeoutId = window.setTimeout(() => {
+      this.gitPollingCycleTimeoutId = undefined;
+      this.scheduleGitPollingCycle();
+    }, cycleLengthMs);
   }
 
+  /*
+  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  Poll only projects that currently render a sidebar group header, instead of
+  every registered local project plus every project of every connected remote
+  machine. Diff stats exist purely for those headers, so the rendered group
+  projection is the authoritative visibility set; remote machines that are only
+  showing a stale last-seen snapshot are unreachable and are skipped.
+  */
   private getVisibleProjectDiffStatsRefreshTargets(): GpuiProjectDiffStatsRefreshTarget[] {
-    const localTargets: GpuiProjectDiffStatsRefreshTarget[] = this.client
-      ? this.domainProjects
-          .filter(
-            (project) =>
-              !isGpuiPresentationQuickDomainProject(project) &&
-              project.isRecentProject !== true &&
-              Boolean(normalizeGpuiProjectPath(project.path)),
-          )
-          .map((project) => ({
-            key: `local:${project.projectId}`,
-            kind: "local",
-            project,
-          }))
-      : [];
-    const remoteTargets: GpuiProjectDiffStatsRefreshTarget[] = [];
-    for (const [machineId, presentation] of this.remotePresentations.entries()) {
-      for (const project of presentation.projects) {
-        remoteTargets.push({
-          key: `remote:${machineId}:${project.projectId}`,
-          kind: "remote",
-          reference: { machineId, projectId: project.projectId },
-        });
-      }
-    }
-    return [...localTargets, ...remoteTargets].sort((left, right) =>
-      left.key.localeCompare(right.key),
+    const targetsByKey = new Map<string, GpuiProjectDiffStatsRefreshTarget>();
+    const localProjectsById = new Map(
+      this.domainProjects.map((project) => [project.projectId, project]),
     );
+    for (const group of this.latestGroups) {
+      const projectId = group.projectContext?.editor.projectId;
+      if (!projectId) {
+        continue;
+      }
+      const remoteReference = parseGpuiRemotePresentationProjectId(projectId);
+      if (remoteReference) {
+        if (!this.remotePresentations.has(remoteReference.machineId)) {
+          continue;
+        }
+        targetsByKey.set(`remote:${projectId}`, {
+          key: `remote:${projectId}`,
+          kind: "remote",
+          reference: remoteReference,
+        });
+        continue;
+      }
+      const project = this.client ? localProjectsById.get(projectId) : undefined;
+      if (
+        !project ||
+        isGpuiPresentationQuickDomainProject(project) ||
+        project.isRecentProject === true ||
+        !normalizeGpuiProjectPath(project.path)
+      ) {
+        continue;
+      }
+      targetsByKey.set(`local:${projectId}`, {
+        key: `local:${projectId}`,
+        kind: "local",
+        project,
+      });
+    }
+    return [...targetsByKey.values()].sort((left, right) => left.key.localeCompare(right.key));
   }
 
   private refreshProjectDiffStatsTarget(target: GpuiProjectDiffStatsRefreshTarget): void {
@@ -1711,17 +1763,29 @@ class GpuiSidebarRuntime {
       return;
     }
     this.pendingProjectDiffRefreshProjectIds.add(projectId);
-    this.setProjectDiffStats(projectId, {
-      ...this.getProjectDiffStats(projectId),
-      isLoading: true,
-    });
+    /*
+    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    Background polls must be invisible unless the numbers actually change:
+    the old pre-probe `isLoading: true` republish plus the post-probe
+    republish meant every poll of every project rebuilt and re-sent the whole
+    sidebar tree twice, even with nothing to report. `isLoading` only feeds a
+    hover tooltip, so silent background probes simply publish the resolved
+    stats (deduplicated inside setProjectDiffStats).
+    */
     try {
-      const repoCheck = await this.runGitAction(project, { action: "isInsideWorkTree" });
-      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
-        this.setProjectDiffStats(projectId, createDefaultSidebarProjectDiffStats(false));
-        return;
+      if (!this.gitRepoProjectIds.has(projectId)) {
+        const repoCheck = await this.runGitAction(project, { action: "isInsideWorkTree" });
+        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+          this.setProjectDiffStats(projectId, createDefaultSidebarProjectDiffStats(false));
+          return;
+        }
+        this.gitRepoProjectIds.add(projectId);
       }
       const trackedDiff = await this.runGitAction(project, { action: "diffNumstat" });
+      if (trackedDiff.exitCode !== 0) {
+        this.gitRepoProjectIds.delete(projectId);
+        return;
+      }
       const trackedStats = parseGitNumstatDiffStats(trackedDiff.stdout);
       const hasTrackedLineChanges = trackedStats.additions > 0 || trackedStats.deletions > 0;
       const settings = createGpuiSidebarSettings(this.runtimeSettings);
@@ -1743,10 +1807,7 @@ class GpuiSidebarRuntime {
       }
       this.setProjectDiffStats(projectId, resolvedStats);
     } catch {
-      this.setProjectDiffStats(projectId, {
-        ...this.getProjectDiffStats(projectId),
-        isLoading: false,
-      });
+      // Keep the last published stats; the next polling cycle re-probes.
     } finally {
       this.pendingProjectDiffRefreshProjectIds.delete(projectId);
     }
@@ -1763,19 +1824,24 @@ class GpuiSidebarRuntime {
       return;
     }
     this.pendingProjectDiffRefreshProjectIds.add(scopedProjectId);
-    this.setProjectDiffStats(scopedProjectId, {
-      ...this.getProjectDiffStats(scopedProjectId),
-      isLoading: true,
-    });
+    // Silent background probe: publish only resolved, changed stats (see
+    // refreshProjectDiffStats for the churn rationale).
     try {
-      const repoCheck = await this.runRemoteGitAction(reference, {
-        action: "isInsideWorkTree",
-      });
-      if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
-        this.setProjectDiffStats(scopedProjectId, createDefaultSidebarProjectDiffStats(false));
-        return;
+      if (!this.gitRepoProjectIds.has(scopedProjectId)) {
+        const repoCheck = await this.runRemoteGitAction(reference, {
+          action: "isInsideWorkTree",
+        });
+        if (repoCheck.exitCode !== 0 || repoCheck.stdout.trim() !== "true") {
+          this.setProjectDiffStats(scopedProjectId, createDefaultSidebarProjectDiffStats(false));
+          return;
+        }
+        this.gitRepoProjectIds.add(scopedProjectId);
       }
       const trackedDiff = await this.runRemoteGitAction(reference, { action: "diffNumstat" });
+      if (trackedDiff.exitCode !== 0) {
+        this.gitRepoProjectIds.delete(scopedProjectId);
+        return;
+      }
       const trackedStats = parseGitNumstatDiffStats(trackedDiff.stdout);
       const hasTrackedLineChanges = trackedStats.additions > 0 || trackedStats.deletions > 0;
       const settings = createGpuiSidebarSettings(this.runtimeSettings);
@@ -1799,10 +1865,7 @@ class GpuiSidebarRuntime {
       }
       this.setProjectDiffStats(scopedProjectId, resolvedStats);
     } catch {
-      this.setProjectDiffStats(scopedProjectId, {
-        ...this.getProjectDiffStats(scopedProjectId),
-        isLoading: false,
-      });
+      // Keep the last published stats; the next polling cycle re-probes.
     } finally {
       this.pendingProjectDiffRefreshProjectIds.delete(scopedProjectId);
     }
@@ -1813,10 +1876,10 @@ class GpuiSidebarRuntime {
     paths: readonly string[],
   ): Promise<number> {
     let lines = 0;
-    for (const path of paths) {
+    for (const filePaths of chunkUntrackedLineCountPaths(paths)) {
       const result = await this.runGitAction(project, {
         action: "countFileLines",
-        filePaths: [path],
+        filePaths,
       });
       if (result.exitCode !== 0) {
         throw new Error("Could not count untracked file lines.");
@@ -1831,10 +1894,10 @@ class GpuiSidebarRuntime {
     paths: readonly string[],
   ): Promise<number> {
     let lines = 0;
-    for (const path of paths) {
+    for (const filePaths of chunkUntrackedLineCountPaths(paths)) {
       const result = await this.runRemoteGitAction(reference, {
         action: "countFileLines",
-        filePaths: [path],
+        filePaths,
       });
       if (result.exitCode !== 0) {
         throw new Error("Could not count remote untracked file lines.");
@@ -1844,21 +1907,61 @@ class GpuiSidebarRuntime {
     return lines;
   }
 
-  private getProjectDiffStats(projectId: string): SidebarProjectDiffStats {
-    return (
-      this.projectDiffStatsByProjectId.get(projectId) ?? createDefaultSidebarProjectDiffStats()
-    );
-  }
-
   private setProjectDiffStats(projectId: string, stats: SidebarProjectDiffStats): void {
+    const previous = this.projectDiffStatsByProjectId.get(projectId);
     this.projectDiffStatsByProjectId.set(projectId, stats);
-    if (!this.hasHydrated) {
+    if (!this.hasHydrated || (previous && haveSameSidebarProjectDiffStats(previous, stats))) {
       return;
     }
-    // Diff stats live inside the group projection (projectContext.editor), so
-    // republish groups through the existing patch path instead of a HUD-only
-    // update.
-    this.publishRemotePresentationPatch();
+    this.publishProjectDiffStatsPatch(projectId);
+  }
+
+  /*
+  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  Diff stats live inside the group projection (projectContext.editor), but a
+  changed +/- count for one project must not rebuild and re-send all groups:
+  with 40+ groups the old full `publishRemotePresentationPatch` here ran many
+  times per second and pinned the sidebar renderer in GC. Patch only the
+  group rows owned by the project, reusing every other group reference, and
+  skip the HUD message entirely (the HUD carries no diff stats). Bridge posts
+  (status pet, active project context, focus state, titlebar Git menu) carry
+  no diff stats either, so they stay out of this path too.
+  */
+  private publishProjectDiffStatsPatch(projectId: string): void {
+    const stats = this.projectDiffStatsByProjectId.get(projectId);
+    if (!stats) {
+      return;
+    }
+    const changedGroups: SidebarSessionGroup[] = [];
+    const nextGroups = this.latestGroups.map((group) => {
+      const projectContext = group.projectContext;
+      if (!projectContext || projectContext.editor.projectId !== projectId) {
+        return group;
+      }
+      const nextGroup = {
+        ...group,
+        projectContext: {
+          ...projectContext,
+          editor: { ...projectContext.editor, diffStats: stats },
+        },
+      };
+      changedGroups.push(nextGroup);
+      return nextGroup;
+    });
+    if (changedGroups.length === 0) {
+      // No rendered group shows this project; the stored stats overlay onto
+      // the next full projection rebuild instead.
+      return;
+    }
+    this.latestGroups = nextGroups;
+    this.messageSource.postMessage({
+      groupOrder: nextGroups.map((group) => group.groupId),
+      groups: changedGroups,
+      removedGroupIds: [],
+      removedSessionIds: [],
+      revision: ++this.revision,
+      type: "sidebarGroupsChanged",
+    });
   }
 
   private async runGpuiAutoSleepMonitor(
@@ -4831,6 +4934,7 @@ class GpuiSidebarRuntime {
         }),
       ),
     );
+    const previousHud = this.latestHud;
     this.latestHud = createGpuiSidebarHudState({
       activeProjectId: this.activeProjectId,
       commandPaneSessions: this.commandPaneSessions,
@@ -4850,21 +4954,7 @@ class GpuiSidebarRuntime {
       this.messageSource.postMessage(this.createHydrateMessage(groups, this.latestHud));
       this.hasHydrated = true;
     } else {
-      const patch = createGpuiSidebarGroupsPatch(previousGroups, groups);
-      const revision = ++this.revision;
-      this.messageSource.postMessage({
-        groupOrder: patch.groupOrder,
-        groups: patch.groups,
-        removedGroupIds: patch.removedGroupIds,
-        removedSessionIds: patch.removedSessionIds,
-        revision,
-        type: "sidebarGroupsChanged",
-      });
-      this.messageSource.postMessage({
-        hud: this.latestHud,
-        revision,
-        type: "sidebarHudChanged",
-      });
+      this.postSidebarProjectionPatchMessages(previousGroups, groups, previousHud);
     }
     this.latestGroups = groups;
     this.postGpuiStatusPetState();
@@ -4872,6 +4962,48 @@ class GpuiSidebarRuntime {
     this.postGxserverPresentationFocusState();
     this.postTitlebarGitMenuState();
     this.refreshGitStateForActiveProjectIfNeeded();
+  }
+
+  /*
+  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  Routine publishes frequently rebuild a projection identical to the last one
+  (background pollers, presentation deltas that only touch non-rendered
+  state). Sending those anyway made the renderer re-normalize the full tree
+  and deep-compare the whole HUD per message. Skip the groups message when the
+  diffed patch carries nothing and skip the HUD message when the rebuilt HUD
+  is structurally identical to the one already published.
+  */
+  private postSidebarProjectionPatchMessages(
+    previousGroups: readonly SidebarSessionGroup[],
+    groups: SidebarSessionGroup[],
+    previousHud: SidebarHudState,
+  ): void {
+    const patch = createGpuiSidebarGroupsPatch(previousGroups, groups);
+    const groupOrderChanged =
+      patch.groupOrder.length !== previousGroups.length ||
+      patch.groupOrder.some((groupId, index) => previousGroups[index]?.groupId !== groupId);
+    if (
+      patch.groups.length > 0 ||
+      patch.removedGroupIds.length > 0 ||
+      patch.removedSessionIds.length > 0 ||
+      groupOrderChanged
+    ) {
+      this.messageSource.postMessage({
+        groupOrder: patch.groupOrder,
+        groups: patch.groups,
+        removedGroupIds: patch.removedGroupIds,
+        removedSessionIds: patch.removedSessionIds,
+        revision: ++this.revision,
+        type: "sidebarGroupsChanged",
+      });
+    }
+    if (!haveSameSidebarProjectionValue(previousHud, this.latestHud)) {
+      this.messageSource.postMessage({
+        hud: this.latestHud,
+        revision: ++this.revision,
+        type: "sidebarHudChanged",
+      });
+    }
   }
 
   private publishUnavailable(_reason: string): void {
@@ -4892,6 +5024,7 @@ class GpuiSidebarRuntime {
     */
     this.gitStateMemoByProjectId.clear();
     this.gitHubStateMemoByProjectId.clear();
+    this.gitRepoProjectIds.clear();
     for (const timeoutId of this.gitHubProbeTimeoutIds) {
       window.clearTimeout(timeoutId);
     }
@@ -4934,6 +5067,7 @@ class GpuiSidebarRuntime {
       }
     }
     const previousGroups = this.latestGroups;
+    const previousHud = this.latestHud;
     const groups = this.presentation
       ? this.createSidebarGroups(this.presentation)
       : this.overlayProjectDiffStats([
@@ -4958,21 +5092,7 @@ class GpuiSidebarRuntime {
       this.messageSource.postMessage(this.createHydrateMessage(groups, this.latestHud));
       this.hasHydrated = true;
     } else {
-      const patch = createGpuiSidebarGroupsPatch(previousGroups, groups);
-      const revision = ++this.revision;
-      this.messageSource.postMessage({
-        groupOrder: patch.groupOrder,
-        groups: patch.groups,
-        removedGroupIds: patch.removedGroupIds,
-        removedSessionIds: patch.removedSessionIds,
-        revision,
-        type: "sidebarGroupsChanged",
-      });
-      this.messageSource.postMessage({
-        hud: this.latestHud,
-        revision,
-        type: "sidebarHudChanged",
-      });
+      this.postSidebarProjectionPatchMessages(previousGroups, groups, previousHud);
     }
     this.latestGroups = groups;
     this.postGpuiStatusPetState();
@@ -5058,6 +5178,7 @@ class GpuiSidebarRuntime {
   }
 
   private publishHudPatch(): void {
+    const previousHud = this.latestHud;
     this.latestHud = createGpuiSidebarHudState({
       activeProjectId: this.activeProjectId,
       commandPaneSessions: this.commandPaneSessions,
@@ -5073,7 +5194,7 @@ class GpuiSidebarRuntime {
       sidebarHud: this.sidebarHud,
     });
     this.postTitlebarGitMenuState();
-    if (!this.hasHydrated) {
+    if (!this.hasHydrated || haveSameSidebarProjectionValue(previousHud, this.latestHud)) {
       return;
     }
     this.messageSource.postMessage({
@@ -6114,10 +6235,12 @@ class GpuiSidebarRuntime {
         return;
       case "focusSession":
         await this.focusSession(message.sessionId, message);
+        this.postSidebarSessionFocusConfirmation(message.sessionId);
         return;
       case "focusSessionMode":
         if (parseGpuiRemotePresentationSessionId(message.sessionId)) {
           await this.focusSession(message.sessionId, message);
+          this.postSidebarSessionFocusConfirmation(message.sessionId);
           return;
         }
         this.handleUnsupportedSidebarMessage(message);
@@ -6749,6 +6872,38 @@ class GpuiSidebarRuntime {
     */
     this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId);
     this.publishPresentation("patch");
+  }
+
+  /*
+  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  The SidebarApp applies focus optimistically (pendingFocusedSessionId) and
+  waits for a groups message containing the session to confirm or correct it.
+  Full-tree publishes used to provide that confirmation implicitly on every
+  patch; now that patches carry only changed groups, a focus request whose
+  projection ends up identical (clicking the already-focused session) would
+  never re-deliver the group and the pending marker could go stale, letting a
+  later native-driven focus change get visually yanked back. Re-send the
+  authoritative group(s) holding the requested session after every explicit
+  sidebar focus request, even when unchanged.
+  */
+  private postSidebarSessionFocusConfirmation(sessionId: string): void {
+    if (!this.hasHydrated) {
+      return;
+    }
+    const groups = this.latestGroups.filter((group) =>
+      group.sessions.some((session) => session.sessionId === sessionId),
+    );
+    if (groups.length === 0) {
+      return;
+    }
+    this.messageSource.postMessage({
+      groupOrder: this.latestGroups.map((group) => group.groupId),
+      groups,
+      removedGroupIds: [],
+      removedSessionIds: [],
+      revision: ++this.revision,
+      type: "sidebarGroupsChanged",
+    });
   }
 
   private focusLocalWorkspaceSession(
@@ -13354,6 +13509,19 @@ class GpuiSidebarRuntime {
     */
     if (GPUI_MUTATING_GIT_ACTIONS.has(String(params.action ?? ""))) {
       this.gitStateMemoByProjectId.delete(project.projectId);
+      const result = await this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
+        ...params,
+        projectId: project.projectId,
+      });
+      /*
+      CDXC:SidebarDiffStatsChurn 2026-08-16:
+      The background diff-stats cycle stretches with sidebar size, so a commit
+      or checkout could otherwise leave the project header's +/- counts stale
+      for the better part of a minute. Re-probe this one project right after
+      the write instead of waiting the cycle out.
+      */
+      void this.refreshProjectDiffStats(project);
+      return result;
     }
     return this.client.rpc<GxserverTypedOperationResult>("/api/runGitAction", {
       ...params,
@@ -20056,7 +20224,7 @@ function createGpuiSidebarGroupsPatch(
   previousGroups: readonly SidebarSessionGroup[],
   nextGroups: SidebarSessionGroup[],
 ): GpuiSidebarGroupsPatch {
-  const previousGroupIds = new Set(previousGroups.map((group) => group.groupId));
+  const previousGroupsById = new Map(previousGroups.map((group) => [group.groupId, group]));
   const nextGroupIds = new Set(nextGroups.map((group) => group.groupId));
   const previousSessionIds = new Set(
     previousGroups.flatMap((group) => group.sessions.map((session) => session.sessionId)),
@@ -20066,12 +20234,78 @@ function createGpuiSidebarGroupsPatch(
   );
   return {
     groupOrder: nextGroups.map((group) => group.groupId),
-    groups: nextGroups,
-    removedGroupIds: [...previousGroupIds].filter((groupId) => !nextGroupIds.has(groupId)),
+    /*
+    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    The SidebarApp store merges patch groups by groupId and leaves untouched
+    groups alone, so a patch only needs the groups that actually changed.
+    Sending all groups on every publish forced the renderer to re-normalize
+    and deep-compare the entire tree per message, which is what made routine
+    background publishes expensive in large sidebars.
+    */
+    groups: nextGroups.filter((group) => {
+      const previousGroup = previousGroupsById.get(group.groupId);
+      return !previousGroup || !haveSameSidebarProjectionValue(previousGroup, group);
+    }),
+    removedGroupIds: [...previousGroupsById.keys()].filter(
+      (groupId) => !nextGroupIds.has(groupId),
+    ),
     removedSessionIds: [...previousSessionIds].filter(
       (sessionId) => !nextSessionIds.has(sessionId),
     ),
   };
+}
+
+function chunkUntrackedLineCountPaths(paths: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let start = 0; start < paths.length; start += GPUI_UNTRACKED_LINE_COUNT_BATCH_SIZE) {
+    chunks.push(paths.slice(start, start + GPUI_UNTRACKED_LINE_COUNT_BATCH_SIZE));
+  }
+  return chunks;
+}
+
+function haveSameSidebarProjectDiffStats(
+  left: SidebarProjectDiffStats,
+  right: SidebarProjectDiffStats,
+): boolean {
+  return (
+    left.additions === right.additions &&
+    left.deletions === right.deletions &&
+    left.files === right.files &&
+    left.isLoading === right.isLoading &&
+    left.isRepo === right.isRepo
+  );
+}
+
+/**
+ * Structural equality for the JSON-serializable sidebar projection values that
+ * cross the runtime -> SidebarApp postMessage boundary. Mirrors the store's
+ * `haveSameSerializableValue` so both sides agree on what "unchanged" means.
+ */
+function haveSameSidebarProjectionValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (typeof left !== typeof right) {
+    return false;
+  }
+  if (typeof left !== "object" || left === null || right === null) {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => haveSameSidebarProjectionValue(value, right[index]));
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => haveSameSidebarProjectionValue(leftRecord[key], rightRecord[key]))
+  );
 }
 
 function gxserverSearchResultToPreviousSessionItem(
