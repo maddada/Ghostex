@@ -3610,11 +3610,12 @@ pub async fn run_session_chat_follower(
     let mut last_successor_scan = std::time::Instant::now();
     // "Adopt none and log once" for an ambiguous successor set.
     let mut logged_successor_ambiguity: Option<String> = None;
-    // Model/effort the follower has published, plus the reconcile counter that
-    // paces the periodic re-detect (~30s at the 1s reconcile interval).
+    // Model/effort the follower has published, plus counters that pace the
+    // fast startup probes and periodic steady-state re-detects.
     let mut published_options: Option<crate::session_chat_options::SessionChatDetectedOptions> =
         None;
     let mut reconcile_ticks: u64 = 0;
+    let mut startup_option_reconcile_ticks: u64 = 0;
 
     loop {
         if resolved.is_none() {
@@ -3812,18 +3813,31 @@ pub async fn run_session_chat_follower(
 
         /*
         CDXC:SessionChatDetectedOptions 2026-08-01:
-        Periodic model/effort probe: the user can switch model straight in the
-        TUI, which no transcript row or hook reports. Piggybacking on the 1s
-        reconcile keeps it free when nobody is subscribed (the loop only runs
-        for followed sessions) and one `zmx history` per ~30s when someone is.
-        A frame is emitted ONLY when the detected value actually changed.
+        Model/effort probe: a newly launched agent can paint its footer just
+        after the seed read cached an empty detection. Probe each 1s reconcile
+        for up to ten seconds until both values arrive, then retain the ~30s
+        steady-state cadence that catches direct TUI changes. The follower only
+        exists while subscribed, and a frame is emitted only when the detected
+        value actually changed.
         */
         reconcile_ticks = reconcile_ticks.wrapping_add(1);
+        let startup_probe_due = published_state_valid
+            && config.options_reader.is_some()
+            && reconcile_ticks > 1
+            && startup_option_reconcile_ticks
+                < crate::session_chat_options::SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS
+            && published_options.as_ref().map_or(true, |options| {
+                options.selection.model.is_none() || options.selection.effort.is_none()
+            });
+        if startup_probe_due {
+            startup_option_reconcile_ticks += 1;
+        }
+        let periodic_probe_due = reconcile_ticks
+            % crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
+            == 0;
         if published_state_valid
             && config.options_reader.is_some()
-            && reconcile_ticks
-                % crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
-                == 0
+            && (startup_probe_due || periodic_probe_due)
         {
             let reader = config.options_reader.clone();
             let detected = tokio::task::spawn_blocking(move || {

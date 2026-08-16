@@ -53,6 +53,11 @@ pub const SESSION_CHAT_OPTION_REDETECT_DELAYS_MS: [u64; 2] = [2_000, 6_000];
 /// Follower reconciles (1s each) between periodic re-detects.
 pub const SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS: u64 = 30;
 
+/// A newly followed agent may paint its model/effort footer just after the
+/// chat's seed read. Re-detect on each of the first ten 1s reconciles until
+/// both values are present instead of leaving a cached startup miss visible.
+pub const SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS: u64 = 10;
+
 // ---------------------------------------------------------------------------
 // Result types (mirror of shared/session-chat.ts SessionChatDetectedOptions)
 // ---------------------------------------------------------------------------
