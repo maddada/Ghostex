@@ -231,7 +231,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-thinking-line::before {
-  font-size: 1.25em;
+  font-size: 2.5em;
 }
 
 .ghostex-chat-thinking-row {
@@ -265,6 +265,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-items: start;
   background: transparent;
   border: 0;
+  border-radius: 3px;
   color: inherit;
   display: grid;
   font: inherit;
@@ -292,9 +293,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-thinking-icon svg {
-  height: 1.09375rem;
+  height: 2.1875rem;
   transition: transform 150ms ease;
-  width: 1.09375rem;
+  width: 2.1875rem;
 }
 
 .ghostex-chat-thinking-text {
@@ -325,6 +326,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-self: flex-start;
   background: transparent;
   border: 0;
+  border-radius: 3px;
   color: var(--muted-foreground);
   display: inline-flex;
   font-size: 0.8125rem;
@@ -412,6 +414,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-self: stretch;
   background: transparent;
   border: 0;
+  border-radius: 3px;
   color: var(--muted-foreground);
   cursor: pointer;
   display: flex;
@@ -435,7 +438,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-work-row {
-  border-radius: 0.375rem;
+  border-radius: 3px;
   min-width: 0;
   padding: 0.125rem;
   width: 100%;
@@ -445,6 +448,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-items: center;
   background: transparent;
   border: 0;
+  border-radius: 3px;
   color: var(--muted-foreground);
   display: flex;
   font-size: 0.75rem;
