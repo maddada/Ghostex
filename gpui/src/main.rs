@@ -936,10 +936,8 @@ const GPUI_PROJECT_BOARD_INSTALL_OR_UPDATE_BEADS_ACTION: &str = "installOrUpdate
 const GPUI_PROJECT_BOARD_INSTALL_OR_UPDATE_BEADS_COMMAND_ID: &str =
     "ghostex.gpui.projectBoard.installOrUpdateBeads";
 const GPUI_PROJECT_BOARD_RUN_BEADS_MIGRATION_ACTION: &str = "runBeadsMigration";
-const GPUI_PROJECT_BOARD_MIGRATE_BEADS_COMMAND_ID: &str =
-    "ghostex.gpui.projectBoard.migrateBeads";
-const GPUI_PROJECT_BOARD_ADOPT_BEADS_COMMAND_ID: &str =
-    "ghostex.gpui.projectBoard.adoptBeads";
+const GPUI_PROJECT_BOARD_MIGRATE_BEADS_COMMAND_ID: &str = "ghostex.gpui.projectBoard.migrateBeads";
+const GPUI_PROJECT_BOARD_ADOPT_BEADS_COMMAND_ID: &str = "ghostex.gpui.projectBoard.adoptBeads";
 const GPUI_PROJECT_BOARD_ADOPT_BEADS_FAST_FORWARD_COMMAND_ID: &str =
     "ghostex.gpui.projectBoard.adoptBeadsFastForward";
 const GPUI_PROJECT_BOARD_RECONCILE_BEADS_FORK_COMMAND_ID: &str =
@@ -34985,9 +34983,7 @@ impl GhostexGpuiApp {
                                 Duration::from_secs(10),
                             )?;
                             gpui_create_remote_project_workspace_terminal(
-                                &config,
-                                &target,
-                                &reference,
+                                &config, &target, &reference,
                             )
                         })
                         .await;
@@ -42076,9 +42072,7 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            "copyRecentProjectPath"
-            | "openRecentProjectInFinder"
-            | "openRecentProjectTerminal" => {
+            "copyRecentProjectPath" | "openRecentProjectInFinder" | "openRecentProjectTerminal" => {
                 self.handle_gpui_app_modal_recent_project_path_action(command_type, command, cx);
             }
             "focusSession" => {
@@ -42411,36 +42405,34 @@ impl GhostexGpuiApp {
                     let context = project_board_bridge_runtime_context_from_snapshot(
                         self.latest_sidebar_project_snapshot.as_ref(),
                     );
-                    let response = match gpui_project_board_command_request(
-                        &request,
-                        context.as_ref(),
-                    ) {
-                        Ok(intent) => {
-                            /*
-                            CDXC:ProjectBoardBeadsCommands 2026-08-14:
-                            The Kanban CEF surface sends only fixed setup/migration selectors.
-                            Rust owns every literal command and the active-project cwd, then uses
-                            the existing command-Action lifecycle so completion comes from the
-                            terminal status file instead of renderer shell text, a timer, or a
-                            hidden subprocess.
-                            */
-                            self.open_gpui_command_action_terminal(
-                                intent.command_id().to_string(),
-                                intent.title().to_string(),
-                                intent.command().to_string(),
-                                false,
-                                false,
-                                window,
-                                cx,
-                            );
-                            serde_json::json!({
-                                "ok": true,
-                                "payload": { "started": true },
-                                "requestId": request_id,
-                            })
-                        }
-                        Err(error) => gpui_project_board_error_response(&request_id, &error),
-                    };
+                    let response =
+                        match gpui_project_board_command_request(&request, context.as_ref()) {
+                            Ok(intent) => {
+                                /*
+                                CDXC:ProjectBoardBeadsCommands 2026-08-14:
+                                The Kanban CEF surface sends only fixed setup/migration selectors.
+                                Rust owns every literal command and the active-project cwd, then uses
+                                the existing command-Action lifecycle so completion comes from the
+                                terminal status file instead of renderer shell text, a timer, or a
+                                hidden subprocess.
+                                */
+                                self.open_gpui_command_action_terminal(
+                                    intent.command_id().to_string(),
+                                    intent.title().to_string(),
+                                    intent.command().to_string(),
+                                    false,
+                                    false,
+                                    window,
+                                    cx,
+                                );
+                                serde_json::json!({
+                                    "ok": true,
+                                    "payload": { "started": true },
+                                    "requestId": request_id,
+                                })
+                            }
+                            Err(error) => gpui_project_board_error_response(&request_id, &error),
+                        };
                     self.dispatch_project_workarea_json_event(
                         slot_key,
                         "ghostex-project-board-response",
@@ -62792,11 +62784,7 @@ impl GhostexGpuiApp {
         }
         self.dispatch_gpui_app_modal_toast("warning", "Command terminal unavailable", message, cx);
         if let Some(action) = project_board_action {
-            self.dispatch_gpui_project_board_command_completed(
-                action,
-                1,
-                cx,
-            );
+            self.dispatch_gpui_project_board_command_completed(action, 1, cx);
         }
         cx.notify();
         changed
@@ -94311,13 +94299,7 @@ fn gpui_prepare_remote_attach_terminal_plan(
             "operation": if wake_session { "wake" } else { "metadata" },
         }),
     );
-    gpui_remote_attach_terminal_plan_from_result(
-        config,
-        target,
-        reference,
-        &result,
-        wake_session,
-    )
+    gpui_remote_attach_terminal_plan_from_result(config, target, reference, &result, wake_session)
 }
 
 fn gpui_remote_attach_terminal_plan_from_result(
@@ -94342,9 +94324,8 @@ fn gpui_remote_attach_terminal_plan_from_result(
     let title = gpui_workspace_attach_title(attach);
     let clipboard_command =
         gpui_remote_ghostex_attach_ssh_command(config, &target.execution_target, reference);
-    let terminal_remote_command = format!(
-        "printf '\\033]2;{TEMP_REMOTE_SSH_READY_TITLE}\\007'; {attach_command}"
-    );
+    let terminal_remote_command =
+        format!("printf '\\033]2;{TEMP_REMOTE_SSH_READY_TITLE}\\007'; {attach_command}");
     let terminal_ssh_command = gpui_remote_ssh_shell_command(
         config,
         &target.execution_target,
@@ -94768,13 +94749,8 @@ fn gpui_create_remote_project_workspace_terminal(
         session_id,
     };
     let plan_started = Instant::now();
-    let plan = gpui_remote_attach_terminal_plan_from_result(
-        config,
-        target,
-        &reference,
-        &result,
-        true,
-    )?;
+    let plan =
+        gpui_remote_attach_terminal_plan_from_result(config, target, &reference, &result, true)?;
     support_logs::append_temporary(
         support_logs::GpuiSupportLog::TerminalFocus,
         "TEMP.remoteNewTerminal.planCompleted",
@@ -95262,9 +95238,7 @@ fn gpui_local_workspace_attach_string<'a>(
         .filter(|value| !value.is_empty() && !value.contains('\0'))
 }
 
-fn gpui_workspace_attach_title(
-    attach: &serde_json::Map<String, serde_json::Value>,
-) -> String {
+fn gpui_workspace_attach_title(attach: &serde_json::Map<String, serde_json::Value>) -> String {
     attach
         .get("session")
         .and_then(|session| session.get("title"))
@@ -110988,9 +110962,7 @@ impl GpuiProjectBoardCommandIntent {
             Self::InstallOrUpdateBeads => GPUI_PROJECT_BOARD_INSTALL_OR_UPDATE_BEADS_COMMAND_ID,
             Self::MigrateBeads => GPUI_PROJECT_BOARD_MIGRATE_BEADS_COMMAND_ID,
             Self::AdoptBeads => GPUI_PROJECT_BOARD_ADOPT_BEADS_COMMAND_ID,
-            Self::AdoptBeadsFastForward => {
-                GPUI_PROJECT_BOARD_ADOPT_BEADS_FAST_FORWARD_COMMAND_ID
-            }
+            Self::AdoptBeadsFastForward => GPUI_PROJECT_BOARD_ADOPT_BEADS_FAST_FORWARD_COMMAND_ID,
             Self::ReconcileBeadsFork => GPUI_PROJECT_BOARD_RECONCILE_BEADS_FORK_COMMAND_ID,
         }
     }
@@ -111045,9 +111017,7 @@ fn gpui_project_board_command_request(
         .ok_or_else(|| "The Beads command request is invalid.".to_string())?;
     if object
         .keys()
-        .any(|key| {
-            !["action", "migrationOption", "projectId", "requestId"].contains(&key.as_str())
-        })
+        .any(|key| !["action", "migrationOption", "projectId", "requestId"].contains(&key.as_str()))
     {
         return Err("The Beads command request is invalid.".to_string());
     }
