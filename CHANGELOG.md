@@ -1,5 +1,19 @@
 # Changelog
 
+## 7.9.0 - 2026-08-16
+
+- Major
+  - Remote terminals now reconnect automatically through network interruptions and system sleep, preserving the remote session and scrollback instead of dropping to a local shell, thanks to @NiTE.
+- Minor
+  - Session Chat adds a per-session Verbose control that remembers whether thinking and tool activity should start expanded, thanks to @banozz.
+  - Default Agent View now switches compatible agents into Chat automatically, remembers each session's chosen view across restarts, and keeps the terminal live in the background.
+  - Session Chat detects model and reasoning options during agent startup instead of leaving them blank until a later refresh.
+  - Supported agents launched inside an existing terminal are recognized as soon as their identity appears, making Chat available without reopening the session.
+  - Chat and terminal action tooltips now show the configured keyboard shortcuts for faster discovery.
+  - Large sidebars reduce CPU and remote traffic by rate-limiting project Git-stat checks and updating only rows whose state changed.
+  - Remote project groups show only the actually focused session instead of also exposing an unrelated first session, thanks to @NiTE.
+  - GitHub releases now link directly to every customer installer and explain how to request the iOS TestFlight through the Ghostex Discord.
+
 ## 7.8.0 - 2026-08-15
 
 - Major
