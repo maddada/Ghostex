@@ -61,6 +61,7 @@ use crate::{
         GXSERVER_CAPABILITIES, GXSERVER_JSON_BODY_LIMIT_BYTES, GXSERVER_PRODUCT,
         GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION,
     },
+    delayed_sends::DelayedSendRuntime,
     domain::{
         read_domain_rpc_params, read_optional_project_id, read_project_id, read_session_id,
         DomainRepository, DomainStateError,
@@ -158,6 +159,7 @@ enum ExistingGxserverState {
 struct AppState {
     auth_token: String,
     automation_runtime: AutomationRuntime,
+    delayed_send_runtime: DelayedSendRuntime,
     /// Serializes `/api/startBoardWork` so concurrent calls for one bead
     /// cannot both observe "no usable link" and create two worker sessions.
     board_start_work_gate: Arc<Mutex<()>>,
@@ -229,13 +231,6 @@ const GXSERVER_SESSION_STATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
 
 const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "assertSidebarCard",
-    /*
-    CDXC:MobileDelayedSend 2026-07-24:
-    Mobile arms Delayed Send / Close After Done through `ghostex delayed-send`
-    and `ghostex close-after-done`; the timers live in the connected sidebar
-    renderer, so those actions must pass this allowlist as renderer commands.
-    */
-    "cancelDelayedSend",
     "clickButton",
     "focusGroup",
     "focusSession",
@@ -253,7 +248,6 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "renameCommand",
     "runCommand",
     "saveAgent",
-    "scheduleDelayedSend",
     "sendMessage",
     "setViewMode",
     "setVisibleCount",
@@ -339,6 +333,7 @@ pub async fn run_gxserver_foreground(
     };
     let migration = create_gxserver_migration_status(&storage);
     let event_hub = GxserverEventHub::new(metadata.server_id.clone());
+    let presentation_event_sequence = Arc::new(Mutex::new(()));
     let (shutdown_tx, _) = broadcast::channel(8);
     let local_host = config.listeners.local.host.clone();
     let local_port = config.listeners.local.port;
@@ -350,10 +345,17 @@ pub async fn run_gxserver_foreground(
             config.listeners.local.host, config.listeners.local.port
         ),
     );
+    let delayed_send_runtime = DelayedSendRuntime::new(
+        paths.clone(),
+        metadata.server_id.clone(),
+        event_hub.clone(),
+        presentation_event_sequence.clone(),
+    );
 
     let state = Arc::new(AppState {
         auth_token: auth.token,
         automation_runtime,
+        delayed_send_runtime,
         board_start_work_gate: Arc::new(Mutex::new(())),
         build_identity,
         config,
@@ -362,7 +364,7 @@ pub async fn run_gxserver_foreground(
         metadata: metadata.clone(),
         migration,
         paths: paths.clone(),
-        presentation_event_sequence: Arc::new(Mutex::new(())),
+        presentation_event_sequence,
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -418,6 +420,7 @@ pub async fn run_gxserver_foreground(
         "type": "serverStarted",
     }));
     state.automation_runtime.start(shutdown_tx.subscribe());
+    state.delayed_send_runtime.start(shutdown_tx.subscribe());
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     let codex_metadata_title_sync_task = spawn_codex_metadata_title_sync_task(&state);
@@ -2648,6 +2651,9 @@ async fn route_http(
         | "/api/markAutomationRunRead" => {
             handle_automation_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/scheduleDelayedSend" | "/api/cancelDelayedSend" | "/api/readDelayedSends" => {
+            handle_delayed_send_http(&state, endpoint.path, request_id, &body_json)
+        }
         "/api/saveScratchPad" => handle_domain_http(
             &state,
             endpoint.path,
@@ -3286,6 +3292,29 @@ async fn handle_automation_http(
     Automation RPCs are first-class gxserver endpoints now. Route them through the modular automation runtime instead of `/api/dispatchRendererCommand` so CLI, macOS, and remote clients do not depend on a native sidebar renderer being connected.
     */
     match handle_automation_endpoint(&state.automation_runtime, &endpoint_path, body).await {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+fn handle_delayed_send_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    match state
+        .delayed_send_runtime
+        .handle_endpoint(&endpoint_path, &params)
+    {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -10159,7 +10188,7 @@ fn schedule_presentation_session_delta(
 ) -> std::result::Result<(), DomainStateError> {
     {
         let _event_sequence = lock_presentation_event_sequence(state)?;
-        let delta = build_presentation_session_delta(repository, project_id, session_id)?;
+        let delta = build_presentation_session_delta(db, repository, project_id, session_id)?;
         let revision = increment_presentation_revision(db)?;
         state.event_hub.broadcast(json!({
             "delta": delta,
@@ -14180,15 +14209,15 @@ mod tests {
     }
 
     #[test]
-    fn renderer_command_actions_include_mobile_session_timer_actions() {
+    fn renderer_command_actions_keep_only_renderer_owned_mobile_timer_actions() {
         /*
-        CDXC:MobileDelayedSend 2026-07-24:
-        `ghostex delayed-send` / `close-after-done` from mobile clients enter
-        gxserver as renderer commands; dropping these from the allowlist
-        silently breaks the mobile session context menu.
+        CDXC:GxserverDelayedSends 2026-08-17:
+        Delayed Send now enters first-class daemon endpoints. Keeping the old
+        renderer actions would arm a second timer in whichever desktop client
+        happened to be connected.
         */
-        assert!(RENDERER_COMMAND_ACTIONS.contains(&"scheduleDelayedSend"));
-        assert!(RENDERER_COMMAND_ACTIONS.contains(&"cancelDelayedSend"));
+        assert!(!RENDERER_COMMAND_ACTIONS.contains(&"scheduleDelayedSend"));
+        assert!(!RENDERER_COMMAND_ACTIONS.contains(&"cancelDelayedSend"));
         assert!(RENDERER_COMMAND_ACTIONS.contains(&"toggleCloseAfterDone"));
     }
 
@@ -16868,18 +16897,27 @@ mod tests {
                 config.listeners.local.host, config.listeners.local.port
             ),
         );
+        let event_hub = GxserverEventHub::new(metadata.server_id.clone());
+        let presentation_event_sequence = Arc::new(Mutex::new(()));
+        let delayed_send_runtime = DelayedSendRuntime::new(
+            paths.clone(),
+            metadata.server_id.clone(),
+            event_hub.clone(),
+            presentation_event_sequence.clone(),
+        );
         Arc::new(AppState {
             auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
             automation_runtime,
+            delayed_send_runtime,
             board_start_work_gate: Arc::new(Mutex::new(())),
             build_identity: "test-build".to_string(),
             config,
-            event_hub: GxserverEventHub::new(metadata.server_id.clone()),
+            event_hub,
             logger: Arc::new(GxserverLogger::new(paths.clone())),
             metadata,
             migration: create_gxserver_migration_status(&storage),
             paths,
-            presentation_event_sequence: Arc::new(Mutex::new(())),
+            presentation_event_sequence,
             repository_clone_jobs: RepositoryCloneJobManager::default(),
             session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
             session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),

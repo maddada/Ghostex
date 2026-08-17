@@ -140,6 +140,9 @@ export type GxserverEndpointPath =
   | "/api/readSidebarProjectCollections"
   | "/api/updateSidebarProjectCollections"
   | "/api/assignProjectToSidebarCollection"
+  | "/api/scheduleDelayedSend"
+  | "/api/cancelDelayedSend"
+  | "/api/readDelayedSends"
   | "/api/readAutomationState"
   | "/api/saveAutomation"
   | "/api/deleteAutomation"
@@ -2052,6 +2055,10 @@ export interface GxserverPresentationSession {
   attention?: GxserverPresentationAttentionState;
   createdAt: string;
   cwd?: string;
+  /** Daemon-owned Delayed Send state; absent when no send is armed. */
+  delayedSendDeadlineAt?: string;
+  delayedSendRemainingLabel?: string;
+  delayedSendRemainingMs?: number;
   /**
    * CDXC:SidebarV2Git 2026-07-29:
    * Branch, diff stats, and change-request state for this session's cwd.
@@ -2083,6 +2090,8 @@ export interface GxserverPresentationSession {
   sessionId: GxserverSessionId;
   sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
   sessionTag?: GxserverSessionTag;
+  sendWhenAllProjectSessionsStopActive?: boolean;
+  sendWhenAgentStopsActive?: boolean;
   /**
    * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
    * Server-owned Sidebar V2 inbox lifecycle. `settledOverride` is the explicit

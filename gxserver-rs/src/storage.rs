@@ -1241,6 +1241,42 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 19;
     "#,
     },
+    Migration {
+        id: "0020_delayed_sends",
+        /*
+        CDXC:GxserverDelayedSends 2026-08-17:
+        Delayed Send is session automation, not renderer state. Keep one
+        durable row beside the gxserver session it targets so the hosting
+        daemon can re-arm it after either the desktop app or gxserver restarts.
+        The row stores only canonical ids, trigger/deadline lifecycle, and an
+        optional bounded failure reason; terminal input and content never enter
+        this table.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS delayed_sends (
+        projectId TEXT NOT NULL,
+        sessionId TEXT NOT NULL,
+        trigger TEXT NOT NULL CHECK (trigger IN ('timer', 'agentStops', 'allAgentsStop')),
+        deadlineAt TEXT,
+        nonWorkingSinceAt TEXT,
+        state TEXT NOT NULL CHECK (state IN ('armed', 'firing', 'completed', 'failed', 'expired')),
+        errorMessage TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (projectId, sessionId),
+        FOREIGN KEY (projectId, sessionId) REFERENCES sessions(projectId, sessionId) ON DELETE CASCADE,
+        CHECK (
+          (trigger = 'timer' AND deadlineAt IS NOT NULL)
+          OR (trigger IN ('agentStops', 'allAgentsStop') AND deadlineAt IS NULL)
+        )
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_delayed_sends_due
+        ON delayed_sends(state, trigger, deadlineAt);
+
+      PRAGMA user_version = 20;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1289,10 +1325,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 19);
+        assert_eq!(user_version, 20);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 19);
+        assert_eq!(schema_migration_count(&db), 20);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1301,6 +1337,7 @@ mod tests {
                 "idx_automation_runs_project_created".to_string(),
                 "idx_automations_due".to_string(),
                 "idx_automations_project_updated".to_string(),
+                "idx_delayed_sends_due".to_string(),
                 "idx_global_sidebar_commands_order".to_string(),
                 "idx_id_allocations_kind_parent".to_string(),
                 "idx_portless_domain_project_identity".to_string(),
@@ -1379,6 +1416,20 @@ mod tests {
                 "settledOverrideAt",
                 "snoozedAt",
                 "snoozedUntil",
+            ]
+        );
+        assert_eq!(
+            table_columns(&db, "delayed_sends"),
+            vec![
+                "projectId",
+                "sessionId",
+                "trigger",
+                "deadlineAt",
+                "nonWorkingSinceAt",
+                "state",
+                "errorMessage",
+                "createdAt",
+                "updatedAt",
             ]
         );
         assert_eq!(

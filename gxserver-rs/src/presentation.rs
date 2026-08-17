@@ -2,6 +2,9 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
 use crate::{
+    delayed_sends::{
+        insert_delayed_send_presentation_payload, insert_delayed_send_session_projection,
+    },
     domain::{DomainRepository, DomainStateError},
     ids::is_gxserver_session_id,
     portless::read_portless_presentation_payload,
@@ -48,6 +51,7 @@ pub fn read_presentation_snapshot(
         read_presentation_revision(db)?,
         sidebar_v2_selected,
     );
+    insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     insert_auto_settle_window_presentation_payload(&mut snapshot, auto_settle_after_days);
     insert_portless_presentation_payload(&mut snapshot, db);
     insert_workspace_groups_presentation_payload(&mut snapshot, db)?;
@@ -105,6 +109,7 @@ pub fn build_presentation_project_delta(
 }
 
 pub fn build_presentation_session_delta(
+    db: &Connection,
     repository: &DomainRepository<'_>,
     project_id: &str,
     session_id: &str,
@@ -127,13 +132,15 @@ pub fn build_presentation_session_delta(
             "type": "sessionRemoved",
         }));
     }
+    let mut presentation_session = project_presentation_session(
+        &project,
+        &default_group_id(project_id),
+        &session,
+        &now_iso(),
+    );
+    insert_delayed_send_session_projection(db, &mut presentation_session)?;
     Ok(json!({
-        "session": project_presentation_session(
-            &project,
-            &default_group_id(project_id),
-            &session,
-            &now_iso(),
-        ),
+        "session": presentation_session,
         "type": "sessionPresentationChanged",
     }))
 }
