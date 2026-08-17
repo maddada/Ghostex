@@ -141,11 +141,10 @@ Write your own skills that use the /ghostex-agent-orchestration skill.
 
 ### Notifications and status
 
-Ghostex supports notification sounds, pets, menu bar indicators (running/done agents), and phone app notifications.<br/>
+Ghostex supports notification sounds, menu bar indicators (running/done agents), and phone app notifications.<br/>
 See how many agents are running with just a glance at your menu bar. Click to jump to an agent!
 
 <img width="300" alt="2026-06-23_Ghostex_15-37-53@2x" src="https://github.com/user-attachments/assets/91885b03-efc4-40cd-84ad-b33523185322" />
-<img width="300" alt="Ghostex notification indicator" src="https://github.com/user-attachments/assets/ad0f7af5-b0e9-4b24-988c-cb6bf02c6c9f" />
 
 ## Highlights
 
