@@ -1,5 +1,16 @@
 # Changelog
 
+## 7.10.0 - 2026-08-17
+
+- Major
+  - Delayed Send is now owned by the machine hosting the session, so timers and agent-stop triggers keep counting down and still fire after Ghostex is closed or reconnected, including for remote sessions.
+- Minor
+  - Agent sessions set to open in Chat now start directly in Chat with the composer focused instead of briefly showing the terminal first.
+  - Clicking inside a chat now moves keyboard focus there instead of leaving typed keys going to the terminal behind it.
+  - Narrow chat panes now place session options and prompt actions on separate rows and widen chat search, so the controls stay reachable instead of crowding each other.
+  - Android chat now uses the full screen width and reserves Enter for new lines, keeping sending a deliberate tap.
+  - Opening an existing conversation no longer flashes the new-session welcome screen while the transcript loads.
+
 ## 7.9.1 - 2026-08-16
 
 - Major
