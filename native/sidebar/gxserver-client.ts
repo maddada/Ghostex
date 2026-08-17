@@ -1326,6 +1326,12 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "save sidebar project collections";
     case "/api/assignProjectToSidebarCollection":
       return "move the project into its sidebar group";
+    case "/api/scheduleDelayedSend":
+      return "schedule delayed send";
+    case "/api/cancelDelayedSend":
+      return "cancel delayed send";
+    case "/api/readDelayedSends":
+      return "load delayed sends";
     case "/api/readAutomationState":
       return "load automation state";
     case "/api/saveAutomation":
