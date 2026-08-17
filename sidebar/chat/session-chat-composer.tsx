@@ -1,5 +1,5 @@
-// Session chat composer (upstream chat spec §1.1/§11.6 port). Enter sends,
-// Shift+Enter inserts a newline, Escape interrupts, the IME guard swallows
+// Session chat composer (upstream chat spec §1.1/§11.6 port). Enter sends by
+// default, hosts can reserve it for newlines, Escape interrupts, the IME guard swallows
 // composition Enter, and ArrowUp/Down recall draft history. Typing a
 // line-leading "/" opens the slash-command picker (per-agent catalog):
 // ArrowUp/Down highlight, Tab/Enter complete, Enter on an exact match sends,
@@ -92,6 +92,8 @@ export interface SessionChatComposerInputApi {
 export interface SessionChatComposerProps {
   disabled?: boolean;
   isWorking: boolean;
+  /** Whether plain Enter sends instead of inserting a newline. */
+  sendOnEnter?: boolean;
   /** Stable conversation identity used to restore this session's unsent draft. */
   sessionKey?: string;
   placeholder?: string;
@@ -326,6 +328,7 @@ export const SessionChatComposer = forwardRef<
     onStash,
     optionPills,
     placeholder,
+    sendOnEnter = true,
     sessionKey,
     slashCommands,
     slashHeading,
@@ -806,7 +809,7 @@ export const SessionChatComposer = forwardRef<
       completeSlashCommand(highlighted);
       return true;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (sendOnEnter && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       // A fully typed (or previously completed) command sends immediately;
       // a partial token completes first so arguments can still be added.
@@ -852,7 +855,10 @@ export const SessionChatComposer = forwardRef<
       });
       return true;
     }
-    if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+    if (
+      event.key === "Tab" ||
+      (sendOnEnter && event.key === "Enter" && !event.shiftKey)
+    ) {
       event.preventDefault();
       completeSkillMention(highlighted);
       return true;
@@ -875,7 +881,7 @@ export const SessionChatComposer = forwardRef<
       onInterrupt();
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (sendOnEnter && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       send();
       return;
@@ -1126,14 +1132,14 @@ export const SessionChatComposer = forwardRef<
           />
         )}
         </div>
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-0.5">
+        <div className="ghostex-chat-composer-footer flex w-full items-center justify-between gap-2">
+          <div className="ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5">
             {optionPills}
           </div>
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ghostex-chat-composer-footer-actions ml-auto flex items-center gap-1.5">
             {onStash ? (
               <AppTooltip content="Stash prompt">
-                <span className="inline-flex">
+                <span className="ghostex-chat-stash-control inline-flex">
                   <Button
                     aria-label="Stash prompt"
                     className="ghostex-chat-footer-control rounded-full"

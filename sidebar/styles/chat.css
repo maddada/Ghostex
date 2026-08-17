@@ -133,7 +133,8 @@
 
 @media (max-width: 700px) {
   .ghostex-session-chat-scope [data-slot="message-scroller-content"] {
-    max-width: calc(100% - 20px);
+    max-width: 100%;
+    width: 100%;
   }
 }
 
@@ -221,6 +222,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: grid;
   grid-template-columns: 0.375rem minmax(0, 1fr);
   min-width: 0;
+  padding-inline-start: 6.5px;
   width: 100%;
 }
 
@@ -260,6 +262,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: grid;
   grid-template-columns: 0.375rem minmax(0, 1fr);
   min-width: 0;
+  padding-inline-start: 6.5px;
 }
 
 .ghostex-chat-thinking-line::before {
@@ -274,7 +277,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-items: start;
   background: transparent;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px !important;
   color: inherit;
   display: grid;
   font: inherit;
@@ -284,6 +287,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   line-height: inherit;
   min-width: 0;
   padding: 0;
+  padding-inline: 6.5px 5px;
   text-align: left;
   width: 100%;
 }
@@ -322,7 +326,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-thinking-detail {
-  margin-inline-start: 0.03125rem;
+  margin-inline-start: calc(0.03125rem + 6.5px);
 }
 
 .ghostex-chat-completed-turn,
@@ -343,7 +347,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-self: flex-start;
   background: transparent;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px !important;
   color: var(--muted-foreground);
   display: inline-flex;
   font-size: 0.8125rem;
@@ -431,7 +435,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-self: stretch;
   background: transparent;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px !important;
   color: var(--muted-foreground);
   cursor: pointer;
   display: flex;
@@ -455,7 +459,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-work-row {
-  border-radius: 3px;
+  border-radius: 4px !important;
   min-width: 0;
   padding: 0.125rem;
   width: 100%;
@@ -465,7 +469,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px !important;
   color: var(--muted-foreground);
   display: flex;
   font-size: 0.75rem;
@@ -473,6 +477,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   line-height: 1.25rem;
   min-width: 0;
   padding: 0;
+  padding-inline: 2px 5px;
   text-align: left;
   width: 100%;
 }
@@ -616,6 +621,46 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-composer {
   background: #242424;
+}
+
+/* The chat pane can be much narrower than the app window, so lay out the
+   footer from the composer's own width instead of relying on viewport media
+   queries. Narrow composers use one row for session options and a second row
+   for prompt actions, keeping both groups complete and non-overlapping. */
+.ghostex-chat-composer {
+  container: ghostex-chat-composer / inline-size;
+}
+
+.ghostex-chat-composer-footer-options {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.ghostex-chat-composer-footer-actions {
+  flex: 0 0 auto;
+}
+
+@container ghostex-chat-composer (max-width: 28rem) {
+  .ghostex-chat-composer-footer {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  .ghostex-chat-composer-footer-options {
+    flex-basis: 100%;
+    overflow: visible;
+  }
+
+  .ghostex-chat-composer-footer-actions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+}
+
+@container ghostex-chat-composer (max-width: 19rem) {
+  .ghostex-chat-agent-identity {
+    display: none;
+  }
 }
 
 .ghostex-session-chat-scope[data-chat-theme="dark"]

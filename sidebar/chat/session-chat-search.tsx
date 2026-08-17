@@ -331,11 +331,10 @@ export function SessionChatSearch({
 
   return (
     <div
-      className="absolute right-3 top-3 z-30 rounded-lg border border-border bg-popover p-1 shadow-lg"
+      className="absolute inset-x-3 top-3 z-30 rounded-lg border border-border bg-popover p-1 shadow-lg"
       data-session-chat-typing-redirect-ignore="true"
       data-session-chat-search-ignore="true"
       role="search"
-      style={{ width: "min(21rem, calc(75% - 1.125rem))" }}
     >
       <InputGroup className="rounded-lg bg-background">
         <InputGroupInput
