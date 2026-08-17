@@ -24903,7 +24903,8 @@ pub struct GhostexGpuiApp {
     /// detection in the same shell slot is still a fresh eligibility edge.
     agents_chat_auto_switch_observed_sessions: HashSet<TerminalSessionId>,
     agents_chat_auto_switch_preference: GpuiPreferredAgentInterface,
-    /// One-shot launch requests waiting for the hidden terminal runtime to exist.
+    /// One-shot Chat launch requests waiting for a shell-session mapping. The
+    /// mapped session enters Chat mode before any terminal focus handoff.
     pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
     agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
     /// Chat surfaces whose page-side composer bridge has registered.
@@ -35373,6 +35374,7 @@ impl GhostexGpuiApp {
             self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key);
         let project_editor_mode = self.active_mode;
         self.agents_workspace.select_tab(pane_id, session_id);
+        self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         if keep_editor_mode {
             self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
                 project_editor_mode,
@@ -35580,6 +35582,7 @@ impl GhostexGpuiApp {
                 self.agents_workspace
                     .select_tab(placed_pane_id, existing_session_id);
                 let workspace_key = GpuiWorkspaceTerminalSessionKey::Remote(key.clone());
+                self.activate_preferred_agents_chat_launch_intent(existing_session_id, cx);
                 if self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key)
                 {
                     let project_editor_mode = self.active_mode;
@@ -35681,6 +35684,7 @@ impl GhostexGpuiApp {
         }
         self.remote_attach_sessions.insert(key.clone(), session_id);
         let workspace_key = GpuiWorkspaceTerminalSessionKey::Remote(key.clone());
+        self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         if self.should_keep_project_editor_open_for_workspace_terminal_focus(&workspace_key) {
             let project_editor_mode = self.active_mode;
             self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
@@ -39570,6 +39574,22 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
+        CDXC:GPUIRemoteDelayedSend 2026-08-17:
+        Remote sidebar rows carry their canonical machine/project/session id,
+        but they do not belong to a local command tab or local Agents mapping.
+        Return that bounded command to the sidebar runtime so it can submit the
+        durable trigger to the gxserver that hosts the session.
+        */
+        if command
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .and_then(gpui_remote_attach_session_reference_from_project_id)
+            .is_some()
+        {
+            self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(command.clone()), cx);
+            return;
+        }
+        /*
         CDXC:GPUICommandDelayedSend 2026-06-25-23:04:
         `scheduleDelayedSend` is a direct command-session sidebar command, so resolve its external `G{u64}` sessionId through the shared live command-tab bridge before reading delayMs. Malformed, legacy numeric, stale, missing, and orphan ids must no-op without falling back to the focused command group or surfacing duration validation for the wrong target.
         */
@@ -39668,6 +39688,15 @@ impl GhostexGpuiApp {
         command: &serde_json::Map<String, serde_json::Value>,
         cx: &mut gpui::Context<Self>,
     ) {
+        if command
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .and_then(gpui_remote_attach_session_reference_from_project_id)
+            .is_some()
+        {
+            self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(command.clone()), cx);
+            return;
+        }
         /*
         CDXC:GPUICommandDelayedSend 2026-06-25-23:04:
         Cancel submissions from the shared sidebar/app-modal bridge must target a live command tab, not a stale stored command-session row. Resolve the external `G{u64}` sessionId through the shared app-modal command bridge so malformed, legacy numeric, missing, orphan, or stale ids no-op before any runtime timer is cleared.
@@ -40102,93 +40131,81 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        if command
-            .get("sendWhenAllProjectSessionsStop")
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-        {
-            let Some(project_id) = self
-                .local_workspace_key_for_shell_session(session_id)
-                .map(|key| key.project_id)
-            else {
-                self.dispatch_gpui_app_modal_toast(
-                    "warning",
-                    "Delayed Send unavailable",
-                    "The selected terminal is not attached to a project.",
-                    cx,
-                );
-                return;
-            };
-            if self.schedule_gpui_agents_send_when_stopped(
-                session_id,
-                GpuiAgentsSendWhenStoppedScope::Project(project_id),
-                cx,
-            ) {
-                self.dispatch_gpui_app_modal_toast(
-                    "info",
-                    "Delayed Send scheduled",
-                    "Presses Enter after all agents in the project have finished working for 10 seconds.",
-                    cx,
-                );
-            } else {
-                self.dispatch_gpui_app_modal_toast(
-                    "warning",
-                    "Delayed Send unavailable",
-                    "Select a running terminal before scheduling Delayed Send.",
-                    cx,
-                );
-            }
-            return;
-        }
-        if command
-            .get("sendWhenAgentStops")
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-        {
-            if self.schedule_gpui_agents_send_when_stopped(
-                session_id,
-                GpuiAgentsSendWhenStoppedScope::Session,
-                cx,
-            ) {
-                self.dispatch_gpui_app_modal_toast(
-                    "info",
-                    "Delayed Send scheduled",
-                    "Presses Enter after the agent has finished working for 10 seconds.",
-                    cx,
-                );
-            } else {
-                self.dispatch_gpui_app_modal_toast(
-                    "warning",
-                    "Delayed Send unavailable",
-                    "Select a running terminal before scheduling Delayed Send.",
-                    cx,
-                );
-            }
-            return;
-        }
-        let Some(delay_ms) = command.get("delayMs").and_then(serde_json::Value::as_u64) else {
-            return;
-        };
-        let Some(duration) = gpui_command_delayed_send_duration_from_millis(delay_ms) else {
+        let Some(key) = self.local_workspace_key_for_shell_session(session_id) else {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Delayed Send unavailable",
-                "Choose a Delayed Send timer between 1 minute and 24 days.",
+                "The selected terminal is not attached to a gxserver session.",
                 cx,
             );
             return;
         };
-        if self.schedule_gpui_agents_delayed_send(session_id, duration, cx) {
-            let description = format!(
-                "Presses Enter in {}.",
-                gpui_command_delayed_send_duration_label(duration)
+        let delay_ms = command.get("delayMs").and_then(serde_json::Value::as_u64);
+        let send_when_agent_stops = command
+            .get("sendWhenAgentStops")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true);
+        let send_when_all_project_sessions_stop = command
+            .get("sendWhenAllProjectSessionsStop")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true);
+        if usize::from(delay_ms.is_some())
+            + usize::from(send_when_agent_stops)
+            + usize::from(send_when_all_project_sessions_stop)
+            != 1
+            || delay_ms.is_some_and(|delay_ms| {
+                gpui_command_delayed_send_duration_from_millis(delay_ms).is_none()
+            })
+        {
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                "Delayed Send unavailable",
+                "Choose exactly one valid Delayed Send trigger.",
+                cx,
             );
-            self.dispatch_gpui_app_modal_toast("info", "Delayed Send scheduled", &description, cx);
+            return;
+        }
+        let params = serde_json::json!({
+            "projectId": key.project_id,
+            "sessionId": key.session_id,
+            "delayMs": delay_ms,
+            "sendWhenAgentStops": send_when_agent_stops,
+            "sendWhenAllProjectSessionsStop": send_when_all_project_sessions_stop,
+        });
+        if gpui_gxserver_rpc_result(
+            "/api/scheduleDelayedSend",
+            &params,
+            Duration::from_secs(5),
+        )
+        .is_ok()
+        {
+            self.agents_delayed_send_timers.remove(&session_id);
+            self.agents_send_when_stopped_watchers.remove(&session_id);
+            self.refresh_sidebar_agents_delayed_sends_if_changed(cx);
+            self.persist_shell_layout_state();
+            let description = if send_when_agent_stops {
+                "Presses Enter after the agent has finished working for 10 seconds.".to_string()
+            } else if send_when_all_project_sessions_stop {
+                "Presses Enter after all agents in the project have finished working for 10 seconds."
+                    .to_string()
+            } else {
+                let duration = Duration::from_millis(delay_ms.unwrap_or_default());
+                format!(
+                    "Presses Enter in {}.",
+                    gpui_command_delayed_send_duration_label(duration)
+                )
+            };
+            self.dispatch_gpui_app_modal_toast(
+                "info",
+                "Delayed Send scheduled",
+                &description,
+                cx,
+            );
         } else {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Delayed Send unavailable",
-                "Select a running terminal before scheduling Delayed Send.",
+                "gxserver could not persist this Delayed Send.",
                 cx,
             );
         }
@@ -40203,6 +40220,17 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        let Some(key) = self.local_workspace_key_for_shell_session(session_id) else {
+            return;
+        };
+        let response = gpui_gxserver_rpc_result(
+            "/api/cancelDelayedSend",
+            &serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            }),
+            Duration::from_secs(5),
+        );
         let removed_timer = self
             .agents_delayed_send_timers
             .remove(&session_id)
@@ -40211,7 +40239,11 @@ impl GhostexGpuiApp {
             .agents_send_when_stopped_watchers
             .remove(&session_id)
             .is_some();
-        if removed_timer || removed_watcher {
+        let changed = response
+            .ok()
+            .and_then(|result| result.get("changed").and_then(serde_json::Value::as_bool))
+            .unwrap_or(false);
+        if changed || removed_timer || removed_watcher {
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
             self.refresh_sidebar_agents_delayed_sends_if_changed(cx);
             self.persist_shell_layout_state();
@@ -43618,6 +43650,21 @@ impl GhostexGpuiApp {
         }
     }
 
+    fn request_project_editor_companion_session_text_focus_handoff(
+        &mut self,
+        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.agents_chat_mode_sessions.contains(&slot_id.session_id) {
+            self.pending_project_editor_companion_terminal_text_focus_slot = None;
+            self.pending_session_chat_composer_focus = Some(slot_id.session_id);
+            self.reconcile_agents_chat_surfaces(cx);
+        } else {
+            self.pending_session_chat_composer_focus = None;
+            self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
+        }
+    }
+
     fn show_agents_session_chat_mode(
         &mut self,
         session_id: TerminalSessionId,
@@ -43655,6 +43702,37 @@ impl GhostexGpuiApp {
         {
             false
         }
+    }
+
+    fn activate_preferred_agents_chat_launch_intent(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(key) = self.workspace_terminal_key_for_shell_session(session_id) else {
+            return false;
+        };
+        if !self.pending_agents_chat_launch_intents.contains(&key) {
+            return false;
+        }
+        // The projected agent icon is the compatibility authority available
+        // before the hidden terminal runtime starts. Unsupported terminals
+        // keep their normal terminal body and focus behavior.
+        if self
+            .agents_session_chat_transcript_agent(session_id)
+            .is_none()
+        {
+            self.pending_agents_chat_launch_intents.remove(&key);
+            return false;
+        }
+
+        self.pending_agents_chat_launch_intents.remove(&key);
+        self.agents_chat_mode_sessions.insert(session_id);
+        self.pending_agents_terminal_text_focus_slot = None;
+        self.pending_project_editor_companion_terminal_text_focus_slot = None;
+        self.pending_session_chat_composer_focus = Some(session_id);
+        self.reconcile_agents_chat_surfaces(cx);
+        true
     }
 
     fn reconcile_preferred_agents_chat_launch_intents(&mut self, cx: &mut gpui::Context<Self>) {
@@ -45531,7 +45609,7 @@ impl GhostexGpuiApp {
                 true,
             );
             if let Some(slot_id) = self.project_editor_companion_terminal_slot_for_mode(mode) {
-                self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
+                self.request_project_editor_companion_session_text_focus_handoff(slot_id, cx);
             }
             self.set_sidebar_focus_border_handoff_target(shell_session_id);
         }
@@ -45883,6 +45961,7 @@ impl GhostexGpuiApp {
                 "sessionId": key.session_id,
             }),
         );
+        self.activate_preferred_agents_chat_launch_intent(shell_session_id, cx);
         if keep_editor_mode {
             let workspace_key = GpuiWorkspaceTerminalSessionKey::Local(key.clone());
             self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
@@ -45980,6 +46059,7 @@ impl GhostexGpuiApp {
                 return false;
             }
         };
+        self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         if keep_editor_mode {
             self.seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
                 project_editor_mode,
@@ -46065,6 +46145,7 @@ impl GhostexGpuiApp {
                 return false;
             }
         };
+        self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         self.active_mode = TitlebarMode::Agents;
         self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
         self.set_sidebar_focus_border_handoff_target(session_id);
@@ -48286,6 +48367,7 @@ impl GhostexGpuiApp {
             if !suppressed_by_programmatic_focus {
                 self.reconcile_project_workarea_cef_keyboard_ownership(window, cx);
                 self.reconcile_browser_cef_keyboard_ownership(window, cx);
+                self.reconcile_session_chat_cef_keyboard_ownership(window, cx);
                 if self.reconcile_shell_focus_with_first_responder_target() {
                     self.persist_shell_layout_state();
                     cx.notify();
@@ -48298,6 +48380,7 @@ impl GhostexGpuiApp {
             suppressed_by_programmatic_focus;
         self.reconcile_project_workarea_cef_keyboard_ownership(window, cx);
         self.reconcile_browser_cef_keyboard_ownership(window, cx);
+        self.reconcile_session_chat_cef_keyboard_ownership(window, cx);
         if !suppressed_by_programmatic_focus {
             if self.reconcile_shell_focus_with_first_responder_target() {
                 self.persist_shell_layout_state();
@@ -48514,6 +48597,34 @@ impl GhostexGpuiApp {
             return;
         }
         let Some(surface) = self.browser_surfaces.get(&tab_id).cloned() else {
+            return;
+        };
+        let focus_handle = surface.read(cx).focus_handle.clone();
+        if !focus_handle.is_focused(window) {
+            focus_handle.focus(window, cx);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn reconcile_session_chat_cef_keyboard_ownership(
+        &self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUISessionChatCefKeyboardOwnership 2026-08-17:
+        Chat body clicks reach Chromium before GPUI's hitbox, so AppKit can
+        focus Chat while GPUI remains focused on the command terminal. Mirror
+        the other CEF surfaces by synchronizing the existing GPUI handle once
+        the registered Chat view owns native focus. Do not force the composer;
+        the original Chromium click target remains unchanged.
+        */
+        let FirstResponderTarget::CefSurface(FirstResponderCefSurface::SessionChat(session_id)) =
+            self.first_responder_target
+        else {
+            return;
+        };
+        let Some(surface) = self.agents_chat_surfaces.get(&session_id) else {
             return;
         };
         let focus_handle = surface.read(cx).focus_handle.clone();
@@ -58359,9 +58470,9 @@ impl GhostexGpuiApp {
             .reconcile_with_workspace(&self.agents_workspace);
         self.sync_agents_gpui_engine_terminals(cx);
         /*
-        A chat-preferred launch waits until the terminal record has consumed
-        its attach payload. Switching now keeps that live terminal behind the
-        chat CEF surface while avoiding an extra visible terminal frame.
+        Reconcile any Chat launch intent that could not be consumed when its
+        shell mapping was first created (for example, until agent metadata
+        arrived). The terminal runtime remains live behind the Chat surface.
         */
         self.reconcile_preferred_agents_chat_launch_intents(cx);
         prune_agents_terminal_startup_body_slot_geometries(
@@ -63921,6 +64032,7 @@ impl GhostexGpuiApp {
 
     fn finish_project_editor_companion_resize_drag(&mut self, cx: &mut gpui::Context<Self>) {
         if self.project_editor_companion_drag.take().is_some() {
+            self.clear_project_editor_companion_divider_hover_state();
             self.persist_shell_layout_state();
             cx.notify();
         }
@@ -64014,6 +64126,7 @@ impl GhostexGpuiApp {
 
     fn finish_project_editor_companion_split_resize_drag(&mut self, cx: &mut gpui::Context<Self>) {
         if self.project_editor_companion_split_drag.take().is_some() {
+            self.clear_project_editor_companion_split_divider_hover_state();
             self.persist_shell_layout_state();
             cx.notify();
         }
@@ -76166,7 +76279,7 @@ impl GhostexGpuiApp {
 
     fn handle_sidebar_drag_mouse_up(
         &mut self,
-        event: &MouseUpEvent,
+        _event: &MouseUpEvent,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -76175,14 +76288,13 @@ impl GhostexGpuiApp {
             cx.stop_propagation();
         }
         self.finish_sidebar_drag(cx);
-        let hovering = self.sidebar_divider_contains_position(event.position, window);
-        self.set_sidebar_divider_hovering(hovering, cx);
     }
 
     fn finish_sidebar_drag(&mut self, cx: &mut gpui::Context<Self>) {
         if self.sidebar_drag.take().is_none() {
             return;
         }
+        self.clear_sidebar_divider_hover_state();
         persist_sidebar_width_setting(self.sidebar_width);
         cx.notify();
     }
@@ -76197,6 +76309,10 @@ impl GhostexGpuiApp {
 
     fn cancel_sidebar_divider_interaction_state(&mut self) {
         self.sidebar_drag = None;
+        self.clear_sidebar_divider_hover_state();
+    }
+
+    fn clear_sidebar_divider_hover_state(&mut self) {
         self.sidebar_divider_hovering = false;
         self.sidebar_divider_hover_visible = false;
         self.sidebar_divider_hover_epoch = self.sidebar_divider_hover_epoch.wrapping_add(1);
@@ -90649,6 +90765,8 @@ fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
         "/api/createSession"
             | "/api/createAgentSession"
             | "/api/forkSession"
+            | "/api/scheduleDelayedSend"
+            | "/api/cancelDelayedSend"
             | "/api/sleepSession"
             | "/api/wakeSession"
             | "/api/killSession"
@@ -90721,6 +90839,8 @@ fn gpui_remote_sidebar_request_params(
         | "/api/removeProject"
         | "/api/listProjectWorktrees"
         | "/api/mergeWorktreeIntoMain" => gpui_remote_sidebar_project_id_params(params),
+        "/api/scheduleDelayedSend" => gpui_remote_sidebar_delayed_send_params(params, false),
+        "/api/cancelDelayedSend" => gpui_remote_sidebar_delayed_send_params(params, true),
         "/api/settleSession" | "/api/unsettleSession" | "/api/unsnoozeSession" => {
             gpui_remote_sidebar_session_lifecycle_params(params, None)
         }
@@ -90737,6 +90857,57 @@ fn gpui_remote_sidebar_request_params(
         }
         _ => Some(params),
     }
+}
+
+fn gpui_remote_sidebar_delayed_send_params(
+    params: serde_json::Value,
+    cancel: bool,
+) -> Option<serde_json::Value> {
+    let object = params.as_object()?;
+    let project_id = object
+        .get("projectId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| gpui_remote_sidebar_project_id_allowed(value))?;
+    let session_id = object
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| gpui_remote_sidebar_session_id_allowed(value))?;
+    let mut shaped = serde_json::Map::new();
+    shaped.insert("projectId".to_string(), serde_json::json!(project_id));
+    shaped.insert("sessionId".to_string(), serde_json::json!(session_id));
+    if cancel {
+        return Some(serde_json::Value::Object(shaped));
+    }
+    let delay_ms = object.get("delayMs").and_then(serde_json::Value::as_u64);
+    let send_when_agent_stops = object
+        .get("sendWhenAgentStops")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true);
+    let send_when_all_project_sessions_stop = object
+        .get("sendWhenAllProjectSessionsStop")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true);
+    if usize::from(delay_ms.is_some())
+        + usize::from(send_when_agent_stops)
+        + usize::from(send_when_all_project_sessions_stop)
+        != 1
+    {
+        return None;
+    }
+    if let Some(delay_ms) = delay_ms {
+        gpui_command_delayed_send_duration_from_millis(delay_ms)?;
+        shaped.insert("delayMs".to_string(), serde_json::json!(delay_ms));
+    } else if send_when_agent_stops {
+        shaped.insert("sendWhenAgentStops".to_string(), serde_json::Value::Bool(true));
+    } else {
+        shaped.insert(
+            "sendWhenAllProjectSessionsStop".to_string(),
+            serde_json::Value::Bool(true),
+        );
+    }
+    Some(serde_json::Value::Object(shaped))
 }
 
 fn gpui_remote_sidebar_project_id_params(params: serde_json::Value) -> Option<serde_json::Value> {
@@ -91305,6 +91476,13 @@ fn gpui_remote_sidebar_response_payload(
         }
         "/api/listRecentProjects" => gpui_remote_sidebar_recent_projects_response_payload(result),
         "/api/readPresentationSnapshot" => result,
+        "/api/scheduleDelayedSend" => serde_json::json!({}),
+        "/api/cancelDelayedSend" => serde_json::json!({
+            "changed": result
+                .get("changed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        }),
         "/api/updateSidebarProjectCollections" => result
             .get("sidebarProjectCollections")
             .and_then(gpui_remote_sidebar_project_collections_state)
