@@ -520,6 +520,12 @@ in Ghostex's own Browser view (Shift+click asks for the OS browser instead),
 and a file path opens in the project's Docs view when Docs can show it, else in
 the Code view. Both ride the same host-action bridge as the button cluster; the
 page never navigates itself, since chat.html has nowhere to navigate to.
+
+CDXC:GPUISessionChatLinks 2026-08-18:
+Where a web URL actually lands is the host's call, not this page's: it reads the
+"Open links in embedded browser" Browser setting, the same one Command-clicked
+terminal links use, and hands the URL to the system default browser when that
+setting is off.
 */
 const GPUI_SESSION_CHAT_HOST_LINKS: SessionChatHostLinks = {
   openUrl: (url, { external }) => postSessionChatHostAction("openLink", { external, url }),

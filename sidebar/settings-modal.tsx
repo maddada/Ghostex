@@ -1765,8 +1765,8 @@ export function SettingsModal({
       {
         key: "openTerminalLinksInApp",
         subtitle:
-          "Open Command-clicked terminal web links as tabs in the project Browser view instead of the system browser.",
-        title: "Open terminal links in embedded browser",
+          "Open web links from terminal output (Command-click) and session chat as tabs in the project Browser view instead of the system default browser.",
+        title: "Open links in embedded browser",
       },
     ]),
     editor: getSettingsSectionSearch(settingsSearchQuery, "Editor", [
@@ -4076,11 +4076,15 @@ export function SettingsModal({
                * Browser view by default, and the in-app toast points users at
                * this toggle. Keep it a normal visible Browser setting so the
                * toast's "change in settings" hint stays discoverable.
+               *
+               * CDXC:GPUISessionChatLinks 2026-08-18:
+               * The same toggle also routes web links clicked in session chat,
+               * so one Browser setting covers every agent-sent web link.
                */
               <ToggleField
                 checked={draft.openTerminalLinksInApp}
-                description="Open Command-clicked terminal web links as tabs in the project Browser view instead of the system browser."
-                label="Open terminal links in embedded browser"
+                description="Open web links from terminal output (Command-click) and session chat as tabs in the project Browser view instead of the system default browser."
+                label="Open links in embedded browser"
                 {...getSettingModificationProps("openTerminalLinksInApp")}
                 onChange={(checked) => updateDraft("openTerminalLinksInApp", checked)}
               />

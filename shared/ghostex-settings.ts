@@ -841,6 +841,12 @@ export type ghostexSettings = {
    * Browser view by default. Turning this off restores handing web links to
    * the system default browser. File paths and non-web schemes always keep
    * the external NSWorkspace route regardless of this setting.
+   *
+   * CDXC:GPUISessionChatLinks 2026-08-18:
+   * Web links clicked in session chat follow the same switch, so this is the
+   * single answer to "where do agent-sent web links open". Chat file links
+   * still open in Docs or Code, and Shift+click still forces the system
+   * default browser while the setting is on.
    */
   openTerminalLinksInApp: boolean;
   /**
@@ -1479,6 +1485,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * In-app terminal link routing is the default so cmd-clicked web links land
    * in the project Browser view unless the user opts back into the system
    * browser in Settings.
+   *
+   * CDXC:GPUISessionChatLinks 2026-08-18:
+   * Session chat web links share this default for the same reason.
    */
   openTerminalLinksInApp: true,
   /**

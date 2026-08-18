@@ -30024,9 +30024,11 @@ impl GhostexGpuiApp {
         /*
         CDXC:GPUISessionChatLinks 2026-08-03:
         Conversation links open in the app's own surfaces: a web URL goes to
-        the integrated Browser (Shift+click asks for the OS browser instead),
-        and a file path goes to Docs or Code. Both leave the chat pane behind
-        by design, so neither needs the focused-session routing below.
+        the integrated Browser while "Open links in embedded browser" is on
+        (Shift+click, or that setting off, asks for the system default browser
+        instead), and a file path goes to Docs or Code. Both leave the chat
+        pane behind by design, so neither needs the focused-session routing
+        below.
         */
         if action == "openLink" {
             let Some(url) = message.get("url").and_then(serde_json::Value::as_str) else {
@@ -30291,6 +30293,12 @@ impl GhostexGpuiApp {
     `ghostex browser open` (same-origin reuse, so re-clicking a dev-server URL
     does not multiply tabs). Shift+click is the explicit escape hatch to the OS
     browser and takes the http/https-only external opener.
+
+    CDXC:GPUISessionChatLinks 2026-08-18:
+    Chat web links answer to the same "Open links in embedded browser" setting
+    as Command-clicked terminal links, so a single switch decides where every
+    agent-sent web link lands. With that setting off, an ordinary click leaves
+    for the system default browser exactly like Shift+click already does.
     */
     fn open_session_chat_link(
         &mut self,
@@ -30302,7 +30310,9 @@ impl GhostexGpuiApp {
         if url.chars().count() > GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS {
             return;
         }
-        if external {
+        let open_in_app =
+            shared_settings::shared_sidebar_settings_snapshot().open_terminal_links_in_app();
+        if external || !open_in_app {
             if let Some(url) = normalize_address(url) {
                 let _ = gpui_open_external_http_url(&url);
             }
