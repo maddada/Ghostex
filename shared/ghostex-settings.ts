@@ -67,6 +67,7 @@ export type DefaultEditorCommand =
 export type SessionPersistenceProvider = "off" | "tmux" | "zmx" | "zellij";
 export type SessionStatusIndicatorSize = "small" | "medium" | "large" | "x-large";
 export type SidebarSide = "left" | "right";
+export type CommandsPanelSide = "bottom" | "right";
 export type SidebarProjectGroupStyle = "quiet" | "header" | "branched";
 export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
@@ -1277,6 +1278,12 @@ export type ghostexSettings = {
    * workspace limits enforced during drag resize.
    */
   commandsPanelDefaultHeightPx: number;
+  /**
+   * Where the command pane docks in the desktop workspace: below the active
+   * workspace (default) or as a column to its right. Terminal Actions and
+   * F12 open the pane on the configured side.
+   */
+  commandsPanelSide: CommandsPanelSide;
 };
 
 export type ghostexSettingsPatch = Partial<ghostexSettings>;
@@ -2034,6 +2041,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   workspacePaneGap: 0,
   remoteMachines: [],
   commandsPanelDefaultHeightPx: DEFAULT_COMMANDS_PANEL_HEIGHT_PX,
+  commandsPanelSide: "bottom",
 };
 
 export const SIDEBAR_THEME_SETTING_OPTIONS: ReadonlyArray<{
@@ -2115,6 +2123,14 @@ export const SIDEBAR_SIDE_OPTIONS: ReadonlyArray<{
   value: SidebarSide;
 }> = [
   { label: "Left", value: "left" },
+  { label: "Right", value: "right" },
+];
+
+export const COMMANDS_PANEL_SIDE_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: CommandsPanelSide;
+}> = [
+  { label: "Bottom", value: "bottom" },
   { label: "Right", value: "right" },
 ];
 
@@ -3393,6 +3409,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         DEFAULT_ghostex_SETTINGS.commandsPanelDefaultHeightPx,
       ),
     ),
+    commandsPanelSide: normalizeCommandsPanelSide(
+      readString(source, "commandsPanelSide", DEFAULT_ghostex_SETTINGS.commandsPanelSide),
+    ),
   };
 }
 
@@ -3801,6 +3820,10 @@ export function getDefaultEditorCommandForSettings(settings: ghostexSettings): s
 
 function normalizeSidebarSide(value: string | undefined): SidebarSide {
   return value === "right" ? "right" : DEFAULT_ghostex_SETTINGS.sidebarSide;
+}
+
+function normalizeCommandsPanelSide(value: string | undefined): CommandsPanelSide {
+  return value === "right" ? "right" : DEFAULT_ghostex_SETTINGS.commandsPanelSide;
 }
 
 function normalizeSidebarProjectGroupStyle(

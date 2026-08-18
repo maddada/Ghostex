@@ -210,6 +210,28 @@ impl SharedSidebarSide {
     }
 }
 
+/*
+CDXC:GPUISettingsCommandPaneSide 2026-08-16:
+The command pane docks below the workspace by default; `commandsPanelSide` may
+move it to a right-hand column. Only `bottom` and `right` are accepted, and
+missing or malformed values render as bottom. Read-only here: the Settings
+modal owns the write path through the shared settings object.
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SharedCommandPaneSide {
+    Bottom,
+    Right,
+}
+
+impl SharedCommandPaneSide {
+    pub fn from_settings_value(value: Option<&str>) -> Self {
+        match value {
+            Some("right") => Self::Right,
+            _ => Self::Bottom,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SharedTerminalGhosttySurfaceConfig {
     font_size: f32,
@@ -681,6 +703,12 @@ impl SharedSidebarSettingsSnapshot {
     pub fn sidebar_side(&self) -> SharedSidebarSide {
         SharedSidebarSide::from_settings_value(
             self.object.get("sidebarSide").and_then(Value::as_str),
+        )
+    }
+
+    pub fn command_pane_side(&self) -> SharedCommandPaneSide {
+        SharedCommandPaneSide::from_settings_value(
+            self.object.get("commandsPanelSide").and_then(Value::as_str),
         )
     }
 

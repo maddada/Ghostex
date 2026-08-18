@@ -182,6 +182,7 @@ import {
   areDiagnosticLoggingSettingsEqual,
   getSessionTitleGenerationCommandPreview,
   getSidebarSettingsPresetId,
+  COMMANDS_PANEL_SIDE_OPTIONS,
   MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
   MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MAX_SIDEBAR_DEFAULT_WIDTH_PX,
@@ -214,6 +215,7 @@ import {
   type SessionTitleGenerationAgent,
   type SidebarSettingsPresetId,
   type SidebarProjectGroupStyle,
+  type CommandsPanelSide,
   type SidebarSide,
   type SidebarVersion,
   type TerminalBackgroundImageFit,
@@ -682,6 +684,7 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
     "sidebarCollapseAnimationDurationMs",
     "sidebarDefaultWidthPx",
     "commandsPanelDefaultHeightPx",
+    "commandsPanelSide",
     "projectSessionListCollapsedCount",
     "agentManagerZoomPercent",
     "createSessionOnSidebarDoubleClick",
@@ -2092,6 +2095,12 @@ export function SettingsModal({
         key: "commandsPanelDefaultHeightPx",
         subtitle: "Height used when opening the command pane and when double-clicking its top resize rail.",
         title: "Command Pane Default Height",
+      },
+      {
+        key: "commandsPanelSide",
+        options: COMMANDS_PANEL_SIDE_OPTIONS,
+        subtitle: "Dock the command pane below the workspace or to its right.",
+        title: "Command Pane Side",
       },
       {
         key: "projectSessionListCollapsedCount",
@@ -3810,6 +3819,16 @@ export function SettingsModal({
                 onChange={(value) => updateDraftDebounced("commandsPanelDefaultHeightPx", value)}
                 step={1}
                 value={draft.commandsPanelDefaultHeightPx}
+              />
+              ) : null}
+              {mainSettingVisible(settingsSearch.sidebar, "commandsPanelSide") ? (
+              <SelectField
+                description="Where terminal Actions and F12 open the command pane: below the workspace or as a column to its right."
+                label="Command Pane Side"
+                {...getSettingModificationProps("commandsPanelSide")}
+                onChange={(value) => updateDraft("commandsPanelSide", value as CommandsPanelSide)}
+                options={COMMANDS_PANEL_SIDE_OPTIONS}
+                value={draft.commandsPanelSide}
               />
               ) : null}
               {mainSettingVisible(settingsSearch.sidebar, "projectSessionListCollapsedCount") ? (

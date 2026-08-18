@@ -3,6 +3,7 @@ import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
   APP_SHOTS_HOTKEY_OPTIONS,
   BROWSER_OPEN_MODE_OPTIONS,
+  COMMANDS_PANEL_SIDE_OPTIONS,
   DEFAULT_ghostex_SETTINGS,
   DEFAULT_EDITOR_COMMAND_OPTIONS,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
@@ -1082,6 +1083,23 @@ describe("normalizeghostexSettings", () => {
     });
     expect(SIDEBAR_SIDE_OPTIONS).toEqual([
       { label: "Left", value: "left" },
+      { label: "Right", value: "right" },
+    ]);
+  });
+
+  test("keeps command pane side as a selectable bottom or right setting", () => {
+    expect(DEFAULT_ghostex_SETTINGS.commandsPanelSide).toBe("bottom");
+    expect(normalizeghostexSettings({})).toMatchObject({
+      commandsPanelSide: "bottom",
+    });
+    expect(normalizeghostexSettings({ commandsPanelSide: "right" })).toMatchObject({
+      commandsPanelSide: "right",
+    });
+    expect(normalizeghostexSettings({ commandsPanelSide: "left" })).toMatchObject({
+      commandsPanelSide: "bottom",
+    });
+    expect(COMMANDS_PANEL_SIDE_OPTIONS).toEqual([
+      { label: "Bottom", value: "bottom" },
       { label: "Right", value: "right" },
     ]);
   });

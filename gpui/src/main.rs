@@ -1549,6 +1549,17 @@ const COMMAND_PANE_MAX_DEFAULT_HEIGHT_PX: f32 = 600.0;
 const COMMAND_PANE_MIN_HEIGHT_RATIO: f32 = 0.05;
 const COMMAND_PANE_MAX_HEIGHT_RATIO: f32 = 0.90;
 /*
+CDXC:GPUICommandPaneSide 2026-08-16:
+A right-docked command pane sizes by a workspace-width ratio instead of the
+bottom pane's height ratio. The default is a constant fraction rather than a
+second Settings value; the vertical resize rail and its double-click reset are
+the only ways to change it, and the ratio persists per project next to
+`heightRatio` so switching sides keeps both remembered sizes.
+*/
+const COMMAND_PANE_DEFAULT_WIDTH_RATIO: f32 = 0.38;
+const COMMAND_PANE_MIN_WIDTH_RATIO: f32 = 0.10;
+const COMMAND_PANE_MAX_WIDTH_RATIO: f32 = 0.90;
+/*
 CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
 Sleeping command-pane bodies should mirror native AppKit placeholders: black body, centered medium 13px wake text, and the exact "Press Any Key to Wake" affordance only when click-to-wake placeholders are enabled.
 
@@ -3707,6 +3718,20 @@ impl GpuiSidebarSide {
             _ => None,
         }
     }
+}
+
+/*
+CDXC:GPUICommandPaneSide 2026-08-16:
+Command pane placement is placement-only shell state sourced from shared
+Settings (`commandsPanelSide`). Bottom keeps the historical pinned/collapsed
+layout; Right renders the pinned pane as a workspace column with a vertical
+resize rail. The collapsed footer strip stays at the bottom on both sides so
+the pane remains discoverable from the same place.
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GpuiCommandPaneSide {
+    Bottom,
+    Right,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6774,6 +6799,9 @@ enum CommandPaneWorkspaceLayoutPlan {
     Pinned {
         panel_height: f32,
     },
+    PinnedRight {
+        panel_width: f32,
+    },
     Floating {
         panel_height: f32,
         bottom_reservation: CommandPaneWorkspaceBottomReservation,
@@ -7055,6 +7083,9 @@ fn command_pane_workspace_layout_plan(
     has_sessions: bool,
     content_height: f32,
     height_ratio: f32,
+    side: GpuiCommandPaneSide,
+    content_width: f32,
+    width_ratio: f32,
 ) -> CommandPaneWorkspaceLayoutPlan {
     /*
     CDXC:GPUICommandPaneLayout 2026-06-27-08:32:
@@ -7062,9 +7093,18 @@ fn command_pane_workspace_layout_plan(
 
     CDXC:GPUICommandPaneLayout 2026-06-27-15:00:
     The command-pane chrome belongs to live command sessions. Once the final command session closes, hide the entire bottom strip so the active workspace reclaims its full height; reopening a command pane still follows the existing session-creation path.
+
+    CDXC:GPUICommandPaneSide 2026-08-16:
+    `commandsPanelSide: "right"` only changes the pinned placement: the expanded pane becomes a workspace column sized by `widthRatio`. Floating (release-disabled) and the collapsed footer strip keep their bottom layout so the pane is discoverable from the same place on both sides.
     */
     if !has_sessions {
         return CommandPaneWorkspaceLayoutPlan::Hidden;
+    }
+
+    if side == GpuiCommandPaneSide::Right && mode == CommandPaneMode::Pinned {
+        return CommandPaneWorkspaceLayoutPlan::PinnedRight {
+            panel_width: command_pane_width_for_ratio(width_ratio, content_width),
+        };
     }
 
     let bottom_reservation = command_pane_bottom_reservation_chrome(mode).map(|chrome| {
@@ -7580,10 +7620,18 @@ fn cpraildbg(message: &str) {
     let _ = writeln!(file, "[{millis}] {message}");
 }
 
+/*
+CDXC:GPUICommandPaneSide 2026-08-16:
+One drag state serves both docks: the bottom rail tracks pointer Y against the
+panel height, the right divider tracks pointer X against the panel width. The
+side is captured at mouse-down so a Settings save mid-drag cannot re-interpret
+the stored start position on the other axis.
+*/
 #[derive(Clone, Copy)]
 struct CommandPaneResizeDragState {
-    start_y: f32,
-    start_height: f32,
+    side: GpuiCommandPaneSide,
+    start_position: f32,
+    start_extent: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -14282,6 +14330,7 @@ struct CommandPaneModel {
     mode: CommandPaneMode,
     last_expanded_mode: CommandPaneMode,
     height_ratio: f32,
+    width_ratio: f32,
     resize_drag: Option<CommandPaneResizeDragState>,
     next_group_id: u64,
     next_split_id: u64,
@@ -14308,6 +14357,7 @@ impl CommandPaneModel {
                 default_height_px,
                 content_height,
             ),
+            width_ratio: COMMAND_PANE_DEFAULT_WIDTH_RATIO,
             resize_drag: None,
             next_group_id: 1,
             next_split_id: 1,
@@ -14673,6 +14723,9 @@ impl CommandPaneModel {
         /*
         CDXC:GPUICommandPane 2026-06-25-11:47:
         Opening a hidden GPUI command pane must match macOS `createCommandsPanelOpenStatePatch`: reset height from the Workspace default only when the pane is hidden, and preserve the user's live resize while the pane is already expanded. Keep this model-local so F12, titlebar Actions, sidebar Actions, and command chrome share the same rule.
+
+        CDXC:GPUICommandPaneSide 2026-08-16:
+        Only the height resets here, because it comes from the Workspace default-height Setting. The right dock's width has no Settings default, so its ratio is user-owned: opening the pane again keeps the width the divider drag stored, and the divider's double-click reset stays the only way back to the default.
         */
         if self.is_expanded() {
             return false;
@@ -16009,6 +16062,11 @@ impl CommandPaneModel {
             default_height_px,
             content_height,
         );
+        self.resize_drag = None;
+    }
+
+    fn reset_width_to_default(&mut self) {
+        self.width_ratio = COMMAND_PANE_DEFAULT_WIDTH_RATIO;
         self.resize_drag = None;
     }
 }
@@ -18728,6 +18786,7 @@ fn command_pane_model_to_shell_state_json_with_optional_delayed_send_timers(
     });
     if model.has_sessions() {
         state["heightRatio"] = json_number_f32(command_pane_height_ratio(model.height_ratio));
+        state["widthRatio"] = json_number_f32(command_pane_width_ratio(model.width_ratio));
     }
     state
 }
@@ -18787,6 +18846,7 @@ fn command_pane_model_from_shell_state_with_default_height_px(
                 default_height_px,
                 content_height,
             ),
+            width_ratio: COMMAND_PANE_DEFAULT_WIDTH_RATIO,
             resize_drag: None,
             next_group_id: json_u64_field(object, "nextGroupId").unwrap_or(1).max(1),
             next_split_id: json_u64_field(object, "nextSplitId").unwrap_or(1).max(1),
@@ -18875,6 +18935,9 @@ fn command_pane_model_from_shell_state_with_default_height_px(
                     content_height,
                 )
             }),
+        width_ratio: json_f32_field(object, "widthRatio")
+            .map(command_pane_width_ratio)
+            .unwrap_or(COMMAND_PANE_DEFAULT_WIDTH_RATIO),
         resize_drag: None,
         next_group_id: json_u64_field(object, "nextGroupId").unwrap_or(0).max(
             group_ids
@@ -19213,6 +19276,9 @@ fn split_command_pane_shell_state_json_by_gxserver_project(
             });
             if let Some(height_ratio) = object.get("heightRatio") {
                 pane["heightRatio"] = height_ratio.clone();
+            }
+            if let Some(width_ratio) = object.get("widthRatio") {
+                pane["widthRatio"] = width_ratio.clone();
             }
             Some((project_id, pane))
         })
@@ -24021,6 +24087,10 @@ fn command_pane_height_ratio(ratio: f32) -> f32 {
     ratio.clamp(COMMAND_PANE_MIN_HEIGHT_RATIO, COMMAND_PANE_MAX_HEIGHT_RATIO)
 }
 
+fn command_pane_width_ratio(ratio: f32) -> f32 {
+    ratio.clamp(COMMAND_PANE_MIN_WIDTH_RATIO, COMMAND_PANE_MAX_WIDTH_RATIO)
+}
+
 fn command_pane_default_height_px_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> f32 {
@@ -24528,8 +24598,25 @@ fn command_pane_content_height(window: &Window) -> f32 {
     (window.bounds().size.height.as_f32() - TITLEBAR_HEIGHT).max(1.0)
 }
 
-fn command_pane_workspace_width(window: &Window, sidebar_width: f32) -> f32 {
-    (window.bounds().size.width.as_f32() - sidebar_width - SIDEBAR_DIVIDER_WIDTH).max(0.0)
+fn command_pane_workspace_width(
+    window: &Window,
+    sidebar_width: f32,
+    sidebar_collapsed: bool,
+) -> f32 {
+    /*
+    CDXC:GPUICommandPaneSide 2026-08-16:
+    Collapsing the sidebar removes both the sidebar and its divider from the
+    body row without mutating the saved width, so the workspace really does
+    own the whole window width there. The right dock sizes its column from
+    this number, so it has to follow that collapse instead of subtracting a
+    sidebar that is not on screen.
+    */
+    let sidebar_chrome_width = if gpui_sidebar_chrome_visible(sidebar_collapsed) {
+        sidebar_width + SIDEBAR_DIVIDER_WIDTH
+    } else {
+        0.0
+    };
+    (window.bounds().size.width.as_f32() - sidebar_chrome_width).max(0.0)
 }
 
 fn command_pane_panel_chrome_width(workspace_width: f32, floating: bool) -> f32 {
@@ -24548,6 +24635,10 @@ fn command_pane_height_for_ratio(ratio: f32, content_height: f32) -> f32 {
     command_pane_height_ratio(ratio) * content_height.max(1.0)
 }
 
+fn command_pane_width_for_ratio(ratio: f32, content_width: f32) -> f32 {
+    command_pane_width_ratio(ratio) * content_width.max(1.0)
+}
+
 fn command_pane_resize_drag_height_ratio(
     drag: CommandPaneResizeDragState,
     current_y: f32,
@@ -24559,8 +24650,21 @@ fn command_pane_resize_drag_height_ratio(
     GPUI pointer Y is top-origin, so visual upward motion is `start_y - current_y`; keep that conversion in one helper so drag handling cannot regress the AppKit sign/clamp contract.
     */
     let content_height = content_height.max(1.0);
-    let upward_delta = drag.start_y - current_y;
-    command_pane_height_ratio((drag.start_height + upward_delta) / content_height)
+    let upward_delta = drag.start_position - current_y;
+    command_pane_height_ratio((drag.start_extent + upward_delta) / content_height)
+}
+
+fn command_pane_resize_drag_width_ratio(
+    drag: CommandPaneResizeDragState,
+    current_x: f32,
+    content_width: f32,
+) -> f32 {
+    // The right-docked pane grows as the divider moves left, so leftward
+    // pointer motion is `start_position - current_x`; the same one-helper rule
+    // as the bottom rail keeps the sign and clamp contract in one place.
+    let content_width = content_width.max(1.0);
+    let leftward_delta = drag.start_position - current_x;
+    command_pane_width_ratio((drag.start_extent + leftward_delta) / content_width)
 }
 
 fn command_pane_floating_height_for_ratio(ratio: f32, content_height: f32) -> f32 {
@@ -25241,6 +25345,7 @@ pub struct GhostexGpuiApp {
     Sidebar side is placement-only shell state sourced from shared Settings. Keep it independent from `sidebar_width` and `sidebar_collapsed` so Move Sidebar can mirror native without resizing, expanding, or hiding the sidebar.
     */
     sidebar_side: GpuiSidebarSide,
+    command_pane_side: GpuiCommandPaneSide,
     sidebar_width: f32,
     sidebar_collapsed: bool,
     sidebar_drag: Option<SidebarDragState>,
@@ -25413,6 +25518,8 @@ impl GhostexGpuiApp {
         let sidebar_gxserver_bootstrap =
             gpui_sidebar_gxserver_bootstrap(None, &sidebar_gxserver_presentation_focus_state, None);
         let sidebar_side = gpui_sidebar_side_from_shared_settings(&shared_settings_snapshot);
+        let command_pane_side =
+            gpui_command_pane_side_from_shared_settings(&shared_settings_snapshot);
         let sidebar_width = read_sidebar_width_setting()
             .unwrap_or(DEFAULT_SIDEBAR_WIDTH)
             .clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
@@ -25724,6 +25831,7 @@ impl GhostexGpuiApp {
                 gpui_pet_overlay_animation_ticker_active: false,
                 gpui_pet_overlay_reduce_motion_enabled,
                 sidebar_side,
+                command_pane_side,
                 sidebar_width,
                 sidebar_collapsed: false,
                 sidebar_drag: None,
@@ -36408,6 +36516,7 @@ impl GhostexGpuiApp {
             cx,
         );
         self.apply_gpui_sidebar_side_from_saved_settings(settings_snapshot);
+        self.apply_gpui_command_pane_side_from_saved_settings(settings_snapshot);
         refresh_gpui_visual_settings(settings_snapshot);
         self.refresh_sidebar_runtime_settings_from_shared_settings(settings_snapshot, cx);
         self.coerce_active_mode_to_available_project_context(cx);
@@ -64279,10 +64388,48 @@ impl GhostexGpuiApp {
 
         let content_height = command_pane_content_height(window);
         self.command_pane.resize_drag = Some(CommandPaneResizeDragState {
-            start_y: event.position.y.as_f32(),
-            start_height: command_pane_height_for_ratio(
+            side: GpuiCommandPaneSide::Bottom,
+            start_position: event.position.y.as_f32(),
+            start_extent: command_pane_height_for_ratio(
                 self.command_pane.height_ratio,
                 content_height,
+            ),
+        });
+        cx.notify();
+    }
+
+    fn handle_command_pane_side_divider_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:GPUICommandPaneSide 2026-08-16:
+        The right-dock divider mirrors the bottom rail contract on the X axis:
+        double-click resets the width ratio to the constant default, a single
+        press stores the absolute start width and pointer X, and the root
+        mouse-move/up handlers finish the drag through the shared resize state.
+        */
+        window.prevent_default();
+        cx.stop_propagation();
+
+        if event.click_count >= 2 {
+            self.clear_command_resize_hover_state();
+            self.command_pane.reset_width_to_default();
+            self.persist_shell_layout_state();
+            cx.notify();
+            return;
+        }
+
+        let content_width =
+            command_pane_workspace_width(window, self.sidebar_width, self.sidebar_collapsed);
+        self.command_pane.resize_drag = Some(CommandPaneResizeDragState {
+            side: GpuiCommandPaneSide::Right,
+            start_position: event.position.x.as_f32(),
+            start_extent: command_pane_width_for_ratio(
+                self.command_pane.width_ratio,
+                content_width,
             ),
         });
         cx.notify();
@@ -64311,15 +64458,33 @@ impl GhostexGpuiApp {
         window.prevent_default();
         cx.stop_propagation();
 
-        let next_ratio = command_pane_resize_drag_height_ratio(
-            drag,
-            event.position.y.as_f32(),
-            command_pane_content_height(window),
-        );
-
-        if (next_ratio - self.command_pane.height_ratio).abs() >= 0.001 {
-            self.command_pane.height_ratio = next_ratio;
-            cx.notify();
+        match drag.side {
+            GpuiCommandPaneSide::Bottom => {
+                let next_ratio = command_pane_resize_drag_height_ratio(
+                    drag,
+                    event.position.y.as_f32(),
+                    command_pane_content_height(window),
+                );
+                if (next_ratio - self.command_pane.height_ratio).abs() >= 0.001 {
+                    self.command_pane.height_ratio = next_ratio;
+                    cx.notify();
+                }
+            }
+            GpuiCommandPaneSide::Right => {
+                let next_ratio = command_pane_resize_drag_width_ratio(
+                    drag,
+                    event.position.x.as_f32(),
+                    command_pane_workspace_width(
+                        window,
+                        self.sidebar_width,
+                        self.sidebar_collapsed,
+                    ),
+                );
+                if (next_ratio - self.command_pane.width_ratio).abs() >= 0.001 {
+                    self.command_pane.width_ratio = next_ratio;
+                    cx.notify();
+                }
+            }
         }
     }
 
@@ -64696,13 +64861,17 @@ impl GhostexGpuiApp {
         CDXC:GPUICommandPane 2026-06-22-05:42:
         Command terminals render as a bottom workspace surface beside Agents and project/editor modes without entering the normal workspace tab tree. Pinned mode reserves height and pushes the active workspace area up, floating mode keeps a collapsed bottom strip while drawing the expanded command surface above the workspace, collapsed mode keeps the compact command strip visible while sessions exist, and the command surface disappears when its final session closes.
         */
+        let workspace_width =
+            command_pane_workspace_width(window, self.sidebar_width, self.sidebar_collapsed);
         let layout_plan = command_pane_workspace_layout_plan(
             self.command_pane.mode,
             self.command_pane.has_sessions(),
             command_pane_content_height(window),
             self.command_pane.height_ratio,
+            self.command_pane_side,
+            workspace_width,
+            self.command_pane.width_ratio,
         );
-        let workspace_width = command_pane_workspace_width(window, self.sidebar_width);
 
         match layout_plan {
             CommandPaneWorkspaceLayoutPlan::Hidden => v_flex()
@@ -64722,12 +64891,37 @@ impl GhostexGpuiApp {
                 .overflow_hidden()
                 .child(self.render_main_workspace(window, cx))
                 .child(self.render_command_pane_panel(
+                    GpuiCommandPaneSide::Bottom,
                     panel_height,
                     false,
                     command_pane_panel_chrome_width(workspace_width, false),
                     cx,
                 ))
                 .child(self.render_command_pane_resize_rail(panel_height, 0.0, cx))
+                .into_any_element(),
+            CommandPaneWorkspaceLayoutPlan::PinnedRight { panel_width } => h_flex()
+                /*
+                CDXC:GPUICommandPaneSide 2026-08-16:
+                Right dock is strict normal layout: workspace, a real 5px
+                divider sibling, and the pane column. gpui-component `h_flex`
+                centers its children by default, so stretch them or the pane
+                and workspace collapse to their content height.
+                */
+                .id("ghostex-gpui-workspace-with-command-pinned-right")
+                .flex_1()
+                .min_w_0()
+                .min_h_0()
+                .items_stretch()
+                .overflow_hidden()
+                .child(self.render_main_workspace(window, cx))
+                .child(self.render_command_pane_side_divider(cx))
+                .child(self.render_command_pane_panel(
+                    GpuiCommandPaneSide::Right,
+                    panel_width,
+                    false,
+                    command_pane_panel_chrome_width(panel_width, false),
+                    cx,
+                ))
                 .into_any_element(),
             CommandPaneWorkspaceLayoutPlan::Floating {
                 panel_height,
@@ -64747,6 +64941,7 @@ impl GhostexGpuiApp {
                         .overflow_hidden()
                         .child(self.render_main_workspace(window, cx))
                         .child(self.render_command_pane_panel(
+                            GpuiCommandPaneSide::Bottom,
                             panel_height,
                             true,
                             command_pane_panel_chrome_width(workspace_width, true),
@@ -64782,13 +64977,21 @@ impl GhostexGpuiApp {
 
     fn render_command_pane_panel(
         &self,
-        height: f32,
+        side: GpuiCommandPaneSide,
+        extent: f32,
         floating: bool,
         panel_chrome_width: f32,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        /*
+        CDXC:GPUICommandPaneSide 2026-08-16:
+        `extent` is the panel height for the bottom dock and the panel width
+        for the right dock. Floating is always bottom-anchored. The right dock
+        skips the top border because its divider sibling paints the separator.
+        */
         let view = cx.entity().clone();
         let owner_content_width = command_pane_owner_content_width(panel_chrome_width);
+        let docked_right = side == GpuiCommandPaneSide::Right && !floating;
 
         v_flex()
             .on_children_prepainted(move |child_bounds, _window, cx| {
@@ -64798,16 +65001,21 @@ impl GhostexGpuiApp {
             })
             .id(if floating {
                 "ghostex-gpui-command-pane-floating"
+            } else if docked_right {
+                "ghostex-gpui-command-pane-pinned-right"
             } else {
                 "ghostex-gpui-command-pane-pinned"
             })
-            .h(px(height))
-            .when(!floating, |this| this.w_full())
-            .when(!floating, |this| {
+            .when(!docked_right, |this| this.h(px(extent)))
+            .when(docked_right, |this| {
+                this.w(px(extent)).h_full().flex_shrink_0()
+            })
+            .when(!floating && !docked_right, |this| this.w_full())
+            .when(!floating && !docked_right, |this| {
                 this.min_h(px(COMMAND_PANE_TAB_BAR_HEIGHT))
             })
             .overflow_hidden()
-            .border_t_1()
+            .when(!docked_right, |this| this.border_t_1())
             .border_color(command_pane_panel_separator_color())
             .bg(command_pane_chrome_color())
             .when(floating, |this| {
@@ -64873,6 +65081,76 @@ impl GhostexGpuiApp {
                             ))
                         },
                     ),
+            )
+            .into_any_element()
+    }
+
+    fn render_command_pane_side_divider(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
+        /*
+        CDXC:GPUICommandPaneSide 2026-08-16:
+        The right-docked pane's grab target is a real 5px divider sibling, the
+        same strict-layout pattern as the sidebar divider and command split
+        handles, rather than porting the bottom rail's approved 12px overlap to
+        a second edge. Its right edge paints the panel separator so the pane
+        keeps a visible boundary; hover feedback reuses the shared PanelRail
+        hover state and white 3px line.
+        */
+        div()
+            .id("ghostex-gpui-command-pane-side-divider")
+            .relative()
+            .flex_shrink_0()
+            .h_full()
+            .w(px(COMMAND_PANE_SPLIT_HANDLE_THICKNESS))
+            .cursor_ew_resize()
+            .bg(command_pane_split_handle_color())
+            .on_hover(cx.listener(|this, hovered, _, cx| {
+                this.set_command_resize_hovering(
+                    CommandPaneResizeHoverTarget::PanelRail,
+                    *hovered,
+                    cx,
+                );
+            }))
+            .on_mouse_move(cx.listener(|this, _event: &MouseMoveEvent, _window, cx| {
+                this.set_command_resize_hovering(CommandPaneResizeHoverTarget::PanelRail, true, cx);
+            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    this.handle_command_pane_side_divider_mouse_down(event, window, cx);
+                }),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .right_0()
+                    .w(px(WORKSPACE_SPLIT_SEPARATOR_THICKNESS))
+                    .cursor_ew_resize()
+                    .bg(command_pane_panel_separator_color()),
+            )
+            .when(
+                self.command_resize_hover_visible == Some(CommandPaneResizeHoverTarget::PanelRail),
+                |this| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(px((COMMAND_PANE_SPLIT_HANDLE_THICKNESS
+                                - COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT)
+                                / 2.0))
+                            .w(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                            .cursor_ew_resize()
+                            .bg(command_pane_resize_hover_line_color())
+                            .with_animation(
+                                "ghostex-gpui-command-pane-side-divider-hover-line",
+                                Animation::new(COMMAND_PANE_RESIZE_HOVER_FADE_DURATION)
+                                    .with_easing(gpui::ease_out_quint()),
+                                |line, delta| line.opacity(delta),
+                            ),
+                    )
+                },
             )
             .into_any_element()
     }
@@ -76365,6 +76643,23 @@ impl GhostexGpuiApp {
         }
         self.sidebar_side = saved_side;
         self.cancel_sidebar_divider_interaction_state();
+    }
+
+    fn apply_gpui_command_pane_side_from_saved_settings(
+        &mut self,
+        settings_snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
+    ) {
+        // Settings persists commandsPanelSide through the patch path; a save
+        // whose side differs from the live placement re-docks the pane on the
+        // next render instead of waiting for relaunch. Any in-flight rail drag
+        // belongs to the old axis, so drop it rather than let it keep resizing.
+        let saved_side = gpui_command_pane_side_from_shared_settings(settings_snapshot);
+        if saved_side == self.command_pane_side {
+            return;
+        }
+        self.command_pane_side = saved_side;
+        self.command_pane.resize_drag = None;
+        self.clear_command_resize_hover_state();
     }
 }
 
@@ -113495,6 +113790,15 @@ fn gpui_sidebar_side_from_shared_settings(
     match settings.sidebar_side() {
         shared_settings::SharedSidebarSide::Left => GpuiSidebarSide::Left,
         shared_settings::SharedSidebarSide::Right => GpuiSidebarSide::Right,
+    }
+}
+
+fn gpui_command_pane_side_from_shared_settings(
+    settings: &shared_settings::SharedSidebarSettingsSnapshot,
+) -> GpuiCommandPaneSide {
+    match settings.command_pane_side() {
+        shared_settings::SharedCommandPaneSide::Bottom => GpuiCommandPaneSide::Bottom,
+        shared_settings::SharedCommandPaneSide::Right => GpuiCommandPaneSide::Right,
     }
 }
 
