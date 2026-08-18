@@ -6793,7 +6793,16 @@ function injectManageAgentationScript(documentValue: Document): void {
 function buildManageAgentationBootstrapScript(): string {
   return `
 const rootId = "ghostex-agentation-root";
+const directionStyleId = "ghostex-agentation-direction-style";
 document.getElementById(rootId)?.remove();
+document.getElementById(directionStyleId)?.remove();
+// Agentation portals its visible UI into document.body, outside rootEl. Give
+// that portal an explicit writing-mode boundary so authored RTL page styles
+// cannot reverse Agentation's own controls.
+const directionStyle = document.createElement("style");
+directionStyle.id = directionStyleId;
+directionStyle.textContent = "[data-agentation-root][data-agentation-theme] { direction: ltr !important; text-align: left !important; }";
+(document.head || document.documentElement).appendChild(directionStyle);
 const rootEl = document.createElement("div");
 rootEl.id = rootId;
 rootEl.setAttribute("data-agentation-html-root", "true");
@@ -6818,6 +6827,7 @@ Promise.all([
     message: error instanceof Error ? error.message : String(error)
   });
   rootEl.remove();
+  directionStyle.remove();
 });
 `.trim();
 }
@@ -7172,6 +7182,22 @@ styleElement.textContent = `
     margin: 0;
     overflow: hidden;
     width: 100%;
+  }
+
+  /*
+   * CDXC:DocsRootLayout 2026-08-18:
+   * Manage pulls in the shared sidebar theme for its tooltip/app tokens, and
+   * that stylesheet also carries the sidebar app's own shell layout
+   * ('#root { display: grid; grid-template-rows: auto minmax(0, 1fr) }', a
+   * titlebar row plus a content row). Manage has no titlebar row: it renders a
+   * single '.manage-shell' child that must own the whole document. Under the
+   * sidebar grid that child lands in the content-sized 'auto' row, so Docs
+   * stopped at its content height and left the rest of the pane empty. Manage
+   * declares its own root layout so the document root stays a plain full-height
+   * block box regardless of which shared theme sheets are loaded.
+   */
+  #root {
+    display: block;
   }
 
   body {
