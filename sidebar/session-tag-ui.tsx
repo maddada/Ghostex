@@ -11,15 +11,18 @@ import {
   IconPlayerPlay,
   IconPuzzle,
   IconStar,
+  IconTagOff,
   IconTestPipe,
   type TablerIcon,
 } from "@tabler/icons-react";
 import {
   getEffectiveSidebarSessionTag,
   getSidebarSessionTagLabel,
+  SIDEBAR_SESSION_TAG_FILTER_UNTAGGED,
   SIDEBAR_SESSION_TAG_OPTIONS,
   SIDEBAR_SESSION_TAG_SECTIONS,
   type SidebarSessionTag,
+  type SidebarSessionTagFilter,
 } from "../shared/session-tags";
 
 const SIDEBAR_SESSION_TAG_ICONS = {
@@ -38,8 +41,13 @@ const SIDEBAR_SESSION_TAG_ICONS = {
   todo: IconCheckbox,
 } satisfies Record<SidebarSessionTag, TablerIcon>;
 
-export { SIDEBAR_SESSION_TAG_OPTIONS, SIDEBAR_SESSION_TAG_SECTIONS, getSidebarSessionTagLabel };
-export type { SidebarSessionTag };
+export {
+  SIDEBAR_SESSION_TAG_FILTER_UNTAGGED,
+  SIDEBAR_SESSION_TAG_OPTIONS,
+  SIDEBAR_SESSION_TAG_SECTIONS,
+  getSidebarSessionTagLabel,
+};
+export type { SidebarSessionTag, SidebarSessionTagFilter };
 
 export function getSessionTagIcon(tag: SidebarSessionTag): TablerIcon {
   return SIDEBAR_SESSION_TAG_ICONS[tag];
@@ -63,8 +71,20 @@ export function SessionTagIcon({
   fillFavorite?: boolean;
   size?: number;
   stroke?: number;
-  tag: SidebarSessionTag;
+  tag: SidebarSessionTagFilter;
 }) {
+  if (tag === SIDEBAR_SESSION_TAG_FILTER_UNTAGGED) {
+    return (
+      <IconTagOff
+        aria-hidden="true"
+        className={className}
+        data-session-tag={tag}
+        fill="none"
+        size={size}
+        stroke={stroke}
+      />
+    );
+  }
   const Icon = getSessionTagIcon(tag);
   return (
     <Icon

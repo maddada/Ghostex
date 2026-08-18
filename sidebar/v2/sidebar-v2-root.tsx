@@ -12,7 +12,7 @@ import type { SidebarAgentButton } from "../../shared/sidebar-agents";
 import type {
   SidebarSessionItem,
   SidebarSessionLifecycleCapabilities,
-  SidebarSessionTag,
+  SidebarSessionTagFilter,
 } from "../../shared/session-grid-contract";
 import {
   normalizeWorktreePathForComparison,
@@ -266,7 +266,7 @@ export type SidebarV2RootProps = {
   primaryAgentId?: string;
   /** Raw search text, for empty-state copy only; filtering already happened. */
   searchQuery: string;
-  selectedSessionTagFilters: readonly SidebarSessionTag[];
+  selectedSessionTagFilters: readonly SidebarSessionTagFilter[];
   /** Display-ordered session ids per group, after search and tag filtering. */
   sessionIdsByGroup: Readonly<Record<string, readonly string[]>>;
   sessionsById: Readonly<Record<string, SidebarSessionItem>>;

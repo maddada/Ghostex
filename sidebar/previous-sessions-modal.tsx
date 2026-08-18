@@ -16,14 +16,19 @@ import { TOOLTIP_DELAY_MS } from './tooltip-delay';
 import { TooltipProvider } from './app-tooltip';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
-import { getEffectiveSessionTag, SessionTagIcon, type SidebarSessionTag } from './session-tag-ui';
+import { SessionTagIcon, getSidebarSessionTagLabel, type SidebarSessionTagFilter } from './session-tag-ui';
 import type { WebviewApi } from './webview-api';
 import type {
   ExtensionToSidebarMessage,
   SidebarPreviousSessionItem,
   SidebarSessionItem,
 } from '../shared/session-grid-contract';
-import { getEnabledVisibleSidebarSessionTagSections } from '../shared/session-tags';
+import {
+  getEnabledVisibleSidebarSessionTagFilters,
+  getSidebarSessionTagListItemFilter,
+  normalizeSidebarSessionTagListItems,
+  sessionMatchesSidebarTagFilters,
+} from '../shared/session-tags';
 import { ghostexHotkeyTextFromKeyboardEvent } from '../shared/ghostex-hotkeys';
 import { formatSidebarHotkeyLabel } from './hotkey-label';
 
@@ -109,7 +114,7 @@ function mergePreviousSessionPages(
   return merged;
 }
 
-function getPreviousSessionsQueryKey(query: string, sessionTags: readonly SidebarSessionTag[]): string {
+function getPreviousSessionsQueryKey(query: string, sessionTags: readonly SidebarSessionTagFilter[]): string {
   return JSON.stringify([query.trim(), [...sessionTags].sort()]);
 }
 
@@ -161,15 +166,15 @@ export function PreviousSessionsModal({
   const sessionsById = useSidebarStore((state) => state.sessionsById);
   const showDebugSessionNumbers = useSidebarStore((state) => state.hud.debuggingMode);
   const sidebarSessionTagListItems = useSidebarStore((state) => state.hud.settings?.sidebarSessionTagListItems);
-  const previousSessionTagFilterSections = useMemo(
-    () => getEnabledVisibleSidebarSessionTagSections(sidebarSessionTagListItems),
+  const previousSessionTagFilterItems = useMemo(
+    () => normalizeSidebarSessionTagListItems(sidebarSessionTagListItems),
     [sidebarSessionTagListItems]
   );
   const enabledPreviousSessionTagFilterSet = useMemo(
-    () => new Set(previousSessionTagFilterSections.flatMap((section) => section.options.map((option) => option.value))),
-    [previousSessionTagFilterSections]
+    () => new Set(getEnabledVisibleSidebarSessionTagFilters(previousSessionTagFilterItems)),
+    [previousSessionTagFilterItems]
   );
-  const [selectedSessionTagFilters, setSelectedSessionTagFilters] = useState<SidebarSessionTag[]>([]);
+  const [selectedSessionTagFilters, setSelectedSessionTagFilters] = useState<SidebarSessionTagFilter[]>([]);
   const [isTagFilterMenuOpen, setIsTagFilterMenuOpen] = useState(false);
   const [remotePreviousSessions, setRemotePreviousSessions] = useState<SidebarPreviousSessionItem[] | undefined>(
     undefined
@@ -226,10 +231,7 @@ export function PreviousSessionsModal({
   );
   const filteredOpenSessions = useMemo(() => {
     const tagFilteredSessions = hasTagFilters
-      ? openSessions.filter((item) => {
-          const sessionTag = getEffectiveSessionTag(item.session);
-          return sessionTag ? selectedSessionTagFilters.includes(sessionTag) : false;
-        })
+      ? openSessions.filter((item) => sessionMatchesSidebarTagFilters(item.session, selectedSessionTagFilters))
       : openSessions;
     const matchedSessions = new Set(filterSidebarSessionItems(tagFilteredSessions.map((item) => item.session), searchQuery));
     return tagFilteredSessions.filter((item) => matchedSessions.has(item.session));
@@ -445,7 +447,7 @@ export function PreviousSessionsModal({
     setIsTagFilterMenuOpen(true);
   };
 
-  const toggleSessionTagFilter = (sessionTag: SidebarSessionTag) => {
+  const toggleSessionTagFilter = (sessionTag: SidebarSessionTagFilter) => {
     if (!enabledPreviousSessionTagFilterSet.has(sessionTag)) {
       return;
     }
@@ -868,41 +870,54 @@ export function PreviousSessionsModal({
                      * CDXC:SessionTagFilters 2026-06-16-00:05:
                      * Shared tag context menus omit Priority, Progress, and Type
                      * heading rows while preserving section order and dividers.
+                     *
+                     * CDXC:SessionTagFilters 2026-08-18-02:49:
+                     * The filter list is the Settings-managed row set, including
+                     * No tag, so Previous Sessions stays aligned with the sidebar.
                      */}
-                    {previousSessionTagFilterSections.map((section) => (
-                      <div className='session-tag-menu-section' key={section.label}>
-                        {section.options.map((option) => {
-                          const isSelected = selectedSessionTagFilters.includes(option.value);
-                          return (
-                            <button
-                              aria-checked={isSelected}
-                              className='session-context-menu-item previous-sessions-tag-filter-item'
-                              data-selected={String(isSelected)}
-                              key={option.value}
-                              onClick={() => toggleSessionTagFilter(option.value)}
-                              role='menuitemcheckbox'
-                              type='button'
-                            >
-                              <SessionTagIcon
-                                className='session-context-menu-icon session-tag-colored-icon'
-                                fillFavorite
-                                size={14}
-                                stroke={1.8}
-                                tag={option.value}
-                              />
-                              {option.label}
-                              <IconCheck
-                                aria-hidden='true'
-                                className='session-context-menu-trailing-icon previous-sessions-tag-filter-check'
-                                data-visible={String(isSelected)}
-                                size={14}
-                                stroke={2}
-                              />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
+                    {previousSessionTagFilterItems.map((item) => {
+                      if (!item.visible) {
+                        return null;
+                      }
+                      if (item.type === "separator") {
+                        return item.enabled ? (
+                          <div className="session-context-menu-divider" key={item.id} role="separator" />
+                        ) : null;
+                      }
+                      const filter = getSidebarSessionTagListItemFilter(item);
+                      if (!filter) {
+                        return null;
+                      }
+                      const isSelected = selectedSessionTagFilters.includes(filter);
+                      return (
+                        <button
+                          aria-checked={isSelected}
+                          className='session-context-menu-item previous-sessions-tag-filter-item'
+                          data-selected={String(isSelected)}
+                          disabled={!item.enabled}
+                          key={item.id}
+                          onClick={() => toggleSessionTagFilter(filter)}
+                          role='menuitemcheckbox'
+                          type='button'
+                        >
+                          <SessionTagIcon
+                            className='session-context-menu-icon session-tag-colored-icon'
+                            fillFavorite
+                            size={14}
+                            stroke={1.8}
+                            tag={filter}
+                          />
+                          {getSidebarSessionTagLabel(filter)}
+                          <IconCheck
+                            aria-hidden='true'
+                            className='session-context-menu-trailing-icon previous-sessions-tag-filter-check'
+                            data-visible={String(isSelected)}
+                            size={14}
+                            stroke={2}
+                          />
+                        </button>
+                      );
+                    })}
                   </div>,
                   document.body
                 )

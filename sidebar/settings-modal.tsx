@@ -277,6 +277,7 @@ import { PET_CONTROLS_VISIBLE, PET_OPTIONS, type PetId } from "../shared/pets";
 import {
   areSidebarSessionTagListItemsEqual,
   DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
+  getSidebarSessionTagListItemLabel,
   normalizeSidebarSessionTagListItems,
   type SidebarSessionTagListItem,
 } from "../shared/session-tags";
@@ -291,7 +292,7 @@ import { HotkeyRecorderField } from "./hotkey-recorder-field";
 import { PetAvatar } from "./pet-avatar";
 import { CommandIconPicker } from "./command-icon-picker";
 import { SidebarCommandIconGlyph } from "./sidebar-command-icon";
-import { getSidebarSessionTagLabel, SessionTagIcon } from "./session-tag-ui";
+import { SessionTagIcon } from "./session-tag-ui";
 import { useSidebarStore } from "./sidebar-store";
 import type { AgentConfigDraft } from "./agent-config-modal";
 import type { WebviewApi } from "./webview-api";
@@ -2181,10 +2182,7 @@ export function SettingsModal({
         key: "sidebarSessionTagListItems",
         options: [
           ...DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS.map((item) => ({
-            label:
-              item.type === "tag"
-                ? getSidebarSessionTagLabel(item.tag) ?? item.tag
-                : "Separator",
+            label: getSidebarSessionTagListItemLabel(item),
             value: item.id,
           })),
           { label: "Hide tag", value: "hide" },
@@ -13593,8 +13591,7 @@ function SidebarTagListSettingsRow({
   });
   const { handleRef, isDragging } = sortable;
   const isDimmed = !item.enabled || !item.visible;
-  const label =
-    item.type === "tag" ? getSidebarSessionTagLabel(item.tag) ?? item.tag : "Separator";
+  const label = getSidebarSessionTagListItemLabel(item);
 
   const setRowRef = (element: HTMLDivElement | null) => {
     setSettingsSortableRowElement(sortable, element);
@@ -13625,16 +13622,16 @@ function SidebarTagListSettingsRow({
           aria-hidden="true"
           className="settings-management-icon flex size-8 shrink-0 items-center justify-center bg-muted"
         >
-          {item.type === "tag" ? (
+          {item.type === "separator" ? (
+            <IconMinus className="text-muted-foreground" size={16} stroke={2} />
+          ) : (
             <SessionTagIcon
               className="session-tag-colored-icon"
               fillFavorite
               size={15}
               stroke={1.8}
-              tag={item.tag}
+              tag={item.type === "untagged" ? "untagged" : item.tag}
             />
-          ) : (
-            <IconMinus className="text-muted-foreground" size={16} stroke={2} />
           )}
         </span>
         <span className="min-w-0 flex-1">

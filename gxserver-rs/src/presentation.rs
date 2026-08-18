@@ -855,12 +855,7 @@ fn search_sessions(
     let mut candidates = sessions
         .into_iter()
         .filter(|session| project_id_filter.matches(session))
-        .filter(|session| {
-            tags.is_empty()
-                || string_field(session, "sessionTag")
-                    .map(|tag| tags.iter().any(|expected| *expected == tag))
-                    .unwrap_or(false)
-        })
+        .filter(|session| session_matches_tag_filters(session, &tags))
         .filter(|session| {
             let active = is_active(session);
             (active && include_active) || (!active && include_previous)
@@ -920,12 +915,7 @@ fn search_previous_sessions(
         .into_iter()
         .filter(is_previous_session_history_candidate)
         .filter(|session| project_id_filter.matches(session))
-        .filter(|session| {
-            tags.is_empty()
-                || string_field(session, "sessionTag")
-                    .map(|tag| tags.iter().any(|expected| *expected == tag))
-                    .unwrap_or(false)
-        })
+        .filter(|session| session_matches_tag_filters(session, &tags))
         .filter(|session| {
             let active = is_active(session);
             (active && include_active) || (!active && include_previous)
@@ -1429,6 +1419,26 @@ fn is_favorite(session: &Value) -> bool {
         || session.get("isFavorite").and_then(Value::as_bool) == Some(true)
 }
 
+fn effective_session_tag_for_filter(session: &Value) -> Option<String> {
+    if let Some(tag) = string_field(session, "sessionTag").filter(|tag| !tag.is_empty()) {
+        return Some(tag);
+    }
+    if session.get("isFavorite").and_then(Value::as_bool) == Some(true) {
+        return Some("favorite".to_string());
+    }
+    None
+}
+
+fn session_matches_tag_filters(session: &Value, tags: &[&str]) -> bool {
+    if tags.is_empty() {
+        return true;
+    }
+    match effective_session_tag_for_filter(session) {
+        Some(tag) => tags.iter().any(|expected| *expected == tag),
+        None => tags.iter().any(|expected| *expected == "untagged"),
+    }
+}
+
 fn project_sort_key(project: &Value) -> String {
     let pin_rank = if project.get("isPinned").and_then(Value::as_bool) == Some(true) {
         "0"
@@ -1622,6 +1632,10 @@ fn is_leading_terminal_title_status_marker(ch: char) -> bool {
                 | '\u{273a}'
                 | '\u{2737}'
                 | '\u{2734}'
+                | '\u{25d0}'
+                | '\u{25d1}'
+                | '\u{25d2}'
+                | '\u{25d3}'
                 | '\u{26ec}'
                 | '\u{2726}'
                 | '\u{25c7}'
@@ -3259,6 +3273,61 @@ mod tests {
         .expect_err("bad sessionTags should match TypeScript internal error");
         assert_eq!(error.code, "internalError");
         assert_eq!(error.message, "values?.filter is not a function");
+    }
+
+    #[test]
+    fn search_includes_untagged_sessions_when_untagged_filter_is_selected() {
+        let projects = vec![project("P100", "Tags", false, false)];
+        let mut tagged = session("P100", "G-tagged", "Tagged", "running", 1000.0);
+        tagged
+            .as_object_mut()
+            .expect("session object")
+            .insert("sessionTag".to_string(), json!("in-progress"));
+        let untagged = session("P100", "G-untagged", "Untagged", "running", 2000.0);
+        let mut favorite = session("P100", "G-favorite", "Favorite", "running", 3000.0);
+        favorite
+            .as_object_mut()
+            .expect("session object")
+            .insert("isFavorite".to_string(), json!(true));
+        let sessions = vec![tagged, untagged, favorite];
+
+        let result = search_sessions(
+            projects.clone(),
+            sessions.clone(),
+            json!({ "sessionTags": ["untagged"] })
+                .as_object()
+                .expect("params object"),
+        )
+        .expect("untagged search");
+        let results = result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("results");
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].get("sessionId").and_then(Value::as_str),
+            Some("G-untagged")
+        );
+
+        let mixed_result = search_sessions(
+            projects,
+            sessions,
+            json!({ "sessionTags": ["untagged", "in-progress"] })
+                .as_object()
+                .expect("params object"),
+        )
+        .expect("mixed tag search");
+        let mixed_ids: Vec<&str> = mixed_result
+            .get("results")
+            .and_then(Value::as_array)
+            .expect("results")
+            .iter()
+            .filter_map(|row| row.get("sessionId").and_then(Value::as_str))
+            .collect();
+        assert_eq!(mixed_ids.len(), 2);
+        assert!(mixed_ids.contains(&"G-untagged"));
+        assert!(mixed_ids.contains(&"G-tagged"));
+        assert!(!mixed_ids.contains(&"G-favorite"));
     }
 
     #[test]

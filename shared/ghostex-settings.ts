@@ -1663,9 +1663,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   showSessionDetailsCopyAction: false,
   /**
    * CDXC:SessionTagFilters 2026-06-13-17:50:
-   * First-run sidebar tag filter settings should show every supported tag and
-   * both default separators. Users opt out by hiding or disabling individual
-   * rows from the collapsed Sidebar Tags settings area.
+   * First-run sidebar tag filter settings should show the default triage tags,
+   * the No tag filter, and the default separators. Users opt out by hiding or
+   * disabling individual rows from the collapsed Sidebar Tags settings area.
    */
   sidebarSessionTagListItems: DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
   /**

@@ -174,14 +174,15 @@ import {
   filterSidebarSessionItems,
 } from "./previous-session-search";
 import {
-  getEffectiveSessionTag,
   getSidebarSessionTagLabel,
   SessionTagIcon,
-  type SidebarSessionTag,
+  type SidebarSessionTagFilter,
 } from "./session-tag-ui";
 import {
-  getEnabledVisibleSidebarSessionTags,
+  getEnabledVisibleSidebarSessionTagFilters,
+  getSidebarSessionTagListItemFilter,
   normalizeSidebarSessionTagListItems,
+  sessionMatchesSidebarTagFilters,
   type SidebarSessionTagListItem,
 } from "../shared/session-tags";
 import { isEmptySidebarDoubleClick } from "./empty-sidebar-double-click";
@@ -1075,7 +1076,7 @@ export function SidebarApp({
   const previousExpandedProjectGroupIdsByCollectionIdRef = useRef<Record<string, string[]>>({});
   const [ sessionSearchQuery, setSessionSearchQuery ] = useState("");
   const [ selectedSessionTagFilters, setSelectedSessionTagFilters ] = useState<
-    SidebarSessionTag[]
+    SidebarSessionTagFilter[]
   >([]);
   const [ remoteSessionSearchPreviousSessions, setRemoteSessionSearchPreviousSessions ] =
     useState<SidebarPreviousSessionItem[] | undefined>(undefined);
@@ -1383,7 +1384,7 @@ export function SidebarApp({
     [ effectiveSettings.sidebarSessionTagListItems ],
   );
   const enabledVisibleSidebarSessionTagSet = useMemo(
-    () => new Set(getEnabledVisibleSidebarSessionTags(sidebarSessionTagListItems)),
+    () => new Set(getEnabledVisibleSidebarSessionTagFilters(sidebarSessionTagListItems)),
     [ sidebarSessionTagListItems ],
   );
   const activeSelectedSessionTagFilters = useMemo(
@@ -5179,7 +5180,7 @@ export function SidebarApp({
     );
   };
 
-  const toggleSessionTagFilter = (sessionTag: SidebarSessionTag) => {
+  const toggleSessionTagFilter = (sessionTag: SidebarSessionTagFilter) => {
     if (!enabledVisibleSidebarSessionTagSet.has(sessionTag)) {
       return;
     }
@@ -7008,12 +7009,12 @@ function SidebarReferenceSectionHeader({
   onSetSidebarV2Layout?: (layout: SidebarV2Layout) => void;
   onSetSidebarVersion?: (sidebarVersion: SidebarVersion) => void;
   onToggleShowHidden?: () => void;
-  onToggleSessionTagFilter?: (tag: SidebarSessionTag) => void;
+  onToggleSessionTagFilter?: (tag: SidebarSessionTagFilter) => void;
   onToggleCollapsed: () => void;
   primaryAgentId?: string;
   remoteConnectionControl?: RemoteMachineHeaderConnectionControl;
   sectionKey: ReferenceSidebarSectionId;
-  selectedSessionTagFilters?: readonly SidebarSessionTag[];
+  selectedSessionTagFilters?: readonly SidebarSessionTagFilter[];
   sessionSummary?: SidebarSectionSessionSummary;
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   sidebarV2Layout?: SidebarV2Layout;
@@ -7563,7 +7564,11 @@ function SidebarReferenceSectionHeader({
                 ) : null;
               }
 
-              const isSelected = selectedSessionTagFilters.includes(item.tag);
+              const filter = getSidebarSessionTagListItemFilter(item);
+              if (!filter) {
+                return null;
+              }
+              const isSelected = selectedSessionTagFilters.includes(filter);
               return (
                 <button
                   aria-checked={isSelected}
@@ -7571,7 +7576,7 @@ function SidebarReferenceSectionHeader({
                   data-selected={String(isSelected)}
                   disabled={!item.enabled}
                   key={item.id}
-                  onClick={() => onToggleSessionTagFilter(item.tag)}
+                  onClick={() => onToggleSessionTagFilter(filter)}
                   role="menuitemcheckbox"
                   type="button"
                 >
@@ -7580,9 +7585,9 @@ function SidebarReferenceSectionHeader({
                     fillFavorite
                     size={14}
                     stroke={1.8}
-                    tag={item.tag}
+                    tag={filter}
                   />
-                  {getSidebarSessionTagLabel(item.tag)}
+                  {getSidebarSessionTagLabel(filter)}
                   <IconCheck
                     aria-hidden="true"
                     className="session-context-menu-trailing-icon reference-sidebar-tag-filter-check"
@@ -7733,7 +7738,7 @@ function RemoteMachineSidebarSection({
   onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
   onSetSidebarV2Layout: (layout: SidebarV2Layout) => void;
   onSetSidebarVersion: (sidebarVersion: SidebarVersion) => void;
-  onToggleSessionTagFilter: (tag: SidebarSessionTag) => void;
+  onToggleSessionTagFilter: (tag: SidebarSessionTagFilter) => void;
   onToggleCollapsed: () => void;
   projectCollectionItems?: readonly SidebarProjectCollectionRenderItem[];
   projectUngroupDropIndicatorScopeId?: string;
@@ -7744,7 +7749,7 @@ function RemoteMachineSidebarSection({
     itemIndex: number,
   ) => ReactNode;
   renderProjectGroup: (groupId: string, groupIndex: number) => ReactNode;
-  selectedSessionTagFilters: readonly SidebarSessionTag[];
+  selectedSessionTagFilters: readonly SidebarSessionTagFilter[];
   sessionSummary?: SidebarSectionSessionSummary;
   sessionTagListItems: readonly SidebarSessionTagListItem[];
   sidebarV2Layout: SidebarV2Layout;
@@ -9312,7 +9317,7 @@ function createDisplayedSessionIdsByGroup({
 }: {
   groupIds: readonly string[];
   query: string;
-  selectedSessionTags: readonly SidebarSessionTag[];
+  selectedSessionTags: readonly SidebarSessionTagFilter[];
   sessionIdsByGroup: SessionIdsByGroup;
     sessionsById: ReturnType<typeof useSidebarStore.getState>[ "sessionsById" ];
   shouldFilter: boolean;
@@ -9337,17 +9342,15 @@ function createDisplayedSessionIdsByGroup({
 function filterSessionIdsByTags(
   sessionIds: readonly string[],
   sessionsById: ReturnType<typeof useSidebarStore.getState>[ "sessionsById" ],
-  selectedSessionTags: readonly SidebarSessionTag[],
+  selectedSessionTags: readonly SidebarSessionTagFilter[],
 ): string[] {
   if (selectedSessionTags.length === 0) {
     return [ ...sessionIds ];
   }
 
-  const selectedTagSet = new Set(selectedSessionTags);
   return sessionIds.filter((sessionId) => {
     const session = sessionsById[ sessionId ];
-    const sessionTag = session ? getEffectiveSessionTag(session) : undefined;
-    return sessionTag ? selectedTagSet.has(sessionTag) : false;
+    return session ? sessionMatchesSidebarTagFilters(session, selectedSessionTags) : false;
   });
 }
 

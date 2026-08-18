@@ -43,6 +43,7 @@ import { DEFAULT_PET_ID } from "./pets";
 import {
   DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
   getEnabledVisibleSidebarSessionTags,
+  getEnabledVisibleSidebarSessionTagFilters,
   getEnabledVisibleSidebarSessionTagSections,
 } from "./session-tags";
 
@@ -605,6 +606,17 @@ describe("normalizeghostexSettings", () => {
       "research",
       "design",
     ]);
+    expect(getEnabledVisibleSidebarSessionTagFilters(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS)).toEqual([
+      "favorite",
+      "in-progress",
+      "testing",
+      "blocked",
+      "on-hold",
+      "done",
+      "research",
+      "design",
+      "untagged",
+    ]);
     expect(
       getEnabledVisibleSidebarSessionTagSections(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS).map(
         (section) => ({
@@ -630,7 +642,19 @@ describe("normalizeghostexSettings", () => {
       { enabled: false, id: "testing", tag: "testing", type: "tag", visible: false },
       DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS[0],
     ]);
-    expect(getEnabledVisibleSidebarSessionTags(normalizedCustomTags)).not.toContain("testing");
+    expect(getEnabledVisibleSidebarSessionTagFilters(normalizedCustomTags)).not.toContain("testing");
+    expect(normalizedCustomTags.at(-2)).toEqual({
+      enabled: true,
+      id: "separator-type-untagged",
+      type: "separator",
+      visible: true,
+    });
+    expect(normalizedCustomTags.at(-1)).toEqual({
+      enabled: true,
+      id: "untagged",
+      type: "untagged",
+      visible: true,
+    });
   });
 
   test("keeps untracked project diff lines off unless explicitly enabled", () => {

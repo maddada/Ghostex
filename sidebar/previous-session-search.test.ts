@@ -162,6 +162,12 @@ describe("filterPreviousSessions", () => {
       { historyId: "history-2" },
     ]);
     expect(filterPreviousSessions(previousSessions, "normal", { sessionTags: ["favorite"] })).toEqual([]);
+    expect(filterPreviousSessions(previousSessions, "", { sessionTags: ["untagged"] })).toMatchObject([
+      { historyId: "history-3" },
+    ]);
+    expect(
+      filterPreviousSessions(previousSessions, "", { sessionTags: ["untagged", "todo"] }),
+    ).toMatchObject([{ historyId: "history-2" }, { historyId: "history-3" }]);
   });
 
   test("should keep only the latest session for the same project and title", () => {

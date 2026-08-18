@@ -1474,6 +1474,11 @@
   color: #ff9ee7;
 }
 
+.session-tag-colored-icon[data-session-tag="untagged"],
+.session-tag-agent-icon[data-session-tag="untagged"] {
+  color: color-mix(in srgb, #9aa8b6 70%, var(--app-foreground) 30%);
+}
+
 .session-frame:hover .session-floating-agent-icon,
 .session-frame:hover .session-floating-agent-tabler-icon,
 .session-frame:hover .session-floating-reloading-icon,
