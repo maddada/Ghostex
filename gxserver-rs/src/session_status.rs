@@ -36,7 +36,7 @@ const SLOW_SPINNER_ACTIVITY_WINDOW_MS: i64 = 5_000;
 const CLAUDE_CODE_IDLE_MARKERS: &[char] = &['\u{2733}', '*'];
 const CLAUDE_CODE_WORKING_MARKERS: &[char] = &[
     '\u{2810}', '\u{2802}', '\u{00b7}', '\u{2736}', '\u{273b}', '\u{273d}', '\u{2738}', '\u{2739}',
-    '\u{273a}', '\u{2737}', '\u{2734}',
+    '\u{273a}', '\u{2737}', '\u{2734}', '\u{25d0}', '\u{25d1}', '\u{25d2}', '\u{25d3}',
 ];
 const CODEX_WORKING_MARKERS: &[char] = &[
     '\u{2838}', '\u{2834}', '\u{283c}', '\u{2827}', '\u{2826}', '\u{280f}', '\u{280b}', '\u{2807}',
@@ -1257,6 +1257,10 @@ fn trim_title_prefix_markers(value: &str) -> &str {
                     | '\u{25e6}'
                     | '\u{2733}'
                     | '*'
+                    | '\u{25d0}'
+                    | '\u{25d1}'
+                    | '\u{25d2}'
+                    | '\u{25d3}'
                     | '\u{2726}'
                     | '\u{25c7}'
                     | '\u{1f916}'
@@ -1347,6 +1351,10 @@ fn collapse_signature_noise(value: &str) -> String {
                     | '\u{25e6}'
                     | '\u{2733}'
                     | '*'
+                    | '\u{25d0}'
+                    | '\u{25d1}'
+                    | '\u{25d2}'
+                    | '\u{25d3}'
                     | '\u{2726}'
                     | '\u{25c7}'
                     | '\u{1f916}'
