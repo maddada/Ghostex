@@ -4,6 +4,7 @@ import {
   isSessionChatEventType,
   normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
+  type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverReadSessionChatSkillsResult,
@@ -196,6 +197,12 @@ function createGpuiSessionChatTransport(
     },
     readSkills() {
       return rpc<GxserverReadSessionChatSkillsResult>(bootstrap, "/api/readSessionChatSkills", {
+        projectId,
+        sessionId,
+      });
+    },
+    readFiles() {
+      return rpc<GxserverReadSessionChatFilesResult>(bootstrap, "/api/readSessionChatFiles", {
         projectId,
         sessionId,
       });

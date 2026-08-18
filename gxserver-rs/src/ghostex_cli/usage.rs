@@ -243,6 +243,7 @@ pub fn usage() -> String {
         format_help_command("read-text <selector> [--lines n] [--visible] [--json]", "Read terminal text by id or quoted title"),
         format_help_command("read-session-chat <selector> [--limit n] [--before-offset n] [--wait-ms n --fingerprint f] --json", "Read a session's chat transcript; --wait-ms long-polls until the chat changes"),
         format_help_command("read-session-chat-skills <selector> --json", "List skills available to the session's agent"),
+        format_help_command("read-session-chat-files <selector> --json", "List the session project's files for @ mentions"),
         format_help_command("send-session-chat-message <selector> <text>", "Send a chat message into an agent session"),
         format_help_command("answer-session-chat-prompt <selector> --answer-json '<json>'", "Answer a pending question/approval prompt"),
         format_help_command("interrupt-session-chat <selector>", "Interrupt the session's running agent turn"),

@@ -4,6 +4,7 @@ import "./session-chat.css";
 import {
   normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
+  type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverReadSessionChatSkillsResult,
@@ -31,7 +32,7 @@ all chat behavior lives in shared code.
 
 Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - page → RN: window.ReactNativeWebView.postMessage(JSON.stringify(
-    { id, op: "read" | "readSkills" | "send" | "sendKey"
+    { id, op: "read" | "readSkills" | "readFiles" | "send" | "sendKey"
         | "switchToTerminalForAgentPicker" | "answerPrompt" | "interrupt"
         | "saveImage" | "saveAttachment" | "loadImage",
       params }))
@@ -85,6 +86,7 @@ interface MobileChatHostState {
 type BridgeOp =
   | "read"
   | "readSkills"
+  | "readFiles"
   | "send"
   | "sendKey"
   | "switchToTerminalForAgentPicker"
@@ -322,6 +324,9 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     },
     readSkills() {
       return bridgeCall<GxserverReadSessionChatSkillsResult>("readSkills");
+    },
+    readFiles() {
+      return bridgeCall<GxserverReadSessionChatFilesResult>("readFiles");
     },
     /*
     Composer image paste. gxserver's saveSessionChatImage endpoint has no CLI

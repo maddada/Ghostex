@@ -5,6 +5,7 @@
 // re-subscribes automatically after reconnects).
 
 import type {
+  GxserverReadSessionChatFilesResult,
   GxserverReadSessionChatImageResult,
   GxserverReadSessionChatResult,
   GxserverSaveSessionChatAttachmentResult,
@@ -45,6 +46,13 @@ export function createSessionChatTransport(
           ...(params.limit !== undefined ? { limit: params.limit } : {}),
           ...(params.beforeOffset !== undefined ? { beforeOffset: params.beforeOffset } : {}),
         },
+      );
+    },
+    readFiles() {
+      return rpcForMachine<GxserverReadSessionChatFilesResult>(
+        machineId,
+        "/api/readSessionChatFiles",
+        { projectId, sessionId },
       );
     },
     async send(text, imagePaths) {

@@ -3,15 +3,28 @@
 // composition Enter, and ArrowUp/Down recall draft history. Typing a
 // line-leading "/" opens the slash-command picker (per-agent catalog):
 // ArrowUp/Down highlight, Tab/Enter complete, Enter on an exact match sends,
-// Escape dismisses the picker without interrupting.
+// Escape dismisses the picker without interrupting. A "$" token opens the same
+// picker over the session's skills and an "@" token over the project's files;
+// both read the token under the caret (see session-chat-composer-trigger.ts),
+// so they open wherever in the draft the mention is being typed.
 //
 // Layout (§1.1): input row, then a footer row — session identity/options on
-// the left, with Attach and Send/Stop on the right. Styled with shadcn tokens
-// to sit under the shadcn chat conversation.
+// the left, with Attach, Maximize and Send/Stop on the right. Styled with
+// shadcn tokens to sit under the shadcn chat conversation.
+//
+// Maximize lifts the whole field onto a centered overlay (see
+// `.ghostex-chat-composer-maximized` in sidebar/styles/chat.css) so long
+// prompts can be edited without scrolling a 160px-tall input. The field keeps
+// its place in the React tree while maximized — only its box changes — so the
+// monaco instance, caret, undo stack and pending attachments all survive the
+// toggle.
 
 import {
   IconArrowUp,
+  IconFile,
   IconLoader2,
+  IconMaximize,
+  IconMinimize,
   IconPaperclip,
   IconPlayerStopFilled,
   IconRobot,
@@ -45,6 +58,15 @@ import {
   sessionChatSlashQuery,
   type SessionChatSlashCommand,
 } from "./session-chat-slash-commands";
+import {
+  detectSessionChatComposerTrigger,
+  filterSessionChatFiles,
+  filterSessionChatSkills,
+  linkedSessionChatSkillMention,
+  sessionChatFileBasename,
+  sessionChatFileDirectory,
+  sessionChatFileMention,
+} from "./session-chat-composer-trigger";
 import { SessionChatMonacoInput } from "./session-chat-monaco-input";
 import {
   sessionChatImageTargetForHref,
@@ -59,6 +81,12 @@ export interface SessionChatComposerHandle {
   getDraft: () => string;
   /** Insert text at the caret; returns false when the composer cannot take it. */
   insertTypedText: (text: string) => boolean;
+  /**
+   * Clipboard payload redirected from the chat background: images become
+   * attachments, text lands at the caret. Returns false when the composer
+   * cannot take anything the clipboard holds.
+   */
+  pasteClipboard: (data: DataTransfer) => boolean;
 }
 
 /**
@@ -105,6 +133,20 @@ export interface SessionChatComposerProps {
   skills?: readonly SessionChatSkill[];
   /** Section heading shown above the skill mention rows. */
   skillHeading?: string;
+  /**
+   * Project-relative file paths offered by the "@" picker, listed on the
+   * session's machine. Undefined while the host has not answered yet.
+   */
+  files?: readonly string[];
+  /** Section heading shown above the file mention rows. */
+  fileHeading?: string;
+  /**
+   * Asked once the first "@" token is typed so the host can list the project
+   * lazily instead of on every chat mount.
+   */
+  onRequestFiles?: () => void;
+  /** True while the host is listing files for the "@" picker. */
+  filesLoading?: boolean;
   onSend: (text: string) => void | Promise<void>;
   onInterrupt: () => void;
   /** Save the current draft for later and clear it after the save succeeds. */
@@ -164,40 +206,6 @@ interface PastedImagePreview {
   path: string;
 }
 
-interface SessionChatSkillMentionQuery {
-  query: string;
-  start: number;
-}
-
-/** A whitespace-delimited trailing `$name` token opens the skill picker. */
-function sessionChatSkillMentionQuery(text: string): SessionChatSkillMentionQuery | null {
-  const match = /(?:^|\s)\$([\p{L}\p{N}._:-]*)$/u.exec(text);
-  if (!match) {
-    return null;
-  }
-  const tokenOffset = match[0].lastIndexOf("$");
-  return {
-    query: match[1] ?? "",
-    start: match.index + tokenOffset,
-  };
-}
-
-function filterSessionChatSkills(
-  skills: readonly SessionChatSkill[],
-  query: string,
-): SessionChatSkill[] {
-  const normalized = query.trim().toLocaleLowerCase();
-  return skills.filter((skill) =>
-    normalized === "" || skill.name.toLocaleLowerCase().includes(normalized),
-  );
-}
-
-function linkedSessionChatSkillMention(skill: SessionChatSkill): string {
-  const label = skill.name.replace(/[\\\[\]]/g, "\\$&");
-  const path = skill.directoryPath.replace(/[\\()]/g, "\\$&");
-  return `[$${label}](${path})`;
-}
-
 /** Rich Prompt Editor numbering: max existing [Image #N]( in the draft, +1. */
 function nextImageReferenceIndex(text: string): number {
   let highest = 0;
@@ -221,6 +229,10 @@ function nextFileReferenceIndex(text: string): number {
   }
   return highest + 1;
 }
+
+/** Mentions the two composer pickers so they are discoverable without docs. */
+const DEFAULT_SESSION_CHAT_PLACEHOLDER =
+  "Send a message to the agent. Enter @ to mention a file and $ to use a skill...";
 
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
@@ -317,6 +329,9 @@ export const SessionChatComposer = forwardRef<
 >(function SessionChatComposer(
   {
     disabled = false,
+    fileHeading,
+    files,
+    filesLoading = false,
     isWorking,
     monacoVsBaseUrl,
     onAttachFile,
@@ -324,6 +339,7 @@ export const SessionChatComposer = forwardRef<
     onLoadImagePreview,
     onPasteImage,
     onPickPaths,
+    onRequestFiles,
     onSend,
     onStash,
     optionPills,
@@ -344,15 +360,24 @@ export const SessionChatComposer = forwardRef<
   const [slashIndex, setSlashIndex] = useState(0);
   const [skillDismissed, setSkillDismissed] = useState(false);
   const [skillIndex, setSkillIndex] = useState(0);
+  const [fileDismissed, setFileDismissed] = useState(false);
+  const [fileIndex, setFileIndex] = useState(0);
+  /**
+   * Caret offset the pickers read. The draft alone cannot say where the caret
+   * is, and a mention is only "being typed" when the caret sits at its end.
+   */
+  const [caret, setCaret] = useState<number | null>(null);
   const [pastedImages, setPastedImages] = useState<readonly PastedImagePreview[]>([]);
   const [pendingImagePastes, setPendingImagePastes] = useState(0);
   const [monacoFailed, setMonacoFailed] = useState(false);
+  const [maximized, setMaximized] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const imageViewer = useSessionChatImageViewer();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const slashListRef = useRef<HTMLDivElement | null>(null);
   const skillListRef = useRef<HTMLDivElement | null>(null);
+  const fileListRef = useRef<HTMLDivElement | null>(null);
   const pasteSequenceRef = useRef(0);
   const previewLoadsRef = useRef(new Set<string>());
   const draftRef = useRef(draft);
@@ -382,8 +407,8 @@ export const SessionChatComposer = forwardRef<
   );
   const slashOpen = slashMatches.length > 0 && !disabled;
   const highlightedIndex = Math.min(slashIndex, Math.max(slashMatches.length - 1, 0));
-  const skillMention = sessionChatSkillMentionQuery(draft);
-  const skillQuery = skillMention?.query ?? null;
+  const trigger = detectSessionChatComposerTrigger(draft, caret ?? draft.length);
+  const skillQuery = trigger?.kind === "skill" ? trigger.query : null;
   const skillMatches = useMemo(
     () =>
       skillQuery !== null && !skillDismissed
@@ -396,6 +421,31 @@ export const SessionChatComposer = forwardRef<
     skillIndex,
     Math.max(skillMatches.length - 1, 0),
   );
+  const fileQuery = trigger?.kind === "path" ? trigger.query : null;
+  const fileMatches = useMemo(
+    () =>
+      fileQuery !== null && !fileDismissed
+        ? filterSessionChatFiles(files ?? [], fileQuery)
+        : [],
+    [fileDismissed, fileQuery, files],
+  );
+  const filePickerActive =
+    fileQuery !== null && !fileDismissed && !disabled && !slashOpen;
+  // The picker stays up while the host is still listing so "@" never looks
+  // dead on the first use of a session, when nothing is cached yet.
+  const fileOpen =
+    filePickerActive && (fileMatches.length > 0 || (filesLoading && !files));
+  const highlightedFileIndex = Math.min(
+    fileIndex,
+    Math.max(fileMatches.length - 1, 0),
+  );
+
+  // Lazy list: the first "@" of a session asks the host for the project files.
+  useEffect(() => {
+    if (filePickerActive && files === undefined) {
+      onRequestFiles?.();
+    }
+  }, [filePickerActive, files, onRequestFiles]);
 
   useEffect(() => {
     if (!slashOpen) {
@@ -415,19 +465,37 @@ export const SessionChatComposer = forwardRef<
       ?.scrollIntoView({ block: "nearest" });
   }, [highlightedSkillIndex, skillOpen]);
 
-  const updateDraft = (next: string): void => {
+  useEffect(() => {
+    if (!fileOpen) {
+      return;
+    }
+    fileListRef.current
+      ?.querySelector('[data-highlighted="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlightedFileIndex, fileOpen]);
+
+  const updateDraft = (next: string, nextCaret?: number): void => {
+    const caretOffset = nextCaret ?? next.length;
     writeStoredSessionChatDraft(sessionKey, next);
     setDraft(next);
+    setCaret(caretOffset);
     setSendError(null);
     setHistory((current) => resetSessionChatComposerHistoryIndex(current));
     if (sessionChatSlashQuery(next) === null) {
       setSlashDismissed(false);
     }
-    if (sessionChatSkillMentionQuery(next) === null) {
+    // Leaving a token re-arms its picker, so a dismissed mention does not stay
+    // dismissed for the next one typed in the same draft.
+    const nextTrigger = detectSessionChatComposerTrigger(next, caretOffset);
+    if (nextTrigger?.kind !== "skill") {
       setSkillDismissed(false);
+    }
+    if (nextTrigger?.kind !== "path") {
+      setFileDismissed(false);
     }
     setSlashIndex(0);
     setSkillIndex(0);
+    setFileIndex(0);
   };
 
   const textareaApi: SessionChatComposerInputApi = {
@@ -457,7 +525,7 @@ export const SessionChatComposer = forwardRef<
       const start = textarea.selectionStart ?? textarea.value.length;
       const end = textarea.selectionEnd ?? textarea.value.length;
       const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
-      updateDraft(next);
+      updateDraft(next, start + text.length);
       textarea.focus();
       requestAnimationFrame(() => {
         const caret = start + text.length;
@@ -496,12 +564,15 @@ export const SessionChatComposer = forwardRef<
       writeStoredSessionChatDraft(sessionKey, "");
       draftRef.current = "";
       setDraft("");
+      setCaret(0);
       setHistory((value) => resetSessionChatComposerHistoryIndex(value));
       getInputApi()?.applyValue("", 0);
       setSlashDismissed(false);
       setSlashIndex(0);
       setSkillDismissed(false);
       setSkillIndex(0);
+      setFileDismissed(false);
+      setFileIndex(0);
       setSendError(null);
       return true;
     },
@@ -528,6 +599,27 @@ export const SessionChatComposer = forwardRef<
       }
       return input.insertText(text);
     },
+    pasteClipboard: (data: DataTransfer): boolean => {
+      if (disabled) {
+        return false;
+      }
+      if (processClipboardData(data)) {
+        // Images were consumed as attachments; put the caret back in the
+        // input so the redirected paste ends with a ready composer.
+        getInputApi()?.focus();
+        return true;
+      }
+      const text = data.getData("text/plain");
+      if (text === "") {
+        return false;
+      }
+      const input = getInputApi();
+      if (!input) {
+        pendingInsertTextRef.current += text;
+        return true;
+      }
+      return input.insertText(text);
+    },
   }));
 
   const send = (text: string = draft): void => {
@@ -545,10 +637,13 @@ export const SessionChatComposer = forwardRef<
     setDraft("");
     setHistory((value) => resetSessionChatComposerHistoryIndex(value));
     getInputApi()?.applyValue("", 0);
+    setCaret(0);
     setSlashDismissed(false);
     setSlashIndex(0);
     setSkillDismissed(false);
     setSkillIndex(0);
+    setFileDismissed(false);
+    setFileIndex(0);
 
     const sendRequest = (() => {
       try {
@@ -570,6 +665,7 @@ export const SessionChatComposer = forwardRef<
         writeStoredSessionChatDraft(sessionKey, restored);
         draftRef.current = restored;
         setDraft(restored);
+        setCaret(restored.length);
         setHistory((value) => resetSessionChatComposerHistoryIndex(value));
         getInputApi()?.applyValue(restored, restored.length);
         getInputApi()?.focus();
@@ -590,7 +686,7 @@ export const SessionChatComposer = forwardRef<
     const needsLeadingSpace = start > 0 && !/\s/.test(current[start - 1] ?? "");
     const inserted = `${needsLeadingSpace ? " " : ""}${reference} `;
     const next = `${current.slice(0, start)}${inserted}${current.slice(end)}`;
-    updateDraft(next);
+    updateDraft(next, start + inserted.length);
     api?.focus();
     api?.applyValue(next, start + inserted.length);
   };
@@ -669,7 +765,7 @@ export const SessionChatComposer = forwardRef<
       return;
     }
     const next = current.replace(pattern, "");
-    updateDraft(next);
+    updateDraft(next, matchIndex);
     api?.applyValue(next, matchIndex);
   };
 
@@ -779,7 +875,7 @@ export const SessionChatComposer = forwardRef<
 
   const completeSlashCommand = (command: SessionChatSlashCommand): void => {
     const next = `/${command.name}`;
-    updateDraft(next);
+    updateDraft(next, next.length);
     const api = getInputApi();
     api?.focus();
     api?.applyValue(next, next.length);
@@ -823,17 +919,25 @@ export const SessionChatComposer = forwardRef<
     return false;
   };
 
-  const completeSkillMention = (skill: SessionChatSkill): void => {
-    const mention = sessionChatSkillMentionQuery(draft);
-    if (!mention) {
+  /** Replaces the token under the caret and leaves the caret just past it. */
+  const completeMention = (replacement: string): void => {
+    if (!trigger) {
       return;
     }
-    const linkedMention = `${linkedSessionChatSkillMention(skill)} `;
-    const next = `${draft.slice(0, mention.start)}${linkedMention}`;
-    updateDraft(next);
+    const next = `${draft.slice(0, trigger.start)}${replacement}${draft.slice(trigger.end)}`;
+    const nextCaret = trigger.start + replacement.length;
+    updateDraft(next, nextCaret);
     const api = getInputApi();
     api?.focus();
-    api?.applyValue(next, next.length);
+    api?.applyValue(next, nextCaret);
+  };
+
+  const completeSkillMention = (skill: SessionChatSkill): void => {
+    completeMention(`${linkedSessionChatSkillMention(skill)} `);
+  };
+
+  const completeFileMention = (path: string): void => {
+    completeMention(`${sessionChatFileMention(path)} `);
   };
 
   const handleSkillKeyDown = (event: SessionChatComposerKeyEvent): boolean => {
@@ -866,6 +970,49 @@ export const SessionChatComposer = forwardRef<
     return false;
   };
 
+  const handleFileKeyDown = (event: SessionChatComposerKeyEvent): boolean => {
+    if (!fileOpen) {
+      return false;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setFileDismissed(true);
+      return true;
+    }
+    if (fileMatches.length === 0) {
+      // Still listing: swallow nothing but Escape so typing and sending work.
+      return false;
+    }
+    const highlighted = fileMatches[highlightedFileIndex];
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const delta = event.key === "ArrowUp" ? -1 : 1;
+      setFileIndex((current) => {
+        const currentIndex = Math.min(current, fileMatches.length - 1);
+        return (currentIndex + delta + fileMatches.length) % fileMatches.length;
+      });
+      return true;
+    }
+    if (
+      event.key === "Tab" ||
+      (sendOnEnter && event.key === "Enter" && !event.shiftKey)
+    ) {
+      event.preventDefault();
+      if (highlighted !== undefined) {
+        completeFileMention(highlighted);
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const setMaximizedAndFocus = (next: boolean): void => {
+    setMaximized(next);
+    // The field never leaves the React tree, so the live input element is the
+    // same node before and after the toggle and can be refocused right away.
+    getInputApi()?.focus();
+  };
+
   const handleKeyDown = (event: SessionChatComposerKeyEvent): void => {
     // IME guard: composition Enter confirms the composition; letting it fall
     // through would submit a partial draft. (The textarea wrapper additionally
@@ -873,11 +1020,21 @@ export const SessionChatComposer = forwardRef<
     if (event.isComposing) {
       return;
     }
-    if (handleSkillKeyDown(event) || handleSlashKeyDown(event)) {
+    if (
+      handleSkillKeyDown(event) ||
+      handleFileKeyDown(event) ||
+      handleSlashKeyDown(event)
+    ) {
       return;
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      // Maximize is an overlay, so Escape closes it first; the next Escape
+      // interrupts the agent as usual.
+      if (maximized) {
+        setMaximizedAndFocus(false);
+        return;
+      }
       onInterrupt();
       return;
     }
@@ -892,6 +1049,7 @@ export const SessionChatComposer = forwardRef<
         event.preventDefault();
         setHistory(recalled.history);
         setDraft(recalled.draft);
+        setCaret(recalled.draft.length);
         getInputApi()?.applyValue(recalled.draft, recalled.draft.length);
       }
       return;
@@ -902,6 +1060,7 @@ export const SessionChatComposer = forwardRef<
         event.preventDefault();
         setHistory(recalled.history);
         setDraft(recalled.draft);
+        setCaret(recalled.draft.length);
         getInputApi()?.applyValue(recalled.draft, recalled.draft.length);
       }
     }
@@ -910,331 +1069,437 @@ export const SessionChatComposer = forwardRef<
   const sendDisabled = isWorking ? false : disabled || draft.trim() === "";
 
   return (
-    // min-w-0 all the way down to the input: this sits in a grid/flex column,
-    // whose items are min-width:auto by default, so an unbreakable pasted run
-    // would otherwise widen the composer past the pane and scroll the page.
-    <Field
-      className="relative min-w-0 gap-2"
-      data-invalid={sendError !== null ? true : undefined}
-    >
-      {slashOpen ? (
-        <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
-          <div
-            className="max-h-72 overflow-y-auto p-1.5"
-            ref={slashListRef}
-            role="listbox"
-            aria-label="Slash commands"
-          >
-            <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {slashHeading ?? "Commands"}
-            </div>
-            {slashMatches.map((command, index) => (
-              <button
-                aria-selected={index === highlightedIndex}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
-                  index === highlightedIndex
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground",
-                )}
-                data-highlighted={index === highlightedIndex ? "true" : undefined}
-                key={command.name}
-                onMouseDown={(event) => {
-                  // Keep textarea focus; complete on the same gesture.
-                  event.preventDefault();
-                  completeSlashCommand(command);
-                }}
-                onMouseMove={() => {
-                  if (index !== highlightedIndex) {
-                    setSlashIndex(index);
-                  }
-                }}
-                role="option"
-                type="button"
-              >
-                <IconRobot
-                  aria-hidden="true"
-                  className="size-4 shrink-0 text-muted-foreground"
-                  stroke={1.6}
-                />
-                <span className="shrink-0 font-semibold">/{command.name}</span>
-                <span className="truncate text-muted-foreground">
-                  {command.description}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+    <>
+      {maximized ? (
+        <div
+          aria-hidden="true"
+          className="ghostex-chat-composer-backdrop"
+          onClick={() => {
+            setMaximizedAndFocus(false);
+          }}
+        />
       ) : null}
-      {skillOpen ? (
-        <div className="absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
-          <div
-            aria-label="Available skills"
-            className="max-h-72 overflow-y-auto p-1.5"
-            ref={skillListRef}
-            role="listbox"
-          >
-            <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {skillHeading ?? "Skills"}
-            </div>
-            {skillMatches.map((skill, index) => (
-              <button
-                aria-selected={index === highlightedSkillIndex}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
-                  index === highlightedSkillIndex
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground",
-                )}
-                data-highlighted={
-                  index === highlightedSkillIndex ? "true" : undefined
-                }
-                key={`${skill.name}:${skill.directoryPath}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  completeSkillMention(skill);
-                }}
-                onMouseMove={() => {
-                  if (index !== highlightedSkillIndex) {
-                    setSkillIndex(index);
-                  }
-                }}
-                role="option"
-                type="button"
-              >
-                <IconRobot
-                  aria-hidden="true"
-                  className="size-4 shrink-0 text-muted-foreground"
-                  stroke={1.6}
-                />
-                <span className="shrink-0 font-semibold">${skill.name}</span>
-                <span className="truncate text-muted-foreground">
-                  {skill.directoryPath}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {sendError ? <FieldError className="px-2">{sendError}</FieldError> : null}
-      <div
+      {/* min-w-0 all the way down to the input: this sits in a grid/flex column,
+          whose items are min-width:auto by default, so an unbreakable pasted run
+          would otherwise widen the composer past the pane and scroll the page. */}
+      <Field
         className={cn(
-          "ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
-          disabled && "opacity-60",
+          "relative min-w-0 gap-2",
+          maximized && "ghostex-chat-composer-maximized",
         )}
-        data-disabled={disabled ? "true" : undefined}
+        data-invalid={sendError !== null ? true : undefined}
       >
-        {pastedImages.length > 0 || pendingImagePastes > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 pb-2">
-            {pastedImages.map((image) => (
-              <div className="relative" key={image.id}>
+        {slashOpen ? (
+          <div className="ghostex-chat-composer-picker absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
+            <div
+              className="max-h-72 overflow-y-auto p-1.5"
+              ref={slashListRef}
+              role="listbox"
+              aria-label="Slash commands"
+            >
+              <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {slashHeading ?? "Commands"}
+              </div>
+              {slashMatches.map((command, index) => (
                 <button
-                  aria-label="View pasted image"
-                  className="block cursor-zoom-in rounded-lg"
-                  disabled={!imageViewer}
-                  onClick={() =>
-                    imageViewer?.open({
-                      alt: "Pasted image",
-                      url: image.dataUrl,
-                    })
-                  }
+                  aria-selected={index === highlightedIndex}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
+                    index === highlightedIndex
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground",
+                  )}
+                  data-highlighted={index === highlightedIndex ? "true" : undefined}
+                  key={command.name}
+                  onMouseDown={(event) => {
+                    // Keep textarea focus; complete on the same gesture.
+                    event.preventDefault();
+                    completeSlashCommand(command);
+                  }}
+                  onMouseMove={() => {
+                    if (index !== highlightedIndex) {
+                      setSlashIndex(index);
+                    }
+                  }}
+                  role="option"
                   type="button"
                 >
-                  <img
-                    alt="Pasted image"
-                    className="h-12 w-12 rounded-lg border border-input object-cover"
-                    src={image.dataUrl}
+                  <IconRobot
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted-foreground"
+                    stroke={1.6}
                   />
+                  <span className="shrink-0 font-semibold">/{command.name}</span>
+                  <span className="truncate text-muted-foreground">
+                    {command.description}
+                  </span>
                 </button>
-                <button
-                  aria-label="Remove image"
-                  className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-input bg-card text-muted-foreground hover:text-foreground"
-                  onClick={() => removePastedImage(image)}
-                  type="button"
-                >
-                  <IconX aria-hidden="true" size={10} stroke={2.4} />
-                </button>
-              </div>
-            ))}
-            {pendingImagePastes > 0 ? (
-              <div
-                aria-label="Saving attachment"
-                className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-input text-muted-foreground"
-              >
-                <IconLoader2
-                  aria-hidden="true"
-                  className="animate-spin"
-                  size={16}
-                  stroke={2}
-                />
-              </div>
-            ) : null}
+              ))}
+            </div>
           </div>
         ) : null}
-        <div className="flex min-w-0 items-end gap-2 pb-1.5">
-        {useMonaco ? (
-          <SessionChatMonacoInput
-            disabled={disabled}
-            initialValue={draft}
-            onChange={updateDraft}
-            onKeyDown={handleKeyDown}
-            onLoadFailed={(error) => {
-              console.error(
-                "[session-chat] Monaco failed to load; using the plain input.",
-                error,
-              );
-              setMonacoFailed(true);
-            }}
-            onPasteData={processClipboardData}
-            placeholder={placeholder ?? "Send a message…"}
-            registerApi={(api) => {
-              monacoApiRef.current = api;
-              if (api && pendingInsertTextRef.current) {
-                const pending = pendingInsertTextRef.current;
-                pendingInsertTextRef.current = "";
-                api.insertText(pending);
-              }
-              if (api && pendingFocusRef.current) {
-                pendingFocusRef.current = false;
-                api.focus();
-              }
-            }}
-            theme={theme}
-            vsBaseUrl={monacoVsBaseUrl ?? ""}
-          />
-        ) : (
-          <textarea
-            className="ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
-            disabled={disabled}
-            aria-invalid={sendError !== null}
-            onChange={(event) => {
-              updateDraft(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              const adapted = reactKeyEventAdapter(event);
-              if (adapted.isComposing) {
-                if (adapted.key === "Enter") {
+        {skillOpen ? (
+          <div className="ghostex-chat-composer-picker absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
+            <div
+              aria-label="Available skills"
+              className="max-h-72 overflow-y-auto p-1.5"
+              ref={skillListRef}
+              role="listbox"
+            >
+              <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {skillHeading ?? "Skills"}
+              </div>
+              {skillMatches.map((skill, index) => (
+                <button
+                  aria-selected={index === highlightedSkillIndex}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
+                    index === highlightedSkillIndex
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground",
+                  )}
+                  data-highlighted={
+                    index === highlightedSkillIndex ? "true" : undefined
+                  }
+                  key={`${skill.name}:${skill.directoryPath}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    completeSkillMention(skill);
+                  }}
+                  onMouseMove={() => {
+                    if (index !== highlightedSkillIndex) {
+                      setSkillIndex(index);
+                    }
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  <IconRobot
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted-foreground"
+                    stroke={1.6}
+                  />
+                  <span className="shrink-0 font-semibold">${skill.name}</span>
+                  <span className="truncate text-muted-foreground">
+                    {skill.directoryPath}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {fileOpen ? (
+          <div className="ghostex-chat-composer-picker absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl">
+            <div
+              aria-label="Project files"
+              className="max-h-72 overflow-y-auto p-1.5"
+              ref={fileListRef}
+              role="listbox"
+            >
+              <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {fileHeading ?? "Files"}
+              </div>
+              {fileMatches.length === 0 ? (
+                <div className="flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground">
+                  <IconLoader2
+                    aria-hidden="true"
+                    className="size-4 shrink-0 animate-spin"
+                    stroke={2}
+                  />
+                  Listing project files…
+                </div>
+              ) : null}
+              {fileMatches.map((path, index) => (
+                <button
+                  aria-selected={index === highlightedFileIndex}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
+                    index === highlightedFileIndex
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground",
+                  )}
+                  data-highlighted={
+                    index === highlightedFileIndex ? "true" : undefined
+                  }
+                  key={path}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    completeFileMention(path);
+                  }}
+                  onMouseMove={() => {
+                    if (index !== highlightedFileIndex) {
+                      setFileIndex(index);
+                    }
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  <IconFile
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted-foreground"
+                    stroke={1.6}
+                  />
+                  <span className="shrink-0 font-semibold">
+                    {sessionChatFileBasename(path)}
+                  </span>
+                  <span className="truncate text-muted-foreground">
+                    {sessionChatFileDirectory(path)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {sendError ? <FieldError className="px-2">{sendError}</FieldError> : null}
+        <div
+          className={cn(
+            "ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
+            disabled && "opacity-60",
+          )}
+          data-disabled={disabled ? "true" : undefined}
+        >
+          {pastedImages.length > 0 || pendingImagePastes > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 pb-2">
+              {pastedImages.map((image) => (
+                <div className="relative" key={image.id}>
+                  <button
+                    aria-label="View pasted image"
+                    className="block cursor-zoom-in rounded-lg"
+                    disabled={!imageViewer}
+                    onClick={() =>
+                      imageViewer?.open({
+                        alt: "Pasted image",
+                        url: image.dataUrl,
+                      })
+                    }
+                    type="button"
+                  >
+                    <img
+                      alt="Pasted image"
+                      className="h-12 w-12 rounded-lg border border-input object-cover"
+                      src={image.dataUrl}
+                    />
+                  </button>
+                  <button
+                    aria-label="Remove image"
+                    className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-input bg-card text-muted-foreground hover:text-foreground"
+                    onClick={() => removePastedImage(image)}
+                    type="button"
+                  >
+                    <IconX aria-hidden="true" size={10} stroke={2.4} />
+                  </button>
+                </div>
+              ))}
+              {pendingImagePastes > 0 ? (
+                <div
+                  aria-label="Saving attachment"
+                  className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-input text-muted-foreground"
+                >
+                  <IconLoader2
+                    aria-hidden="true"
+                    className="animate-spin"
+                    size={16}
+                    stroke={2}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="ghostex-chat-composer-row flex min-w-0 items-end gap-2 pb-1.5">
+          {useMonaco ? (
+            <SessionChatMonacoInput
+              disabled={disabled}
+              fillHeight={maximized}
+              initialValue={draft}
+              onCaretChange={setCaret}
+              onChange={updateDraft}
+              onKeyDown={handleKeyDown}
+              onLoadFailed={(error) => {
+                console.error(
+                  "[session-chat] Monaco failed to load; using the plain input.",
+                  error,
+                );
+                setMonacoFailed(true);
+              }}
+              onPasteData={processClipboardData}
+              placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+              registerApi={(api) => {
+                monacoApiRef.current = api;
+                if (api && pendingInsertTextRef.current) {
+                  const pending = pendingInsertTextRef.current;
+                  pendingInsertTextRef.current = "";
+                  api.insertText(pending);
+                }
+                if (api && pendingFocusRef.current) {
+                  pendingFocusRef.current = false;
+                  api.focus();
+                }
+              }}
+              theme={theme}
+              vsBaseUrl={monacoVsBaseUrl ?? ""}
+            />
+          ) : (
+            <textarea
+              className="ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
+              disabled={disabled}
+              aria-invalid={sendError !== null}
+              onChange={(event) => {
+                updateDraft(
+                  event.target.value,
+                  event.target.selectionStart ?? event.target.value.length,
+                );
+              }}
+              onSelect={(event) => {
+                // Caret moves (click, arrows, Home/End) decide which token the
+                // pickers read, so they have to reach state too.
+                setCaret(event.currentTarget.selectionStart ?? null);
+              }}
+              onKeyDown={(event) => {
+                const adapted = reactKeyEventAdapter(event);
+                if (adapted.isComposing) {
+                  if (adapted.key === "Enter") {
+                    event.preventDefault();
+                  }
+                  return;
+                }
+                handleKeyDown(adapted);
+              }}
+              onPaste={(event) => {
+                if (processClipboardData(event.clipboardData)) {
                   event.preventDefault();
                 }
-                return;
-              }
-              handleKeyDown(adapted);
-            }}
-            onPaste={(event) => {
-              if (processClipboardData(event.clipboardData)) {
-                event.preventDefault();
-              }
-            }}
-            placeholder={placeholder ?? "Send a message…"}
-            ref={textareaRef}
-            rows={1}
-            value={draft}
-          />
-        )}
-        </div>
-        <div className="ghostex-chat-composer-footer flex w-full items-center justify-between gap-2">
-          <div className="ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5">
-            {optionPills}
+              }}
+              placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+              ref={textareaRef}
+              rows={1}
+              value={draft}
+            />
+          )}
           </div>
-          <div className="ghostex-chat-composer-footer-actions ml-auto flex items-center gap-1.5">
-            {onStash ? (
-              <AppTooltip content="Stash prompt">
-                <span className="ghostex-chat-stash-control inline-flex">
-                  <Button
-                    aria-label="Stash prompt"
-                    className="ghostex-chat-footer-control rounded-full"
-                    disabled={disabled || draft.trim() === ""}
-                    onClick={onStash}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <IconStackPush aria-hidden="true" stroke={2} />
-                  </Button>
-                </span>
-              </AppTooltip>
-            ) : null}
-            {onPasteImage || onAttachFile || onPickPaths ? (
-              <>
-                {onPickPaths ? null : (
-                  <input
-                    className="hidden"
-                    multiple
-                    onChange={(event) => {
-                      const files = Array.from(event.target.files ?? []);
-                      // Same input element every time: clear it so re-picking
-                      // the same file still fires change.
-                      event.target.value = "";
-                      const images = files.filter(
-                        (file) => isImageFile(file) && onPasteImage !== undefined,
-                      );
-                      const others = files.filter(
-                        (file) => !images.includes(file) && onAttachFile !== undefined,
-                      );
-                      if (images.length > 0) {
-                        consumeImageFiles(images);
-                      }
-                      if (others.length > 0) {
-                        consumeAttachmentFiles(others);
-                      }
-                    }}
-                    ref={fileInputRef}
-                    tabIndex={-1}
-                    type="file"
-                    {...(onAttachFile ? {} : { accept: "image/*" })}
-                  />
-                )}
-                <AppTooltip content="Attach an Image, File, or Folder">
-                  <span className="inline-flex">
+          <div className="ghostex-chat-composer-footer flex w-full items-center justify-between gap-2">
+            <div className="ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5">
+              {optionPills}
+            </div>
+            <div className="ghostex-chat-composer-footer-actions ml-auto flex items-center gap-1.5">
+              {onStash ? (
+                <AppTooltip content="Stash prompt">
+                  <span className="ghostex-chat-stash-control inline-flex">
                     <Button
-                      aria-label="Attach an Image, File, or Folder"
+                      aria-label="Stash prompt"
                       className="ghostex-chat-footer-control rounded-full"
-                      disabled={disabled}
-                      onClick={() => {
-                        if (onPickPaths) {
-                          attachFromNativePicker();
-                        } else {
-                          fileInputRef.current?.click();
-                        }
-                      }}
+                      disabled={disabled || draft.trim() === ""}
+                      onClick={onStash}
                       size="icon-sm"
                       variant="ghost"
                     >
-                      <IconPaperclip aria-hidden="true" stroke={2} />
+                      <IconStackPush aria-hidden="true" stroke={2} />
                     </Button>
                   </span>
                 </AppTooltip>
-              </>
-            ) : null}
-            {isWorking ? (
-              <Button
-                aria-label="Stop the agent"
-                className="size-8 rounded-full"
-                onClick={() => {
-                  onInterrupt();
-                }}
-                size="icon"
-                variant="secondary"
-              >
-                <IconPlayerStopFilled
-                  aria-hidden="true"
-                  className="size-3.5"
-                  stroke={1.6}
-                />
-              </Button>
-            ) : (
-              <Button
-                aria-label="Send"
-                className="ghostex-chat-send-button size-8 rounded-full"
-                disabled={sendDisabled}
-                onClick={() => send()}
-                size="icon"
-              >
-                <IconArrowUp aria-hidden="true" className="size-4" stroke={2.2} />
-              </Button>
-            )}
+              ) : null}
+              {onPasteImage || onAttachFile || onPickPaths ? (
+                <>
+                  {onPickPaths ? null : (
+                    <input
+                      className="hidden"
+                      multiple
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? []);
+                        // Same input element every time: clear it so re-picking
+                        // the same file still fires change.
+                        event.target.value = "";
+                        const images = files.filter(
+                          (file) => isImageFile(file) && onPasteImage !== undefined,
+                        );
+                        const others = files.filter(
+                          (file) => !images.includes(file) && onAttachFile !== undefined,
+                        );
+                        if (images.length > 0) {
+                          consumeImageFiles(images);
+                        }
+                        if (others.length > 0) {
+                          consumeAttachmentFiles(others);
+                        }
+                      }}
+                      ref={fileInputRef}
+                      tabIndex={-1}
+                      type="file"
+                      {...(onAttachFile ? {} : { accept: "image/*" })}
+                    />
+                  )}
+                  <AppTooltip content="Attach an Image, File, or Folder">
+                    <span className="inline-flex">
+                      <Button
+                        aria-label="Attach an Image, File, or Folder"
+                        className="ghostex-chat-footer-control rounded-full"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (onPickPaths) {
+                            attachFromNativePicker();
+                          } else {
+                            fileInputRef.current?.click();
+                          }
+                        }}
+                        size="icon-sm"
+                        variant="ghost"
+                      >
+                        <IconPaperclip aria-hidden="true" stroke={2} />
+                      </Button>
+                    </span>
+                  </AppTooltip>
+                </>
+              ) : null}
+              <AppTooltip content={maximized ? "Exit maximize" : "Maximize"}>
+                <span className="inline-flex">
+                  <Button
+                    aria-label={maximized ? "Exit maximize" : "Maximize"}
+                    aria-pressed={maximized}
+                    className="ghostex-chat-footer-control rounded-full"
+                    onClick={() => {
+                      setMaximizedAndFocus(!maximized);
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    {maximized ? (
+                      <IconMinimize aria-hidden="true" stroke={2} />
+                    ) : (
+                      <IconMaximize aria-hidden="true" stroke={2} />
+                    )}
+                  </Button>
+                </span>
+              </AppTooltip>
+              {isWorking ? (
+                <Button
+                  aria-label="Stop the agent"
+                  className="size-8 rounded-full"
+                  onClick={() => {
+                    onInterrupt();
+                  }}
+                  size="icon"
+                  variant="secondary"
+                >
+                  <IconPlayerStopFilled
+                    aria-hidden="true"
+                    className="size-3.5"
+                    stroke={1.6}
+                  />
+                </Button>
+              ) : (
+                <Button
+                  aria-label="Send"
+                  className="ghostex-chat-send-button size-8 rounded-full"
+                  disabled={sendDisabled}
+                  onClick={() => send()}
+                  size="icon"
+                >
+                  <IconArrowUp aria-hidden="true" className="size-4" stroke={2.2} />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </Field>
+      </Field>
+    </>
   );
 });

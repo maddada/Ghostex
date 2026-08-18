@@ -102,6 +102,7 @@ use crate::{
         create_source_build_identity, is_build_identity_reusable, remove_runtime_metadata,
         write_runtime_metadata,
     },
+    session_chat_files::read_session_chat_files,
     session_chat_skills::read_session_chat_skills,
     session_git_status, session_lifecycle,
     session_status::agent_activity_presentation_refresh_delay_ms,
@@ -2799,6 +2800,9 @@ async fn route_http(
         "/api/readSessionChatSkills" => {
             handle_read_session_chat_skills_http(&state, endpoint.path, request_id, &body_json)
                 .await
+        }
+        "/api/readSessionChatFiles" => {
+            handle_read_session_chat_files_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/sendSessionChatMessage" => {
             handle_send_session_chat_message_http(&state, endpoint.path, request_id, &body_json)
@@ -11238,6 +11242,98 @@ async fn handle_read_session_chat_skills_http(
     )
 }
 
+/*
+CDXC:SessionChatFileMentions 2026-08-18:
+The composer's "@" picker names a session; gxserver resolves that session's
+project and walks it on this machine, so the client never chooses a scan root.
+The walk itself is blocking work (a git probe or a directory sweep), so it runs
+off the request thread the same way the skill discovery does.
+*/
+async fn handle_read_session_chat_files_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    if project_id.is_empty() || session_id.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "readSessionChatFiles requires projectId and sessionId.".to_string(),
+            },
+        );
+    }
+
+    let resolved = (|| {
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        repository
+            .get_session(project_id, session_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        let project = repository
+            .get_project(project_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The project no longer exists.".to_string(),
+            })?;
+        Ok::<_, DomainStateError>(
+            project
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+        )
+    })();
+    let project_path = match resolved {
+        Ok(project_path) => project_path,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let result =
+        match tokio::task::spawn_blocking(move || read_session_chat_files(project_path.as_deref()))
+            .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "internalError",
+                        message: "Session chat files could not be listed.".to_string(),
+                    },
+                )
+            }
+        };
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, result),
+    )
+}
+
 fn resolve_session_chat_read_state(
     state: &AppState,
     project_id: &str,
@@ -11781,6 +11877,16 @@ async fn handle_send_session_chat_message_http(
             },
         );
     }
+    /*
+    Claude Code's resume-usage picker owns the input line when a large session
+    is resumed, so it has to be answered before anything else is typed —
+    including the Ctrl+G draft-preservation handshake, which the picker would
+    otherwise swallow. The step is a no-op when no picker is on screen.
+    */
+    steps.insert(
+        0,
+        crate::session_chat_send::SessionChatSendStep::ResolveResumePrompt,
+    );
     if let Err(message) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,

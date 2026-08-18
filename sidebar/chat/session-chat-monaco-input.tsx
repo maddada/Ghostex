@@ -52,6 +52,7 @@ interface MonacoEditorInstanceLike {
   getSelection(): MonacoSelectionLike | null;
   getValue(): string;
   layout(): void;
+  onDidChangeCursorPosition(listener: () => void): MonacoDisposableLike;
   onDidChangeModelContent(listener: () => void): MonacoDisposableLike;
   onDidContentSizeChange(listener: () => void): MonacoDisposableLike;
   onKeyDown(listener: (event: MonacoKeyboardEventLike) => void): MonacoDisposableLike;
@@ -108,6 +109,16 @@ function composerKeyForMonacoEvent(event: MonacoKeyboardEventLike): string {
     default:
       return event.browserEvent.key;
   }
+}
+
+/** Caret as a plain string offset, the coordinate the composer's state uses. */
+function caretOffset(editor: MonacoEditorInstanceLike): number {
+  const model = editor.getModel();
+  const selection = editor.getSelection();
+  if (!model || !selection) {
+    return editor.getValue().length;
+  }
+  return model.getOffsetAt(selection.getEndPosition());
 }
 
 let monacoPromise: Promise<MonacoNamespaceLike> | undefined;
@@ -187,18 +198,27 @@ function ensureChatThemes(monaco: MonacoNamespaceLike): void {
 export function SessionChatMonacoInput({
   disabled,
   initialValue,
+  onCaretChange,
   onChange,
   onKeyDown,
   onLoadFailed,
   onPasteData,
   placeholder,
+  fillHeight,
   registerApi,
   theme,
   vsBaseUrl,
 }: {
   disabled: boolean;
+  /**
+   * Maximized composer: stop sizing the editor to its content and let the
+   * flex row own the height, so a short draft still gets the full box.
+   */
+  fillHeight: boolean;
   initialValue: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, caret: number) => void;
+  /** Caret offset after a pure selection move (no edit). */
+  onCaretChange: (caret: number) => void;
   onKeyDown: (event: SessionChatComposerKeyEvent) => void;
   onLoadFailed: (error: unknown) => void;
   /** Returns true when the paste was handled (image); blocks Monaco's paste. */
@@ -210,11 +230,20 @@ export function SessionChatMonacoInput({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MonacoEditorInstanceLike | null>(null);
+  const applyHeightRef = useRef<(() => void) | null>(null);
+  const fillHeightRef = useRef(fillHeight);
+  fillHeightRef.current = fillHeight;
   const suppressChangeRef = useRef(false);
   const themeRef = useRef(theme);
   themeRef.current = theme;
-  const callbacksRef = useRef({ onChange, onKeyDown, onLoadFailed, onPasteData });
-  callbacksRef.current = { onChange, onKeyDown, onLoadFailed, onPasteData };
+  const callbacksRef = useRef({
+    onCaretChange,
+    onChange,
+    onKeyDown,
+    onLoadFailed,
+    onPasteData,
+  });
+  callbacksRef.current = { onCaretChange, onChange, onKeyDown, onLoadFailed, onPasteData };
 
   useEffect(() => {
     let disposed = false;
@@ -267,17 +296,41 @@ export function SessionChatMonacoInput({
         });
         editorRef.current = editor;
         const applyHeight = (): void => {
-          const height = Math.min(
-            Math.max(editor.getContentHeight(), MIN_INPUT_HEIGHT_PX),
-            MAX_INPUT_HEIGHT_PX,
-          );
-          container.style.height = `${height}px`;
+          if (fillHeightRef.current) {
+            // Clear the inline height so the stylesheet's stretched container
+            // wins; monaco's automaticLayout then follows the flex row.
+            container.style.height = "";
+          } else {
+            const height = Math.min(
+              Math.max(editor.getContentHeight(), MIN_INPUT_HEIGHT_PX),
+              MAX_INPUT_HEIGHT_PX,
+            );
+            container.style.height = `${height}px`;
+          }
           editor.layout();
         };
+        applyHeightRef.current = applyHeight;
         disposables.push(
           editor.onDidChangeModelContent(() => {
+            if (suppressChangeRef.current) {
+              return;
+            }
+            callbacksRef.current.onChange(editor.getValue(), caretOffset(editor));
+            // Monaco updates the selection as part of the same command that
+            // raised this event; reading it again once that command has fully
+            // unwound is what makes the reported caret independent of the
+            // order monaco happens to fire content and cursor events in.
+            queueMicrotask(() => {
+              // Skip once the editor is gone: a disposed instance has no model
+              // and reading it would throw inside the microtask.
+              if (editorRef.current === editor) {
+                callbacksRef.current.onCaretChange(caretOffset(editor));
+              }
+            });
+          }),
+          editor.onDidChangeCursorPosition(() => {
             if (!suppressChangeRef.current) {
-              callbacksRef.current.onChange(editor.getValue());
+              callbacksRef.current.onCaretChange(caretOffset(editor));
             }
           }),
           editor.onDidContentSizeChange(applyHeight),
@@ -344,6 +397,7 @@ export function SessionChatMonacoInput({
     return () => {
       disposed = true;
       registerApi(null);
+      applyHeightRef.current = null;
       for (const disposable of disposables) {
         disposable.dispose();
       }
@@ -354,6 +408,10 @@ export function SessionChatMonacoInput({
     // the dedicated effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vsBaseUrl]);
+
+  useEffect(() => {
+    applyHeightRef.current?.();
+  }, [fillHeight]);
 
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly: disabled });
@@ -414,7 +472,7 @@ export function SessionChatMonacoInput({
 
   return (
     <div
-      className="min-h-6 w-full min-w-0 flex-1 overflow-hidden"
+      className="ghostex-chat-composer-monaco min-h-6 w-full min-w-0 flex-1 overflow-hidden"
       data-session-chat-typing-redirect-ignore="true"
       ref={containerRef}
     />

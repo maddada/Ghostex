@@ -5,7 +5,7 @@
 
 import { IconEyeFilled, IconEyeOff, IconRobot } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { ClipboardEvent, KeyboardEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/utils";
 import type { SessionChatSkill, SessionChatTheme } from "../../shared/session-chat";
@@ -345,6 +345,41 @@ export function SessionChatView({
       active = false;
     };
   }, [transport]);
+  /*
+  Composer "@" mentions. The project walk is server work, so it runs on first
+  use and the answer is cached for the rest of the mount; `undefined` means
+  "not listed yet" and keeps the picker in its loading state.
+  */
+  const [files, setFiles] = useState<readonly string[] | undefined>(undefined);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const filesRequestedRef = useRef(false);
+  useEffect(() => {
+    filesRequestedRef.current = false;
+    setFiles(undefined);
+    setFilesLoading(false);
+  }, [transport]);
+  const requestFiles = useCallback(() => {
+    if (filesRequestedRef.current) {
+      return;
+    }
+    filesRequestedRef.current = true;
+    const readFiles = transport.readFiles?.bind(transport);
+    if (!readFiles) {
+      setFiles([]);
+      return;
+    }
+    setFilesLoading(true);
+    void readFiles()
+      .then((result) => {
+        setFiles(result.files);
+      })
+      .catch(() => {
+        setFiles([]);
+      })
+      .finally(() => {
+        setFilesLoading(false);
+      });
+  }, [transport]);
   const sessionOptions = useSessionChatSessionOptions({
     agent: agentLabel ?? null,
     ...(sessionKey !== undefined ? { sessionKey } : {}),
@@ -517,6 +552,26 @@ export function SessionChatView({
     [questionActive],
   );
 
+  // Pasting after a click on the pane background lands in the composer too,
+  // maximized or not: clipboard images become attachments and text lands at
+  // the caret, instead of the paste dying on a non-editable focus target.
+  const handlePasteCapture = useCallback(
+    (event: ClipboardEvent<HTMLDivElement>): void => {
+      if (event.defaultPrevented || questionActive) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.(INTERACTIVE_TARGET_SELECTOR)) {
+        return;
+      }
+      if (composerRef.current?.pasteClipboard(event.clipboardData)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    [questionActive],
+  );
+
   // The initial read cannot yet distinguish an existing transcript from a
   // genuinely empty session. Keep that indeterminate phase visually blank so
   // an existing conversation never flashes the new-session welcome/composer.
@@ -559,6 +614,7 @@ export function SessionChatView({
       )}
         data-chat-theme={theme}
         onKeyDownCapture={handleKeyDownCapture}
+        onPasteCapture={handlePasteCapture}
         ref={chatRootRef}
         tabIndex={-1}
       >
@@ -664,6 +720,10 @@ export function SessionChatView({
             slashCommands={slashCommands}
             slashHeading={sessionChatSlashHeadingForAgent(agentLabel ?? null)}
             skills={skills}
+            files={files}
+            filesLoading={filesLoading}
+            onRequestFiles={requestFiles}
+            fileHeading="Project files"
             skillHeading={`${displayAgentName(agentLabel) ?? "Agent"} skills`}
           />
         )}

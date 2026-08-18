@@ -623,37 +623,110 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   background: #242424;
 }
 
+/* The interactive prompt card stands in for the composer while a question is
+   live, so it wears the same raised surface instead of disappearing into the
+   conversation background (--card is the page background in this theme). */
+.ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-question-card {
+  background: #242424;
+}
+
 /* The chat pane can be much narrower than the app window, so lay out the
-   footer from the composer's own width instead of relying on viewport media
-   queries. Narrow composers use one row for session options and a second row
-   for prompt actions, keeping both groups complete and non-overlapping. */
+   footer from its own content rather than a width breakpoint: both groups keep
+   their intrinsic width and the row only breaks onto a second line once the
+   session options and the prompt actions genuinely stop fitting side by side.
+   The actions group keeps `ml-auto`, so it stays right-aligned on either line. */
 .ghostex-chat-composer {
   container: ghostex-chat-composer / inline-size;
 }
 
+.ghostex-chat-composer-footer {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+
 .ghostex-chat-composer-footer-options {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: fit-content;
   overflow: hidden;
 }
 
 .ghostex-chat-composer-footer-actions {
   flex: 0 0 auto;
+  width: fit-content;
+  justify-content: flex-end;
 }
 
-@container ghostex-chat-composer (max-width: 28rem) {
-  .ghostex-chat-composer-footer {
-    flex-wrap: wrap;
-    row-gap: 0.25rem;
-  }
+/* Maximize: a centered overlay that turns the composer into a full editing
+   surface for long prompts. The field keeps its slot in the React tree and
+   only changes its box, so monaco (or the textarea), the caret, the undo
+   stack and any pending attachments survive the toggle. The backdrop is a
+   sibling rather than a wrapper for the same reason — wrapping would reparent
+   the field and remount the editor. Both sit below the z-50 that portalled
+   dropdowns and the image viewer use, so those still open on top. */
+.ghostex-chat-composer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  /* A black scrim alone barely registers against the near-black chat
+     background, so blur carries the separation (same pairing the image
+     viewer uses). */
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(2px);
+}
 
-  .ghostex-chat-composer-footer-options {
-    flex-basis: 100%;
-    overflow: visible;
-  }
+.ghostex-chat-composer-maximized {
+  position: fixed;
+  /* All four insets plus auto margins centre the box and give it the margin
+     the small viewports fall back to. */
+  inset: 1.5rem;
+  z-index: 45;
+  margin: auto;
+  width: min(56rem, calc(100vw - 3rem));
+  height: min(45rem, calc(100vh - 3rem));
+  justify-content: flex-end;
+}
 
-  .ghostex-chat-composer-footer-actions {
-    justify-content: flex-end;
-    width: 100%;
+/* The slash/skill pickers normally float above the composer on `bottom-full`.
+   Inside the overlay there is no room above the box, so they drop back into
+   flow and stack on top of the card, which shrinks to make room. */
+.ghostex-chat-composer-maximized .ghostex-chat-composer-picker {
+  position: static;
+  margin-bottom: 0;
+}
+
+.ghostex-chat-composer-maximized .ghostex-chat-composer {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ghostex-chat-composer-maximized .ghostex-chat-composer-row {
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-height: 0;
+}
+
+/* Both input backends cap themselves at 160px so the composer stays a
+   composer. Maximized, the row owns the height instead. */
+.ghostex-chat-composer-maximized .ghostex-chat-composer-input {
+  max-height: none;
+  height: 100%;
+  field-sizing: normal;
+}
+
+.ghostex-chat-composer-maximized .ghostex-chat-composer-monaco {
+  height: 100%;
+}
+
+/* Under a ~430px chat pane the agent name is the first thing worth dropping:
+   the icon still says which agent is answering, and the freed width keeps the
+   option pills and prompt actions on one row. The container is the composer's
+   content box, which is 66px narrower than the pane (footer px-4 + composer
+   px-4 + composer border), so 430px of chat is 364px here. */
+@container ghostex-chat-composer (max-width: 364px) {
+  .ghostex-chat-agent-name {
+    display: none;
   }
 }
 
@@ -663,19 +736,25 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   }
 }
 
+/* CDXC:SessionChatDarkButtons: shadcn button fills read as foreign chrome in
+   the dark chat theme, so buttons here are flattened to transparent with a
+   neutral hover. Controls that own a deliberate fill opt out — including the
+   interactive prompt card's option rows and its primary answer button, whose
+   `bg-primary` would otherwise be stripped while `text-primary-foreground`
+   stayed dark, leaving dark text on a dark surface. */
 .ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]),
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]),
 body[data-session-chat-theme="dark"]
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]) {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]) {
   background-color: transparent;
 }
 
 .ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not(:disabled):hover,
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not(:disabled):hover,
 body[data-session-chat-theme="dark"]
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not(:disabled):hover {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not(:disabled):hover {
   background-color: #333333;
 }
 
@@ -844,6 +923,7 @@ body[data-session-chat-theme="dark"]
   background: var(--muted);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
+  line-height: 1.375;
   max-width: 100%;
   overflow: hidden;
 }
@@ -872,8 +952,13 @@ body[data-session-chat-theme="dark"]
   scrollbar-width: thin;
 }
 
+/* Fenced code sits one notch under the 0.875rem prose around it: a monospace
+   face set at the prose size reads visibly larger than the sans next to it, so
+   matching the px number is what makes the sizes look mismatched. Inline code
+   stays relative to its sentence in the rule above. */
 .ghostex-chat-markdown pre code {
   background: transparent;
+  font-size: 0.8125rem;
   padding: 0;
 }
 
@@ -934,6 +1019,45 @@ body[data-session-chat-theme="dark"]
   max-width: 100%;
   object-fit: contain;
   width: auto;
+}
+
+/* --- Image preview overlay ------------------------------------------------- */
+
+/* `width: fit-content` with `min-width: 100%` centres the picture while it fits
+   the window and stops the overflow being clipped once it does not: plain flex
+   centring inside a scroll container cuts off the top and left of a zoomed
+   picture, which is exactly the part a zoom is usually aimed at. */
+.ghostex-chat-image-preview-stage {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  min-width: 100%;
+  padding: 1rem;
+  width: fit-content;
+}
+
+/* Fitted: the whole picture, capped so it always sits inside the window. */
+.ghostex-chat-image-preview {
+  max-height: 75vh;
+  max-width: 90vw;
+  object-fit: contain;
+}
+
+/* The picture toggles between that fitted size and 1:1 on click, and the cursor
+   is the whole affordance for it, so it names what the next click will do. An
+   `img` is content rather than chrome, so the app-wide
+   `button { cursor: default !important }` never reaches it and no override is
+   needed. `data-zoom="none"` is a picture already at full size: plain arrow,
+   because clicking it does nothing. */
+.ghostex-chat-image-preview[data-zoom="in"] {
+  cursor: zoom-in;
+}
+
+.ghostex-chat-image-preview[data-zoom="out"] {
+  cursor: zoom-out;
+  max-height: none;
+  max-width: none;
 }
 
 .ghostex-chat-inline-image-pending {

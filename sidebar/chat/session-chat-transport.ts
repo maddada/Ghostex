@@ -6,6 +6,7 @@
 
 import type {
   GxserverAnswerSessionChatPromptParams,
+  GxserverReadSessionChatFilesResult,
   GxserverReadSessionChatImageResult,
   GxserverReadSessionChatResult,
   GxserverReadSessionChatSkillsResult,
@@ -22,6 +23,11 @@ export interface SessionChatTransport {
   }): Promise<GxserverReadSessionChatResult>;
   /** Lists skills gxserver resolved for this session's stored agent identity. */
   readSkills?(): Promise<GxserverReadSessionChatSkillsResult>;
+  /**
+   * Lists the session project's files for the composer's "@" mentions, walked
+   * on the session's machine. Hosts without it leave "@" as plain text.
+   */
+  readFiles?(): Promise<GxserverReadSessionChatFilesResult>;
   /** Returns an unsubscribe function. Events must already be filtered to this session. */
   subscribe(handlers: {
     onEvent: (e: GxserverSessionChatEvent) => void;
