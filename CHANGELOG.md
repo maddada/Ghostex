@@ -1,5 +1,22 @@
 # Changelog
 
+## 7.11.0 - 2026-08-18
+
+- Major
+  - The chat composer can now attach project files by typing `@` and picking from the session's project, with the picker opening wherever the mention is typed in the draft.
+  - The Monaco prompt editor now ships inside the macOS app, so Ctrl+G opens it on installed builds instead of quietly falling back to the machine's default terminal editor.
+  - A new Command Pane Side setting docks the command pane as a full-height column to the right of the workspace instead of a strip along the bottom, remembering its own width per project.
+- Minor
+  - Chat no longer shows prompts that were revised or re-sent before the agent replied, so the conversation matches what the agent actually ran.
+  - Sending a chat message to a resumed Claude session now answers its resume-usage prompt first, so the message reaches the agent instead of being swallowed as menu keystrokes.
+  - Clicking a picture in chat now toggles between fitted and full size, zooming to the spot you clicked and panning by scroll.
+  - Interactive prompt cards now ask one question at a time with numbered shortcut keys, a collapsible header, and a free-text answer row in the composer's place.
+  - Sending a chat message scrolls it into view without leaving an empty gap above the composer.
+  - Copying one of your own chat turns now includes its image references, so pasting it into another composer still attaches the same pictures.
+  - The sidebar session filter menu gained a No tag row for isolating sessions that carry no marker.
+  - Sessions from agents that use half-circle spinner glyphs now report working status correctly and keep those glyphs out of the session title.
+  - The Docs pane in Manage now fills the full height of the pane and follows the shared app theme.
+
 ## 7.10.0 - 2026-08-17
 
 - Major
