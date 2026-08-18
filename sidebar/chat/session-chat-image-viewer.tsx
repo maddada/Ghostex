@@ -1,9 +1,12 @@
 // Session chat images. Pictures shared in the conversation render inline as
 // thumbnails (SessionChatInlineImage) and click through to a centered overlay
-// at full size (max 75% of the window height, original aspect ratio). Machine
-// paths load through the transport's readSessionChatImage RPC — the paths
-// inside "[Image #N](path)" references live on the session's machine, so the
-// page cannot open them directly. http(s)/data URLs render as-is.
+// at full size (max 75% of the window height, original aspect ratio). Clicking
+// the overlay picture toggles it between that fitted size and 1:1, panning by
+// scroll while zoomed; the zoom-in/zoom-out cursor is the affordance for it,
+// and an image with no detail beyond its fitted size never offers the toggle.
+// Machine paths load through the transport's readSessionChatImage RPC — the
+// paths inside "[Image #N](path)" references live on the session's machine, so
+// the page cannot open them directly. http(s)/data URLs render as-is.
 
 import { IconLoader2, IconPhotoX, IconX } from "@tabler/icons-react";
 import {
@@ -11,9 +14,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { cn } from "../../lib/utils";
@@ -195,6 +200,14 @@ export function SessionChatImageViewerProvider({
   connection hiccup does not make an image permanently unviewable.
   */
   const sourcesRef = useRef(new Map<string, Promise<string>>());
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  // Where in the picture the zoom-in click landed, as 0..1 fractions, so the
+  // detail that was clicked ends up under the pointer instead of the overlay
+  // jumping to the top-left corner.
+  const zoomFocusRef = useRef<{ x: number; y: number } | null>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const [zoomable, setZoomable] = useState(false);
 
   const close = useCallback((): void => {
     openSequenceRef.current += 1;
@@ -253,6 +266,78 @@ export function SessionChatImageViewerProvider({
     };
   }, []);
 
+  const source = state.status === "ready" ? state.src : null;
+
+  // Every open (and every close) starts fitted again.
+  useEffect(() => {
+    zoomFocusRef.current = null;
+    setZoomed(false);
+    setZoomable(false);
+  }, [source]);
+
+  /*
+  Zoom is only worth offering when 1:1 would actually show more than the fitted
+  box already does — a small picture is already at full size, so it keeps the
+  plain cursor and ignores clicks rather than pretending to zoom. Measured
+  against the fitted render, so it is re-read whenever the window resizes.
+  */
+  const measureZoomable = useCallback((): void => {
+    const image = imageRef.current;
+    if (image === null) {
+      return;
+    }
+    setZoomable(
+      image.naturalWidth > image.clientWidth + 1 ||
+        image.naturalHeight > image.clientHeight + 1,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (source === null || zoomed) {
+      return;
+    }
+    window.addEventListener("resize", measureZoomable);
+    return () => {
+      window.removeEventListener("resize", measureZoomable);
+    };
+  }, [measureZoomable, source, zoomed]);
+
+  const toggleZoom = (event: ReactMouseEvent<HTMLImageElement>): void => {
+    // Clicking the picture itself zooms it; only the surround dismisses.
+    event.stopPropagation();
+    if (!zoomable) {
+      return;
+    }
+    if (zoomed) {
+      setZoomed(false);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    zoomFocusRef.current = {
+      x: (event.clientX - rect.left) / rect.width,
+      y: (event.clientY - rect.top) / rect.height,
+    };
+    setZoomed(true);
+  };
+
+  // Scroll the freshly enlarged picture to the point that was clicked, before
+  // the browser paints the new size.
+  useLayoutEffect(() => {
+    const focus = zoomFocusRef.current;
+    zoomFocusRef.current = null;
+    const scroll = scrollRef.current;
+    const image = imageRef.current;
+    if (!zoomed || focus === null || scroll === null || image === null) {
+      return;
+    }
+    const imageRect = image.getBoundingClientRect();
+    const scrollRect = scroll.getBoundingClientRect();
+    scroll.scrollLeft +=
+      imageRect.left - scrollRect.left + focus.x * imageRect.width - scroll.clientWidth / 2;
+    scroll.scrollTop +=
+      imageRect.top - scrollRect.top + focus.y * imageRect.height - scroll.clientHeight / 2;
+  }, [zoomed]);
+
   // Escape closes the overlay before the composer's interrupt shortcut can
   // see the key (window capture, only while open).
   const open = state.status !== "closed";
@@ -280,42 +365,50 @@ export function SessionChatImageViewerProvider({
         <div
           aria-label={state.alt ?? "Image preview"}
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px]"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[2px]"
           onClick={close}
           role="dialog"
         >
+          {/* Outside the scrolling layer so it stays put while a zoomed
+              picture is panned around under it. */}
           <button
             aria-label="Close image preview"
-            className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:text-white"
+            className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-full bg-black/50 text-white/80 transition-colors hover:text-white"
             onClick={close}
             type="button"
           >
             <IconX aria-hidden="true" size={18} stroke={2} />
           </button>
-          {state.status === "loading" ? (
-            <IconLoader2
-              aria-label="Loading image"
-              className="size-7 animate-spin text-white/80"
-              stroke={2}
-            />
-          ) : null}
-          {state.status === "error" ? (
-            <div className="flex flex-col items-center gap-2 text-white/80">
-              <IconPhotoX aria-hidden="true" className="size-7" stroke={1.8} />
-              <span className="text-sm">The image could not be loaded.</span>
+          <div className="absolute inset-0 overflow-auto" ref={scrollRef}>
+            <div className="ghostex-chat-image-preview-stage">
+              {state.status === "loading" ? (
+                <IconLoader2
+                  aria-label="Loading image"
+                  className="size-7 animate-spin text-white/80"
+                  stroke={2}
+                />
+              ) : null}
+              {state.status === "error" ? (
+                <div className="flex flex-col items-center gap-2 text-white/80">
+                  <IconPhotoX aria-hidden="true" className="size-7" stroke={1.8} />
+                  <span className="text-sm">The image could not be loaded.</span>
+                </div>
+              ) : null}
+              {state.status === "ready" ? (
+                <img
+                  alt={state.alt ?? "Image preview"}
+                  className="ghostex-chat-image-preview rounded-lg shadow-2xl"
+                  data-zoom={zoomed ? "out" : zoomable ? "in" : "none"}
+                  // Native image dragging would fight scroll-to-pan.
+                  draggable={false}
+                  onClick={toggleZoom}
+                  onLoad={measureZoomable}
+                  ref={imageRef}
+                  src={state.src}
+                />
+              ) : null}
             </div>
-          ) : null}
-          {state.status === "ready" ? (
-            <img
-              alt={state.alt ?? "Image preview"}
-              className="max-h-[75vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
-              onClick={(event) => {
-                // Clicking the picture itself should not dismiss it.
-                event.stopPropagation();
-              }}
-              src={state.src}
-            />
-          ) : null}
+          </div>
         </div>
       ) : null}
     </SessionChatImageViewerContext.Provider>
