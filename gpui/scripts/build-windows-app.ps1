@@ -61,12 +61,12 @@ finally {
     Pop-Location
 }
 
-# 2) Rust binaries (bootstrap, main app, and CEF helper). Requires MSVC toolchain, cmake,
+# 2) Rust binaries (bootstrap, main app, CEF helper, and installer launcher). Requires MSVC toolchain, cmake,
 # and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
 # libghostty-vt (GHOSTEX_ZIG override honored by gpui/build.rs).
 Push-Location $GpuiDir
 try {
-    cargo build --release --bin ghostex-gpui-cef-bootstrap --bin ghostex-gpui --bin ghostex-gpui-cef-helper
+    cargo build --release --bin ghostex-gpui-cef-bootstrap --bin ghostex-gpui --bin ghostex-gpui-cef-helper --bin ghostex-windows-installer
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 }
 finally {

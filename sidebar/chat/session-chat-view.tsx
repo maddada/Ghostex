@@ -122,6 +122,12 @@ export interface SessionChatViewProps {
   verboseMode?: boolean;
   /** Show the touch-friendly search affordance used by the mobile host. */
   showSearchButton?: boolean;
+  /** Show the agent name beside its composer icon. */
+  showComposerAgentName?: boolean;
+  /** Show the prompt beneath the agent logo for a new session. */
+  showNewSessionWelcomeTitle?: boolean;
+  /** Whether plain Enter sends from the composer instead of inserting a newline. */
+  sendOnEnter?: boolean;
   className?: string;
 }
 
@@ -153,7 +159,13 @@ function displayAgentName(agentLabel?: string | null): string | null {
   );
 }
 
-function NewSessionWelcome({ agentLabel }: { agentLabel?: string | null }) {
+function NewSessionWelcome({
+  agentLabel,
+  showTitle = true,
+}: {
+  agentLabel?: string | null;
+  showTitle?: boolean;
+}) {
   const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
   const agentName = displayAgentName(agentLabel);
 
@@ -174,20 +186,28 @@ function NewSessionWelcome({ agentLabel }: { agentLabel?: string | null }) {
           <IconRobot aria-hidden="true" size={28} stroke={1.7} />
         )}
       </div>
-      <div className="ghostex-chat-new-session-title">
-        {agentName ? (
-          <>
-            What should we build with {agentName}?
-          </>
-        ) : (
-          "What should we work on?"
-        )}
-      </div>
+      {showTitle ? (
+        <div className="ghostex-chat-new-session-title">
+          {agentName ? (
+            <>
+              What should we build with {agentName}?
+            </>
+          ) : (
+            "What should we work on?"
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function SessionAgentIdentity({ agentLabel }: { agentLabel?: string | null }) {
+function SessionAgentIdentity({
+  agentLabel,
+  showName = true,
+}: {
+  agentLabel?: string | null;
+  showName?: boolean;
+}) {
   const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
   const agentName = displayAgentName(agentLabel);
   if (!agentName) {
@@ -197,7 +217,7 @@ function SessionAgentIdentity({ agentLabel }: { agentLabel?: string | null }) {
   return (
     <div
       aria-label={`Agent ${agentName}`}
-      className="flex min-w-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground"
+      className="ghostex-chat-agent-identity flex min-w-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground"
     >
       {agent?.icon ? (
         <span
@@ -208,9 +228,14 @@ function SessionAgentIdentity({ agentLabel }: { agentLabel?: string | null }) {
       ) : (
         <IconRobot aria-hidden="true" className="size-3.5 shrink-0" stroke={1.8} />
       )}
-      <span className="min-w-0 truncate" style={{ maxWidth: "6rem" }}>
-        {agentName}
-      </span>
+      {showName ? (
+        <span
+          className="ghostex-chat-agent-name min-w-0 truncate"
+          style={{ maxWidth: "6rem" }}
+        >
+          {agentName}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -228,28 +253,22 @@ function SessionVerbosePill({
   verbose: boolean;
 }) {
   const Icon = verbose ? IconEyeFilled : IconEyeOff;
+  const verboseLabel = verbose ? "Verbose mode on" : "Verbose mode off";
   return (
-    <AppTooltip
-      content={
-        verbose
-          ? "Verbose on for this chat: thinking blocks start expanded"
-          : "Verbose off for this chat: thinking blocks start collapsed"
-      }
-    >
-      <span className="inline-flex">
+    <AppTooltip content={verboseLabel}>
+      <span className="ghostex-chat-verbose-wrapper inline-flex">
         <Button
-          aria-label="Verbose mode"
+          aria-label={verboseLabel}
           aria-pressed={verbose}
           className={cn(
-            "ghostex-chat-footer-control rounded-full",
+            "ghostex-chat-footer-control ghostex-chat-verbose-control rounded-full",
             verbose ? "text-foreground" : "text-muted-foreground",
           )}
           onClick={onToggle}
-          size="xs"
+          size="icon-xs"
           variant={verbose ? "secondary" : "ghost"}
         >
           <Icon aria-hidden="true" className="size-3 shrink-0" stroke={2} />
-          <span className="truncate">Verbose</span>
         </Button>
       </span>
     </AppTooltip>
@@ -267,7 +286,10 @@ export function SessionChatView({
   monacoVsBaseUrl,
   onSwitchToTerminalForAgentPicker,
   previewText,
+  sendOnEnter = true,
   sessionKey,
+  showComposerAgentName = true,
+  showNewSessionWelcomeTitle = true,
   showSearchButton = false,
   theme = "dark",
   transport,
@@ -299,6 +321,7 @@ export function SessionChatView({
     transport,
     working,
   });
+  const initialTranscriptLoading = chat.view.kind === "loading";
   const [skills, setSkills] = useState<readonly SessionChatSkill[]>([]);
   useEffect(() => {
     const readSkills = transport.readSkills?.bind(transport);
@@ -395,7 +418,7 @@ export function SessionChatView({
     return draft;
   }, [hostComposerBridge]);
   useEffect(() => {
-    if (!hostComposerBridge) {
+    if (!hostComposerBridge || initialTranscriptLoading) {
       return;
     }
     return hostComposerBridge.register({
@@ -404,7 +427,12 @@ export function SessionChatView({
       insertPrompt: (content) => composerRef.current?.insertTypedText(content) ?? false,
       requestStash: stashComposerDraft,
     });
-  }, [handoffComposerDraft, hostComposerBridge, stashComposerDraft]);
+  }, [
+    handoffComposerDraft,
+    hostComposerBridge,
+    initialTranscriptLoading,
+    stashComposerDraft,
+  ]);
   const pasteImage = useMemo(() => {
     const saveImage = transport.saveImage?.bind(transport);
     return saveImage
@@ -489,6 +517,23 @@ export function SessionChatView({
     [questionActive],
   );
 
+  // The initial read cannot yet distinguish an existing transcript from a
+  // genuinely empty session. Keep that indeterminate phase visually blank so
+  // an existing conversation never flashes the new-session welcome/composer.
+  if (initialTranscriptLoading) {
+    return (
+      <div
+        aria-busy="true"
+        className={cn(
+          "ghostex-session-chat-scope h-full min-h-0 bg-background",
+          theme === "dark" && "dark",
+          className,
+        )}
+        data-chat-theme={theme}
+      />
+    );
+  }
+
   const emptyKind =
     chat.view.kind === "ready"
       ? null
@@ -498,7 +543,7 @@ export function SessionChatView({
   const showNewSessionWelcome =
     // A new agent reports `starting` until its first transcript file exists.
     // Keep the designed welcome visible throughout that pre-transcript window.
-    emptyKind === "loading" || emptyKind === "starting" || emptyKind === "empty";
+    emptyKind === "starting" || emptyKind === "empty";
 
   return (
     <TooltipProvider>
@@ -542,7 +587,10 @@ export function SessionChatView({
             verboseMode={verbose}
           />
         ) : showNewSessionWelcome ? (
-          <NewSessionWelcome agentLabel={agentLabel} />
+          <NewSessionWelcome
+            agentLabel={agentLabel}
+            showTitle={showNewSessionWelcomeTitle}
+          />
         ) : emptyKind ? (
           chat.view.kind === "error" ? (
             <EmptyState
@@ -580,11 +628,15 @@ export function SessionChatView({
             onPasteImage={pasteImage}
             onPickPaths={pickPaths}
             onSend={send}
+            sendOnEnter={sendOnEnter}
             {...(hostComposerBridge ? { onStash: stashComposerDraft } : {})}
             optionPills={
               <>
                 {chat.view.kind === "ready" ? (
-                  <SessionAgentIdentity agentLabel={agentLabel} />
+                  <SessionAgentIdentity
+                    agentLabel={agentLabel}
+                    showName={showComposerAgentName}
+                  />
                 ) : null}
                 <SessionChatSessionOptionPills
                   canSend={canSend}

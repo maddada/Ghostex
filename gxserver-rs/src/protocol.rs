@@ -350,13 +350,22 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             true,
             Transport::WebSocket,
         ),
-        "/api/control/stop"
-        | "/api/control/stopAll"
-        | "/api/createWorkspaceTerminal" => remote_blocked(path),
+        "/api/control/stop" | "/api/control/stopAll" => remote_blocked(path),
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/ingestAgentHookEvent"
         | "/api/createSession"
+        /*
+        CDXC:GPUIRemoteNewTerminal 2026-08-16:
+        Remote GPUI project-header terminal creation uses the daemon-owned
+        atomic workspace-terminal endpoint so the new session, provider, and
+        attach plan are created as one operation. It carries only a trusted
+        project id plus the bounded prompt-editor selector and is the atomic
+        equivalent of the already remote-allowed createSession and
+        startSessionProvider operations, so blocking it makes the native
+        sidebar action fail before a terminal can be created.
+        */
+        | "/api/createWorkspaceTerminal"
         | "/api/createAgentSession"
         | "/api/relocateProject"
         | "/api/forkSession"
@@ -376,6 +385,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSidebarProjectCollections"
         | "/api/updateSidebarProjectCollections"
         | "/api/assignProjectToSidebarCollection"
+        | "/api/scheduleDelayedSend"
+        | "/api/cancelDelayedSend"
+        | "/api/readDelayedSends"
         | "/api/readAutomationState"
         | "/api/saveAutomation"
         | "/api/deleteAutomation"

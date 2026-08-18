@@ -1293,7 +1293,12 @@ class GpuiSidebarRuntime {
       the terminal. Route exactly these known command types to the runtime's
       own sidebar-message handler instead.
       */
-      if (message.type === "renameSession" || message.type === "toggleCloseAfterDone") {
+      if (
+        message.type === "renameSession" ||
+        message.type === "scheduleDelayedSend" ||
+        message.type === "cancelDelayedSend" ||
+        message.type === "toggleCloseAfterDone"
+      ) {
         void this.handleSidebarMessage(message);
         return;
       }
@@ -6346,6 +6351,12 @@ class GpuiSidebarRuntime {
       case "toggleCloseAfterDone":
         this.toggleCloseAfterDone(message.sessionId);
         return;
+      case "scheduleDelayedSend":
+        await this.scheduleRemoteDelayedSend(message);
+        return;
+      case "cancelDelayedSend":
+        await this.cancelRemoteDelayedSend(message.sessionId);
+        return;
       case "openAutomationsPage":
         /*
         CDXC:GPUIAutomationsOverview 2026-07-08:
@@ -8676,6 +8687,96 @@ class GpuiSidebarRuntime {
       sessionId,
     );
     return subgroup ? createGpuiWorkspaceSessionSubgroupId(projectId, subgroup.groupId) : undefined;
+  }
+
+  private async scheduleRemoteDelayedSend(
+    message: Extract<SidebarToExtensionMessage, { type: "scheduleDelayedSend" }>,
+  ): Promise<void> {
+    /*
+    CDXC:GPUIRemoteDelayedSend 2026-08-17:
+    Remote delayed sends are owned by the gxserver hosting the target session.
+    The renderer submits only the canonical trigger and ids; the daemon stores,
+    projects, and eventually fires the send even if this app disappears.
+    */
+    const reference = parseGpuiRemotePresentationSessionId(message.sessionId);
+    if (!reference) {
+      this.handleUnsupportedSidebarMessage(message);
+      return;
+    }
+    const session = this.findRemotePresentationSession(reference);
+    if (!session || (session.kind !== "terminal" && session.kind !== "agent")) {
+      this.postSidebarActionToast(
+        "info",
+        "Delayed Send is only available for remote terminal sessions.",
+      );
+      return;
+    }
+
+    const trigger: "afterDelay" | "agentStops" | "allAgentsStop" = message.sendWhenAllProjectSessionsStop
+      ? "allAgentsStop"
+      : message.sendWhenAgentStops
+        ? "agentStops"
+        : "afterDelay";
+    if (
+      trigger === "afterDelay" &&
+      (!Number.isSafeInteger(message.delayMs) ||
+        message.delayMs < GPUI_DELAYED_SEND_MIN_DELAY_MS ||
+        message.delayMs > GPUI_DELAYED_SEND_MAX_DELAY_MS ||
+        message.delayMs % GPUI_DELAYED_SEND_MIN_DELAY_MS !== 0)
+    ) {
+      this.postSidebarActionToast(
+        "warning",
+        "Choose a Delayed Send timer between 1 minute and 24 days.",
+      );
+      return;
+    }
+
+    try {
+      await this.requestRemoteGxserver(reference.machineId, "/api/scheduleDelayedSend", {
+        ...(trigger === "afterDelay" ? { delayMs: message.delayMs } : {}),
+        projectId: reference.projectId,
+        ...(trigger === "allAgentsStop" ? { sendWhenAllProjectSessionsStop: true } : {}),
+        ...(trigger === "agentStops" ? { sendWhenAgentStops: true } : {}),
+        sessionId: reference.sessionId,
+      });
+      this.postSidebarActionToast("info", "Delayed Send scheduled", {
+        description:
+          trigger === "agentStops"
+            ? "Presses Enter after this agent has finished working for 10 seconds."
+            : trigger === "allAgentsStop"
+              ? "Presses Enter after all agents in the project have finished working for 10 seconds."
+              : `Presses Enter in ${formatGpuiDelayedSendDelay(message.delayMs)}.`,
+      });
+    } catch (error) {
+      this.postRemoteToast("error", "Delayed Send unavailable", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async cancelRemoteDelayedSend(sessionId: string): Promise<void> {
+    const reference = parseGpuiRemotePresentationSessionId(sessionId);
+    if (!reference) {
+      return;
+    }
+    try {
+      const result = await this.requestRemoteGxserver<{ changed?: boolean }>(
+        reference.machineId,
+        "/api/cancelDelayedSend",
+        {
+          projectId: reference.projectId,
+          sessionId: reference.sessionId,
+        },
+      );
+      this.postSidebarActionToast(
+        "info",
+        result.changed === true ? "Delayed Send canceled" : "No Delayed Send timer is active",
+      );
+    } catch (error) {
+      this.postRemoteToast("error", "Delayed Send could not be canceled", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private toggleCloseAfterDone(sessionId: string): void {
@@ -20675,6 +20776,8 @@ function getGpuiPresentationAttentionEventId(
 
 const GPUI_CLOSE_AFTER_DONE_DELAY_MS = 3 * 60_000;
 const GPUI_CLOSE_AFTER_DONE_STORAGE_KEY = "ghostex-gpui-close-after-done-session-ids";
+const GPUI_DELAYED_SEND_MIN_DELAY_MS = 60_000;
+const GPUI_DELAYED_SEND_MAX_DELAY_MS = 2_147_483_647;
 
 type GpuiCloseAfterDoneTimer = {
   deadlineAtMs?: number;
@@ -20720,6 +20823,15 @@ function formatGpuiCloseAfterDoneCountdown(remainingMs: number): string {
     return `${String(hours).padStart(2, "0")}:${paddedMinutes}:${paddedSeconds}`;
   }
   return `${paddedMinutes}:${paddedSeconds}`;
+}
+
+function formatGpuiDelayedSendDelay(delayMs: number): string {
+  const totalMinutes = Math.max(1, Math.round(delayMs / GPUI_DELAYED_SEND_MIN_DELAY_MS));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return [hours > 0 ? `${hours}h` : undefined, minutes > 0 ? `${minutes}m` : undefined]
+    .filter((part): part is string => part !== undefined)
+    .join(" ");
 }
 
 function readStoredGpuiCloseAfterDoneSessionIds(): string[] {

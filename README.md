@@ -141,11 +141,10 @@ Write your own skills that use the /ghostex-agent-orchestration skill.
 
 ### Notifications and status
 
-Ghostex supports notification sounds, pets, menu bar indicators (running/done agents), and phone app notifications.<br/>
+Ghostex supports notification sounds, menu bar indicators (running/done agents), and phone app notifications.<br/>
 See how many agents are running with just a glance at your menu bar. Click to jump to an agent!
 
 <img width="300" alt="2026-06-23_Ghostex_15-37-53@2x" src="https://github.com/user-attachments/assets/91885b03-efc4-40cd-84ad-b33523185322" />
-<img width="300" alt="Ghostex notification indicator" src="https://github.com/user-attachments/assets/ad0f7af5-b0e9-4b24-988c-cb6bf02c6c9f" />
 
 ## Highlights
 
@@ -176,7 +175,6 @@ See how many agents are running with just a glance at your menu bar. Click to ju
 | Cross Model Orchestration | Yes | - | Yes |
 | Rich Prompt Editor | Yes | N/A | - |
 | Android | Yes | Yes | - |
-| Pets | Yes | Yes | - |
 | Appshots | Yes | Yes | - |
 | Automations | Yes | Yes | - |
 
@@ -217,7 +215,6 @@ Ghostex builds on open source work from these projects and communities:
 - [zehn](https://github.com/al3rez/zehn) by [al3erz](https://github.com/al3rez) — searching sessions by prompt
 - [vvterm](https://github.com/vivy-company/vvterm) — source of terminal ideas ported into the mobile app
 - [Termux](https://github.com/termux/termux-app) — Android terminal components ported into the mobile app
-- [Codex on Linux](https://github.com/ilysenko/codex-desktop-linux) — pets implementation
 - [Pierre Computer Company](https://github.com/pierrecomputer/pierre) — diffs and file rendering components
 - [Beads](https://github.com/steveyegge/beads) by [Steve Yegge](https://github.com/steveyegge) — kanban project board
 - [Beads Viewer](https://github.com/Dicklesworthstone/beads_viewer) by [doodlestein](https://github.com/Dicklesworthstone) — kanban view reference

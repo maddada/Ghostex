@@ -109,7 +109,7 @@ const NO_FINGERPRINT_POLL_DELAY_MS = 3_000;
 const MIN_TRANSCRIPT_WIDTH_PERCENT = 50;
 const MAX_TRANSCRIPT_WIDTH_PERCENT = 100;
 const TRANSCRIPT_WIDTH_PERCENT_STEP = 5;
-const DEFAULT_TRANSCRIPT_WIDTH_PERCENT = 75;
+const DEFAULT_TRANSCRIPT_WIDTH_PERCENT = 100;
 
 declare global {
   interface Window {
@@ -459,7 +459,10 @@ function MobileSessionChat({
         onSwitchToTerminalForAgentPicker={() => {
           void bridgeCall("switchToTerminalForAgentPicker");
         }}
+        sendOnEnter={false}
         sessionKey={sessionKey}
+        showComposerAgentName={false}
+        showNewSessionWelcomeTitle={false}
         showSearchButton
         theme={theme}
         transport={transport}

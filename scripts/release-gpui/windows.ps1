@@ -201,7 +201,48 @@ if (-not $GeneratedInstaller -or -not $GeneratedPortable) {
 }
 $Installer = Join-Path $Output "ghostex-$Version-windows-$Arch.exe"
 $Archive = Join-Path $Output "ghostex-$Version-windows-$Arch-portable.zip"
-Move-Item $GeneratedInstaller.FullName $Installer
+$InstallerLauncher = Join-Path $RepoRoot "gpui/target/release/ghostex-windows-installer.exe"
+if (-not (Test-Path $InstallerLauncher)) {
+    throw "Windows build did not produce the Ghostex installer launcher"
+}
+
+# CDXC:WindowsSeamlessInstaller 2026-08-16:
+# Velopack's Setup.exe correctly supports update and same-version repair, but
+# it pauses on an "already installed" confirmation before doing either. Keep
+# the signed Velopack setup as the transactional inner installer and bundle it
+# behind Ghostex's small launcher. The launcher uses normal interactive setup
+# for a first install or downgrade; for a same/newer
+# downloaded version it supplies Velopack's supported --silent confirmation,
+# waits for replacement, and relaunches the stable installed Ghostex.exe. When
+# release signing is enabled, the inner setup and final customer-facing
+# executable retain independent Authenticode signatures.
+$InnerInstaller = Join-Path $VpkOutput "Ghostex-Velopack-Setup.exe"
+Move-Item $GeneratedInstaller.FullName $InnerInstaller
+if ($RequireSigning) {
+    & $SignTool.FullName verify /pa /all $InnerInstaller
+    if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for the inner Velopack installer" }
+}
+Copy-Item $InstallerLauncher $Installer
+$InstallerStream = [IO.File]::Open($Installer, [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::None)
+$InnerStream = [IO.File]::OpenRead($InnerInstaller)
+try {
+    $InnerLength = [UInt64]$InnerStream.Length
+    $InnerStream.CopyTo($InstallerStream)
+    $Magic = [Text.Encoding]::ASCII.GetBytes("GXSETUP1TRAILER!")
+    $InstallerStream.Write($Magic, 0, $Magic.Length)
+    $LengthBytes = [BitConverter]::GetBytes($InnerLength)
+    if (-not [BitConverter]::IsLittleEndian) { [Array]::Reverse($LengthBytes) }
+    $InstallerStream.Write($LengthBytes, 0, $LengthBytes.Length)
+}
+finally {
+    $InnerStream.Dispose()
+    $InstallerStream.Dispose()
+}
+$ExpectedBundledLength = (Get-Item $InstallerLauncher).Length + [Int64]$InnerLength + 24
+if ((Get-Item $Installer).Length -ne $ExpectedBundledLength) {
+    throw "Ghostex installer launcher did not bundle the complete Velopack setup payload"
+}
+Remove-Item $InnerInstaller
 Move-Item $GeneratedPortable.FullName $Archive
 
 $UpdateArtifacts = @()
@@ -232,8 +273,24 @@ Remove-Item -Recurse -Force $VpkOutput
 Remove-Item $ReleaseNotesPath
 
 if ($RequireSigning) {
+    & $SignTool.FullName sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $SigningPfx /p $SigningPassword $Installer
+    if ($LASTEXITCODE -ne 0) { throw "Authenticode signing failed for the Ghostex installer" }
     & $SignTool.FullName verify /pa /all $Installer
-    if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for the Velopack installer" }
+    if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for the Ghostex installer" }
+}
+$InstallerCheckStream = [IO.File]::OpenRead($Installer)
+try {
+    $TailLength = [Math]::Min([Int64](1024 * 1024), $InstallerCheckStream.Length)
+    $InstallerCheckStream.Seek(-$TailLength, [IO.SeekOrigin]::End) | Out-Null
+    $TailBytes = [byte[]]::new([int]$TailLength)
+    $TailBytesRead = $InstallerCheckStream.Read($TailBytes, 0, $TailBytes.Length)
+    $TailText = [Text.Encoding]::ASCII.GetString($TailBytes)
+    if ($TailBytesRead -ne $TailBytes.Length -or -not $TailText.Contains("GXSETUP1TRAILER!")) {
+        throw "Ghostex installer signature step did not preserve the Velopack setup trailer"
+    }
+}
+finally {
+    $InstallerCheckStream.Dispose()
 }
 
 $Artifacts = @($Installer, $Archive) + $UpdateArtifacts | ForEach-Object {

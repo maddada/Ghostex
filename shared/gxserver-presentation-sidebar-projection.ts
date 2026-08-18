@@ -388,7 +388,22 @@ export function createGxserverPresentationSidebarSession({
     nativePaneState === "mounted" ||
     nativePaneState === "mounting";
   const closeAfterDone = resolveCloseAfterDone?.(projectId, presentation.sessionId);
-  const delayedSend = resolveDelayedSend?.(projectId, presentation.sessionId);
+  const serverDelayedSend =
+    presentation.delayedSendDeadlineAt ||
+    presentation.delayedSendRemainingLabel ||
+    presentation.delayedSendRemainingMs !== undefined ||
+    presentation.sendWhenAllProjectSessionsStopActive === true ||
+    presentation.sendWhenAgentStopsActive === true
+      ? {
+          deadlineAt: presentation.delayedSendDeadlineAt,
+          remainingLabel: presentation.delayedSendRemainingLabel,
+          remainingMs: presentation.delayedSendRemainingMs,
+          sendWhenAllProjectSessionsStopActive:
+            presentation.sendWhenAllProjectSessionsStopActive,
+          sendWhenAgentStopsActive: presentation.sendWhenAgentStopsActive,
+        }
+      : undefined;
+  const delayedSend = serverDelayedSend ?? resolveDelayedSend?.(projectId, presentation.sessionId);
   const agentIcon = resolveAgentIcon(
     presentation.agentIcon ?? presentation.agentName ?? presentation.agentId,
   );

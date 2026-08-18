@@ -174,16 +174,39 @@ jobs:
           scripts/release-gpui/linux-rpm.sh "${{ inputs.version }}"
           # Risk R8: the shared package root is reused by the DEB step, so prove
           # the RPM payload never contains Debian control metadata.
-          RPM_PATH="build/release-gpui/${{ inputs.version }}/linux-rpm-x64/ghostex-${{ inputs.version }}-1.x86_64.rpm"
+          RPM_PATH="$(realpath "build/release-gpui/${{ inputs.version }}/linux-rpm-x64/ghostex-${{ inputs.version }}-1.x86_64.rpm")"
           if rpm -qpl "$RPM_PATH" | grep -q '^/DEBIAN'; then
             echo "RPM payload leaked DEBIAN/ control metadata" >&2
             exit 1
           fi
+          # Exercise the package manager's exact same-version replacement path
+          # in an isolated root. Downloaded RPMs must support both upgrades and
+          # an explicit reinstall without retaining stale /opt payload files.
+          RPM_TEST_ROOT="$(mktemp -d)"
+          trap 'sudo rm -rf "$RPM_TEST_ROOT"' EXIT
+          sudo rpm --root "$RPM_TEST_ROOT" --initdb
+          sudo rpm --root "$RPM_TEST_ROOT" --install --nodeps "$RPM_PATH"
+          sudo rpm --root "$RPM_TEST_ROOT" --upgrade --replacepkgs --nodeps "$RPM_PATH"
+          sudo test -x "$RPM_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$RPM_TEST_ROOT/usr/bin/ghostex"
+          sudo test -L "$RPM_TEST_ROOT/usr/bin/gx"
       - name: Build the DEB package
         if: ${{ contains(inputs.packages, 'deb') }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/release-gpui/linux-deb.sh "${{ inputs.version }}"
+        run: |
+          scripts/release-gpui/linux-deb.sh "${{ inputs.version }}"
+          # Resolve the built package against this Ubuntu runner's real package
+          # database, then install the same downloaded DEB again through dpkg.
+          # This catches renamed distro dependencies as well as package-owned
+          # file replacement regressions before publication.
+          DEB_PATH="$(realpath "build/release-gpui/${{ inputs.version }}/linux-deb-x64/ghostex_${{ inputs.version }}_amd64.deb")"
+          sudo apt-get install -y --no-install-recommends "$DEB_PATH"
+          sudo dpkg --install "$DEB_PATH"
+          test -x /opt/ghostex/Ghostex
+          test -x /usr/bin/ghostex
+          test -L /usr/bin/gx
+          test "$(dpkg-query --showformat='${Version}' --show ghostex)" = "${{ inputs.version }}"
       - name: Attest the RPM package
         if: ${{ contains(inputs.packages, 'rpm') }}
         uses: actions/attest-build-provenance@v4

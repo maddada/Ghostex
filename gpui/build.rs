@@ -404,7 +404,10 @@ fn build_windows_app_resource(manifest_dir: &Path) {
     fs::write(&icon_path, icon_bytes)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", icon_path.display()));
 
-    let package_version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION");
+    println!("cargo:rerun-if-env-changed=GHOSTEX_GPUI_MARKETING_VERSION");
+    let package_version = env::var("GHOSTEX_GPUI_MARKETING_VERSION")
+        .unwrap_or_else(|_| env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION"));
+    println!("cargo:rustc-env=GHOSTEX_BUILD_MARKETING_VERSION={package_version}");
     let mut numeric_version = [0_u16; 4];
     for (index, component) in package_version
         .split_once('-')

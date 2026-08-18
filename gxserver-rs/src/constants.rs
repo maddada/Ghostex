@@ -83,4 +83,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0017_stashed_prompts",
     "0018_global_sidebar_commands",
     "0019_remove_unsupported_session_kinds",
+    "0020_delayed_sends",
 ];

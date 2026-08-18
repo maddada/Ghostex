@@ -20,6 +20,7 @@ import {
 import { AppTooltip } from "../app-tooltip";
 import type { SessionChatSendKey } from "../../shared/session-chat";
 import { Button } from "../../components/ui/button";
+import { cn } from "../../lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,11 +164,13 @@ export interface SessionChatSessionOptionPillsProps {
 
 function PillTrigger({
   ariaLabel,
+  className,
   disabled,
   label,
   title,
 }: {
   ariaLabel: string;
+  className?: string;
   disabled: boolean;
   label: string;
   title: string;
@@ -178,7 +181,10 @@ function PillTrigger({
         render={
           <Button
             aria-label={ariaLabel}
-            className="ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground"
+            className={cn(
+              "ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground",
+              className,
+            )}
             disabled={disabled}
             size="xs"
             variant="ghost"
@@ -382,6 +388,7 @@ export function SessionChatSessionOptionPills({
         <DropdownMenu>
           <PillTrigger
             ariaLabel={combinedTitle}
+            className="ghostex-chat-model-pill"
             disabled={disabled}
             label={combinedLabel}
             title={tooltipText(combinedTitle, combinedHint)}
@@ -414,6 +421,7 @@ export function SessionChatSessionOptionPills({
       <DropdownMenu>
         <PillTrigger
           ariaLabel={modelTitle}
+          className="ghostex-chat-model-pill"
           disabled={disabled}
           label={modelLabel ?? catalog.model.label}
           title={tooltipText(modelTitle, modelHint)}
@@ -438,6 +446,7 @@ export function SessionChatSessionOptionPills({
         <DropdownMenu>
           <PillTrigger
             ariaLabel={optionsTitle}
+            className="ghostex-chat-options-pill"
             disabled={disabled}
             label={optionsLabel ?? "Options"}
             title={tooltipText(optionsTitle, optionsHint)}

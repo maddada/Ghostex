@@ -288,16 +288,22 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "sendKey" => send_gxserver_session_key(payload, flags),
         "renameCommand" => send_gxserver_rename_command(payload, flags),
         "sendMessage" => rpc::call_gxserver_rpc("/api/sendSessionMessage", payload, flags),
+        "scheduleDelayedSend" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/scheduleDelayedSend", &params, flags)
+        }
+        "cancelDelayedSend" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/cancelDelayedSend", &params, flags)
+        }
         /*
-        CDXC:MobileDelayedSend 2026-07-24:
-        Delayed Send and Close After Done timers are owned by the connected
-        sidebar renderer (native `handleNativeCliCommand` implements all three
-        actions), so `ghostex delayed-send` / `close-after-done` must enter as
-        renderer commands like restartSession instead of failing as
-        unsupported CLI actions.
+        CDXC:MobileCloseAfterDone 2026-08-17:
+        Close After Done remains owned by the connected sidebar renderer, so
+        the mobile CLI forwards its existing command payload instead of
+        pretending that it is an unsupported CLI action. Delayed Send uses the
+        first-class gxserver endpoints above.
         */
         "assertSidebarCard"
-        | "cancelDelayedSend"
         | "clickButton"
         | "focusGroup"
         | "fullReloadSession"
@@ -309,7 +315,6 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "restartSession"
         | "runCommand"
         | "saveAgent"
-        | "scheduleDelayedSend"
         | "setViewMode"
         | "setVisibleCount"
         | "switchProject"
