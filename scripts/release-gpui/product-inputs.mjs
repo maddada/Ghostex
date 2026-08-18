@@ -70,7 +70,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "appcast-x86_64.xml", why: "Historical Sparkle feed output, not a build input." },
   { path: "appcast.xml", why: "Sparkle feed output written by the publisher, not a build input." },
   { path: "claude-code-codex-keybindings.json", why: "Developer keybindings; not packaged." },
-  { path: "editor", why: "Standalone GhostexEditor daemon; built by build:editor, not by any release job." },
   { path: "favicon.png", why: "Web asset for local tooling; not packaged by any release job." },
   { path: "ghostex-cli", why: "Port planning notes only (no build inputs)." },
   { path: "ghostex-history", why: "Local history CLI; not packaged by any release job." },
@@ -403,6 +402,15 @@ const PRODUCT_LIST = [
       /* macOS is the only builder that stages bundled sounds and CLI skills. */
       { pathspec: "media/**" },
       { pathspec: "skills/**" },
+      /*
+       * The Ctrl+G Monaco prompt editor ships as Contents/Resources/
+       * GhostexEditor.app, built from the Swift package plus the Monaco web
+       * payload. editor/desktop/** is the Linux/Windows wry variant and is
+       * deliberately excluded: it cannot change the macOS artifact.
+       */
+      { pathspec: "editor/macos/**" },
+      { pathspec: "editor/web/**" },
+      { pathspec: "editor/scripts/**" },
       { pathspec: "scripts/release-gpui/macos.sh" },
       { pathspec: "scripts/release-gpui/macos-notary.sh" },
       { pathspec: "scripts/release-gpui/macos-finalize.sh" },

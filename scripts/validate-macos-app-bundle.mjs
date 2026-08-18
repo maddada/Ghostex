@@ -50,6 +50,7 @@ export async function validateMacosAppBundle({
   if (releaseManifest) {
     await validateUnbundledCefComponent({ appPath, arch, appName, onDemandManifest: releaseManifest });
     await validateUnbundledCodeServerComponent({ arch, onDemandManifest: releaseManifest, resourcesRoot });
+    await validateBundledGhostexEditorHelper({ appPath, arch });
   } else {
     await assertMachOContainsArch(
       path.join(appPath, "Contents", "Frameworks", "Chromium Embedded Framework.framework", "Chromium Embedded Framework"),
@@ -271,6 +272,27 @@ async function validateBundledGxserverRuntime({ arch, resourcesRoot }) {
     );
   }
   await assertMachOContainsArch(bundledDatabaseModulePath, arch);
+}
+
+/*
+ * The Ctrl+G "Monaco editor" prompt-editor backend is served by the standalone
+ * GhostexEditor daemon. Release bundles must carry it, or the setting silently
+ * degrades to the machine editor (vi for anyone with no $EDITOR) with no error,
+ * no toast, and no log line.
+ */
+async function validateBundledGhostexEditorHelper({ appPath, arch }) {
+  const editorApp = path.join(appPath, "Contents", "Resources", "GhostexEditor.app");
+  const editorExecutable = path.join(editorApp, "Contents", "MacOS", "GhostexEditor");
+  const editorWebRoot = path.join(editorApp, "Contents", "Resources", "Web");
+  await assertRequiredPaths(arch, "bundled GhostexEditor helper", [
+    editorApp,
+    path.join(editorApp, "Contents", "Info.plist"),
+    editorExecutable,
+    path.join(editorWebRoot, "index.html"),
+    path.join(editorWebRoot, "monaco", "vs", "loader.js"),
+  ]);
+  await assertExecutableFileMode(arch, "bundled GhostexEditor helper executable", editorExecutable);
+  await assertMachOContainsArch(editorExecutable, arch);
 }
 
 async function validateBundledResourceShape({

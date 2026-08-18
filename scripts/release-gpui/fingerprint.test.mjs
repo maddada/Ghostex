@@ -48,7 +48,7 @@ describe("release fingerprint algorithm", () => {
     };
     const first = computeNodeFingerprint({ ...shared, nodeId: "alpha" });
     const second = computeNodeFingerprint({ ...shared, nodeId: "beta" });
-    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp1");
+    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp2");
     expect(first.fingerprint).not.toBe(second.fingerprint);
     expect(first.inputs.paths).toEqual([
       { digest: expect.stringMatching(/^[0-9a-f]{64}$/u), entryCount: 1, pathspec: "package.json" },

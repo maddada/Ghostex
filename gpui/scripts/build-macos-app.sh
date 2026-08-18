@@ -22,6 +22,9 @@ APP_ICON_SOURCE_SET="$GPUI_DIR/resources/AppIcon.appiconset"
 APP_ICON_DEST="$APP_PATH/Contents/Resources/AppIcon.icns"
 LID_SLEEP_HELPER_SOURCE_DIR="$GPUI_DIR/native/macos/lid-sleep-helper"
 LID_SLEEP_HELPER_BUILD_DIR="$GPUI_DIR/build/macos-lid-sleep-helper"
+GHOSTEX_EDITOR_BUILD_SCRIPT="$REPO_ROOT/editor/scripts/build-editor-app.sh"
+GHOSTEX_EDITOR_APP_SOURCE="$REPO_ROOT/editor/dist/GhostexEditor.app"
+GHOSTEX_EDITOR_APP_DEST="$APP_PATH/Contents/Resources/GhostexEditor.app"
 GHOSTEX_REMOTE_GXSERVER_LINUX_X64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/x64/package"
 GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_DEFAULT_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/arm64/package"
 GHOSTEX_REMOTE_GXSERVER_LINUX_X64_STAGED_PACKAGE="$WEB_SOURCE_DIR/gxserver-linux-x64"
@@ -492,6 +495,39 @@ EOF_HELPER_PLIST
 		exit 1
 	fi
 	printf '%s\n' "$helper_binary"
+}
+
+# The Ctrl+G "Monaco editor" prompt-editor backend is served by the standalone
+# GhostexEditor daemon. Ship it inside the app bundle so installed builds resolve
+# a real helper; without it the setting silently degrades to the machine editor
+# (vi for anyone with no $EDITOR).
+stage_gpui_ghostex_editor_app() {
+	local editor_executable="$GHOSTEX_EDITOR_APP_DEST/Contents/MacOS/GhostexEditor"
+
+	echo "Building bundled GhostexEditor helper for $GHOSTEX_MACOS_ARCH" >&2
+	GHOSTEX_EDITOR_ARCH="$GHOSTEX_MACOS_ARCH" \
+	GHOSTEX_EDITOR_SWIFT_DEVELOPER_DIR="${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}" \
+		bash "$GHOSTEX_EDITOR_BUILD_SCRIPT"
+
+	if [[ ! -x "$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" ]]; then
+		echo "GhostexEditor build did not produce $GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" >&2
+		exit 1
+	fi
+
+	rm -rf "$GHOSTEX_EDITOR_APP_DEST"
+	/usr/bin/ditto "$GHOSTEX_EDITOR_APP_SOURCE" "$GHOSTEX_EDITOR_APP_DEST"
+	if [[ ! -x "$editor_executable" ]]; then
+		echo "Packaged GhostexEditor helper is missing or not executable: $editor_executable" >&2
+		exit 1
+	fi
+	if [[ ! -f "$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html" || ! -f "$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/monaco/vs/loader.js" ]]; then
+		echo "Packaged GhostexEditor helper is missing its Monaco web payload." >&2
+		exit 1
+	fi
+	if ! /usr/bin/lipo -archs "$editor_executable" | tr ' ' '\n' | grep -Fxq "$GHOSTEX_MACOS_ARCH"; then
+		echo "Packaged GhostexEditor helper does not contain $GHOSTEX_MACOS_ARCH: $editor_executable" >&2
+		exit 1
+	fi
 }
 
 stage_gpui_lid_sleep_helper() {
@@ -1238,6 +1274,7 @@ EOF_HELPER
 done
 
 stage_gpui_lid_sleep_helper
+stage_gpui_ghostex_editor_app
 stage_gpui_sparkle_framework_if_available
 
 # CDXC:GPUICefDistribution 2026-08-03:

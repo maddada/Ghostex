@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
+use crate::ghostex_cli::launchers;
 use crate::ghostex_cli::rpc::{
     self, call_gxserver_rpc, unsupported_action_error, CliError, CliResult,
 };
@@ -1633,10 +1634,8 @@ fn current_platform_name() -> &'static str {
 }
 
 fn resolve_ghostex_editor_executable() -> Option<String> {
-    let cli_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf));
-    let repo_root = cli_dir.and_then(|dir| ghostex_cli_repo_root_from_cli_dir(&dir));
+    let cli_dir = launchers::cli_dir();
+    let repo_root = ghostex_cli_repo_root_from_cli_dir(&cli_dir);
     if let Some(app_override) = normalized_env("GHOSTEX_EDITOR_APP") {
         let executable = ghostex_editor_executable_candidate(&app_override)?;
         return if is_executable_file(&executable) {
@@ -1649,6 +1648,7 @@ fn resolve_ghostex_editor_executable() -> Option<String> {
         current_platform_name(),
         repo_root.as_deref(),
         &rpc::home_dir(),
+        Some(cli_dir.as_path()),
     );
     for candidate in candidates {
         if let Some(executable) = ghostex_editor_executable_candidate(&candidate) {
@@ -1660,14 +1660,44 @@ fn resolve_ghostex_editor_executable() -> Option<String> {
     None
 }
 
+/// Packaged macOS builds ship the standalone editor daemon inside the app at
+/// `Contents/Resources/GhostexEditor.app`. The bundled `ghostex` binary lives
+/// under the same `Resources` tree (`Resources/CLI/ghostex` and
+/// `Resources/Web/gxserver/bin/ghostex`), so walk up to the enclosing
+/// `Contents/Resources` directory instead of hardcoding an app name or an
+/// install location. Returns nothing outside a macOS app bundle.
+fn ghostex_editor_bundled_app_candidates(cli_dir: Option<&Path>) -> Vec<PathBuf> {
+    let file_name = |path: Option<&Path>| {
+        path.and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .map(str::to_string)
+    };
+    let mut candidates = Vec::new();
+    let mut current = cli_dir;
+    while let Some(dir) = current {
+        if file_name(Some(dir)).as_deref() == Some("Resources")
+            && file_name(dir.parent()).as_deref() == Some("Contents")
+        {
+            candidates.push(dir.join("GhostexEditor.app"));
+        }
+        current = dir.parent();
+    }
+    candidates
+}
+
 fn ghostex_editor_executable_candidates_for_platform(
     platform_name: &str,
     repo_root: Option<&Path>,
     home: &Path,
+    cli_dir: Option<&Path>,
 ) -> Vec<String> {
     let path_string = |path: PathBuf| path.to_string_lossy().into_owned();
     if platform_name == "darwin" {
-        let mut candidates = vec![
+        let mut candidates: Vec<String> = ghostex_editor_bundled_app_candidates(cli_dir)
+            .into_iter()
+            .map(|app| path_string(app.join("Contents").join("MacOS").join("GhostexEditor")))
+            .collect();
+        candidates.extend([
             path_string(
                 home.join("Applications")
                     .join("GhostexEditor.app")
@@ -1676,7 +1706,7 @@ fn ghostex_editor_executable_candidates_for_platform(
                     .join("GhostexEditor"),
             ),
             "/Applications/GhostexEditor.app/Contents/MacOS/GhostexEditor".to_string(),
-        ];
+        ]);
         if let Some(repo_root) = repo_root {
             candidates.push(path_string(
                 repo_root
@@ -2537,7 +2567,7 @@ mod tests {
         let home = Path::new("/home/u");
         let repo = Path::new("/repo");
         assert_eq!(
-            ghostex_editor_executable_candidates_for_platform("darwin", Some(repo), home),
+            ghostex_editor_executable_candidates_for_platform("darwin", Some(repo), home, None),
             vec![
                 "/home/u/Applications/GhostexEditor.app/Contents/MacOS/GhostexEditor",
                 "/Applications/GhostexEditor.app/Contents/MacOS/GhostexEditor",
@@ -2545,11 +2575,11 @@ mod tests {
             ]
         );
         assert_eq!(
-            ghostex_editor_executable_candidates_for_platform("darwin", None, home).len(),
+            ghostex_editor_executable_candidates_for_platform("darwin", None, home, None).len(),
             2
         );
         assert_eq!(
-            ghostex_editor_executable_candidates_for_platform("linux", Some(repo), home),
+            ghostex_editor_executable_candidates_for_platform("linux", Some(repo), home, None),
             vec![
                 "/home/u/.local/bin/ghostex-editor",
                 "/usr/local/bin/ghostex-editor",

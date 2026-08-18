@@ -219,6 +219,27 @@ sign_nested_resource_code() {
 		done
 }
 
+# The bundled Ctrl+G Monaco prompt-editor helper is a nested app bundle, so
+# notarization needs its executable and then the bundle signed before the outer
+# app. It is a plain WKWebView Swift app: no V8/JIT entitlements.
+GHOSTEX_EDITOR_APP="$APP_PATH/Contents/Resources/GhostexEditor.app"
+if [[ -d "$GHOSTEX_EDITOR_APP" ]]; then
+	if [[ -x "$GHOSTEX_EDITOR_APP/Contents/MacOS/GhostexEditor" ]]; then
+		codesign \
+			--force \
+			--options runtime \
+			"$CODE_SIGN_TIMESTAMP_FLAG" \
+			--sign "$CODE_SIGN_IDENTITY" \
+			"$GHOSTEX_EDITOR_APP/Contents/MacOS/GhostexEditor"
+	fi
+	codesign \
+		--force \
+		--options runtime \
+		"$CODE_SIGN_TIMESTAMP_FLAG" \
+		--sign "$CODE_SIGN_IDENTITY" \
+		"$GHOSTEX_EDITOR_APP"
+fi
+
 sign_nested_resource_code "$APP_PATH/Contents/Resources/Web"
 sign_nested_resource_code "$APP_PATH/Contents/Resources/CLI"
 

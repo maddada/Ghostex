@@ -374,7 +374,7 @@ describe("reuse verification", () => {
   test("rejects an incompatible algorithm revision", () => {
     const stale = { ...androidRecord(), algorithmRevision: "fp0" };
     expect(accept({ candidate: releaseCandidate(stale) }).failures.join(" ")).toMatch(
-      /algorithm revision fp0 != fp1/u,
+      /algorithm revision fp0 != fp2/u,
     );
   });
 
