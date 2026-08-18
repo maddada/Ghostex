@@ -49,7 +49,6 @@ Search these app-owned areas first by task:
 - TUI or zmx behavior: `tui2/`, `zmx/src/`, and `zmx/test/`; keep `tui2/vendor/**` excluded unless the task is specifically about the vendored VT library.
 - Mobile app work: `mobile/` is the only active mobile app and releases Android through the React Native/Expo project. The retired native `iOS/` and Termux-fork `android/` repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
 - Assets, sounds, icons, and release notes: `media/`, `gpui/assets/`, `src/assets/`, `release/`, and the relevant script under `scripts/`.
-- Deprecated macOS Swift/AppKit app (`native/`, `src/`): search here only to *understand* legacy behavior or to touch the gpui-consumed files listed in "Active apps vs deprecated apps". Never as the destination for new work.
 
 Search imported Ghostty code only when the task is explicitly about upstream Ghostty behavior, the embedded Ghostty source, Zig terminal internals, Ghostty macOS internals, or a build/test failure whose failing file is already under `ghostty/**`. Even then, target the relevant subfolder such as `ghostty/src/`, `ghostty/macos/`, `ghostty/pkg/`, or `ghostty/test/`, and continue excluding `ghostty/.zig-cache/**` and `ghostty/zig-out/**`.
 
@@ -66,17 +65,7 @@ Add `native/sidebar` to that list only when the task is about the gpui-owned mod
 host, titlebar host, manage, or kanban surfaces, or about shared `native/sidebar/*.ts`
 logic. Do not add `native/` or `src/` when the task is new desktop-app work.
 
-### Don't write any test in the deprecated macOS app
-
-The macOS Swift/AppKit app (`native/`, `src/`) has already been replaced by the `./gpui` app. It is kept in-tree for reference only and is not a development target, so tests there aren't helpful. No testing code here. If an existing test under those trees fails because of a change, just delete it.
-
-This also means: don't add features, don't do parity work, and don't fix cosmetic bugs in the deprecated macOS app. If a request seems to point there, route it to `gpui/` instead (or to `ghostex-web/` / `mobile/` if it's a web or mobile request) and say so.
-
-### Don't write any test for the code in the gpui app
-
-Things are in a lot of flux in the ./gpui project
-We will write tests later to lock down working parts of it.
-No testing code here for now.
+### Don't write any tests at all except if explicitly asked to do so by the user
 
 ### Never generate fallbacks when the right solution is to actually correct the behavior itself to fix the issue. Fallbacks should be used in rare cases only because they add complexity and hide issues and introduce useless logic.
 
