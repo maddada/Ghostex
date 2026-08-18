@@ -1295,6 +1295,7 @@ export type GxserverSessionTag =
   | "bug"
   | "feature"
   | "design";
+export type GxserverSessionTagFilter = GxserverSessionTag | "untagged";
 export type GxserverDomainLifecycleState = "running" | "sleeping" | "stopped" | "missing" | "unknown";
 export type GxserverProviderLifecycleState = "exists" | "missing" | "unknown";
 export type GxserverStartupTextDisposition =
@@ -2249,7 +2250,7 @@ export interface GxserverPresentationSearchParams {
   limit?: number;
   projectId?: GxserverProjectId;
   query?: string;
-  sessionTags?: readonly GxserverSessionTag[];
+  sessionTags?: readonly GxserverSessionTagFilter[];
 }
 
 export interface GxserverPresentationSearchResult {

@@ -776,7 +776,7 @@ export function SessionChatMessageList({
               </Button>
             </div>
           ) : null}
-          <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]">
+          <MessageScrollerContent className="mx-auto w-full max-w-3xl justify-end gap-0 px-4 pt-8 pb-4 [direction:ltr]">
             {renderItems.map((item) => (
               <MessageScrollerItem
                 key={

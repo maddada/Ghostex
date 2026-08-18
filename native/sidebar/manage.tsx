@@ -6793,7 +6793,16 @@ function injectManageAgentationScript(documentValue: Document): void {
 function buildManageAgentationBootstrapScript(): string {
   return `
 const rootId = "ghostex-agentation-root";
+const directionStyleId = "ghostex-agentation-direction-style";
 document.getElementById(rootId)?.remove();
+document.getElementById(directionStyleId)?.remove();
+// Agentation portals its visible UI into document.body, outside rootEl. Give
+// that portal an explicit writing-mode boundary so authored RTL page styles
+// cannot reverse Agentation's own controls.
+const directionStyle = document.createElement("style");
+directionStyle.id = directionStyleId;
+directionStyle.textContent = "[data-agentation-root][data-agentation-theme] { direction: ltr !important; text-align: left !important; }";
+(document.head || document.documentElement).appendChild(directionStyle);
 const rootEl = document.createElement("div");
 rootEl.id = rootId;
 rootEl.setAttribute("data-agentation-html-root", "true");
@@ -6818,6 +6827,7 @@ Promise.all([
     message: error instanceof Error ? error.message : String(error)
   });
   rootEl.remove();
+  directionStyle.remove();
 });
 `.trim();
 }

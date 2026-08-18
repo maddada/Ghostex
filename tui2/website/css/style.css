@@ -1171,7 +1171,7 @@ samp {
 
 .hero-note {
     margin: 0.75rem 0 0;
-    color: var(--muted-2);
+    color: var(--red);
     font-size: 0.82rem;
     font-family: var(--mono);
 }

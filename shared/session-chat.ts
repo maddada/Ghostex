@@ -404,6 +404,14 @@ export interface GxserverSessionChatAppendedEvent extends SessionChatFrameBase {
   type: "sessionChatAppended";
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
+  /**
+   * Ids of messages an earlier frame published that the transcript has since
+   * proven abandoned — a prompt that was re-sent or revised before the agent
+   * answered leaves the first submission behind as a dead branch, and the
+   * terminal never showed it. Applied BEFORE `messages`. Omitted (not empty)
+   * in the common case, so older daemons simply never retract anything.
+   */
+  supersededMessageIds?: string[];
 }
 
 export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {

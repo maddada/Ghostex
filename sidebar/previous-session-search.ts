@@ -1,10 +1,14 @@
 import type {
   SidebarPreviousSessionItem,
   SidebarSessionItem,
-  SidebarSessionTag,
 } from "../shared/session-grid-contract";
 import { isDefaultSessionSearchTitle } from "../shared/session-grid-contract";
-import { getEffectiveSidebarSessionTag, getSidebarSessionTagLabel } from "../shared/session-tags";
+import {
+  getEffectiveSidebarSessionTag,
+  getSidebarSessionTagLabel,
+  sessionMatchesSidebarTagFilters,
+  type SidebarSessionTagFilter,
+} from "../shared/session-tags";
 import { getSessionHistoryCardTitle } from "./session-history-card-title";
 
 export type PreviousSessionsModalDayGroup = {
@@ -13,7 +17,7 @@ export type PreviousSessionsModalDayGroup = {
 };
 
 export type FilterPreviousSessionsOptions = {
-  sessionTags?: readonly SidebarSessionTag[];
+  sessionTags?: readonly SidebarSessionTagFilter[];
 };
 
 type SidebarSearchableSession = Pick<
@@ -34,13 +38,11 @@ export function filterPreviousSessions(
 ): SidebarPreviousSessionItem[] {
   const normalizedQuery = query.trim().toLowerCase();
   const selectedSessionTags = options.sessionTags ?? [];
-  const selectedTagSet = new Set(selectedSessionTags);
   const filteredSessions =
     selectedSessionTags.length > 0
-      ? previousSessions.filter((session) => {
-          const sessionTag = getEffectiveSidebarSessionTag(session);
-          return sessionTag ? selectedTagSet.has(sessionTag) : false;
-        })
+      ? previousSessions.filter((session) =>
+          sessionMatchesSidebarTagFilters(session, selectedSessionTags),
+        )
       : [...previousSessions];
   const dedupedSessions = dedupePreviousSessionsByProjectAndTitle(filteredSessions);
 

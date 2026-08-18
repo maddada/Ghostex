@@ -109,6 +109,7 @@ import {
   type SidebarSessionItem,
   type SidebarSessionPresentationChangedMessage,
   type SidebarSessionTag,
+  type SidebarSessionTagFilter,
   type SidebarTheme,
   type SidebarToExtensionMessage,
   type SidebarAgentHookStatusMessage,
@@ -16221,7 +16222,7 @@ async function requestPreviousSessionsFromGxserver(input: {
   limit?: number;
   query?: string;
   requestId: string;
-  sessionTags?: SidebarSessionTag[];
+  sessionTags?: SidebarSessionTagFilter[];
 }): Promise<void> {
   try {
     const limit = input.limit ?? 80;
@@ -16476,7 +16477,7 @@ async function requestRemotePreviousSessionsFromConnectedMachines(input: {
   cursorByMachineId?: Record<string, number>;
   limit: number;
   query?: string;
-  sessionTags?: SidebarSessionTag[];
+  sessionTags?: SidebarSessionTagFilter[];
 }): Promise<PreviousSessionsSourcePage[]> {
   const machines = settings.remoteMachines.filter((machine) =>
     remotePresentationSnapshotsByMachineId.has(machine.id),

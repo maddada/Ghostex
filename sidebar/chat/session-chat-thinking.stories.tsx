@@ -390,3 +390,51 @@ export const WorkingTurnHasNoAgentCopyControl: Story = {
     ).not.toBeInTheDocument();
   },
 };
+
+const SHORT_WORKING_TURN: SessionChatMessage[] = [
+  {
+    id: "short-user-turn",
+    role: "user",
+    blocks: [{ type: "text", text: "Please tighten the footer layout." }],
+    source: "transcript",
+    timestamp: 1_000,
+  },
+  {
+    id: "short-reasoning-turn",
+    role: "reasoning",
+    blocks: [{ type: "text", text: "Inspecting the responsive footer" }],
+    source: "transcript",
+    timestamp: 2_000,
+  },
+];
+
+export const ShortWorkingTurnStaysAtScrollerBottom: Story = {
+  args: { verboseMode: false },
+  render: () => (
+    <div
+      className="ghostex-session-chat-scope flex h-screen flex-col bg-background text-foreground"
+      data-chat-theme="dark"
+    >
+      <SessionChatMessageList
+        hasMore={false}
+        isWorking
+        loadingEarlier={false}
+        messages={SHORT_WORKING_TURN}
+        onLoadEarlier={() => undefined}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="message-scroller-viewport"]',
+    );
+    const workingIndicator = within(canvasElement).getByRole("status", {
+      name: "Agent is responding",
+    });
+    expect(viewport).not.toBeNull();
+
+    const viewportBottom = viewport?.getBoundingClientRect().bottom ?? 0;
+    const indicatorBottom = workingIndicator.getBoundingClientRect().bottom;
+    expect(viewportBottom - indicatorBottom).toBeLessThanOrEqual(17);
+  },
+};

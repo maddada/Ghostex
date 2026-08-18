@@ -28,7 +28,7 @@ import type {
 import type { ghostexHotkeyActionId } from "./ghostex-hotkeys";
 import type { WorkspaceIdeTargetApp } from "./workspace-open-targets";
 import type { SidebarPinnedPrompt } from "./sidebar-pinned-prompts";
-import type { SidebarSessionTag } from "./session-tags";
+import type { SidebarSessionTag, SidebarSessionTagFilter } from "./session-tags";
 import type {
   GxserverPortlessPresentation,
   GxserverPortlessStatus,
@@ -2397,7 +2397,7 @@ export type SidebarToExtensionMessage =
       cursor?: string;
       query?: string;
       requestId: string;
-      sessionTags?: SidebarSessionTag[];
+      sessionTags?: SidebarSessionTagFilter[];
       type: "requestPreviousSessions";
     }
   | {

@@ -31,6 +31,7 @@ import {
 import {
   applySessionChatMergerAppend,
   createSessionChatMerger,
+  removeSessionChatMergerIds,
   replaceSessionChatMergerList,
   type SessionChatMerger,
 } from "./session-chat-merge";
@@ -385,6 +386,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         return;
       }
       if (event.type === "sessionChatAppended") {
+        // Retract first: the rows that replace an abandoned prompt can ride
+        // the very same frame.
+        const retracted = removeSessionChatMergerIds(
+          mergerRef.current,
+          event.supersededMessageIds ?? [],
+        );
+        if (retracted) {
+          setTranscript(mergerRef.current.list);
+        }
         if (event.messages.length > 0) {
           applySessionChatMergerAppend(mergerRef.current, event.messages);
           // Keep the read window at least as large as what is on screen so a

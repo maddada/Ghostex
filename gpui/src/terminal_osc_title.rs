@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-const LEADING_STATUS_MARKER_CHARS: &str = "·•⋅◦✳*∗✶✻✽✸✹✺✷✴✦◇🤖🔔";
+const LEADING_STATUS_MARKER_CHARS: &str = "·•⋅◦✳*∗✶✻✽✸✹✺✷✴◐◑◒◓✦◇🤖🔔";
 
 const IGNORED_GENERIC_TERMINAL_TITLES: &[&str] = &[
     "amp",

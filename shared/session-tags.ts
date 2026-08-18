@@ -16,6 +16,17 @@ export const SIDEBAR_SESSION_TAGS = [
 
 export type SidebarSessionTag = (typeof SIDEBAR_SESSION_TAGS)[number];
 
+/**
+ * CDXC:SessionTagFilters 2026-08-18-02:49:
+ * "No tag" is filter chrome only. Sessions stay untagged by omitting
+ * `sessionTag`; this sentinel never becomes a persisted marker.
+ */
+export const SIDEBAR_SESSION_TAG_FILTER_UNTAGGED = "untagged" as const;
+
+export type SidebarSessionTagFilter =
+  | SidebarSessionTag
+  | typeof SIDEBAR_SESSION_TAG_FILTER_UNTAGGED;
+
 export type SidebarSessionTagOption = {
   label: string;
   value: SidebarSessionTag;
@@ -78,7 +89,10 @@ const SIDEBAR_SESSION_TAG_SET = new Set<string>(SIDEBAR_SESSION_TAGS);
 export const SIDEBAR_SESSION_TAG_LIST_SEPARATOR_IDS = [
   "separator-priority-progress",
   "separator-progress-type",
+  "separator-type-untagged",
 ] as const;
+
+export const SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID = SIDEBAR_SESSION_TAG_FILTER_UNTAGGED;
 
 export type SidebarSessionTagListSeparatorId =
   (typeof SIDEBAR_SESSION_TAG_LIST_SEPARATOR_IDS)[number];
@@ -95,6 +109,12 @@ export type SidebarSessionTagListItem =
       enabled: boolean;
       id: SidebarSessionTagListSeparatorId;
       type: "separator";
+      visible: boolean;
+    }
+  | {
+      enabled: boolean;
+      id: typeof SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID;
+      type: "untagged";
       visible: boolean;
     };
 
@@ -119,6 +139,10 @@ const SIDEBAR_SESSION_TAG_LIST_SEPARATOR_SET = new Set<string>(
  * Tags hidden by the first-run default should also be disabled so Reset to
  * Default does not leave a filter row looking enabled while its eye state is
  * hidden. Treat those defaults as fully off until the user turns them back on.
+ *
+ * CDXC:SessionTagFilters 2026-08-18-02:49:
+ * The filter menu ends with a No tag row so users can isolate sessions that
+ * have no marker. Keep that row out of the durable sessionTag union.
  */
 const DEFAULT_OFF_SIDEBAR_SESSION_TAG_FILTERS = new Set<SidebarSessionTag>([
   "high-priority",
@@ -140,18 +164,68 @@ export const DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS: readonly SidebarSessionTagL
   ...SIDEBAR_SESSION_TAG_SECTIONS[2]!.options.map((option) =>
     createDefaultSidebarSessionTagListTagItem(option.value),
   ),
+  createDefaultSidebarSessionTagListSeparatorItem("separator-type-untagged"),
+  createDefaultSidebarSessionTagListUntaggedItem(),
 ];
 
 export function isSidebarSessionTag(value: unknown): value is SidebarSessionTag {
   return typeof value === "string" && SIDEBAR_SESSION_TAG_SET.has(value);
 }
 
+export function isSidebarSessionTagFilter(value: unknown): value is SidebarSessionTagFilter {
+  return isSidebarSessionTag(value) || value === SIDEBAR_SESSION_TAG_FILTER_UNTAGGED;
+}
+
 export function normalizeSidebarSessionTag(value: unknown): SidebarSessionTag | undefined {
   return isSidebarSessionTag(value) ? value : undefined;
 }
 
-export function getSidebarSessionTagLabel(tag: SidebarSessionTag | undefined): string | undefined {
+export function getSidebarSessionTagLabel(
+  tag: SidebarSessionTagFilter | undefined,
+): string | undefined {
+  if (tag === SIDEBAR_SESSION_TAG_FILTER_UNTAGGED) {
+    return "No tag";
+  }
   return SIDEBAR_SESSION_TAG_OPTIONS.find((option) => option.value === tag)?.label;
+}
+
+export function getSidebarSessionTagListItemLabel(item: SidebarSessionTagListItem): string {
+  if (item.type === "tag") {
+    return getSidebarSessionTagLabel(item.tag) ?? item.tag;
+  }
+  if (item.type === "untagged") {
+    return "No tag";
+  }
+  return "Separator";
+}
+
+export function getSidebarSessionTagListItemFilter(
+  item: SidebarSessionTagListItem,
+): SidebarSessionTagFilter | undefined {
+  if (item.type === "tag") {
+    return item.tag;
+  }
+  if (item.type === "untagged") {
+    return SIDEBAR_SESSION_TAG_FILTER_UNTAGGED;
+  }
+  return undefined;
+}
+
+export function sessionMatchesSidebarTagFilters(
+  session: {
+    isFavorite?: boolean;
+    sessionTag?: SidebarSessionTag;
+  },
+  selectedFilters: readonly SidebarSessionTagFilter[],
+): boolean {
+  if (selectedFilters.length === 0) {
+    return true;
+  }
+  const sessionTag = getEffectiveSidebarSessionTag(session);
+  if (sessionTag === undefined) {
+    return selectedFilters.includes(SIDEBAR_SESSION_TAG_FILTER_UNTAGGED);
+  }
+  return selectedFilters.includes(sessionTag);
 }
 
 export function getEffectiveSidebarSessionTag(input: {
@@ -209,12 +283,19 @@ export function areSidebarSessionTagListItemsEqual(
   );
 }
 
+export function getEnabledVisibleSidebarSessionTagFilters(
+  items: readonly SidebarSessionTagListItem[],
+): SidebarSessionTagFilter[] {
+  return normalizeSidebarSessionTagListItems(items).flatMap((item) => {
+    const filter = getSidebarSessionTagListItemFilter(item);
+    return item.enabled && item.visible && filter ? [filter] : [];
+  });
+}
+
 export function getEnabledVisibleSidebarSessionTags(
   items: readonly SidebarSessionTagListItem[],
 ): SidebarSessionTag[] {
-  return normalizeSidebarSessionTagListItems(items).flatMap((item) =>
-    item.type === "tag" && item.enabled && item.visible ? [item.tag] : [],
-  );
+  return getEnabledVisibleSidebarSessionTagFilters(items).filter(isSidebarSessionTag);
 }
 
 export function getEnabledVisibleSidebarSessionTagSections(
@@ -269,6 +350,15 @@ function createDefaultSidebarSessionTagListSeparatorItem(
   };
 }
 
+function createDefaultSidebarSessionTagListUntaggedItem(): SidebarSessionTagListItem {
+  return {
+    enabled: true,
+    id: SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID,
+    type: "untagged",
+    visible: true,
+  };
+}
+
 function normalizeSidebarSessionTagListItem(
   candidate: unknown,
 ): SidebarSessionTagListItem | undefined {
@@ -284,6 +374,15 @@ function normalizeSidebarSessionTagListItem(
       id: tag,
       tag,
       type: "tag",
+      visible: readBoolean(candidate.visible, true),
+    };
+  }
+
+  if (id === SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID || candidate.type === "untagged") {
+    return {
+      enabled: readBoolean(candidate.enabled, true),
+      id: SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID,
+      type: "untagged",
       visible: readBoolean(candidate.visible, true),
     };
   }
@@ -309,9 +408,13 @@ function cloneSidebarSessionTagListItems(
 function cloneSidebarSessionTagListItem(
   item: SidebarSessionTagListItem,
 ): SidebarSessionTagListItem {
-  return item.type === "tag"
-    ? { enabled: item.enabled, id: item.id, tag: item.tag, type: "tag", visible: item.visible }
-    : { enabled: item.enabled, id: item.id, type: "separator", visible: item.visible };
+  if (item.type === "tag") {
+    return { enabled: item.enabled, id: item.id, tag: item.tag, type: "tag", visible: item.visible };
+  }
+  if (item.type === "untagged") {
+    return { enabled: item.enabled, id: item.id, type: "untagged", visible: item.visible };
+  }
+  return { enabled: item.enabled, id: item.id, type: "separator", visible: item.visible };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
