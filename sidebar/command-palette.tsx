@@ -814,9 +814,9 @@ export function CommandPalette({
 
           CDXC:CommandPalette 2026-05-16-08:18:
           The palette should not list itself as a command, Ghostex built-ins
-          should be single-line rows without descriptions, and the pet row must
-          reflect the current wake/sleep state before routing through the shared
-          settings-owned pet toggle.
+          and project actions should be single-line rows without descriptions,
+          and the pet row must reflect the current wake/sleep state before
+          routing through the shared settings-owned pet toggle.
 
           CDXC:CommandPalette 2026-05-16-13:04:
           Command rows without assigned shortcuts should leave the right edge
@@ -994,7 +994,6 @@ function ProjectCommandRow({
       <SidebarCommandIconGlyph icon={command.icon ?? DEFAULT_SIDEBAR_COMMAND_ICON} stroke={1.8} />
       <span className='ghostex-command-palette-copy'>
         <span className='ghostex-command-palette-title'>{getCommandTitle(command)}</span>
-        <span className='ghostex-command-palette-description'>{getCommandDescription(command)}</span>
       </span>
       {hotkey ? <CommandShortcut>{formatSidebarHotkeyLabel(hotkey)}</CommandShortcut> : null}
     </CommandItem>
