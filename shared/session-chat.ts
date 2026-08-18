@@ -231,6 +231,21 @@ export interface GxserverReadSessionChatSkillsResult {
   skills: SessionChatSkill[];
 }
 
+/**
+ * Composer "@" file mentions. gxserver walks the session's project on its own
+ * machine and answers with project-relative paths, so the composer can insert
+ * the same "@path" the agent resolves against its working directory.
+ */
+export interface GxserverReadSessionChatFilesResult {
+  /** Absolute project root the paths are relative to. */
+  rootPath: string;
+  generatedAt: string;
+  /** Project-relative paths, always forward-slash separated. */
+  files: string[];
+  /** True when the walk hit its entry cap, so the list is partial. */
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // /api/sendSessionChatMessage · /api/answerSessionChatPrompt · /api/interruptSessionChat
 // ---------------------------------------------------------------------------
@@ -404,6 +419,14 @@ export interface GxserverSessionChatAppendedEvent extends SessionChatFrameBase {
   type: "sessionChatAppended";
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
+  /**
+   * Ids of messages an earlier frame published that the transcript has since
+   * proven abandoned — a prompt that was re-sent or revised before the agent
+   * answered leaves the first submission behind as a dead branch, and the
+   * terminal never showed it. Applied BEFORE `messages`. Omitted (not empty)
+   * in the common case, so older daemons simply never retract anything.
+   */
+  supersededMessageIds?: string[];
 }
 
 export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {

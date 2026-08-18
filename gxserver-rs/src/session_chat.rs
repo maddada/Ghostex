@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{self, BufRead, BufReader, Read},
     path::{Path, PathBuf},
@@ -235,6 +235,76 @@ pub fn session_chat_lifecycle_decoder(
     }
 }
 
+/// One row's position in a transcript that is a message TREE rather than a
+/// flat log. Only Claude writes one (`uuid` / `parentUuid`); Pi has its own
+/// tree reader, and the Codex/Grok rollouts are linear.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TranscriptLineage {
+    pub id: String,
+    pub parent_id: Option<String>,
+}
+
+pub type SessionChatLineageExtractor = fn(&str) -> Option<TranscriptLineage>;
+
+pub fn session_chat_lineage_extractor(
+    agent: SessionChatTranscriptAgent,
+) -> Option<SessionChatLineageExtractor> {
+    match agent {
+        SessionChatTranscriptAgent::Claude => Some(claude_transcript_lineage),
+        SessionChatTranscriptAgent::Codex
+        | SessionChatTranscriptAgent::Grok
+        | SessionChatTranscriptAgent::Pi => None,
+    }
+}
+
+/*
+CDXC:SessionChatCore 2026-08-18:
+Abandoned prompts. Submitting a prompt and then revising or re-sending it
+before the model answered leaves BOTH rows in the transcript as siblings of the
+same `parentUuid`; only the last one is ever answered. The terminal renders the
+branch that was actually taken, so chat showed prompts the terminal never did
+(reported for `290fff5d…`, two "ok please implement the fixes you suggested"
+rows 13s apart, the first with no children at all).
+
+The rule below is deliberately the NARROWEST one that catches it: a real prompt
+row (role `User` — never a tool_result, meta or interrupted row) that no
+user/assistant row descends from, whose parent already carries a NEWER prompt.
+Walking the leaf chain instead would have been catastrophic — compaction and
+resume legitimately break the chain, and a real turn's parallel tool calls and
+hook `attachment` rows mean an ordinary parent has several children.
+
+Both halves of "no reply" and "re-taken branch" are counted over decodable
+message rows only. A prompt often collects a hook `attachment` child that is not
+an answer, and letting a non-prompt sibling do the retracting would kill a
+prompt typed while the previous turn was still streaming.
+
+Measured over the 80 most recent local transcripts this drops 16 rows, every one
+a re-sent or revised submission; "keep only the leaf chain" dropped 9k rows and
+"keep the newest child of every parent" 9.2k.
+
+Because the superseded row has no message descendants by construction, nothing
+downstream of it needs pruning too.
+*/
+fn superseded_prompt_id(
+    lineage: &TranscriptLineage,
+    message: Option<&SessionChatMessage>,
+    parents_of_newer_messages: &HashSet<String>,
+    parents_of_newer_prompts: &HashSet<String>,
+) -> Option<String> {
+    if message?.role != SessionChatRole::User {
+        return None;
+    }
+    let parent_id = lineage.parent_id.as_ref()?;
+    // Children are always written after their parent, so in a newest-first scan
+    // they have already been seen.
+    if parents_of_newer_messages.contains(&lineage.id) {
+        return None;
+    }
+    parents_of_newer_prompts
+        .contains(parent_id)
+        .then(|| lineage.id.clone())
+}
+
 // ---------------------------------------------------------------------------
 // Shared primitives (upstream chat spec §1)
 // ---------------------------------------------------------------------------
@@ -468,6 +538,20 @@ fn image_ref_block(record: &Map<String, Value>) -> Option<SessionChatBlock> {
 // ---------------------------------------------------------------------------
 // Claude decoder (upstream chat spec §2.2)
 // ---------------------------------------------------------------------------
+
+/// Claude stamps `uuid`/`parentUuid` on every non-sidechain row, including the
+/// `system` and `attachment` rows a prompt can hang off, so the whole tree is
+/// readable from the same scan the decoder already runs.
+fn claude_transcript_lineage(line: &str) -> Option<TranscriptLineage> {
+    let record = parse_json_object(line)?;
+    if record.get("isSidechain") == Some(&Value::Bool(true)) {
+        return None;
+    }
+    Some(TranscriptLineage {
+        id: extract_string(record.get("uuid"))?,
+        parent_id: extract_string(record.get("parentUuid")),
+    })
+}
 
 fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> {
     if record.get("type").and_then(Value::as_str) != Some("user") {
@@ -1638,6 +1722,7 @@ pub fn read_session_chat_transcript_tail_file(
     include_trailing_line: bool,
     end_offset: Option<u64>,
     decode_lifecycle: Option<SessionChatLifecycleDecoder>,
+    lineage: Option<SessionChatLineageExtractor>,
 ) -> std::io::Result<SessionChatTailFileResult> {
     let file = File::open(file_path)?;
     let file_size = file.metadata()?.len();
@@ -1667,12 +1752,17 @@ pub fn read_session_chat_transcript_tail_file(
     let mut malformed_record_count = 0usize;
     let mut oversized_record_count = 0usize;
 
+    let mut parents_of_newer_messages: HashSet<String> = HashSet::new();
+    let mut parents_of_newer_prompts: HashSet<String> = HashSet::new();
+
     let decode_line = |accumulator: &mut TailLineAccumulator,
                        line_offset: u64,
                        newest_first: &mut Vec<(SessionChatMessage, u64)>,
                        lifecycle: &mut Option<SessionChatTurnLifecycle>,
                        ignore_next_malformed_record: &mut bool,
-                       malformed_record_count: &mut usize| {
+                       malformed_record_count: &mut usize,
+                       parents_of_newer_messages: &mut HashSet<String>,
+                       parents_of_newer_prompts: &mut HashSet<String>| {
         let Some(line) = accumulator.take_line() else {
             return;
         };
@@ -1691,7 +1781,29 @@ pub fn read_session_chat_transcript_tail_file(
                 *lifecycle = decode_lifecycle(&line, &fallback_id);
             }
         }
-        if let Some(mut message) = decode(&line, &fallback_id) {
+        let decoded = decode(&line, &fallback_id);
+        let row_lineage = lineage.and_then(|extract| extract(&line));
+        if let Some(row_lineage) = row_lineage {
+            let superseded = superseded_prompt_id(
+                &row_lineage,
+                decoded.as_ref(),
+                parents_of_newer_messages,
+                parents_of_newer_prompts,
+            )
+            .is_some();
+            if let Some(parent_id) = row_lineage.parent_id {
+                if let Some(message) = decoded.as_ref() {
+                    if message.role == SessionChatRole::User {
+                        parents_of_newer_prompts.insert(parent_id.clone());
+                    }
+                    parents_of_newer_messages.insert(parent_id);
+                }
+            }
+            if superseded {
+                return;
+            }
+        }
+        if let Some(mut message) = decoded {
             message.byte_offset = Some(line_offset);
             newest_first.push((message, line_offset));
         }
@@ -1720,6 +1832,8 @@ pub fn read_session_chat_transcript_tail_file(
                     &mut lifecycle,
                     &mut ignore_next_malformed_record,
                     &mut malformed_record_count,
+                    &mut parents_of_newer_messages,
+                    &mut parents_of_newer_prompts,
                 );
             }
             segment_end = index;
@@ -1737,6 +1851,8 @@ pub fn read_session_chat_transcript_tail_file(
             &mut lifecycle,
             &mut ignore_next_malformed_record,
             &mut malformed_record_count,
+            &mut parents_of_newer_messages,
+            &mut parents_of_newer_prompts,
         );
     }
 
@@ -1911,6 +2027,7 @@ fn read_session_chat_transcript_tail_file_for_agent(
             include_trailing_line,
             end_offset,
             decode_lifecycle,
+            session_chat_lineage_extractor(agent),
         )
     }
 }
@@ -1974,6 +2091,18 @@ pub struct SessionChatIncrementalState {
     pending_start: u64,
     pending_bytes: usize,
     dropping_oversized_record: bool,
+    /*
+    CDXC:SessionChatCore 2026-08-18:
+    Forward half of the abandoned-prompt rule (see `superseded_prompt_id`). The
+    tail read can decide in one pass because it walks newest-first; the append
+    stream sees the prompt BEFORE the row that abandons it, so it must publish
+    the prompt immediately and retract it when the sibling lands — which can be
+    a minute later, hence the state lives across drains. Only prompts that have
+    no reply yet are held, so this is a handful of entries at most.
+    */
+    unanswered_prompt_by_parent: HashMap<String, String>,
+    unanswered_prompt_parents: HashMap<String, String>,
+    superseded_prompt_ids: Vec<String>,
 }
 
 impl SessionChatIncrementalState {
@@ -1984,6 +2113,9 @@ impl SessionChatIncrementalState {
             pending_start: 0,
             pending_bytes: 0,
             dropping_oversized_record: false,
+            unanswered_prompt_by_parent: HashMap::new(),
+            unanswered_prompt_parents: HashMap::new(),
+            superseded_prompt_ids: Vec::new(),
         }
     }
 
@@ -1993,6 +2125,47 @@ impl SessionChatIncrementalState {
         self.pending_start = 0;
         self.pending_bytes = 0;
         self.dropping_oversized_record = false;
+        self.unanswered_prompt_by_parent.clear();
+        self.unanswered_prompt_parents.clear();
+        self.superseded_prompt_ids.clear();
+    }
+
+    /// Ids of already-published prompts that a later row proved abandoned.
+    /// Drained by the caller, which removes them from the batch it is about to
+    /// emit and reports the rest to clients.
+    pub fn take_superseded_prompt_ids(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.superseded_prompt_ids)
+    }
+
+    fn observe_lineage(&mut self, row: &TranscriptLineage, message: Option<&SessionChatMessage>) {
+        let Some(message) = message else {
+            // Hook `attachment` and bookkeeping rows are neither an answer nor
+            // a re-taken branch (see `superseded_prompt_id`).
+            return;
+        };
+        let Some(parent_id) = row.parent_id.clone() else {
+            return;
+        };
+        // A message descending from a prompt settles it: never abandoned now.
+        if let Some(settled_prompt_parent) = self.unanswered_prompt_parents.remove(&parent_id) {
+            self.unanswered_prompt_by_parent
+                .remove(&settled_prompt_parent);
+        }
+        if message.role != SessionChatRole::User {
+            return;
+        }
+        // A second PROMPT on the same parent means the branch was re-taken, so
+        // the prompt that was waiting there was abandoned.
+        if let Some(abandoned) = self.unanswered_prompt_by_parent.remove(&parent_id) {
+            if abandoned != row.id {
+                self.unanswered_prompt_parents.remove(&abandoned);
+                self.superseded_prompt_ids.push(abandoned);
+            }
+        }
+        self.unanswered_prompt_by_parent
+            .insert(parent_id.clone(), row.id.clone());
+        self.unanswered_prompt_parents
+            .insert(row.id.clone(), parent_id);
     }
 
     pub fn rebase(&mut self, offset: u64) {
@@ -2049,6 +2222,7 @@ pub fn read_incremental_transcript_messages(
     mut on_batch: Option<&mut dyn FnMut(Vec<SessionChatMessage>)>,
     decode_lifecycle: Option<SessionChatLifecycleDecoder>,
     mut on_lifecycle: Option<&mut dyn FnMut(SessionChatTurnLifecycle)>,
+    lineage: Option<SessionChatLineageExtractor>,
 ) -> std::io::Result<Vec<SessionChatMessage>> {
     let file = File::open(file_path)?;
     let end = file.metadata()?.len();
@@ -2077,7 +2251,13 @@ pub fn read_incremental_transcript_messages(
                             }
                         }
                     }
-                    if let Some(mut message) = decode(&line, &fallback_id) {
+                    let decoded = decode(&line, &fallback_id);
+                    if let Some(extract) = lineage {
+                        if let Some(row) = extract(&line) {
+                            state.observe_lineage(&row, decoded.as_ref());
+                        }
+                    }
+                    if let Some(mut message) = decoded {
                         message.byte_offset = Some(state.pending_start);
                         messages.push(message);
                         if let Some(on_batch) = on_batch.as_mut() {
@@ -2187,7 +2367,9 @@ pub fn boundary_fingerprint(file_path: &Path, offset: u64) -> std::io::Result<St
 // ---------------------------------------------------------------------------
 
 /// Hook-supplied `agentSessionPath` wins when it points at an existing .jsonl
-/// file; otherwise fall back to the per-agent session-id search.
+/// file; otherwise fall back to the per-agent session-id search. Grok's hook
+/// session file is `updates.jsonl`, while its conversation is stored in
+/// `chat_history.jsonl`, so only the latter is a valid supplied Grok path.
 pub fn resolve_session_chat_transcript_path(
     agent: SessionChatTranscriptAgent,
     agent_session_id: Option<&str>,
@@ -2198,10 +2380,13 @@ pub fn resolve_session_chat_transcript_path(
         .filter(|value| !value.is_empty())
     {
         let expanded = expand_home(path);
-        if expanded
-            .extension()
-            .and_then(|extension| extension.to_str())
-            == Some("jsonl")
+        let is_agent_transcript = agent != SessionChatTranscriptAgent::Grok
+            || expanded.file_name().and_then(|name| name.to_str()) == Some("chat_history.jsonl");
+        if is_agent_transcript
+            && expanded
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("jsonl")
             && expanded.is_file()
         {
             return Some(expanded);
@@ -3131,6 +3316,9 @@ enum FollowerDrainOutcome {
     Appended {
         batches: Vec<Vec<SessionChatMessage>>,
         lifecycle: Option<SessionChatTurnLifecycle>,
+        /// Prompts published by an earlier drain that this one proved
+        /// abandoned (see `superseded_prompt_id`).
+        superseded: Vec<String>,
     },
 }
 
@@ -3143,6 +3331,7 @@ fn follower_drain_once(
     state: &mut FollowerFileState,
     want_snapshot: bool,
 ) -> FollowerDrainOutcome {
+    let lineage = session_chat_lineage_extractor(agent);
     let Ok(current) = read_transcript_file_version(file_path) else {
         return FollowerDrainOutcome::Missing;
     };
@@ -3193,6 +3382,7 @@ fn follower_drain_once(
             false,
             None,
             decode_lifecycle,
+            lineage,
         ) {
             Err(_) => return FollowerDrainOutcome::Missing,
             Ok(tail) => {
@@ -3203,15 +3393,22 @@ fn follower_drain_once(
                     |next: SessionChatTurnLifecycle| appended_lifecycle = Some(next);
                 let capture_lifecycle: &mut dyn FnMut(SessionChatTurnLifecycle) =
                     &mut capture_lifecycle;
-                let appended = read_incremental_transcript_messages(
+                let mut appended = read_incremental_transcript_messages(
                     file_path,
                     &mut state.incremental,
                     decode,
                     None,
                     decode_lifecycle,
                     Some(capture_lifecycle),
+                    lineage,
                 )
                 .unwrap_or_default();
+                // The window itself is already filtered, so anything the
+                // trailing read retracts can only be inside `appended`.
+                let superseded = state.incremental.take_superseded_prompt_ids();
+                if !superseded.is_empty() {
+                    appended.retain(|message| !superseded.contains(&message.id));
+                }
                 FollowerDrainOutcome::Snapshot {
                     tail,
                     appended,
@@ -3234,16 +3431,42 @@ fn follower_drain_once(
             Some(push_batch),
             decode_lifecycle,
             Some(capture_lifecycle),
+            lineage,
         ) {
             Err(_) => return FollowerDrainOutcome::Missing,
             Ok(remaining) => {
                 if !remaining.is_empty() {
                     batches.push(remaining);
                 }
-                if batches.is_empty() && lifecycle.is_none() {
+                // A prompt abandoned inside this same drain never reaches a
+                // client, so it is dropped from the batch instead of being
+                // published and retracted in the same breath.
+                let mut superseded = state.incremental.take_superseded_prompt_ids();
+                if !superseded.is_empty() {
+                    let abandoned: HashSet<String> = superseded.iter().cloned().collect();
+                    let mut removed_before_publishing: HashSet<String> = HashSet::new();
+                    for batch in batches.iter_mut() {
+                        batch.retain(|message| {
+                            if abandoned.contains(&message.id) {
+                                removed_before_publishing.insert(message.id.clone());
+                                return false;
+                            }
+                            true
+                        });
+                    }
+                    batches.retain(|batch| !batch.is_empty());
+                    // Only ids an EARLIER drain already published have to be
+                    // retracted; the rest never reached a client.
+                    superseded.retain(|id| !removed_before_publishing.contains(id));
+                }
+                if batches.is_empty() && lifecycle.is_none() && superseded.is_empty() {
                     FollowerDrainOutcome::Idle
                 } else {
-                    FollowerDrainOutcome::Appended { batches, lifecycle }
+                    FollowerDrainOutcome::Appended {
+                        batches,
+                        lifecycle,
+                        superseded,
+                    }
                 }
             }
         }
@@ -3401,6 +3624,7 @@ fn emit_appended_frame(
     epoch: i64,
     messages: &[SessionChatMessage],
     lifecycle: Option<&SessionChatTurnLifecycle>,
+    superseded_message_ids: &[String],
 ) {
     stream.emit_sequenced(
         |seq| {
@@ -3409,6 +3633,14 @@ fn emit_appended_frame(
                 "messages".to_string(),
                 serde_json::to_value(messages).unwrap_or(Value::Array(Vec::new())),
             );
+            // Omitted when empty: daemons and clients that predate the field
+            // then behave exactly as before.
+            if !superseded_message_ids.is_empty() {
+                frame.insert(
+                    "supersededMessageIds".to_string(),
+                    json!(superseded_message_ids),
+                );
+            }
             insert_optional_lifecycle(&mut frame, lifecycle);
             Value::Object(frame)
         },
@@ -3751,14 +3983,27 @@ pub async fn run_session_chat_follower(
                         epoch,
                         &appended,
                         appended_lifecycle.as_ref(),
+                        &[],
                     );
                 }
             }
-            FollowerDrainOutcome::Appended { batches, lifecycle } => {
+            FollowerDrainOutcome::Appended {
+                batches,
+                lifecycle,
+                superseded,
+            } => {
                 last_transcript_change = std::time::Instant::now();
                 if batches.is_empty() {
-                    // Lifecycle-only frames ARE emitted.
-                    emit_appended_frame(&emit, &config, &stream, epoch, &[], lifecycle.as_ref());
+                    // Lifecycle-only and retraction-only frames ARE emitted.
+                    emit_appended_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        &[],
+                        lifecycle.as_ref(),
+                        &superseded,
+                    );
                 } else {
                     let last_index = batches.len() - 1;
                     for (index, batch) in batches.iter().enumerate() {
@@ -3768,7 +4013,19 @@ pub async fn run_session_chat_follower(
                         } else {
                             None
                         };
-                        emit_appended_frame(&emit, &config, &stream, epoch, batch, batch_lifecycle);
+                        // The retraction rides the FIRST frame so a client can
+                        // never re-order it after the rows that replace it.
+                        let batch_superseded: &[String] =
+                            if index == 0 { &superseded } else { &[] };
+                        emit_appended_frame(
+                            &emit,
+                            &config,
+                            &stream,
+                            epoch,
+                            batch,
+                            batch_lifecycle,
+                            batch_superseded,
+                        );
                     }
                 }
             }
@@ -4836,6 +5093,7 @@ mod tests {
             true,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("tail read");
         let mut state = SessionChatIncrementalState::new();
@@ -4846,6 +5104,7 @@ mod tests {
             None,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("forward read");
         assert_eq!(tail.messages.len(), 2);
@@ -5937,6 +6196,7 @@ mod tests {
             true,
             None,
             Some(decode_claude_turn_lifecycle),
+            Some(claude_transcript_lineage),
         )
         .expect("tail read");
         assert_eq!(all.messages.len(), 10);
@@ -5954,6 +6214,7 @@ mod tests {
             true,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("limited read");
         assert_eq!(limited.messages.len(), 3);
@@ -5971,6 +6232,7 @@ mod tests {
             true,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("zero read");
         assert!(zero.messages.is_empty());
@@ -5984,6 +6246,7 @@ mod tests {
             true,
             Some(limited.before_offset),
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("older page");
         assert_eq!(older.messages.len(), 7);
@@ -6008,6 +6271,7 @@ mod tests {
             None,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("first pass");
         assert_eq!(first.len(), 1);
@@ -6028,6 +6292,7 @@ mod tests {
             None,
             None,
             None,
+            Some(claude_transcript_lineage),
         )
         .expect("second pass");
         assert_eq!(second.len(), 1);
@@ -6055,6 +6320,7 @@ mod tests {
             true,
             None,
             Some(decode_claude_turn_lifecycle),
+            Some(claude_transcript_lineage),
         )
         .expect("read real claude transcript");
         let users = result
@@ -6135,6 +6401,7 @@ mod tests {
             true,
             None,
             Some(decode_codex_turn_lifecycle),
+            None,
         )
         .expect("read real codex transcript");
         let users = result

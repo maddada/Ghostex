@@ -94,6 +94,27 @@ export function replaceSessionChatMergerList(
   applyIncoming(merger.list, merger.indexById, list, merger.priority);
 }
 
+/**
+ * Drops rows the server retracted (abandoned prompts). Rebuilding the index is
+ * the only safe way to keep it aligned after a removal, and retractions are
+ * rare enough that the cost never matters.
+ */
+export function removeSessionChatMergerIds(
+  merger: SessionChatMerger,
+  ids: readonly string[],
+): boolean {
+  if (ids.length === 0) {
+    return false;
+  }
+  const drop = new Set(ids);
+  const kept = merger.list.filter((message) => !drop.has(message.id));
+  if (kept.length === merger.list.length) {
+    return false;
+  }
+  replaceSessionChatMergerList(merger, kept);
+  return true;
+}
+
 export function applySessionChatMergerAppend(
   merger: SessionChatMerger,
   incoming: readonly SessionChatMessage[],
