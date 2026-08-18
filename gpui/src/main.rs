@@ -1410,14 +1410,6 @@ const SPATIAL_FOCUS_HALF_PLANE_TOLERANCE: f32 = 2.0;
 const WORKSPACE_DROP_EDGE_BAND_FRACTION: f32 = 0.24;
 const AGENTS_SPLIT_DROP_PREVIEW_FRACTION: f32 = 0.5;
 const COMMAND_PANE_BODY_DROP_EDGE_BAND_FRACTION: f32 = 0.24;
-/*
-CDXC:GPUICommandPaneResize 2026-06-25-13:19:
-Native command-panel resize uses a 12px transparent hit rail above the command panel, with a 3px hover line as delayed feedback. Keep GPUI's rail as real layout but do not paint a permanent dark bar.
-*/
-const COMMAND_PANE_RESIZE_RAIL_HEIGHT: f32 = 12.0;
-const COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT: f32 = 3.0;
-const COMMAND_PANE_RESIZE_HOVER_DELAY: Duration = Duration::from_millis(50);
-const COMMAND_PANE_RESIZE_HOVER_FADE_DURATION: Duration = Duration::from_millis(180);
 const COMMAND_PANE_TAB_BAR_HEIGHT: f32 = 26.0;
 const COMMAND_PANE_STRIP_HEIGHT: f32 = 26.0;
 const COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN: f32 = 4.0;
@@ -48333,6 +48325,10 @@ impl GhostexGpuiApp {
             self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
             self.update_browser_visibility_for_active_mode(cx);
         }
+        // Session Chat is also a native CEF child view. Reconcile it at the
+        // same mode-switch boundary so entering a project workarea with the
+        // companion hidden removes the old Agents-pane chat view immediately.
+        self.reconcile_agents_chat_surfaces(cx);
         if restore_companion_focus {
             /*
             CDXC:GPUIProjectBrowserDefault 2026-07-14:
@@ -57560,6 +57556,7 @@ impl GhostexGpuiApp {
             .detach();
             return;
         }
+        self.warn_if_monaco_prompt_editor_helper_is_missing(cx);
         let Some(originating_session_id) =
             self.prompt_editor_originating_session_id_for_engine_target(target)
         else {
@@ -57591,6 +57588,43 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
+            });
+        })
+        .detach();
+    }
+
+    /*
+    The app is the only place that knows both that the user asked for the Monaco
+    prompt editor and that no GhostexEditor daemon is installed to serve it. The
+    terminal-side CLI only sees the negotiated `editor` capability, so it opens
+    the machine editor (vi, for anyone with no $EDITOR) without a word. Say so
+    where the user is looking instead of degrading silently.
+    */
+    fn warn_if_monaco_prompt_editor_helper_is_missing(&mut self, cx: &mut gpui::Context<Self>) {
+        if !gpui_prompt_editor_backend_setting_is_monaco()
+            || gpui_resolved_ghostex_editor_executable().is_some()
+        {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.upsert_gpui_app_toast(
+                    GpuiAppToast {
+                        id: GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID.to_string(),
+                        level: GpuiAppToastLevel::Warning,
+                        title: "Monaco prompt editor unavailable".to_string(),
+                        description: Some(
+                            "The Ghostex Editor helper is missing from this build, so Ctrl+G opens the machine editor instead. Set GHOSTEX_EDITOR_APP or reinstall Ghostex."
+                                .to_string(),
+                        ),
+                        loading: false,
+                        persistent: false,
+                        duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                        epoch: 0,
+                    },
+                    window,
+                    cx,
+                );
             });
         })
         .detach();
@@ -64361,7 +64395,7 @@ impl GhostexGpuiApp {
         true
     }
 
-    fn handle_command_pane_resize_rail_mouse_down(
+    fn handle_command_pane_resize_divider_mouse_down(
         &mut self,
         event: &MouseDownEvent,
         window: &mut Window,
@@ -64890,6 +64924,7 @@ impl GhostexGpuiApp {
                 .min_h_0()
                 .overflow_hidden()
                 .child(self.render_main_workspace(window, cx))
+                .child(self.render_command_pane_resize_divider(None, cx))
                 .child(self.render_command_pane_panel(
                     GpuiCommandPaneSide::Bottom,
                     panel_height,
@@ -64897,7 +64932,6 @@ impl GhostexGpuiApp {
                     command_pane_panel_chrome_width(workspace_width, false),
                     cx,
                 ))
-                .child(self.render_command_pane_resize_rail(panel_height, 0.0, cx))
                 .into_any_element(),
             CommandPaneWorkspaceLayoutPlan::PinnedRight { panel_width } => h_flex()
                 /*
@@ -64947,9 +64981,11 @@ impl GhostexGpuiApp {
                             command_pane_panel_chrome_width(workspace_width, true),
                             cx,
                         ))
-                        .child(self.render_command_pane_resize_rail(
-                            COMMAND_PANE_FLOATING_MARGIN + panel_height,
-                            COMMAND_PANE_FLOATING_MARGIN,
+                        .child(self.render_command_pane_resize_divider(
+                            Some((
+                                COMMAND_PANE_FLOATING_MARGIN + panel_height,
+                                COMMAND_PANE_FLOATING_MARGIN,
+                            )),
                             cx,
                         )),
                 )
@@ -65138,14 +65174,14 @@ impl GhostexGpuiApp {
                             .top_0()
                             .bottom_0()
                             .left(px((COMMAND_PANE_SPLIT_HANDLE_THICKNESS
-                                - COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT)
+                                - SIDEBAR_DIVIDER_HOVER_LINE_WIDTH)
                                 / 2.0))
-                            .w(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                            .w(px(SIDEBAR_DIVIDER_HOVER_LINE_WIDTH))
                             .cursor_ew_resize()
-                            .bg(command_pane_resize_hover_line_color())
+                            .bg(sidebar_divider_hover_line_color())
                             .with_animation(
                                 "ghostex-gpui-command-pane-side-divider-hover-line",
-                                Animation::new(COMMAND_PANE_RESIZE_HOVER_FADE_DURATION)
+                                Animation::new(SIDEBAR_DIVIDER_HOVER_FADE_DURATION)
                                     .with_easing(gpui::ease_out_quint()),
                                 |line, delta| line.opacity(delta),
                             ),
@@ -65155,35 +65191,42 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    fn render_command_pane_resize_rail(
+    fn render_command_pane_resize_divider(
         &self,
-        bottom_offset: f32,
-        horizontal_inset: f32,
+        floating_offsets: Option<(f32, f32)>,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPane 2026-06-22-05:42:
-        Dragging stores only an in-memory height ratio clamped to a workspace fraction, and double-click resets the default height; no root hit-test rerouting is used.
-
-        CDXC:GPUICommandPaneResize 2026-07-08-02:30:
-        Native `syncCommandsPanelResizeHandle` places the transparent 12px hit rail directly above the command-panel top edge, over the bottom of the workspace panes, so the command tab bar sits flush against the workspace with no reserved gap row. Mirror that exactly: the rail is an approved user-confirmed overlap exception anchored above the panel instead of a normal-layout row inside it, and it stays out of the command tab hit region.
-
-        CDXC:GPUICommandPaneResize 2026-06-25-13:19:
-        Native command-panel resize rails are transparent AppKit hit regions. Do not paint a permanent dark rail or one-pixel line; the visible command-panel edge is the separate panel separator, and resize feedback belongs to hover chrome.
+        CDXC:GPUICommandPaneResize 2026-08-18:
+        The command-pane boundary uses the same real five-pixel divider as the
+        project-editor companion boundary. In pinned mode it is a reserved
+        normal-layout sibling between the workspace and command pane; floating
+        mode positions the same divider at the floating panel edge. The whole
+        visible gap owns resize/reset input, with the same centered three-pixel
+        delayed hover line and no invisible overlap over adjacent content.
         */
+        let hover_line_offset =
+            (WORKSPACE_SPLIT_HANDLE_THICKNESS - SIDEBAR_DIVIDER_HOVER_LINE_WIDTH) / 2.0;
         div()
-            .id("ghostex-gpui-command-pane-resize-rail")
-            .absolute()
-            .left(px(horizontal_inset))
-            .right(px(horizontal_inset))
-            .bottom(px(bottom_offset))
+            .id("ghostex-gpui-command-pane-resize-divider")
+            .relative()
             .flex()
             .flex_shrink_0()
-            .h(px(COMMAND_PANE_RESIZE_RAIL_HEIGHT))
+            .h(px(WORKSPACE_SPLIT_HANDLE_THICKNESS))
             .items_center()
             .justify_center()
             .cursor_ns_resize()
-            .bg(command_pane_resize_rail_color())
+            .bg(project_editor_companion_divider_background_color())
+            .when(floating_offsets.is_none(), |this| this.w_full())
+            .when_some(
+                floating_offsets,
+                |this, (bottom_offset, horizontal_inset)| {
+                    this.absolute()
+                        .left(px(horizontal_inset))
+                        .right(px(horizontal_inset))
+                        .bottom(px(bottom_offset))
+                },
+            )
             .on_hover(cx.listener(|this, hovered, _, cx| {
                 this.set_command_resize_hovering(
                     CommandPaneResizeHoverTarget::PanelRail,
@@ -65198,14 +65241,15 @@ impl GhostexGpuiApp {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.handle_command_pane_resize_rail_mouse_down(event, window, cx);
+                    this.handle_command_pane_resize_divider_mouse_down(event, window, cx);
                 }),
             )
             .child(
                 div()
-                    .h(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                    .h(px(WORKSPACE_SPLIT_SEPARATOR_THICKNESS))
                     .w_full()
-                    .bg(command_pane_resize_rail_line_color()),
+                    .cursor_ns_resize()
+                    .bg(project_editor_companion_divider_line_color()),
             )
             .when(
                 self.command_resize_hover_visible == Some(CommandPaneResizeHoverTarget::PanelRail),
@@ -65214,14 +65258,14 @@ impl GhostexGpuiApp {
                         div()
                             .absolute()
                             .left_0()
-                            .right_0()
-                            .bottom(px(-COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
-                            .h(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                            .top(px(hover_line_offset))
+                            .h(px(SIDEBAR_DIVIDER_HOVER_LINE_WIDTH))
+                            .w_full()
                             .cursor_ns_resize()
-                            .bg(command_pane_resize_hover_line_color())
+                            .bg(sidebar_divider_hover_line_color())
                             .with_animation(
                                 "ghostex-gpui-command-pane-resize-hover-line",
-                                Animation::new(COMMAND_PANE_RESIZE_HOVER_FADE_DURATION)
+                                Animation::new(SIDEBAR_DIVIDER_HOVER_FADE_DURATION)
                                     .with_easing(gpui::ease_out_quint()),
                                 |line, delta| line.opacity(delta),
                             ),
@@ -65409,17 +65453,17 @@ impl GhostexGpuiApp {
                                 .top_0()
                                 .bottom_0()
                                 .left(px((COMMAND_PANE_SPLIT_HANDLE_THICKNESS
-                                    - COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT)
+                                    - SIDEBAR_DIVIDER_HOVER_LINE_WIDTH)
                                     / 2.0))
-                                .w(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                                .w(px(SIDEBAR_DIVIDER_HOVER_LINE_WIDTH))
                                 .cursor_ew_resize()
-                                .bg(command_pane_resize_hover_line_color())
+                                .bg(sidebar_divider_hover_line_color())
                                 .with_animation(
                                     format!(
                                         "ghostex-gpui-command-split-resize-hover-line-{}",
                                         split_id.0
                                     ),
-                                    Animation::new(COMMAND_PANE_RESIZE_HOVER_FADE_DURATION)
+                                    Animation::new(SIDEBAR_DIVIDER_HOVER_FADE_DURATION)
                                         .with_easing(gpui::ease_out_quint()),
                                     |line, delta| line.opacity(delta),
                                 ),
@@ -65479,17 +65523,17 @@ impl GhostexGpuiApp {
                                 .left_0()
                                 .right_0()
                                 .top(px((COMMAND_PANE_SPLIT_HANDLE_THICKNESS
-                                    - COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT)
+                                    - SIDEBAR_DIVIDER_HOVER_LINE_WIDTH)
                                     / 2.0))
-                                .h(px(COMMAND_PANE_RESIZE_HOVER_LINE_HEIGHT))
+                                .h(px(SIDEBAR_DIVIDER_HOVER_LINE_WIDTH))
                                 .cursor_ns_resize()
-                                .bg(command_pane_resize_hover_line_color())
+                                .bg(sidebar_divider_hover_line_color())
                                 .with_animation(
                                     format!(
                                         "ghostex-gpui-command-split-resize-hover-line-{}",
                                         split_id.0
                                     ),
-                                    Animation::new(COMMAND_PANE_RESIZE_HOVER_FADE_DURATION)
+                                    Animation::new(SIDEBAR_DIVIDER_HOVER_FADE_DURATION)
                                         .with_easing(gpui::ease_out_quint()),
                                     |line, delta| line.opacity(delta),
                                 ),
@@ -66510,7 +66554,7 @@ impl GhostexGpuiApp {
             let epoch = self.command_resize_hover_epoch;
             cx.spawn(async move |this, cx| {
                 cx.background_executor()
-                    .timer(COMMAND_PANE_RESIZE_HOVER_DELAY)
+                    .timer(SIDEBAR_DIVIDER_HOVER_DELAY)
                     .await;
 
                 let _ = this.update(cx, |this, cx| {
@@ -86181,30 +86225,6 @@ fn command_pane_focused_border_color() -> Hsla {
     rgb(0x737373).opacity(0.95).into()
 }
 
-fn command_pane_resize_rail_color() -> Hsla {
-    /*
-    CDXC:GPUICommandPaneResize 2026-06-25-13:19:
-    Native command-panel resize rails are visually transparent in normal state; cursor and delayed hover feedback communicate resizing without a persistent filled bar.
-    */
-    rgb(0x000000).opacity(0.0).into()
-}
-
-fn command_pane_resize_rail_line_color() -> Hsla {
-    /*
-    CDXC:GPUICommandPaneResize 2026-06-25-13:19:
-    The native 3px resize hover line is feedback, not a permanent separator. Keep the normal-state GPUI line transparent so the panel edge separator owns visible chrome.
-    */
-    rgb(0x000000).opacity(0.0).into()
-}
-
-fn command_pane_resize_hover_line_color() -> Hsla {
-    /*
-    CDXC:GPUICommandPaneResize 2026-06-25-13:19:
-    Native resize hover indicators use the same white 3px line as the sidebar divider after the short hover delay.
-    */
-    sidebar_divider_hover_line_color()
-}
-
 fn command_pane_tab_background_color(is_active: bool, is_sleeping: bool) -> Hsla {
     /*
     CDXC:GPUICommandTabBackground 2026-06-25-14:36:
@@ -86776,6 +86796,7 @@ fn browser_agentation_feedback_injection_script() -> String {
   const reactDOMClientModuleUrl = __AGENTATION_REACT_DOM_CLIENT_MODULE_URL__;
   const stateKey = '__GHOSTEX_AGENTATION__';
   const rootId = 'ghostex-agentation-root';
+  const directionStyleId = 'ghostex-agentation-direction-style';
   const existing = window[stateKey];
   if (existing && typeof existing.unmount === 'function') {
     existing.unmount();
@@ -86785,6 +86806,7 @@ fn browser_agentation_feedback_injection_script() -> String {
   const state = {
     canceled: false,
     container: null,
+    directionStyle: null,
     root: null,
     activated: false,
     failed: false,
@@ -86797,6 +86819,9 @@ fn browser_agentation_feedback_injection_script() -> String {
       }
       if (this.container && this.container.parentNode) {
         this.container.parentNode.removeChild(this.container);
+      }
+      if (this.directionStyle && this.directionStyle.parentNode) {
+        this.directionStyle.parentNode.removeChild(this.directionStyle);
       }
       if (window[stateKey] === this) {
         delete window[stateKey];
@@ -86868,12 +86893,24 @@ fn browser_agentation_feedback_injection_script() -> String {
     if (staleContainer && staleContainer.parentNode) {
       staleContainer.parentNode.removeChild(staleContainer);
     }
+    const staleDirectionStyle = document.getElementById(directionStyleId);
+    if (staleDirectionStyle && staleDirectionStyle.parentNode) {
+      staleDirectionStyle.parentNode.removeChild(staleDirectionStyle);
+    }
+    // Agentation portals its visible UI into document.body, outside this
+    // mount container. Give that portal an explicit writing-mode boundary so
+    // RTL page content cannot reverse Agentation's own controls.
+    const directionStyle = document.createElement('style');
+    directionStyle.id = directionStyleId;
+    directionStyle.textContent = '[data-agentation-root][data-agentation-theme] { direction: ltr !important; text-align: left !important; }';
+    (document.head || document.documentElement).appendChild(directionStyle);
     const container = document.createElement('div');
     container.id = rootId;
     container.setAttribute('data-agentation-root', 'true');
     (document.body || document.documentElement).appendChild(container);
 
     state.container = container;
+    state.directionStyle = directionStyle;
     state.root = ReactDOMClient.createRoot(container);
     state.root.render(React.createElement(Agentation));
     scheduleAutoActivate();
@@ -96188,12 +96225,16 @@ fn gpui_remote_ghostex_attach_command(reference: &GpuiRemoteAttachSessionReferen
     .join("; ")
 }
 
-fn gpui_current_zmx_prompt_editor_attach_mode_is_monaco() -> bool {
+fn gpui_prompt_editor_backend_setting_is_monaco() -> bool {
     shared_settings::shared_sidebar_settings_snapshot()
         .object()
         .get("promptEditorBackend")
         .and_then(serde_json::Value::as_str)
         == Some("monaco")
+}
+
+fn gpui_current_zmx_prompt_editor_attach_mode_is_monaco() -> bool {
+    gpui_prompt_editor_backend_setting_is_monaco()
         && gpui_resolved_ghostex_editor_executable().is_some()
 }
 
@@ -96205,11 +96246,30 @@ fn gpui_resolved_ghostex_editor_executable() -> Option<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn gpui_default_ghostex_editor_executable() -> Option<PathBuf> {
-    gpui_ghostex_editor_executable_candidate(gpui_home_dir().join("Applications/GhostexEditor.app"))
+    /*
+    Packaged builds ship the daemon at Contents/Resources/GhostexEditor.app, so
+    prefer the app-owned copy: it is version-matched and signed with the same
+    team as the app that launches it. Standalone installs and the source
+    checkout stay as fallbacks for development bundles that ship no helper.
+    */
+    gpui_app_bundle_resources_dir()
+        .and_then(|resources_dir| {
+            gpui_ghostex_editor_executable_candidate(resources_dir.join("GhostexEditor.app"))
+        })
+        .or_else(|| {
+            gpui_ghostex_editor_executable_candidate(
+                gpui_home_dir().join("Applications/GhostexEditor.app"),
+            )
+        })
         .or_else(|| {
             gpui_ghostex_editor_executable_candidate(PathBuf::from(
                 "/Applications/GhostexEditor.app",
             ))
+        })
+        .or_else(|| {
+            gpui_ghostex_editor_executable_candidate(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../editor/dist/GhostexEditor.app"),
+            )
         })
 }
 
@@ -104247,6 +104307,7 @@ fn gpui_gxserver_server_health(timeout: Duration) -> Result<serde_json::Value, S
 }
 
 const GPUI_GXSERVER_DAEMON_TOAST_ID: &str = "toast-gxserver-daemon";
+const GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID: &str = "toast-monaco-prompt-editor-missing";
 const GPUI_GXSERVER_EXPECTED_PRODUCT: &str = "gxserver";
 
 enum GpuiLocalGxserverHealthState {
