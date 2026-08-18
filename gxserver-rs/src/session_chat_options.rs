@@ -200,7 +200,7 @@ pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> b
 
 /// Defensive SGR strip: `zmx history` output is already plain text, but a
 /// themed statusline could carry colours.
-fn strip_ansi_sgr(line: &str) -> String {
+pub(crate) fn strip_ansi_sgr(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -244,7 +244,7 @@ on a live session: the segment arrives as `Fable\u{a0}5`. Folding every
 whitespace character to a plain space is what makes the grammar match what the
 user actually sees, instead of silently detecting only the space-free segments.
 */
-fn normalize_spaces(line: &str) -> String {
+pub(crate) fn normalize_spaces(line: &str) -> String {
     line.chars()
         .map(|ch| if ch.is_whitespace() { ' ' } else { ch })
         .collect()

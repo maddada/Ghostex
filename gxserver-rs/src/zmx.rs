@@ -857,6 +857,38 @@ pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i3
     Ok(result.exit_code)
 }
 
+/// Terminal text (scrollback + live screen) for one zmx session, read by
+/// name. The session chat send worker only carries the zmx name, so it cannot
+/// go through the repository-scoped `/api/readSessionText` dispatcher.
+pub(crate) struct ZmxHistoryCapture {
+    pub text: String,
+    /// The history exceeded the capture cap, so its TAIL — the live screen —
+    /// is missing. Screen-state readers must not draw conclusions from it.
+    pub truncated: bool,
+}
+
+pub(crate) fn read_zmx_session_history_text_by_name(
+    zmx_name: &str,
+) -> Result<ZmxHistoryCapture, String> {
+    let zmx = require_bundled_zmx()?;
+    let result = run_zmx_interaction_command(
+        build_zmx_history_command(zmx_name, &zmx.executable_path),
+        ZmxCommandOptions {
+            allow_stdout_truncation: true,
+            stdout_limit_bytes: Some(GXSERVER_ZMX_HISTORY_STDOUT_LIMIT_BYTES),
+            ..ZmxCommandOptions::default()
+        },
+    )
+    .map_err(|error| match error {
+        ZmxEndpointError::DependencyUnavailable(message) => message,
+        ZmxEndpointError::Domain(error) => error.message,
+    })?;
+    Ok(ZmxHistoryCapture {
+        truncated: result.stdout_truncated,
+        text: result.stdout,
+    })
+}
+
 fn create_attach_session_metadata(
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,

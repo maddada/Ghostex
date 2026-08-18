@@ -57,6 +57,17 @@ pub const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}"; // Ctrl+U — clear towar
 pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear toward end
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
+/*
+Resume-picker answering (see session_chat_resume_prompt). One arrow press per
+row, then a settle before Enter so the TUI has repainted the new highlight —
+the same measured discipline the message body uses for its own delayed Enter.
+After confirming, the send waits for the picker to leave the screen so the
+message is typed into the restored composer instead of into a loading frame.
+*/
+const SESSION_CHAT_RESUME_PROMPT_ROW_STEP_MS: u64 = 150;
+const SESSION_CHAT_RESUME_PROMPT_CONFIRM_DELAY_MS: u64 = 300;
+const SESSION_CHAT_RESUME_PROMPT_SETTLE_POLL_MS: u64 = 500;
+const SESSION_CHAT_RESUME_PROMPT_SETTLE_POLLS: usize = 12;
 const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
@@ -357,6 +368,13 @@ pub enum SessionChatSendStep {
     PreserveTerminalDraft {
         state_dir: PathBuf,
     },
+    /*
+    Answer Claude Code's resume-usage picker before the message takes the
+    input line. A no-op unless the picker is actually on screen: the chat
+    surface is already showing the session the user resumed, so the only
+    answer it ever wants is "Resume full session as-is".
+    */
+    ResolveResumePrompt,
     /// One `zmx send` stdin burst.
     Write(String),
     SleepMs(u64),
@@ -592,23 +610,28 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
-                SessionChatSendStep::Write(payload) => {
-                    crate::zmx::log_temporary_zmx_input_write(
+                SessionChatSendStep::ResolveResumePrompt => {
+                    resolve_resume_prompt(
                         &project_id,
                         &session_id,
                         &zmx_name,
-                        "sessionChatQueueWrite",
+                        source,
+                        &generation,
+                        job_generation,
+                    )
+                    .await;
+                }
+                SessionChatSendStep::Write(payload) => {
+                    if let Err(error) = write_session_chat_payload(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
                         source,
                         &payload,
-                    );
-                    let zmx_name = zmx_name.clone();
-                    let write = tokio::task::spawn_blocking(move || {
-                        crate::zmx::session_chat_zmx_write(&zmx_name, &payload)
-                    })
-                    .await;
-                    if !matches!(write, Ok(Ok(_))) {
-                        outcome =
-                            Err("The session terminal did not accept the chat input.".to_string());
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
                         break;
                     }
                 }
@@ -616,6 +639,120 @@ async fn run_session_chat_send_worker(
         }
         if let Some(completion) = completion.take() {
             let _ = completion.send(outcome);
+        }
+    }
+}
+
+/// One `zmx send` stdin burst, logged through the shared temporary input log.
+async fn write_session_chat_payload(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &'static str,
+    payload: &str,
+) -> Result<(), String> {
+    crate::zmx::log_temporary_zmx_input_write(
+        project_id,
+        session_id,
+        zmx_name,
+        "sessionChatQueueWrite",
+        source,
+        payload,
+    );
+    let zmx_name = zmx_name.to_string();
+    let payload = payload.to_string();
+    let write = tokio::task::spawn_blocking(move || {
+        crate::zmx::session_chat_zmx_write(&zmx_name, &payload)
+    })
+    .await;
+    if matches!(write, Ok(Ok(_))) {
+        Ok(())
+    } else {
+        Err("The session terminal did not accept the chat input.".to_string())
+    }
+}
+
+/// Current terminal text for the session, or `None` when it could not be read
+/// whole — a capture whose tail was dropped cannot prove what is on screen.
+async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
+    let zmx_name = zmx_name.to_string();
+    let capture = tokio::task::spawn_blocking(move || {
+        crate::zmx::read_zmx_session_history_text_by_name(&zmx_name)
+    })
+    .await
+    .ok()?
+    .ok()?;
+    (!capture.truncated).then_some(capture.text)
+}
+
+/*
+Answers the resume-usage picker when it is live: walk the highlight onto
+"Resume full session as-is" (the row count comes from the captured screen, it
+is never assumed) and confirm. Best effort throughout — a terminal that cannot
+be read, or a picker that outlives the settle budget, leaves the caller with
+exactly today's behaviour instead of failing the user's message.
+*/
+async fn resolve_resume_prompt(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &'static str,
+    generation: &AtomicU64,
+    job_generation: u64,
+) {
+    let Some(text) = capture_session_terminal_text(zmx_name).await else {
+        return;
+    };
+    let Some(plan) = crate::session_chat_resume_prompt::detect_resume_full_session_prompt(&text)
+    else {
+        return;
+    };
+    let (row_key, presses) = if plan.row_moves >= 0 {
+        (ASK_NEXT_ROW, plan.row_moves as usize)
+    } else {
+        (ASK_PREVIOUS_ROW, plan.row_moves.unsigned_abs() as usize)
+    };
+    for _ in 0..presses {
+        if job_generation != generation.load(Ordering::SeqCst) {
+            return;
+        }
+        if write_session_chat_payload(project_id, session_id, zmx_name, source, row_key)
+            .await
+            .is_err()
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(
+            SESSION_CHAT_RESUME_PROMPT_ROW_STEP_MS,
+        ))
+        .await;
+    }
+    tokio::time::sleep(Duration::from_millis(
+        SESSION_CHAT_RESUME_PROMPT_CONFIRM_DELAY_MS,
+    ))
+    .await;
+    if job_generation != generation.load(Ordering::SeqCst) {
+        return;
+    }
+    if write_session_chat_payload(project_id, session_id, zmx_name, source, ASK_ENTER)
+        .await
+        .is_err()
+    {
+        return;
+    }
+    for _ in 0..SESSION_CHAT_RESUME_PROMPT_SETTLE_POLLS {
+        tokio::time::sleep(Duration::from_millis(
+            SESSION_CHAT_RESUME_PROMPT_SETTLE_POLL_MS,
+        ))
+        .await;
+        if job_generation != generation.load(Ordering::SeqCst) {
+            return;
+        }
+        let Some(text) = capture_session_terminal_text(zmx_name).await else {
+            return;
+        };
+        if crate::session_chat_resume_prompt::detect_resume_full_session_prompt(&text).is_none() {
+            return;
         }
     }
 }
