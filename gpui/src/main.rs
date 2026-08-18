@@ -14723,13 +14723,15 @@ impl CommandPaneModel {
         /*
         CDXC:GPUICommandPane 2026-06-25-11:47:
         Opening a hidden GPUI command pane must match macOS `createCommandsPanelOpenStatePatch`: reset height from the Workspace default only when the pane is hidden, and preserve the user's live resize while the pane is already expanded. Keep this model-local so F12, titlebar Actions, sidebar Actions, and command chrome share the same rule.
+
+        CDXC:GPUICommandPaneSide 2026-08-16:
+        Only the height resets here, because it comes from the Workspace default-height Setting. The right dock's width has no Settings default, so its ratio is user-owned: opening the pane again keeps the width the divider drag stored, and the divider's double-click reset stays the only way back to the default.
         */
         if self.is_expanded() {
             return false;
         }
 
         self.reset_height_with_default_height_px(content_height, default_height_px);
-        self.reset_width_to_default();
         true
     }
 
@@ -24596,8 +24598,25 @@ fn command_pane_content_height(window: &Window) -> f32 {
     (window.bounds().size.height.as_f32() - TITLEBAR_HEIGHT).max(1.0)
 }
 
-fn command_pane_workspace_width(window: &Window, sidebar_width: f32) -> f32 {
-    (window.bounds().size.width.as_f32() - sidebar_width - SIDEBAR_DIVIDER_WIDTH).max(0.0)
+fn command_pane_workspace_width(
+    window: &Window,
+    sidebar_width: f32,
+    sidebar_collapsed: bool,
+) -> f32 {
+    /*
+    CDXC:GPUICommandPaneSide 2026-08-16:
+    Collapsing the sidebar removes both the sidebar and its divider from the
+    body row without mutating the saved width, so the workspace really does
+    own the whole window width there. The right dock sizes its column from
+    this number, so it has to follow that collapse instead of subtracting a
+    sidebar that is not on screen.
+    */
+    let sidebar_chrome_width = if gpui_sidebar_chrome_visible(sidebar_collapsed) {
+        sidebar_width + SIDEBAR_DIVIDER_WIDTH
+    } else {
+        0.0
+    };
+    (window.bounds().size.width.as_f32() - sidebar_chrome_width).max(0.0)
 }
 
 fn command_pane_panel_chrome_width(workspace_width: f32, floating: bool) -> f32 {
@@ -64403,7 +64422,8 @@ impl GhostexGpuiApp {
             return;
         }
 
-        let content_width = command_pane_workspace_width(window, self.sidebar_width);
+        let content_width =
+            command_pane_workspace_width(window, self.sidebar_width, self.sidebar_collapsed);
         self.command_pane.resize_drag = Some(CommandPaneResizeDragState {
             side: GpuiCommandPaneSide::Right,
             start_position: event.position.x.as_f32(),
@@ -64454,7 +64474,11 @@ impl GhostexGpuiApp {
                 let next_ratio = command_pane_resize_drag_width_ratio(
                     drag,
                     event.position.x.as_f32(),
-                    command_pane_workspace_width(window, self.sidebar_width),
+                    command_pane_workspace_width(
+                        window,
+                        self.sidebar_width,
+                        self.sidebar_collapsed,
+                    ),
                 );
                 if (next_ratio - self.command_pane.width_ratio).abs() >= 0.001 {
                     self.command_pane.width_ratio = next_ratio;
@@ -64837,7 +64861,8 @@ impl GhostexGpuiApp {
         CDXC:GPUICommandPane 2026-06-22-05:42:
         Command terminals render as a bottom workspace surface beside Agents and project/editor modes without entering the normal workspace tab tree. Pinned mode reserves height and pushes the active workspace area up, floating mode keeps a collapsed bottom strip while drawing the expanded command surface above the workspace, collapsed mode keeps the compact command strip visible while sessions exist, and the command surface disappears when its final session closes.
         */
-        let workspace_width = command_pane_workspace_width(window, self.sidebar_width);
+        let workspace_width =
+            command_pane_workspace_width(window, self.sidebar_width, self.sidebar_collapsed);
         let layout_plan = command_pane_workspace_layout_plan(
             self.command_pane.mode,
             self.command_pane.has_sessions(),
