@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import type { SessionChatMessage } from "../../shared/session-chat";
@@ -388,5 +389,173 @@ export const WorkingTurnHasNoAgentCopyControl: Story = {
     expect(
       within(canvasElement).queryByRole("button", { name: "Copy message" }),
     ).not.toBeInTheDocument();
+  },
+};
+
+function longTranscript(): SessionChatMessage[] {
+  const messages: SessionChatMessage[] = [];
+  for (let turn = 0; turn < 12; turn += 1) {
+    messages.push({
+      id: `long-user-${turn}`,
+      role: "user",
+      blocks: [
+        {
+          type: "text",
+          text: `Turn ${turn}: please review the layout and report anything that looks off.`,
+        },
+      ],
+      source: "transcript",
+      timestamp: turn * 1_000 + 1,
+    });
+    messages.push({
+      id: `long-assistant-${turn}`,
+      role: "assistant",
+      blocks: [
+        {
+          type: "text",
+          text: Array.from(
+            { length: 6 },
+            (_unused, line) =>
+              `Reply ${turn}.${line}: the surrounding rows keep their rhythm and the spacing stays even across the whole column.`,
+          ).join("\n\n"),
+        },
+      ],
+      source: "transcript",
+      timestamp: turn * 1_000 + 2,
+    });
+  }
+  return messages;
+}
+
+const LONG_TRANSCRIPT = longTranscript();
+
+function LongChatSendHarness({
+  scrollToTopBeforeSend = false,
+}: {
+  scrollToTopBeforeSend?: boolean;
+}) {
+  const [messages, setMessages] = React.useState(LONG_TRANSCRIPT);
+  const [isWorking, setWorking] = React.useState(false);
+
+  React.useEffect(() => {
+    const send = () => {
+      setMessages((current) => [
+        ...current,
+        {
+          id: "pending:new-turn",
+          role: "user",
+          blocks: [{ type: "text", text: "One more question about the footer." }],
+          source: "transcript",
+          timestamp: 999_000,
+        },
+      ]);
+      setWorking(true);
+    };
+
+    if (!scrollToTopBeforeSend) {
+      const timer = window.setTimeout(send, 100);
+      return () => window.clearTimeout(timer);
+    }
+
+    // Scroll away from the bottom first so the scroller leaves follow mode,
+    // then send: the newest row still has to come back into view.
+    const scrollTimer = window.setTimeout(() => {
+      const viewport = document.querySelector<HTMLElement>(
+        '[data-slot="message-scroller-viewport"]',
+      );
+      if (viewport) {
+        viewport.scrollTop = 0;
+      }
+    }, 100);
+    const sendTimer = window.setTimeout(send, 500);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(sendTimer);
+    };
+  }, [scrollToTopBeforeSend]);
+
+  return (
+    <div
+      className="ghostex-session-chat-scope flex h-screen flex-col bg-background text-foreground"
+      data-chat-theme="dark"
+    >
+      <SessionChatMessageList
+        hasMore={false}
+        isWorking={isWorking}
+        loadingEarlier={false}
+        messages={messages}
+        onLoadEarlier={() => undefined}
+      />
+    </div>
+  );
+}
+
+/**
+ * A long transcript must never become scrollable into dead space: after the
+ * newest turn is anchored, scrolling to the very bottom has to land on the
+ * working indicator instead of a viewport-sized empty gap above the composer.
+ */
+export const LongChatSendLeavesNoDeadSpace: Story = {
+  args: { verboseMode: false },
+  render: () => <LongChatSendHarness />,
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="message-scroller-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    const workingIndicator = await within(canvasElement).findByRole("status", {
+      name: "Agent is responding",
+    });
+
+    await waitFor(() => {
+      expect(viewport?.scrollHeight ?? 0).toBeGreaterThan(
+        viewport?.clientHeight ?? 0,
+      );
+    });
+
+    const scroller = viewport as HTMLElement;
+    scroller.scrollTop = scroller.scrollHeight;
+    await waitFor(() => {
+      expect(
+        Math.abs(
+          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
+        ),
+      ).toBeLessThanOrEqual(1);
+    });
+
+    const deadSpace =
+      scroller.getBoundingClientRect().bottom -
+      workingIndicator.getBoundingClientRect().bottom;
+    expect(deadSpace).toBeLessThanOrEqual(24);
+  },
+};
+
+/**
+ * Sending while scrolled up must still bring the newest row into view, and it
+ * must land on the bottom of the transcript rather than on a padded anchor.
+ */
+export const LongChatSendWhileScrolledUpFollowsBottom: Story = {
+  args: { verboseMode: false },
+  render: () => <LongChatSendHarness scrollToTopBeforeSend />,
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="message-scroller-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    const scroller = viewport as HTMLElement;
+    const workingIndicator = await within(canvasElement).findByRole("status", {
+      name: "Agent is responding",
+    });
+
+    await waitFor(() => {
+      expect(
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
+      ).toBeLessThanOrEqual(1);
+    });
+
+    const deadSpace =
+      scroller.getBoundingClientRect().bottom -
+      workingIndicator.getBoundingClientRect().bottom;
+    expect(deadSpace).toBeLessThanOrEqual(24);
   },
 };

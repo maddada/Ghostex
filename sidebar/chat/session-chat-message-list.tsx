@@ -50,6 +50,7 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
+  useMessageScroller,
 } from "../../components/ui/message-scroller";
 import { orderSessionChatMessages } from "./session-chat-assembler";
 import {
@@ -355,6 +356,28 @@ function normalizeUserMessageMarkdown(markdown: string): string {
   return visible.join("\n\n");
 }
 
+/*
+ * A pasted picture reaches the agent as a "[Image #N](path)" reference inside
+ * the turn's own text; the chat lifts those references out into image blocks so
+ * the picture renders as a picture. Copy has to hand the whole turn back — the
+ * references included — or the reader loses the one thing that names the file
+ * they attached, and pasting the copy into another composer attaches nothing.
+ */
+function userTurnCopyMarkdown(
+  markdown: string,
+  images: readonly { path?: string; url?: string }[],
+): string {
+  const references = images
+    .map((block, index) => {
+      const href = block.path ?? block.url;
+      return href === undefined ? "" : `[Image #${index + 1}](${href})`;
+    })
+    .filter((reference) => reference !== "");
+  return [references.join(" "), markdown]
+    .filter((part) => part !== "")
+    .join("\n\n");
+}
+
 function MessageRow({
   message,
   showAssistantCopy,
@@ -393,9 +416,15 @@ function MessageRow({
   const isReasoning = message.role === "reasoning";
   const isSystem = message.role === "system";
   const hasToolCall = tools.some((block) => block.type === "tool-call");
-  const showCopy =
-    markdown.length > 0 &&
-    (isUser || (message.role === "assistant" && showAssistantCopy));
+  const userMarkdown = isUser ? normalizeUserMessageMarkdown(markdown) : "";
+  const userCopyMarkdown = isUser
+    ? userTurnCopyMarkdown(userMarkdown, images)
+    : "";
+  const showCopy = isUser
+    ? userCopyMarkdown.length > 0
+    : markdown.length > 0 &&
+      message.role === "assistant" &&
+      showAssistantCopy;
 
   if (isSystem) {
     return (
@@ -421,7 +450,6 @@ function MessageRow({
   }
 
   if (isUser) {
-    const userMarkdown = normalizeUserMessageMarkdown(markdown);
     // Optimistic echoes render IDENTICALLY to real turns — no muting, no
     // "Queued" label — so replacement by the transcript turn causes no
     // visible state change.
@@ -441,7 +469,7 @@ function MessageRow({
               </BubbleContent>
             </Bubble>
           ) : null}
-          {showCopy ? <CopyFooter markdown={userMarkdown} /> : null}
+          {showCopy ? <CopyFooter markdown={userCopyMarkdown} /> : null}
         </MessageContent>
       </Message>
     );
@@ -678,6 +706,31 @@ function CompletedWork({
   );
 }
 
+/**
+ * A local send must bring the newest row back into view even when the reader
+ * had scrolled up, without asking message-scroller to anchor that row to the
+ * top of the viewport (top anchoring pads the transcript with a spacer and
+ * leaves a scrollable empty gap above the composer).
+ */
+function ScrollToLatestSend({
+  pendingMessageId,
+}: {
+  pendingMessageId: string | null;
+}): null {
+  const { scrollToEnd } = useMessageScroller();
+  const handledRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (pendingMessageId === null || handledRef.current === pendingMessageId) {
+      return;
+    }
+    handledRef.current = pendingMessageId;
+    scrollToEnd({ behavior: "auto" });
+  }, [pendingMessageId, scrollToEnd]);
+
+  return null;
+}
+
 export function SessionChatMessageList({
   hasMore,
   isWorking,
@@ -751,12 +804,19 @@ export function SessionChatMessageList({
     [isWorking, rendered],
   );
 
+  const pendingMessageId = useMemo(() => {
+    for (let index = rendered.length - 1; index >= 0; index -= 1) {
+      const candidate = rendered[index];
+      if (candidate && isSessionChatPendingMessageId(candidate.id)) {
+        return candidate.id;
+      }
+    }
+    return null;
+  }, [rendered]);
+
   return (
-    <MessageScrollerProvider
-      autoScroll
-      defaultScrollPosition="end"
-      scrollPreviousItemPeek={64}
-    >
+    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+      <ScrollToLatestSend pendingMessageId={pendingMessageId} />
       <MessageScroller className="flex-1">
         {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
         <MessageScrollerViewport
@@ -789,15 +849,12 @@ export function SessionChatMessageList({
                     ? item.message.id
                     : item.turn.final.id
                 }
-                // Anchor the optimistic row exactly once when a local send is
-                // appended. The authoritative transcript replaces that row
-                // with a new id shortly afterwards; anchoring the replacement
-                // makes message-scroller treat reconciliation as another new
-                // turn and jump the viewport back to that message.
-                scrollAnchor={
-                  item.kind === "message" &&
-                  isSessionChatPendingMessageId(item.message.id)
-                }
+                // No row is a scroll anchor: anchoring a message to the top of
+                // the viewport makes message-scroller pad the transcript with a
+                // spacer so that message can reach the top, which leaves a
+                // viewport-sized scrollable gap between the newest row and the
+                // composer until the reply grows tall enough to fill it.
+                // Following the bottom keeps the newest row above the composer.
               >
                 {item.kind === "message" ? (
                   <MessageRow
