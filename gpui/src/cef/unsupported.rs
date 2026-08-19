@@ -21,7 +21,13 @@ pub fn focus_native_view(_native_view: *mut std::ffi::c_void) {}
 
 pub fn focus_gpui_root_view(_native_view: *mut std::ffi::c_void) {}
 
-pub type BrowserPopupOpenHandler = Rc<dyn Fn(String)>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserPopupPlacement {
+    Selected,
+    Background,
+}
+
+pub type BrowserPopupOpenHandler = Rc<dyn Fn(String, BrowserPopupPlacement)>;
 
 pub enum BrowserPageMetadataEvent {
     AddressChanged(String),
@@ -40,6 +46,10 @@ pub enum BrowserPageMetadataEvent {
 }
 
 pub type BrowserPageMetadataHandler = Rc<dyn Fn(BrowserPageMetadataEvent)>;
+
+/// CDXC:GPUITutorialVideoFullscreen 2026-08-18: API mirror of the CEF
+/// main-frame load-end callback used by bridge-less third-party surfaces.
+pub type PageLoadEndHandler = Rc<dyn Fn()>;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BrowserMediaAccessKinds {
@@ -147,10 +157,22 @@ pub struct ManageDocsResourceRoot {
     pub path: PathBuf,
 }
 
+/// Parity with the CEF scope's in-memory/remote resource loader.
+type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
+
 impl ManageDocsResourceScope {
     pub fn new(_resolve_root: ManageDocsLocalRootResolver) -> Self {
         Self
     }
+
+    pub fn new_remote(_loader: ManageDocsRemoteResourceLoader) -> Self {
+        Self
+    }
+}
+
+/// CDXC:GPUIAppServedResource 2026-08-19: parity with the CEF synthetic origin.
+pub fn app_served_resource_url(relative_path: &str) -> String {
+    format!("https://ghostex-docs.invalid/{relative_path}")
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -191,6 +213,7 @@ impl CefBrowser {
         _manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         _app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
         _app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
+        _page_load_end_handler: Option<PageLoadEndHandler>,
     ) -> Self {
         Self
     }
@@ -217,6 +240,15 @@ impl CefBrowser {
     pub fn load_url(&self, _url: &str) {}
 
     pub fn select_all(&self) {}
+
+    pub fn send_fullscreen_toggle_key(&self) {
+        /*
+        CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+        API mirror of the macOS/Windows/Linux host-side "f" key press that puts
+        the tutorial video player in fullscreen. This no-op must not synthesize
+        input, inject JavaScript, or pretend a CEF renderer exists.
+        */
+    }
 
     pub fn execute_java_script_in_main_frame(&self, _script: &str) -> bool {
         false

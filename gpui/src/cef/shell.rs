@@ -278,6 +278,26 @@ fn browser_popup_target_url_for_shell(target_url: Option<&CefString>) -> Option<
         .then_some(requested_url)
 }
 
+/*
+CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+Middle-click and Cmd/Ctrl-click link opens never reach OnBeforePopup: Chromium
+routes them through RequestHandler::OnOpenURLFromTab with the disposition the
+gesture asked for. Map exactly the new-browser dispositions onto the existing
+shell popup path so they become Browser tabs, and leave every same-tab or
+non-navigational disposition to CEF's default handling.
+*/
+fn browser_popup_placement_for_disposition(
+    disposition: WindowOpenDisposition,
+) -> Option<BrowserPopupPlacement> {
+    match disposition {
+        WindowOpenDisposition::NEW_BACKGROUND_TAB => Some(BrowserPopupPlacement::Background),
+        WindowOpenDisposition::NEW_FOREGROUND_TAB
+        | WindowOpenDisposition::NEW_WINDOW
+        | WindowOpenDisposition::NEW_POPUP => Some(BrowserPopupPlacement::Selected),
+        _ => None,
+    }
+}
+
 /// Path markers that identify app-bundled first-party CEF entries in each
 /// OS packaging layout; dev builds always serve from `dist/sidebar`.
 #[cfg(target_os = "macos")]
@@ -415,7 +435,18 @@ pub fn native_view_contains_responder(
     platform::native_view_contains_responder(root_native_view, responder)
 }
 
-pub type BrowserPopupOpenHandler = StdRc<dyn Fn(String)>;
+/// Where a CEF-requested link open should land in the Browser tab strip.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserPopupPlacement {
+    /// Select the new tab: `window.open`, `target=_blank`, and the
+    /// context-menu "Open Link in New Window"/"New Tab" rows.
+    Selected,
+    /// Append the new tab without leaving the current page: middle-click and
+    /// Cmd/Ctrl-click link opens, matching every desktop browser.
+    Background,
+}
+
+pub type BrowserPopupOpenHandler = StdRc<dyn Fn(String, BrowserPopupPlacement)>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SidebarBridgeEvent {
@@ -574,6 +605,17 @@ pub enum BrowserPageMetadataEvent {
 }
 
 pub type BrowserPageMetadataHandler = StdRc<dyn Fn(BrowserPageMetadataEvent)>;
+
+/*
+CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+Third-party surfaces that carry no Ghostex bridge (today only the tutorial
+video modal, which loads the YouTube watch page as its top-level document) can
+still need a host-side action once their page is really on screen. This
+callback reports main-frame load-end for exactly those surfaces; it carries no
+page data (no URL, title, or content), only the "this browser finished loading
+its main frame" edge.
+*/
+pub type PageLoadEndHandler = StdRc<dyn Fn()>;
 
 /*
 CDXC:GPUIBrowserMediaPermissions 2026-07-27:
@@ -1053,6 +1095,18 @@ pub struct ManageDocsResourceScope {
     source: ManageDocsResourceSource,
 }
 
+/*
+CDXC:GPUIAppServedResource 2026-08-19:
+The synthetic origin this scope serves is not Docs-specific: it is simply the
+one http(s) origin the app can hand to a CEF document that must not be a
+file:// URL. The first-launch tutorial player page uses it because YouTube's
+embed player answers "Error 153 - Video player configuration error" when the
+embedding document has no real origin.
+*/
+pub fn app_served_resource_url(relative_path: &str) -> String {
+    format!("{MANAGE_DOCS_RESOURCE_BASE_URL}{relative_path}")
+}
+
 impl ManageDocsResourceScope {
     pub fn new(resolve_root: ManageDocsLocalRootResolver) -> Self {
         Self {
@@ -1460,6 +1514,46 @@ fn append_sidebar_renderer_lifecycle(
 }
 
 wrap_request_handler! {
+    struct GhostexGpuiBrowserRequestHandler {
+        popup_open_handler: BrowserPopupOpenHandler,
+    }
+
+    impl RequestHandler {
+        fn on_open_urlfrom_tab(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            _frame: Option<&mut Frame>,
+            target_url: Option<&CefString>,
+            target_disposition: WindowOpenDisposition,
+            _user_gesture: c_int,
+        ) -> c_int {
+            /*
+            CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+            Chromium reports middle-click and Cmd/Ctrl-click link opens here,
+            not through OnBeforePopup, so Browser panes need this callback to
+            keep those gestures inside the GPUI Browser workspace. Forward only
+            the requested target URL to the same shell tab model the popup path
+            uses and return handled so Chromium creates no separate browser.
+            Dispositions that are not a new browser (same-tab navigation,
+            save-to-disk, ignored actions) stay on CEF's default path.
+
+            Empty targets mirror the popup policy
+            (CDXC:GPUIBrowserPopups 2026-06-23-11:43): handled here with no
+            shell dispatch, because there is no transferable URL and no
+            fallback transfer path.
+            */
+            let Some(placement) = browser_popup_placement_for_disposition(target_disposition) else {
+                return 0;
+            };
+            if let Some(requested_url) = browser_popup_target_url_for_shell(target_url) {
+                (self.popup_open_handler)(requested_url, placement);
+            }
+            1
+        }
+    }
+}
+
+wrap_request_handler! {
     struct GhostexManageDocsRequestHandler {
         source: ManageDocsResourceSource,
     }
@@ -1700,6 +1794,35 @@ wrap_load_handler! {
                 can_go_back: can_go_back != 0,
                 can_go_forward: can_go_forward != 0,
             });
+        }
+    }
+}
+
+wrap_load_handler! {
+    struct GhostexGpuiPageLoadEndHandler {
+        load_end_handler: PageLoadEndHandler,
+    }
+
+    impl LoadHandler {
+        fn on_load_end(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
+            _http_status_code: c_int,
+        ) {
+            let Some(frame) = frame else {
+                return;
+            };
+            if frame.is_main() == 0 {
+                return;
+            }
+
+            /*
+            CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+            Report only the main-frame load-end edge to the app; sub-frames
+            (ads, player iframes) must not retrigger the host action.
+            */
+            (self.load_end_handler)();
         }
     }
 }
@@ -3216,7 +3339,7 @@ wrap_context_menu_handler! {
             if requested_url.is_empty() {
                 return 0;
             }
-            popup_open_handler(requested_url.to_string());
+            popup_open_handler(requested_url.to_string(), BrowserPopupPlacement::Selected);
             1
         }
     }
@@ -3333,7 +3456,7 @@ wrap_life_span_handler! {
                 self.popup_open_handler.as_ref(),
                 browser_popup_target_url_for_shell(target_url),
             ) {
-                (popup_open_handler)(requested_url);
+                (popup_open_handler)(requested_url, BrowserPopupPlacement::Selected);
             }
             1
         }
@@ -3701,6 +3824,7 @@ impl CefBrowser {
         manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
         app_modal_host_bridge_event_handler: Option<AppModalHostBridgeEventHandler>,
+        page_load_end_handler: Option<PageLoadEndHandler>,
     ) -> Result<Self, String> {
         let keyboard_zoom_enabled = page_metadata_handler.is_some()
             || project_workarea_bridge_event_handler.is_some()
@@ -3794,32 +3918,47 @@ impl CefBrowser {
             .map(ManageDocsResourceScope::request_handler)
             .or_else(|| {
                 is_shared_sidebar_surface.then(GhostexGpuiSidebarRendererRequestHandler::new)
+            })
+            .or_else(|| {
+                // Browser panes are the only surface with a shell popup path,
+                // so they are the only ones that turn middle-click and
+                // Cmd/Ctrl-click link opens into Browser tabs.
+                popup_open_handler
+                    .clone()
+                    .map(GhostexGpuiBrowserRequestHandler::new)
             });
-        let load_handler =
-            if sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some()) {
-                Some(GhostexGpuiSidebarProjectContextLoadHandler::new(
-                    sidebar_runtime_settings.unwrap_or_default(),
-                    sidebar_gxserver_bootstrap,
-                ))
-            } else if sidebar_gxserver_bootstrap.is_some() {
-                /*
-                CDXC:GPUISessionChatSurface 2026-07-31:
-                A bootstrap without the sidebar bridge handler identifies the
-                per-session Session Chat surface: it gets only the bootstrap
-                install message so the bundled chat page can reach the local
-                gxserver, while Browser, workarea, and modal clients keep passing
-                no bootstrap at all.
-                */
-                Some(GhostexGpuiSessionChatGxserverBootstrapLoadHandler::new(
-                    sidebar_gxserver_bootstrap,
-                ))
-            } else if project_workarea_bridge_event_handler.is_some() {
-                Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
-                    manage_docs_resource_base_url,
-                ))
-            } else {
-                page_metadata_handler.map(GhostexGpuiBrowserPageLoadHandler::new)
-            };
+        let load_handler = if let Some(page_load_end_handler) = page_load_end_handler {
+            /*
+            CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+            Only bridge-less third-party surfaces (the tutorial video modal)
+            pass this handler, so it can never displace the sidebar,
+            session-chat, workarea, or Browser load handlers below.
+            */
+            Some(GhostexGpuiPageLoadEndHandler::new(page_load_end_handler))
+        } else if sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some()) {
+            Some(GhostexGpuiSidebarProjectContextLoadHandler::new(
+                sidebar_runtime_settings.unwrap_or_default(),
+                sidebar_gxserver_bootstrap,
+            ))
+        } else if sidebar_gxserver_bootstrap.is_some() {
+            /*
+            CDXC:GPUISessionChatSurface 2026-07-31:
+            A bootstrap without the sidebar bridge handler identifies the
+            per-session Session Chat surface: it gets only the bootstrap
+            install message so the bundled chat page can reach the local
+            gxserver, while Browser, workarea, and modal clients keep passing
+            no bootstrap at all.
+            */
+            Some(GhostexGpuiSessionChatGxserverBootstrapLoadHandler::new(
+                sidebar_gxserver_bootstrap,
+            ))
+        } else if project_workarea_bridge_event_handler.is_some() {
+            Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
+                manage_docs_resource_base_url,
+            ))
+        } else {
+            page_metadata_handler.map(GhostexGpuiBrowserPageLoadHandler::new)
+        };
         // Every GPUI CEF browser needs the client's life-span handler so
         // DoClose is always handled and CEF can never close the host GPUI
         // window when a browser is dropped.
@@ -4049,6 +4188,54 @@ impl CefBrowser {
         self.focus();
         let browser = self.browser.borrow();
         select_all_in_browser(&browser);
+    }
+
+    /*
+    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    The tutorial modal loads the YouTube watch page as its own top-level CEF
+    document, so the app cannot put its player in fullscreen from injected
+    JavaScript: Chromium's Fullscreen API requires a transient user
+    activation, and app-owned `execute_java_script` runs without one (the
+    `requestFullscreen()` promise is rejected outright). Sending the key
+    through the browser host instead feeds Chromium's real input pipeline, so
+    the page sees a trusted keydown with user activation and runs its own "f"
+    shortcut. "f" toggles, so callers must send this exactly once per loaded
+    page. This carries no page data and does not persist or log anything.
+    */
+    pub fn send_fullscreen_toggle_key(&self) {
+        // Windows virtual key code for F; Chromium derives DOM `code`/`key`
+        // from this plus the platform-native code below.
+        const VK_F: c_int = 0x46;
+        #[cfg(target_os = "macos")]
+        const NATIVE_F_KEY_CODE: c_int = 3; // kVK_ANSI_F
+        #[cfg(target_os = "linux")]
+        const NATIVE_F_KEY_CODE: c_int = 41; // X11 keycode for F
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        const NATIVE_F_KEY_CODE: c_int = 0;
+
+        let browser = self.browser.borrow();
+        let Some(host) = browser.host() else {
+            return;
+        };
+        let mut event = cef::KeyEvent {
+            size: std::mem::size_of::<cef::sys::cef_key_event_t>(),
+            type_: cef::KeyEventType::RAWKEYDOWN,
+            modifiers: 0,
+            windows_key_code: VK_F,
+            native_key_code: NATIVE_F_KEY_CODE,
+            is_system_key: 0,
+            character: b'f' as u16,
+            unmodified_character: b'f' as u16,
+            focus_on_editable_field: 0,
+        };
+        host.send_key_event(Some(&event));
+        // CEF's char event carries the produced character in the key code.
+        event.type_ = cef::KeyEventType::CHAR;
+        event.windows_key_code = b'f' as c_int;
+        host.send_key_event(Some(&event));
+        event.type_ = cef::KeyEventType::KEYUP;
+        event.windows_key_code = VK_F;
+        host.send_key_event(Some(&event));
     }
 
     pub fn load_url(&self, url: &str) {
@@ -4555,9 +4742,22 @@ pub(super) fn select_all_for_native_view(native_view: *mut c_void) -> c_int {
 
     set_active_cef_native_view(native_view as usize);
 
+    /*
+    CDXC:GPUICefEditCommands 2026-08-18:
+    Taking native focus here is only for the case where GPUI chrome still owns
+    the first responder while the page holds the caret. When Chromium already
+    owns the keyboard, re-running the focus handoff walks the responder out of
+    the render widget and back, and Blink reports that round trip to the page
+    as a blur/focus pair — which commits and closes any field that saves on
+    blur, such as the sidebar group rename. Select All must never disturb the
+    focus that already exists.
+    */
     if let Some(host) = browser.host() {
-        platform::focus_native_view(platform::native_view_ptr(host.window_handle()));
-        host.set_focus(1);
+        let host_view = platform::native_view_ptr(host.window_handle());
+        if !platform::native_view_owns_first_responder(host_view) {
+            platform::focus_native_view(host_view);
+            host.set_focus(1);
+        }
     }
 
     if select_all_in_browser(&browser) {

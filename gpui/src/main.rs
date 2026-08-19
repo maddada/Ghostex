@@ -13,6 +13,7 @@ mod cef_component_window;
 mod component_store;
 mod ghostty_kit;
 mod ghostty_vt;
+mod navigation_history;
 mod plugins_modal;
 mod shared_settings;
 mod support_logs;
@@ -100,6 +101,10 @@ const DEFAULT_BROWSER_URL: &str = "https://www.google.com";
 const GPUI_WORKSPACE_SHELL_STATE_VERSION: u64 = 1;
 static GPUI_APP_QUIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static GPUI_PROMPT_HANDOFF_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+/// The daemon holds `/api/handoffSessionChatDraft` for up to 16s while the
+/// agent CLI answers the Ctrl+G handshake; leave room for the round trip (and
+/// an SSH tunnel) on top of that.
+const GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(target_os = "linux")]
 static GPUI_LINUX_WINDOW_ICON: OnceLock<Arc<image::RgbaImage>> = OnceLock::new();
 #[cfg(target_os = "macos")]
@@ -1124,6 +1129,23 @@ the tutorial in the normal native child window, but load the watch page as its
 top-level CEF document so playback follows the same working path as Browser.
 */
 const GHOSTEX_TUTORIAL_VIDEO_URL: &str = "https://www.youtube.com/watch?v=APdP-j5n4Mw";
+/*
+CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
+The tutorial is the first page of the one first-run modal now, so it plays
+inside the React modal host instead of taking a second window. The host
+document is a file:// URL, where the YouTube embed player refuses to start
+("Error 153 - Video player configuration error"), so the modal host serves this
+one-line player page from the app's synthetic https origin and the setup modal
+embeds THAT. Verified 2026-08-19: file:// -> https player page -> YouTube embed
+plays; file:// -> YouTube embed does not.
+*/
+const GHOSTEX_TUTORIAL_VIDEO_EMBED_URL: &str =
+    "https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&modestbranding=1";
+const GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH: &str = "ghostex-tutorial-video-player.html";
+/// CDXC:GPUITutorialVideoFullscreen 2026-08-18: the watch page reports
+/// main-frame load-end before its player has installed keyboard shortcuts, so
+/// the host-side fullscreen key press waits this long after that edge.
+const GPUI_TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY: Duration = Duration::from_millis(1500);
 const TITLEBAR_TIPS_PANEL_CEF_PROFILE_ID: &str = "titlebar-tips-panel";
 const TITLEBAR_TIPS_PANEL_ID: &str = "ghostex-gpui-titlebar-tips-panel";
 const TITLEBAR_RESOURCES_PANEL_CEF_PROFILE_ID: &str = "titlebar-resources-panel";
@@ -1664,6 +1686,11 @@ fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str) -> &'a str
             "forkSession" => Some(("ctrl+shift+f", "cmd+alt+f")),
             "reloadSession" => Some(("ctrl+shift+r", "cmd+alt+r")),
             "popOutPane" => Some(("ctrl+shift+o", "cmd+alt+o")),
+            // CDXC:NavigationHistory 2026-08-19: same Mac-Control substitution
+            // as the Jump to Project entries below, mirroring the
+            // windowsLinuxDefaultKey values in shared/ghostex-hotkeys.ts.
+            "navigateHistoryBack" => Some(("cmd+ctrl+[", "cmd+alt+[")),
+            "navigateHistoryForward" => Some(("cmd+ctrl+]", "cmd+alt+]")),
             "jumpToProject1" => Some(("cmd+ctrl+1", "cmd+alt+1")),
             "jumpToProject2" => Some(("cmd+ctrl+2", "cmd+alt+2")),
             "jumpToProject3" => Some(("cmd+ctrl+3", "cmd+alt+3")),
@@ -1836,6 +1863,9 @@ const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("popOutPane", "ctrl+shift+o"),
     ("focusPreviousGroup", "cmd+["),
     ("focusNextGroup", "cmd+]"),
+    // CDXC:NavigationHistory 2026-08-19: mirrors shared/ghostex-hotkeys.ts.
+    ("navigateHistoryBack", "cmd+ctrl+["),
+    ("navigateHistoryForward", "cmd+ctrl+]"),
     ("focusPreviousSession", "cmd+shift+tab"),
     ("focusNextSession", "cmd+tab"),
     ("focusUp", "cmd+alt+up"),
@@ -2054,6 +2084,8 @@ fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) 
                 | "focusNextSession"
                 | "focusPreviousSession"
                 | "focusRight"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
                 | "toggleCompanionPane"
                 | "toggleSidebarCollapsed"
         ),
@@ -2063,6 +2095,8 @@ fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) 
             action_id,
             "focusNextSession"
                 | "focusPreviousSession"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
                 | "toggleCompanionPane"
                 | "toggleSidebarCollapsed"
         ),
@@ -2070,13 +2104,23 @@ fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) 
             FirstResponderCefSurface::ProjectEditorCompanion,
         )) => matches!(
             action_id,
-            "createSession" | "focusLeft" | "focusRight" | "toggleCompanionPane"
+            "createSession"
+                | "focusLeft"
+                | "focusRight"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
+                | "toggleCompanionPane"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
             FirstResponderCefSurface::ProjectWorkarea(_),
         )) => matches!(
             action_id,
-            "createSession" | "focusLeft" | "focusRight" | "toggleCompanionPane"
+            "createSession"
+                | "focusLeft"
+                | "focusRight"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
+                | "toggleCompanionPane"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
             FirstResponderCefSurface::SessionChat(_),
@@ -2085,6 +2129,8 @@ fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) 
             "toggleChatView"
                 | "focusNextSession"
                 | "focusPreviousSession"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
                 | "toggleCompanionPane"
                 | "toggleSidebarCollapsed"
         ),
@@ -2654,8 +2700,17 @@ struct GpuiNativeResourceProcess {
     cpu: f64,
     pid: u32,
     ppid: u32,
-    rss_mb: f64,
+    memory_mb: f64,
     system_pid: u32,
+}
+
+/// One TCP listener sampled for the titlebar Resources "Dev Servers" section.
+#[derive(Clone, Debug)]
+struct GpuiNativeResourceServer {
+    label: String,
+    pid: u32,
+    port: u16,
+    url: String,
 }
 
 #[derive(Clone, Debug)]
@@ -3320,9 +3375,19 @@ impl GpuiAppModalKind {
             | Self::AgentsHub
             | Self::DelayedSend
             | Self::RenameSession
-            | Self::FirstLaunchSetup
             | Self::WatchGhostexVideo => serde_json::json!({
                 "modal": self.modal_id(),
+                "type": "open",
+            }),
+            // CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19: the setup modal's
+            // first page plays the tutorial, and it cannot embed YouTube from
+            // the file:// modal host, so it is handed the app-served player
+            // page instead.
+            Self::FirstLaunchSetup => serde_json::json!({
+                "modal": self.modal_id(),
+                "tutorialVideoEmbedUrl": cef::app_served_resource_url(
+                    GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH,
+                ),
                 "type": "open",
             }),
             Self::UpdateAvailable => serde_json::json!({
@@ -10207,6 +10272,7 @@ impl BrowserTabModel {
         &mut self,
         requested_url: String,
         profile_id: BrowserProfileId,
+        placement: cef::BrowserPopupPlacement,
     ) -> Option<BrowserTabId> {
         /*
         CDXC:GPUIBrowserPopups 2026-06-23-11:43:
@@ -10216,6 +10282,15 @@ impl BrowserTabModel {
         The popup target string is accepted only as the loaded-tab target identifier after leading/trailing whitespace is removed. Do not reinterpret an empty target as address-bar text, restored page content, an import request, a notification-worthy event, or a fallback tab.
         */
         let requested_url = browser_loaded_popup_target_url(&requested_url)?;
+
+        /*
+        CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+        Background placement is the middle-click/Cmd-click contract: append the
+        loaded tab to the focused pane's strip and leave selection where it is,
+        so the tab materializes its CEF surface later through the normal
+        inactive-loaded-tab path.
+        */
+        let selects_new_tab = matches!(placement, cef::BrowserPopupPlacement::Selected);
 
         let tab_id = BrowserTabId(self.next_tab_id);
         self.next_tab_id += 1;
@@ -10235,13 +10310,19 @@ impl BrowserTabModel {
             navigation_history: BrowserNavigationHistory::loaded(&requested_url),
         };
         self.tabs.push(tab);
-        self.active_tab = tab_id;
+        if selects_new_tab {
+            self.active_tab = tab_id;
+        }
         let pane_tab = BrowserPaneTab { tab_id };
         if let Some(leaf) = self.find_leaf_mut(self.focused_pane) {
             leaf.tab_group
                 .insert_tab_at(pane_tab, leaf.tab_group.tabs.len());
-            leaf.tab_group.active_tab = tab_id;
+            if selects_new_tab {
+                leaf.tab_group.active_tab = tab_id;
+            }
         } else {
+            // A pane created for this tab has no other tab to keep selected,
+            // so background placement collapses into the selected case.
             let pane_id = self.allocate_pane_id();
             self.root = BrowserNode::Leaf(BrowserLeaf {
                 pane_id,
@@ -10251,6 +10332,7 @@ impl BrowserTabModel {
                 },
             });
             self.focused_pane = pane_id;
+            self.active_tab = tab_id;
         }
         Some(tab_id)
     }
@@ -10466,19 +10548,19 @@ impl BrowserTabModel {
         zone: WorkspaceDropZone,
         profile_id: BrowserProfileId,
         url: String,
-    ) -> bool {
+    ) -> Option<BrowserTabId> {
         /*
         CDXC:GPUIBrowserPaneActions 2026-06-22-13:46:
         Browser pane-menu split actions create a selected address-only tab in a new split pane by focusing the clicked pane, using the normal address-only tab creation path, then moving that new tab through the existing Browser split helper. This preserves Browser split ordering, tab metadata persistence, and CEF ownership because address-only tabs do not create or load browser surfaces.
         */
         if matches!(zone, WorkspaceDropZone::Center) || !self.focus_pane(target_pane_id) {
-            return false;
+            return None;
         }
 
-        let Some(tab_id) = self.add_loaded_popup_tab(url, profile_id) else {
-            return false;
-        };
+        let tab_id =
+            self.add_loaded_popup_tab(url, profile_id, cef::BrowserPopupPlacement::Selected)?;
         self.split_tab_to_pane(target_pane_id, target_pane_id, tab_id, zone)
+            .then_some(tab_id)
     }
 
     fn pane_tab_count(&self, pane_id: BrowserPaneId) -> Option<usize> {
@@ -22426,6 +22508,8 @@ fn gpui_source_workarea_allowed_configured_hotkey_action_id(action_id: &str) -> 
         action_id,
         "focusLeft"
             | "focusRight"
+            | "navigateHistoryBack"
+            | "navigateHistoryForward"
             | "openCommandsPanel"
             | "switchAgentsView"
             | "switchSourceView"
@@ -24745,6 +24829,16 @@ enum GpuiWindowsFirstRunSetupAction {
     ClearDistribution,
 }
 
+/*
+CDXC:SidebarBrowserTabReveal 2026-08-18:
+One pending sidebar reveal for a Browser tab the user just opened, held until
+that tab reaches the sidebar in a published tab snapshot.
+*/
+struct PendingSidebarBrowserTabReveal {
+    project_id: String,
+    tab_id: BrowserTabId,
+}
+
 pub struct GhostexGpuiApp {
     parent_ns_view: *mut std::ffi::c_void,
     project_name: String,
@@ -24806,7 +24900,23 @@ pub struct GhostexGpuiApp {
     parked_browser_tabs_by_project: HashMap<String, BrowserTabModel>,
     browser_tabs_project_epoch: u64,
     sidebar_browser_tabs_snapshot: String,
+    /*
+    CDXC:SidebarBrowserTabReveal 2026-08-18:
+    A Browser tab the user just opened, waiting to be revealed in the sidebar.
+    The reveal is deferred to the tab-snapshot publish instead of being sent at
+    creation time because the sidebar can only expand and scroll to a row it
+    already knows about, and the row reaches it in that same snapshot.
+    */
+    pending_sidebar_browser_tab_reveal: Option<PendingSidebarBrowserTabReveal>,
+    sidebar_browser_tab_reveal_request_id: u64,
     latest_sidebar_project_snapshot: Option<GpuiProjectSnapshot>,
+    /*
+    CDXC:NavigationHistory 2026-08-19:
+    Back/Forward availability plus their tooltips, pushed by the sidebar runtime
+    whenever gxserver's trail changes. The render path may only read this cached
+    value — see `navigation_history` for why the titlebar owns no trail state.
+    */
+    navigation_history_state: navigation_history::GpuiNavigationHistoryState,
     titlebar_git_menu_state: Option<GpuiTitlebarGitMenuState>,
     // Titlebar Actions are projected from gxserver's `/api/readSidebarHud`.
     // The render path must only read this cached snapshot; the RPC runs on
@@ -24840,6 +24950,22 @@ pub struct GhostexGpuiApp {
     // `activePortlessSetupPromptMode` parity).
     portless_setup_prompt_suppressed_until_restart: bool,
     active_portless_setup_prompt_mode: Option<GpuiPortlessSetupPromptMode>,
+    /*
+    CDXC:GPUIPortlessPromptDeferral 2026-08-18:
+    GPUI hosts a single app-modal window, so a Portless prompt resolved while
+    the user already has a modal open cannot be shown right away. Remember that
+    deferral instead of dropping the prompt for the rest of the run, and let
+    the next modal close re-run the check.
+    */
+    portless_setup_prompt_pending_modal_close: bool,
+    /*
+    CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+    First-run onboarding markers are now persisted only after their surface is
+    actually shown, so the on-disk flags can no longer dedupe the entry points
+    that start onboarding (gxserver bootstrap, CEF init, daemon respawn). This
+    memory-only latch owns that dedupe for the process.
+    */
+    first_run_onboarding_started: bool,
     active_open_target_id: Option<String>,
     active_action_command_id: Option<String>,
     /*
@@ -25349,8 +25475,6 @@ pub struct GhostexGpuiApp {
     app_modal_open_attempt_id: u64,
     app_modal_ready_retry_used: bool,
     app_modal_command_return_focus_target: Option<CommandPaneAppModalReturnFocusTarget>,
-    #[cfg(target_os = "windows")]
-    windows_first_launch_setup_followup_pending: bool,
     plugins_modal_window: Option<WindowHandle<plugins_modal::GpuiPluginsModalWindow>>,
     plugin_settings_action_progress:
         HashMap<&'static str, component_store::ComponentStoreProgressPhase>,
@@ -25360,6 +25484,18 @@ pub struct GhostexGpuiApp {
     cef_component_window: Option<WindowHandle<cef_component_window::GpuiCefComponentWindow>>,
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     cef_component_install_generation: u64,
+    /*
+    CDXC:GPUIMainWindowToasts 2026-08-18:
+    The last-known frame of the main workspace window, refreshed from this
+    entity's own render pass. Toast placement must never read the ambient
+    `&mut Window` of whatever context happens to deliver the toast: gpui
+    resolves `WeakEntity::update_in` through `current_window_by_entity`, which
+    points at the last window that drew after this entity was touched. Any
+    child popup (titlebar dropdown, app modal, or the toast panel itself) can
+    win that race, which put toasts on top of the wrong window and walked the
+    stack up the screen one toast at a time.
+    */
+    main_window_bounds: Bounds<Pixels>,
     app_toast_window: Option<WindowHandle<GpuiAppToastWindow>>,
     app_toast_window_height: Pixels,
     app_toast_anchor: Option<Point<Pixels>>,
@@ -25558,6 +25694,7 @@ impl GhostexGpuiApp {
                 GpuiWindowsFirstRunSetupState::Checking
             };
 
+        let main_window_bounds = window.bounds();
         let app = cx.new(move |cx| {
             let mut this = Self {
                 parent_ns_view: parent,
@@ -25596,7 +25733,11 @@ impl GhostexGpuiApp {
                 parked_browser_tabs_by_project: shell_layout_state.parked_browser_tabs_by_project,
                 browser_tabs_project_epoch: 0,
                 sidebar_browser_tabs_snapshot: String::new(),
+                pending_sidebar_browser_tab_reveal: None,
+                sidebar_browser_tab_reveal_request_id: 0,
                 latest_sidebar_project_snapshot: None,
+                navigation_history_state:
+                    navigation_history::GpuiNavigationHistoryState::default(),
                 titlebar_git_menu_state: None,
                 titlebar_actions_snapshot: Vec::new(),
                 titlebar_actions_refresh_in_flight: false,
@@ -25617,6 +25758,8 @@ impl GhostexGpuiApp {
                 prompt_editor_daemon_open: false,
                 portless_setup_prompt_suppressed_until_restart: false,
                 active_portless_setup_prompt_mode: None,
+                portless_setup_prompt_pending_modal_close: false,
+                first_run_onboarding_started: false,
                 active_open_target_id: None,
                 active_action_command_id: None,
                 sidebar_command_run_feedback_states: HashMap::new(),
@@ -25835,8 +25978,6 @@ impl GhostexGpuiApp {
                 app_modal_open_attempt_id: 0,
                 app_modal_ready_retry_used: false,
                 app_modal_command_return_focus_target: None,
-                #[cfg(target_os = "windows")]
-                windows_first_launch_setup_followup_pending: false,
                 plugins_modal_window: None,
                 plugin_settings_action_progress: HashMap::new(),
                 plugin_settings_action_errors: HashMap::new(),
@@ -25845,6 +25986,7 @@ impl GhostexGpuiApp {
                 cef_component_window: None,
                 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                 cef_component_install_generation: 0,
+                main_window_bounds,
                 app_toast_window: None,
                 app_toast_window_height: px(0.0),
                 app_toast_anchor: None,
@@ -26657,6 +26799,7 @@ impl GhostexGpuiApp {
             manage_docs_resource_scope,
             None,
             None,
+            None,
             cx,
         ) {
             Ok(surface) => surface,
@@ -26752,7 +26895,7 @@ impl GhostexGpuiApp {
                 })
                 .await;
             if let Err(message) = result {
-                let _ = this.update_in(cx, |this, window, cx| {
+                let _ = this.update(cx, |this, cx| {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
                             id: "gpui-agents-hub-source-open-failed".to_string(),
@@ -26764,7 +26907,6 @@ impl GhostexGpuiApp {
                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                             epoch: 0,
                         },
-                        window,
                         cx,
                     );
                 });
@@ -26877,7 +27019,7 @@ impl GhostexGpuiApp {
 
         self.active_mode = next_active_mode;
         self.focus_default_surface_for_active_mode();
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.scroll_all_active_tab_strips();
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         self.persist_shell_layout_state();
@@ -28291,7 +28433,6 @@ impl GhostexGpuiApp {
                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                             epoch: 0,
                         },
-                        window,
                         cx,
                     );
                 }
@@ -28668,6 +28809,39 @@ impl GhostexGpuiApp {
         true
     }
 
+    /*
+    CDXC:SidebarBrowserTabReveal 2026-08-18:
+    Record that a newly opened Browser tab should be revealed in the sidebar.
+    Only the tab identity is stored; the reveal itself is sent once the tab has
+    actually been published to the sidebar, so the sidebar never receives a
+    request for a row it cannot resolve. A second open replaces an unsent
+    request because only the newest tab is worth revealing.
+    */
+    fn request_sidebar_browser_tab_reveal(&mut self, tab_id: BrowserTabId) {
+        let Some(project_id) = self.browser_tabs_project_id.clone() else {
+            return;
+        };
+        self.pending_sidebar_browser_tab_reveal =
+            Some(PendingSidebarBrowserTabReveal { project_id, tab_id });
+    }
+
+    fn dispatch_pending_sidebar_browser_tab_reveal(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(pending) = self.pending_sidebar_browser_tab_reveal.take() else {
+            return;
+        };
+        self.sidebar_browser_tab_reveal_request_id =
+            self.sidebar_browser_tab_reveal_request_id.wrapping_add(1);
+        let request_id = self.sidebar_browser_tab_reveal_request_id;
+        let script = gpui_sidebar_reveal_browser_tab_script(&serde_json::json!({
+            "projectId": pending.project_id,
+            "requestId": request_id,
+            "tabId": pending.tab_id.0.to_string(),
+        }));
+        if let Some(sidebar) = self.sidebar.clone() {
+            sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
+        }
+    }
+
     fn refresh_gpui_sidebar_browser_tabs_if_changed(
         &mut self,
         cx: &mut gpui::Context<Self>,
@@ -28748,8 +28922,30 @@ impl GhostexGpuiApp {
                     })
             })
             .collect::<Vec<_>>();
+        /*
+        CDXC:SidebarBrowserTabReveal 2026-08-18:
+        A reveal may only be sent for a tab this snapshot actually carries;
+        otherwise the sidebar would be asked to expand and scroll to a row it
+        has never been told about. A pending reveal whose tab is missing from a
+        published snapshot is dropped, because the tab it named is gone.
+        */
+        let pending_reveal_is_published =
+            self.pending_sidebar_browser_tab_reveal
+                .as_ref()
+                .is_some_and(|pending| {
+                    let pending_tab_id = pending.tab_id.0.to_string();
+                    tabs.iter().any(|tab| {
+                        tab.get("projectId").and_then(serde_json::Value::as_str)
+                            == Some(pending.project_id.as_str())
+                            && tab.get("tabId").and_then(serde_json::Value::as_str)
+                                == Some(pending_tab_id.as_str())
+                    })
+                });
         let snapshot = serde_json::Value::Array(tabs).to_string();
         if self.sidebar_browser_tabs_snapshot == snapshot {
+            if pending_reveal_is_published {
+                self.dispatch_pending_sidebar_browser_tab_reveal(cx);
+            }
             return false;
         }
         let Some(sidebar) = self.sidebar.clone() else {
@@ -28760,6 +28956,11 @@ impl GhostexGpuiApp {
             return false;
         }
         self.sidebar_browser_tabs_snapshot = snapshot;
+        if pending_reveal_is_published {
+            self.dispatch_pending_sidebar_browser_tab_reveal(cx);
+        } else {
+            self.pending_sidebar_browser_tab_reveal = None;
+        }
         true
     }
 
@@ -28971,7 +29172,7 @@ impl GhostexGpuiApp {
         }
         self.project_editor_auto_sleep_epochs.bump(mode);
         if mode == TitlebarMode::Browser {
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
         }
         if mode == TitlebarMode::Source {
             /*
@@ -29476,12 +29677,27 @@ impl GhostexGpuiApp {
         }
         self.browser_url = url.clone();
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        let Some((_tab_id, _profile_id)) = self
+        /*
+        CDXC:SidebarBrowserTabReveal 2026-08-18:
+        Committing an address in an address-only "New Tab" is the moment that
+        tab first becomes a sidebar row (placeholders are deliberately not
+        projected as browser sessions), so it is a new tab as far as the sidebar
+        is concerned and gets the same reveal as any other new tab. Navigating
+        an already-loaded tab is not.
+        */
+        let was_address_only_tab = self
+            .browser_tabs
+            .active_tab_for_pane(pane_id)
+            .is_some_and(|tab| tab.state != BrowserTabState::Loaded);
+        let Some((committed_tab_id, _profile_id)) = self
             .browser_tabs
             .load_pane_active_tab_url(pane_id, url.clone())
         else {
             return;
         };
+        if was_address_only_tab {
+            self.request_sidebar_browser_tab_reveal(committed_tab_id);
+        }
         self.browser_tabs.focus_pane(pane_id);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
         self.load_browser_cef_url_for_pane(pane_id, &url, cx);
@@ -29591,6 +29807,7 @@ impl GhostexGpuiApp {
             None,
             None,
             None,
+            None,
             cx,
         ) {
             Ok(surface) => surface,
@@ -29619,20 +29836,22 @@ impl GhostexGpuiApp {
         let foreground = cx.foreground_executor().clone();
         let project_epoch = self.browser_tabs_project_epoch;
 
-        Rc::new(move |requested_url: String| {
-            let app = app.clone();
-            let mut async_cx = async_cx.clone();
-            foreground
-                .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        if this.browser_tabs_project_epoch != project_epoch {
-                            return;
-                        }
-                        this.open_browser_popup_tab(requested_url, window, cx);
-                    });
-                })
-                .detach();
-        })
+        Rc::new(
+            move |requested_url: String, placement: cef::BrowserPopupPlacement| {
+                let app = app.clone();
+                let mut async_cx = async_cx.clone();
+                foreground
+                    .spawn(async move {
+                        let _ = app.update_in(&mut async_cx, |this, window, cx| {
+                            if this.browser_tabs_project_epoch != project_epoch {
+                                return;
+                            }
+                            this.open_browser_popup_tab(requested_url, placement, window, cx);
+                        });
+                    })
+                    .detach();
+            },
+        )
     }
 
     fn browser_page_metadata_handler(
@@ -29887,6 +30106,51 @@ impl GhostexGpuiApp {
         })
     }
 
+    /*
+    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    The tutorial video should play fullscreen inside its own modal window. The
+    page is a third-party document, so the app cannot call `requestFullscreen()`
+    for it (Chromium requires a transient user activation that app-owned
+    JavaScript never has); the host sends the player's own "f" shortcut as real
+    input instead. The press waits a beat after main-frame load-end because the
+    YouTube player installs its keyboard shortcuts after the page loads, and it
+    is sent once because "f" toggles.
+    */
+    fn tutorial_video_page_load_end_handler(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> cef::PageLoadEndHandler {
+        let app = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        let background = cx.background_executor().clone();
+        let foreground = cx.foreground_executor().clone();
+
+        Rc::new(move || {
+            let app = app.clone();
+            let mut async_cx = async_cx.clone();
+            let background = background.clone();
+            foreground
+                .spawn(async move {
+                    background
+                        .timer(GPUI_TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY)
+                        .await;
+                    let _ = app.update(&mut async_cx, |this, cx| {
+                        this.send_gpui_tutorial_video_fullscreen_key(cx);
+                    });
+                })
+                .detach();
+        })
+    }
+
+    fn send_gpui_tutorial_video_fullscreen_key(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(handle) = self.app_modal_window else {
+            return;
+        };
+        let _ = handle.update(cx, |host, _modal_window, cx| {
+            host.send_tutorial_video_fullscreen_key(cx);
+        });
+    }
+
     fn app_modal_host_bridge_event_handler(
         &self,
         cx: &mut gpui::Context<Self>,
@@ -29968,6 +30232,19 @@ impl GhostexGpuiApp {
                 self.session_chat_composer_ready_sessions.insert(session_id);
             }
             self.complete_session_chat_composer_focus_handoff(session_id, window, cx);
+            /*
+            CDXC:SessionChatDraftHandoff 2026-08-18:
+            A transferred draft also has to reach a chat surface the user is
+            not looking at — the automatic switch runs over every newly
+            eligible session, not just the focused one, and the focus handoff
+            above deliberately does nothing for the rest.
+            */
+            if let Some(content) = self
+                .pending_session_chat_composer_insert
+                .remove(&session_id)
+            {
+                self.insert_prompt_into_session_chat(session_id, &content, cx);
+            }
             return;
         }
         if action == "draftHandoffToTerminalComplete" {
@@ -30019,6 +30296,39 @@ impl GhostexGpuiApp {
                 .unwrap_or_default()
                 .to_string();
             self.request_session_chat_attachment_picks(session_id, request_id, cx);
+            return;
+        }
+        /*
+        CDXC:GPUISessionChatImageSave 2026-08-19:
+        "Save image" in the chat's image overlay. A CEF page has no download
+        handler here, so the bytes ride the bridge and Rust runs the native
+        save panel and writes the file itself. The reply carries an error
+        string only when the write actually failed: a cancelled panel is a
+        completed request, not an error.
+        */
+        if action == "saveImage" {
+            let request_id = message
+                .get("requestId")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let suggested_name = message
+                .get("suggestedName")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("image.png")
+                .to_string();
+            let base64_data = message
+                .get("base64Data")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            self.request_session_chat_image_save(
+                session_id,
+                request_id,
+                suggested_name,
+                base64_data,
+                cx,
+            );
             return;
         }
         /*
@@ -30197,6 +30507,104 @@ impl GhostexGpuiApp {
         }
     }
 
+    fn request_session_chat_image_save(
+        &mut self,
+        session_id: TerminalSessionId,
+        request_id: String,
+        suggested_name: String,
+        base64_data: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let bytes = match BASE64_STANDARD.decode(base64_data.as_bytes()) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                support_logs::append(
+                    support_logs::GpuiSupportLog::AppModal,
+                    "gpui.sessionChat.imageSaveFailed",
+                    serde_json::json!({ "error": error.to_string(), "stage": "decode" }),
+                );
+                self.deliver_session_chat_image_save(
+                    session_id,
+                    &request_id,
+                    Some("The image bytes could not be read."),
+                    cx,
+                );
+                return;
+            }
+        };
+        // A file name, never a path: the page supplies it, and the panel's
+        // directory is ours to choose.
+        let file_name = Path::new(&suggested_name)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "image.png".to_string());
+        // Downloads is where a saved picture belongs by default; the panel lets
+        // the user go anywhere else from there.
+        let home = home_dir();
+        let downloads = home.join("Downloads");
+        let directory = if downloads.is_dir() { downloads } else { home };
+        let receiver = cx.prompt_for_new_path(&directory, Some(file_name.as_str()));
+        cx.spawn(async move |this, cx| {
+            let destination = match receiver.await {
+                Ok(Ok(Some(path))) => path,
+                // Cancelled, or the panel could not open: nothing was written
+                // and the panel already told the user. Settle the page promise.
+                _ => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.deliver_session_chat_image_save(session_id, &request_id, None, cx);
+                    });
+                    return;
+                }
+            };
+            let error = match std::fs::write(&destination, &bytes) {
+                Ok(()) => None,
+                Err(error) => {
+                    support_logs::append(
+                        support_logs::GpuiSupportLog::AppModal,
+                        "gpui.sessionChat.imageSaveFailed",
+                        serde_json::json!({
+                            "error": error.to_string(),
+                            "path": destination.display().to_string(),
+                            "stage": "write",
+                        }),
+                    );
+                    Some("The image could not be written.")
+                }
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.deliver_session_chat_image_save(session_id, &request_id, error, cx);
+            });
+        })
+        .detach();
+    }
+
+    fn deliver_session_chat_image_save(
+        &mut self,
+        session_id: TerminalSessionId,
+        request_id: &str,
+        error: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
+            return;
+        };
+        let payload = serde_json::json!({
+            "error": error,
+            "requestId": request_id,
+        });
+        let literal = payload
+            .to_string()
+            .replace('\u{2028}', "\\u2028")
+            .replace('\u{2029}', "\\u2029");
+        let script = format!(
+            "(function(){{var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatImageSaved==='function'){{ns.onSessionChatImageSaved({literal});}}}})(); undefined;"
+        );
+        surface.update(cx, |surface, _| {
+            surface.execute_app_owned_script(&script);
+        });
+    }
+
     fn deliver_session_chat_attachment_picks(
         &mut self,
         session_id: TerminalSessionId,
@@ -30345,11 +30753,7 @@ impl GhostexGpuiApp {
             .as_ref()
             .and_then(|snapshot| snapshot.in_memory_project_path.clone())
         else {
-            self.report_session_chat_file_open_failure(
-                "No project is active in this window.",
-                window,
-                cx,
-            );
+            self.report_session_chat_file_open_failure("No project is active in this window.", cx);
             return;
         };
         // One stat of a path the reader just clicked; no directory walk, so it
@@ -30365,13 +30769,12 @@ impl GhostexGpuiApp {
         ) else {
             self.report_session_chat_file_open_failure(
                 "That file is not available on this machine.",
-                window,
                 cx,
             );
             return;
         };
         if !fs::metadata(&file_path).is_ok_and(|metadata| metadata.is_file()) {
-            self.report_session_chat_file_open_failure("That path is not a file.", window, cx);
+            self.report_session_chat_file_open_failure("That path is not a file.", cx);
             return;
         }
         let docs_relative_path = file_path
@@ -30386,9 +30789,10 @@ impl GhostexGpuiApp {
             });
         if let Some(relative_path) = docs_relative_path {
             if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage) {
-                self.copy_path_for_disabled_project_workarea(trimmed, "Docs", window, cx);
+                self.copy_path_for_disabled_project_workarea(trimmed, "Docs", cx);
                 return;
             }
+            self.report_session_chat_file_opening("Docs view", &file_path, cx);
             self.pending_docs_file_open = Some(relative_path);
             self.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
             self.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
@@ -30399,9 +30803,20 @@ impl GhostexGpuiApp {
             return;
         }
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source) {
-            self.copy_path_for_disabled_project_workarea(trimmed, "Code", window, cx);
+            self.copy_path_for_disabled_project_workarea(trimmed, "Code", cx);
             return;
         }
+        /*
+        Code view is an on-demand component, so it is not always installed.
+        Switching to Source without it only parks the reader on the component
+        installer prompt with the file still unopened, so reveal the file in the
+        OS file manager instead and let them open it with what they do have.
+        */
+        if let Some(reason) = self.embedded_code_editor_unavailable_reason() {
+            self.reveal_session_chat_file_in_file_manager(&file_path, reason, cx);
+            return;
+        }
+        self.report_session_chat_file_opening("Code view", &file_path, cx);
         self.pending_source_file_open = Some(PendingSourceFileOpen {
             file_path,
             project_path: root,
@@ -30415,7 +30830,6 @@ impl GhostexGpuiApp {
         &mut self,
         path: &str,
         plugin_name: &str,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
@@ -30433,7 +30847,6 @@ impl GhostexGpuiApp {
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                 epoch: 0,
             },
-            window,
             cx,
         );
     }
@@ -30442,7 +30855,6 @@ impl GhostexGpuiApp {
     fn report_session_chat_file_open_failure(
         &mut self,
         description: &str,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         self.upsert_gpui_app_toast(
@@ -30456,9 +30868,85 @@ impl GhostexGpuiApp {
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                 epoch: 0,
             },
-            window,
             cx,
         );
+    }
+
+    /**
+    Main-window toast naming where a clicked chat file link is going. The
+    workarea switch takes the reader off the chat pane and Code/Docs can take a
+    moment to show the file, so the toast is what tells them the click landed.
+    */
+    fn report_session_chat_file_opening(
+        &mut self,
+        destination: &str,
+        file_path: &Path,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: "gpui-session-chat-file-opening".to_string(),
+                level: GpuiAppToastLevel::from_raw(None),
+                title: format!("Opening file in {destination}"),
+                description: gpui_path_file_name_label(file_path),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /** Chat file link on a machine with no usable Code view: reveal it instead. */
+    fn reveal_session_chat_file_in_file_manager(
+        &mut self,
+        file_path: &Path,
+        reason: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Err(message) = gpui_reveal_path_in_finder(file_path) {
+            self.report_session_chat_file_open_failure(&message, cx);
+            return;
+        }
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: "gpui-session-chat-file-opening".to_string(),
+                level: GpuiAppToastLevel::from_raw(None),
+                title: format!("Opening file in {GPUI_FILE_MANAGER_NAME}"),
+                description: Some(reason.to_string()),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /**
+    `None` when the bundled code-server component can actually open a file right
+    now, otherwise the reason to show the reader. This is the same availability
+    read the Source workarea launches on, so a `None` here means the workarea
+    switch ends on the file rather than on the component installer prompt.
+    */
+    fn embedded_code_editor_unavailable_reason(&self) -> Option<&'static str> {
+        let Some(target) = self
+            .latest_sidebar_project_snapshot
+            .as_ref()
+            .and_then(|snapshot| self.source_code_server_runtime_target(snapshot))
+        else {
+            return Some("Code view is not available for this project.");
+        };
+        match source_code_server_runtime_availability(&target) {
+            SourceCodeServerRuntimeAvailability::Available => None,
+            SourceCodeServerRuntimeAvailability::InstallRequired => {
+                Some("Code view is not installed on this machine.")
+            }
+            SourceCodeServerRuntimeAvailability::Failed(_) => {
+                Some("Code view is unavailable on this machine.")
+            }
+        }
     }
 
     /**
@@ -31662,6 +32150,15 @@ impl GhostexGpuiApp {
             ..Default::default()
         };
         let event_handler = self.app_modal_host_bridge_event_handler(cx);
+        /*
+        CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+        Only the tutorial video window loads a third-party page as its own
+        document, and it is the only modal that needs a host-side action once
+        that page is up. Every bridged modal keeps its React ready handshake
+        and receives no load-end callback.
+        */
+        let page_load_end_handler = (modal == GpuiAppModalKind::WatchGhostexVideo)
+            .then(|| self.tutorial_video_page_load_end_handler(cx));
         self.app_modal_open_attempt_id = self.app_modal_open_attempt_id.wrapping_add(1);
         let ready_timeout_attempt_id = self.app_modal_open_attempt_id;
         let ready_timeout_open_message = open_message.clone();
@@ -31676,6 +32173,7 @@ impl GhostexGpuiApp {
                     open_message,
                     sidebar_state_message,
                     event_handler,
+                    page_load_end_handler,
                     cx,
                 )
             })
@@ -31816,48 +32314,36 @@ impl GhostexGpuiApp {
             return;
         }
 
-        #[cfg(target_os = "windows")]
         let closed_modal = handle
             .update(cx, |host, _window, _cx| host.current_modal)
             .ok();
-        #[cfg(target_os = "windows")]
-        let open_first_launch_setup = closed_modal == Some(GpuiAppModalKind::WatchGhostexVideo)
-            && self.windows_first_launch_setup_followup_pending;
 
         self.app_modal_window = None;
         self.app_modal_window_id.set(None);
         self.app_modal_open_attempt_id = self.app_modal_open_attempt_id.wrapping_add(1);
         self.app_modal_ready_retry_used = false;
         self.restore_gpui_app_modal_command_return_focus_if_needed(cx);
-        #[cfg(target_os = "windows")]
-        {
-            if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
-                self.complete_windows_first_launch_setup();
-            }
-            if open_first_launch_setup {
-                self.open_windows_first_launch_setup_followup(cx);
-            }
+        self.resume_deferred_gpui_portless_setup_prompt(cx);
+        if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
+            self.complete_first_launch_setup();
         }
     }
 
-    #[cfg(target_os = "windows")]
-    fn complete_windows_first_launch_setup(&self) {
+    fn complete_first_launch_setup(&self) {
         let mut state = load_gpui_first_run_onboarding_state();
-        if !state.windows_first_launch_setup_complete {
-            state.windows_first_launch_setup_complete = true;
+        if !state.first_launch_setup_complete {
+            state.first_launch_setup_complete = true;
             persist_gpui_first_run_onboarding_state(&state);
         }
     }
 
-    #[cfg(target_os = "windows")]
-    fn open_windows_first_launch_setup_followup(&mut self, cx: &mut gpui::Context<Self>) {
-        self.windows_first_launch_setup_followup_pending = false;
-        let active_project_id = self.gpui_app_modal_active_project_id();
-        let sidebar_state_message = self.with_gpui_command_pane_sidebar_indicators(
-            gpui_app_modal_sidebar_state_message_for_active_project_id(
-                active_project_id.as_deref(),
-            ),
-        );
+    fn open_gpui_first_launch_setup_with_sidebar_state(
+        &mut self,
+        base_sidebar_state: serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let sidebar_state_message =
+            self.with_gpui_command_pane_sidebar_indicators(base_sidebar_state);
         let modal = GpuiAppModalKind::FirstLaunchSetup;
         self.open_gpui_app_modal_window(
             modal,
@@ -31886,6 +32372,13 @@ impl GhostexGpuiApp {
             return;
         }
         self.restore_gpui_app_modal_command_return_focus_if_needed(cx);
+        /*
+        CDXC:GPUIPortlessPromptDeferral 2026-08-18:
+        A modal dismissed from React takes the window handle here instead of
+        reaching the native-close path, so the deferred Portless prompt has to
+        be resumed from this ownership boundary as well.
+        */
+        self.resume_deferred_gpui_portless_setup_prompt(cx);
     }
 
     fn restore_gpui_app_modal_command_return_focus_if_needed(
@@ -31937,7 +32430,7 @@ impl GhostexGpuiApp {
             #[cfg(target_os = "windows")]
             "restartAndUpdateGhostex" => {
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
-                self.restart_and_apply_windows_update(window, cx);
+                self.restart_and_apply_windows_update(cx);
             }
             "open" => {
                 let Some(modal) = message
@@ -32145,19 +32638,9 @@ impl GhostexGpuiApp {
                     "gpui.appModal.lifecycle",
                     serde_json::json!({ "action": "close", "modal": closing_modal_id }),
                 );
-                #[cfg(target_os = "windows")]
-                let open_first_launch_setup = closing_modal_id.as_deref()
-                    == Some("watchGhostexVideo")
-                    && self.windows_first_launch_setup_followup_pending;
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
-                #[cfg(target_os = "windows")]
-                {
-                    if closing_modal_id.as_deref() == Some("firstLaunchSetup") {
-                        self.complete_windows_first_launch_setup();
-                    }
-                    if open_first_launch_setup {
-                        self.open_windows_first_launch_setup_followup(cx);
-                    }
+                if closing_modal_id.as_deref() == Some("firstLaunchSetup") {
+                    self.complete_first_launch_setup();
                 }
             }
             "toastDismissed" => {
@@ -32214,7 +32697,7 @@ impl GhostexGpuiApp {
                 }
             }
             "toast" => {
-                self.receive_gpui_app_toast_bridge_message(&message, window, cx);
+                self.receive_gpui_app_toast_bridge_message(&message, cx);
             }
             /*
             CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
@@ -32311,6 +32794,9 @@ impl GhostexGpuiApp {
                         .unwrap_or(serde_json::Value::Null),
                 );
             }
+            navigation_history::NAVIGATION_HISTORY_STATE_MESSAGE_TYPE => {
+                self.receive_navigation_history_state_message(&message, cx);
+            }
             "runProcess" => {
                 self.receive_gpui_titlebar_native_host_run_process(message, cx);
             }
@@ -32343,7 +32829,6 @@ impl GhostexGpuiApp {
                     "Loading sessions",
                     "Starting gxserver and loading projects.",
                     true,
-                    window,
                     cx,
                 );
                 self.start_gpui_local_gxserver_bootstrap(cx);
@@ -33374,6 +33859,7 @@ impl GhostexGpuiApp {
                     plan,
                     None,
                     AgentsWorkspaceNewTerminalPlacement::Tab,
+                    GpuiRemoteAttachOpenIntent::AttachExistingSession,
                     cx,
                 );
             });
@@ -35097,6 +35583,7 @@ impl GhostexGpuiApp {
                                 plan,
                                 None,
                                 AgentsWorkspaceNewTerminalPlacement::Tab,
+                                GpuiRemoteAttachOpenIntent::CreatedByThisAction,
                                 cx,
                             );
                             this.refresh_gpui_remote_gxserver_presentation_in_background(
@@ -35404,6 +35891,7 @@ impl GhostexGpuiApp {
                         plan,
                         requested_pane_id,
                         placement,
+                        GpuiRemoteAttachOpenIntent::AttachExistingSession,
                         cx,
                     );
                     this.refresh_gpui_remote_gxserver_presentation_in_background(
@@ -35514,6 +36002,7 @@ impl GhostexGpuiApp {
         plan: GpuiRemoteAttachTerminalPlan,
         requested_pane_id: Option<WorkspacePaneId>,
         placement: AgentsWorkspaceNewTerminalPlacement,
+        intent: GpuiRemoteAttachOpenIntent,
         cx: &mut gpui::Context<Self>,
     ) {
         support_logs::append_temporary(
@@ -35534,11 +36023,12 @@ impl GhostexGpuiApp {
             key.project_id.as_str(),
             key.session_id.as_str(),
         );
-        if self
-            .sidebar_gxserver_presentation_focus_state
-            .focused_session_id
-            .as_deref()
-            != Some(scoped_session_id.as_str())
+        if intent == GpuiRemoteAttachOpenIntent::AttachExistingSession
+            && self
+                .sidebar_gxserver_presentation_focus_state
+                .focused_session_id
+                .as_deref()
+                != Some(scoped_session_id.as_str())
         {
             return;
         }
@@ -36788,7 +37278,6 @@ impl GhostexGpuiApp {
     fn receive_gpui_app_toast_bridge_message(
         &mut self,
         message: &serde_json::Value,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
@@ -36796,18 +37285,13 @@ impl GhostexGpuiApp {
         let Some(toast) = gpui_app_toast_from_bridge_message(message, generated_id) else {
             return;
         };
-        self.upsert_gpui_app_toast(toast, window, cx);
+        self.upsert_gpui_app_toast(toast, cx);
     }
 
-    fn upsert_gpui_app_toast(
-        &mut self,
-        mut toast: GpuiAppToast,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn upsert_gpui_app_toast(&mut self, mut toast: GpuiAppToast, cx: &mut gpui::Context<Self>) {
         toast.description =
             gpui_normalized_app_toast_description(&toast.title, toast.description.as_deref());
-        let main_window_bounds = window.bounds();
+        let main_window_bounds = self.main_window_bounds;
         self.app_toast_anchor = Some(point(
             main_window_bounds.origin.x + main_window_bounds.size.width / 2.0,
             main_window_bounds.origin.y + main_window_bounds.size.height,
@@ -36840,7 +37324,6 @@ impl GhostexGpuiApp {
         title: &str,
         description: &str,
         persistent: bool,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         // Every daemon-bootstrap outcome funnels through this toast, so the
@@ -36866,7 +37349,6 @@ impl GhostexGpuiApp {
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                 epoch: 0,
             },
-            window,
             cx,
         );
     }
@@ -36931,7 +37413,7 @@ impl GhostexGpuiApp {
         }
         if start_result != 1 {
             cx.spawn(async move |this, cx| {
-                let _ = this.update_in(cx, |this, window, cx| {
+                let _ = this.update(cx, |this, cx| {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
                             id: "gpui-sparkle-updater-start-failed".to_string(),
@@ -36945,7 +37427,6 @@ impl GhostexGpuiApp {
                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                             epoch: 0,
                         },
-                        window,
                         cx,
                     );
                 });
@@ -37023,8 +37504,10 @@ impl GhostexGpuiApp {
     /// notes, signature validation, download, and install stay on the
     /// supported path. Ignored while a download runs, matching the disabled
     /// React titlebar button.
+    // The window stays in the signature for parity with the Windows updater,
+    // which opens its own update modal; Sparkle owns its own panels here.
     #[cfg(target_os = "macos")]
-    fn check_for_gpui_updates(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    fn check_for_gpui_updates(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) {
         if self.update_downloading {
             return;
         }
@@ -37042,7 +37525,6 @@ impl GhostexGpuiApp {
                     duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                     epoch: 0,
                 },
-                window,
                 cx,
             );
             return;
@@ -37073,7 +37555,6 @@ impl GhostexGpuiApp {
                     duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                     epoch: 0,
                 },
-                window,
                 cx,
             );
             return;
@@ -37170,7 +37651,6 @@ impl GhostexGpuiApp {
                                     duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                                     epoch: 0,
                                 },
-                                window,
                                 cx,
                             );
                         }
@@ -37190,7 +37670,6 @@ impl GhostexGpuiApp {
                                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                                 epoch: 0,
                             },
-                            window,
                             cx,
                         );
                     }
@@ -37291,7 +37770,6 @@ impl GhostexGpuiApp {
                                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                                             epoch: 0,
                                         },
-                                        window,
                                         cx,
                                     );
                                 }
@@ -37311,11 +37789,7 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "windows")]
-    fn restart_and_apply_windows_update(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn restart_and_apply_windows_update(&mut self, cx: &mut gpui::Context<Self>) {
         let (Some(updater), Some(asset)) = (
             self.windows_updater.as_ref(),
             self.windows_ready_update.as_ref(),
@@ -37334,7 +37808,6 @@ impl GhostexGpuiApp {
                     duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                     epoch: 0,
                 },
-                window,
                 cx,
             );
             return;
@@ -37350,6 +37823,39 @@ impl GhostexGpuiApp {
     /// Discover→firstLaunchSetup auto chain was superseded 2026-06-18), opens
     /// the tutorial video modal once per first-launch-setup revision, and shows
     /// a once-forever OS Integration toast.
+    /// CDXC:GPUIFirstRunOnboardingOnce 2026-08-18: writes one first-run marker
+    /// off the foreground thread, re-reading the file first so a concurrent
+    /// writer of a different field is not clobbered by this pass's snapshot.
+    fn persist_gpui_first_run_onboarding_marker(
+        &self,
+        marker: GpuiFirstRunOnboardingMarker,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.background_executor()
+            .spawn(async move {
+                let mut state = load_gpui_first_run_onboarding_state();
+                match marker {
+                    GpuiFirstRunOnboardingMarker::FirstLaunchSetupSeen => {
+                        if state.first_launch_setup_seen_revision.as_deref()
+                            == Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION)
+                        {
+                            return;
+                        }
+                        state.first_launch_setup_seen_revision =
+                            Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION.to_string());
+                    }
+                    GpuiFirstRunOnboardingMarker::OsIntegrationOnboardingSeen => {
+                        if state.os_integration_onboarding_seen {
+                            return;
+                        }
+                        state.os_integration_onboarding_seen = true;
+                    }
+                }
+                persist_gpui_first_run_onboarding_state(&state);
+            })
+            .detach();
+    }
+
     fn start_gpui_first_run_onboarding(&mut self, cx: &mut gpui::Context<Self>) {
         if self.sidebar.is_none() {
             return;
@@ -37358,14 +37864,24 @@ impl GhostexGpuiApp {
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
             return;
         }
+        /*
+        CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+        The first-launch-setup and OS-integration markers are persisted only
+        after their surface is really shown (below), so the persisted flags no
+        longer dedupe the callers that start onboarding. Latch the pass in
+        memory instead, after every early-return guard, so the gxserver
+        bootstrap, CEF init, and daemon-respawn entry points can each try to
+        start onboarding while only the first one that gets past the guards
+        runs it.
+        */
+        if self.first_run_onboarding_started {
+            return;
+        }
+        self.first_run_onboarding_started = true;
         let active_project_id = self.gpui_app_modal_active_project_id();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let (
-                show_os_integration_toast,
-                tutorial_video_sidebar_state,
-                needs_windows_first_launch_setup,
-            ) = background
+            let (show_os_integration_toast, first_launch_setup_sidebar_state) = background
                 .spawn(async move {
                     let mut state = load_gpui_first_run_onboarding_state();
                     let mut changed = false;
@@ -37380,42 +37896,48 @@ impl GhostexGpuiApp {
                             Some(GPUI_HIGHLIGHTED_FEATURES_SEEN_REVISION.to_string());
                         changed = true;
                     }
-                    let open_tutorial_video = state.first_launch_setup_seen_revision.as_deref()
-                        != Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION);
-                    if open_tutorial_video {
-                        state.first_launch_setup_seen_revision =
-                            Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION.to_string());
-                        changed = true;
-                    }
+                    /*
+                    CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+                    The first-launch-setup and OS-integration markers describe
+                    surfaces the user is supposed to see, so they are persisted
+                    from the foreground block below once the toast is really
+                    posted and the modal window really exists. Marking them here
+                    burned first-run onboarding whenever the pass reached this
+                    point and the UI never appeared (no sidebar-owned window,
+                    a failed modal open, or an app exit in between). The two
+                    legacy markers above show nothing at all, so they stay
+                    consumed on this pass.
+
+                    CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
+                    First run raises exactly ONE modal. The tutorial video used
+                    to be its own window opened before (Windows) or instead of
+                    (everywhere else) the setup modal; it is the setup modal's
+                    first page now. Two markers still gate it, and they mean
+                    different things: the revision marker says "this revision's
+                    setup was presented", written when the window exists, so a
+                    future revision bump shows it again; `complete` says "the
+                    user closed it", written on close, so quitting mid-setup
+                    brings it back on the next launch.
+                    */
                     let show_os_integration_toast = !state.os_integration_onboarding_seen;
-                    if show_os_integration_toast {
-                        state.os_integration_onboarding_seen = true;
-                        changed = true;
-                    }
                     if changed {
                         persist_gpui_first_run_onboarding_state(&state);
                     }
-                    let tutorial_video_sidebar_state = open_tutorial_video.then(|| {
+                    let needs_first_launch_setup = state.first_launch_setup_seen_revision.as_deref()
+                        != Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION)
+                        || !state.first_launch_setup_complete;
+                    let first_launch_setup_sidebar_state = needs_first_launch_setup.then(|| {
                         gpui_app_modal_sidebar_state_message_for_active_project_id(
                             active_project_id.as_deref(),
                         )
                     });
-                    let needs_windows_first_launch_setup = cfg!(target_os = "windows")
-                        && !state.windows_first_launch_setup_complete;
-                    (
-                        show_os_integration_toast,
-                        tutorial_video_sidebar_state,
-                        needs_windows_first_launch_setup,
-                    )
+                    (show_os_integration_toast, first_launch_setup_sidebar_state)
                 })
                 .await;
-            if !show_os_integration_toast
-                && tutorial_video_sidebar_state.is_none()
-                && !needs_windows_first_launch_setup
-            {
+            if !show_os_integration_toast && first_launch_setup_sidebar_state.is_none() {
                 return;
             }
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update(cx, |this, cx| {
                 if show_os_integration_toast {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
@@ -37431,30 +37953,22 @@ impl GhostexGpuiApp {
                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                             epoch: 0,
                         },
-                        window,
+                        cx,
+                    );
+                    this.persist_gpui_first_run_onboarding_marker(
+                        GpuiFirstRunOnboardingMarker::OsIntegrationOnboardingSeen,
                         cx,
                     );
                 }
-                if let Some(base_sidebar_state) = tutorial_video_sidebar_state {
-                    #[cfg(target_os = "windows")]
-                    {
-                        this.windows_first_launch_setup_followup_pending =
-                            needs_windows_first_launch_setup;
-                    }
-                    let modal = GpuiAppModalKind::WatchGhostexVideo;
-                    let sidebar_state_message =
-                        this.with_gpui_command_pane_sidebar_indicators(base_sidebar_state);
-                    this.open_gpui_app_modal_window(
-                        modal,
-                        modal.open_message(),
-                        sidebar_state_message,
-                        None,
-                        cx,
-                    );
-                } else {
-                    #[cfg(target_os = "windows")]
-                    if needs_windows_first_launch_setup {
-                        this.open_windows_first_launch_setup_followup(cx);
+                if let Some(base_sidebar_state) = first_launch_setup_sidebar_state {
+                    this.open_gpui_first_launch_setup_with_sidebar_state(base_sidebar_state, cx);
+                    // Only a window that actually exists counts as "this
+                    // revision's setup was presented".
+                    if this.app_modal_window.is_some() {
+                        this.persist_gpui_first_run_onboarding_marker(
+                            GpuiFirstRunOnboardingMarker::FirstLaunchSetupSeen,
+                            cx,
+                        );
                     }
                 }
             });
@@ -37862,13 +38376,12 @@ impl GhostexGpuiApp {
                             });
                             return;
                         }
-                        let _ = this.update_in(cx, |this, window, cx| {
+                        let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "warning",
                                 "WSL runtime setup needed",
                                 &message,
                                 true,
-                                window,
                                 cx,
                             );
                             this.replay_sidebar_gxserver_bootstrap(cx);
@@ -37906,13 +38419,12 @@ impl GhostexGpuiApp {
                 } => {
                     #[cfg(target_os = "windows")]
                     windows_terminal_backend::mark_package_update_required();
-                    let _ = this.update_in(cx, |this, window, cx| {
+                    let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "info",
                             "Restarting gxserver",
                             "The running gxserver does not match the tools bundled with this Ghostex build.",
                             true,
-                            window,
                             cx,
                         );
                         this.stop_gpui_local_gxserver_from_titlebar(true, cx);
@@ -37922,13 +38434,12 @@ impl GhostexGpuiApp {
                 GpuiLocalGxserverHealthState::BuildMismatch => {
                     #[cfg(target_os = "windows")]
                     windows_terminal_backend::mark_package_update_required();
-                    let _ = this.update_in(cx, |this, window, cx| {
+                    let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "info",
                             "Updating gxserver",
                             "The running gxserver belongs to a different Ghostex build. Ghostex is restarting it before loading migrated storage.",
                             true,
-                            window,
                             cx,
                         );
                         this.stop_gpui_local_gxserver_from_titlebar(true, cx);
@@ -37939,13 +38450,12 @@ impl GhostexGpuiApp {
                     #[cfg(target_os = "windows")]
                     {
                         windows_terminal_backend::mark_package_update_required();
-                        let _ = this.update_in(cx, |this, window, cx| {
+                        let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "info",
                                 "Updating WSL gxserver",
                                 "The running WSL gxserver belongs to an older Ghostex build. Ghostex is activating the bundled runtime and restarting it.",
                                 true,
-                                window,
                                 cx,
                             );
                             this.stop_gpui_local_gxserver_from_titlebar(true, cx);
@@ -37955,13 +38465,12 @@ impl GhostexGpuiApp {
                     #[cfg(not(target_os = "windows"))]
                     let message = gpui_gxserver_protocol_mismatch_message(reported);
                     #[cfg(not(target_os = "windows"))]
-                    let _ = this.update_in(cx, |this, window, cx| {
+                    let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "error",
                             "gxserver protocol mismatch",
                             &message,
                             true,
-                            window,
                             cx,
                         );
                     });
@@ -37986,13 +38495,12 @@ impl GhostexGpuiApp {
                     });
                     return;
                 }
-                let _ = this.update_in(cx, |this, window, cx| {
+                let _ = this.update(cx, |this, cx| {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
                         "WSL gxserver unavailable",
                         "gxserver started inside WSL2, but Windows could not reach it through localhost:58744. Check that WSL localhost forwarding is enabled, then retry.",
                         true,
-                        window,
                         cx,
                     );
                 });
@@ -38000,25 +38508,23 @@ impl GhostexGpuiApp {
             }
 
             let Some(binary) = gpui_resolve_local_gxserver_binary() else {
-                let _ = this.update_in(cx, |this, window, cx| {
+                let _ = this.update(cx, |this, cx| {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
                         "gxserver unavailable",
                         "Bundled gxserver binary is missing. Run `bun run build` for development, or reinstall Ghostex so Web/gxserver is present.",
                         true,
-                        window,
                         cx,
                     );
                 });
                 return;
             };
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update(cx, |this, cx| {
                 this.show_gpui_gxserver_bootstrap_toast(
                     "info",
                     "Loading sessions",
                     "Starting gxserver and loading projects.",
                     true,
-                    window,
                     cx,
                 );
             });
@@ -38027,13 +38533,12 @@ impl GhostexGpuiApp {
                 .spawn(async move { gpui_spawn_local_gxserver_daemon(&binary) })
                 .await;
             if let Err(message) = spawn_result {
-                let _ = this.update_in(cx, |this, window, cx| {
+                let _ = this.update(cx, |this, cx| {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
                         "gxserver failed",
                         &message,
                         true,
-                        window,
                         cx,
                     );
                 });
@@ -38049,31 +38554,39 @@ impl GhostexGpuiApp {
                     .await;
                 match health {
                     GpuiLocalGxserverHealthState::Healthy { tools_available } => {
-                        let _ = this.update_in(cx, |this, window, cx| {
+                        let _ = this.update(cx, |this, cx| {
                             if !tools_available {
                                 this.show_gpui_gxserver_bootstrap_toast(
                                     "error",
                                     "gxserver toolchain unavailable",
                                     "The newly started gxserver did not expose the tools bundled with this Ghostex build.",
                                     true,
-                                    window,
                                     cx,
                                 );
                             }
                             this.replay_sidebar_gxserver_bootstrap(cx);
                             this.start_gpui_portless_setup_prompt_check(cx);
+                            /*
+                            CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+                            A launch that had to respawn the daemon reaches
+                            "gxserver healthy" here instead of through the
+                            bootstrap branch, so first-run onboarding has to be
+                            started from this recovery path too. The in-memory
+                            latch plus the persisted markers keep it a no-op
+                            when onboarding already ran.
+                            */
+                            this.start_gpui_first_run_onboarding(cx);
                         });
                         return;
                     }
                     GpuiLocalGxserverHealthState::ProtocolMismatch { reported } => {
                         let message = gpui_gxserver_protocol_mismatch_message(reported);
-                        let _ = this.update_in(cx, |this, window, cx| {
+                        let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "error",
                                 "gxserver protocol mismatch",
                                 &message,
                                 true,
-                                window,
                                 cx,
                             );
                         });
@@ -38089,13 +38602,12 @@ impl GhostexGpuiApp {
                 .await;
             let description = launch_output
                 .unwrap_or_else(|| "The daemon did not become healthy in time.".to_string());
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update(cx, |this, cx| {
                 this.show_gpui_gxserver_bootstrap_toast(
                     "error",
                     "gxserver failed to start",
                     &description,
                     true,
-                    window,
                     cx,
                 );
             });
@@ -38226,6 +38738,7 @@ impl GhostexGpuiApp {
             size: size(px(GPUI_APP_TOAST_WINDOW_WIDTH), stack_height),
         };
         let app = cx.entity().downgrade();
+        let main_window_native_view = self.parent_ns_view;
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             focus: false,
@@ -38240,7 +38753,7 @@ impl GhostexGpuiApp {
         };
         self.app_toast_window = cx
             .open_window(options, move |toast_window, cx| {
-                remove_gpui_app_toast_popup_window_chrome(toast_window);
+                remove_gpui_app_toast_popup_window_chrome(toast_window, main_window_native_view);
                 cx.new(|_| GpuiAppToastWindow {
                     app,
                     toasts,
@@ -39251,6 +39764,16 @@ impl GhostexGpuiApp {
         // replace whatever modal the user has open (macOS stacks child
         // windows), so an occupied host defers the prompt to a later check.
         if self.app_modal_window.is_some() {
+            /*
+            CDXC:GPUIPortlessPromptDeferral 2026-08-18:
+            "Later check" used to mean "whenever some other Portless state
+            update happens to run again", which for a prompt resolved during
+            startup meant never: the prompt was dropped for the whole run.
+            Remember the deferral so closing the user's modal re-runs the
+            check, and keep the run-scoped suppression untouched so Postpone,
+            Cancel, and Disable still stop it for good.
+            */
+            self.portless_setup_prompt_pending_modal_close = true;
             return;
         }
         let settings_portless_enabled = gpui_settings_portless_enabled(
@@ -39306,6 +39829,18 @@ impl GhostexGpuiApp {
     fn suppress_gpui_portless_setup_prompt_for_this_run(&mut self) {
         self.portless_setup_prompt_suppressed_until_restart = true;
         self.active_portless_setup_prompt_mode = None;
+        self.portless_setup_prompt_pending_modal_close = false;
+    }
+
+    /// CDXC:GPUIPortlessPromptDeferral 2026-08-18: the app-modal host is free
+    /// again, so a prompt that was deferred because the user had a modal open
+    /// gets its check re-run instead of being lost for the rest of the run.
+    fn resume_deferred_gpui_portless_setup_prompt(&mut self, cx: &mut gpui::Context<Self>) {
+        if !self.portless_setup_prompt_pending_modal_close {
+            return;
+        }
+        self.portless_setup_prompt_pending_modal_close = false;
+        self.start_gpui_portless_setup_prompt_check(cx);
     }
 
     fn handle_gpui_set_portless_enabled_message(
@@ -40164,21 +40699,23 @@ impl GhostexGpuiApp {
             .any(|(_, mapped_session_id)| *mapped_session_id == session_id);
         open_message["supportsSendWhenAllProjectSessionsStop"] =
             serde_json::json!(supports_project_scope);
-        open_message["sendWhenAllProjectSessionsStopActive"] = serde_json::json!(false);
-        open_message["sendWhenAgentStopsActive"] = serde_json::json!(false);
+        /*
+        CDXC:GxserverDelayedSends 2026-08-19:
+        Armed Delayed Sends live on the daemon, and the sidebar row already
+        carries that projected trigger state into the open message. Only a
+        locally owned watcher/timer may restate it, so this enrichment must not
+        blank the daemon-owned trigger back to "After a delay".
+        */
         if let Some(watcher) = self
             .agents_send_when_stopped_watchers
             .get(&session_id)
             .cloned()
         {
-            match &watcher.scope {
-                GpuiAgentsSendWhenStoppedScope::Session => {
-                    open_message["sendWhenAgentStopsActive"] = serde_json::json!(true);
-                }
-                GpuiAgentsSendWhenStoppedScope::Project(_) => {
-                    open_message["sendWhenAllProjectSessionsStopActive"] = serde_json::json!(true);
-                }
-            }
+            let is_project_scope =
+                matches!(&watcher.scope, GpuiAgentsSendWhenStoppedScope::Project(_));
+            open_message["sendWhenAllProjectSessionsStopActive"] =
+                serde_json::json!(is_project_scope);
+            open_message["sendWhenAgentStopsActive"] = serde_json::json!(!is_project_scope);
             let is_working = self
                 .gpui_agents_send_when_stopped_scope_is_working(session_id, &watcher.scope)
                 .unwrap_or(false);
@@ -41458,6 +41995,19 @@ impl GhostexGpuiApp {
                 }
                 if let Some(action_index) = gpui_command_palette_action_slot_index(action_id) {
                     self.run_configured_gpui_titlebar_action_index(action_index, window, cx);
+                    return;
+                }
+                if let Some(direction) =
+                    navigation_history::navigation_history_hotkey_direction(action_id)
+                {
+                    /*
+                    CDXC:NavigationHistory 2026-08-19:
+                    Back/Forward is shell navigation, not an app-modal command,
+                    and it is owned by the sidebar runtime rather than Rust —
+                    the keypress takes the exact same route as a click on the
+                    titlebar arrows.
+                    */
+                    self.request_navigation_history_navigation(direction, cx);
                     return;
                 }
                 if action_id == "toggleSidebarCollapsed" {
@@ -42998,7 +43548,7 @@ impl GhostexGpuiApp {
             if self.pending_browser_find_focus == Some(message.tab_id) {
                 self.pending_browser_find_focus = None;
             }
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
             cx.notify();
             return;
         }
@@ -43080,10 +43630,15 @@ impl GhostexGpuiApp {
         }
         let created_tab_id = self
             .browser_tabs
-            .add_loaded_popup_tab(url, self.browser_profiles.active_profile_id());
-        if created_tab_id.is_none() {
+            .add_loaded_popup_tab(
+                url,
+                self.browser_profiles.active_profile_id(),
+                cef::BrowserPopupPlacement::Selected,
+            );
+        let Some(created_tab_id) = created_tab_id else {
             return;
-        }
+        };
+        self.request_sidebar_browser_tab_reveal(created_tab_id);
         self.active_mode = TitlebarMode::Browser;
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(
@@ -43766,6 +44321,106 @@ impl GhostexGpuiApp {
         }
     }
 
+    /*
+    CDXC:SessionChatDraftHandoff 2026-08-18:
+    Background terminal → chat draft transfer for the switches that must not
+    block on it: the automatic switch that fires when a terminal-started agent
+    becomes chat-eligible, and remote sessions (whose CLI, marker files and
+    Saved Prompts all live on the other machine, out of reach of the local
+    filesystem handshake `request_terminal_handoff_to_session_chat` uses).
+
+    Chat is shown immediately and the captured draft lands in the composer when
+    the daemon's Ctrl+G handshake answers, so a slow or unanswerable capture
+    costs the user nothing but the text staying where they typed it. That is
+    also why failures are silent here: the user did not ask for a transfer, so
+    a warning toast would be noise about an operation they never requested.
+    */
+    fn request_session_chat_draft_transfer(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        // Grok Build binds Ctrl+G to its Tasks pane, so it can never answer the
+        // handshake. The daemon rejects it outright; skip the round trip.
+        if self.agents_session_chat_transcript_agent(session_id) == Some("grok") {
+            return;
+        }
+        let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_gxserver_rpc_result(
+                    "/api/handoffSessionChatDraft",
+                    &params,
+                    GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT,
+                )
+            })
+        } else {
+            let Some(key) = self.agents_chat_remote_key_for_session(session_id) else {
+                return;
+            };
+            let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+            else {
+                return;
+            };
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_remote_gxserver_rpc_result(
+                    &target,
+                    "/api/handoffSessionChatDraft",
+                    &params,
+                    GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT,
+                )
+            })
+        };
+        cx.spawn(async move |this, cx| {
+            let Ok(result) = request.await else {
+                return;
+            };
+            let content = result
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if content.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.deliver_session_chat_composer_insert(session_id, content, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Puts transferred draft text in the chat composer, or parks it until the
+    /// composer reports itself ready. The park is not an edge case: an
+    /// automatic switch starts the transfer and the surface load in the same
+    /// tick, so either can win.
+    fn deliver_session_chat_composer_insert(
+        &mut self,
+        session_id: TerminalSessionId,
+        content: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.agents_chat_mode_sessions.contains(&session_id) {
+            return;
+        }
+        if self
+            .session_chat_composer_ready_sessions
+            .contains(&session_id)
+            && self.insert_prompt_into_session_chat(session_id, &content, cx)
+        {
+            return;
+        }
+        self.pending_session_chat_composer_insert
+            .insert(session_id, content);
+    }
+
     fn show_agents_session_chat_mode(
         &mut self,
         session_id: TerminalSessionId,
@@ -43870,7 +44525,16 @@ impl GhostexGpuiApp {
                 continue;
             }
             self.pending_agents_chat_launch_intents.remove(&key);
-            let _ = self.show_agents_session_chat_mode(shell_session_id, cx);
+            if self.show_agents_session_chat_mode(shell_session_id, cx) {
+                /*
+                CDXC:SessionChatDraftHandoff 2026-08-18:
+                This intent waits for the agent to become chat-eligible, which
+                can take the whole of its boot. The terminal is live and
+                focused that entire time, so a user who started typing before
+                the switch landed must not lose what they wrote.
+                */
+                self.request_session_chat_draft_transfer(shell_session_id, cx);
+            }
         }
     }
 
@@ -43998,6 +44662,7 @@ impl GhostexGpuiApp {
             None,
             Some(cef::AppModalHostBridgeSurface::SessionChat),
             Some(host_action_handler),
+            None,
             cx,
         ) {
             Ok(surface) => surface,
@@ -44757,7 +45422,7 @@ impl GhostexGpuiApp {
                 &self.agents_workspace,
                 &self.project_editor_shell,
             ));
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
         }
     }
 
@@ -45714,7 +46379,7 @@ impl GhostexGpuiApp {
             }
             self.set_sidebar_focus_border_handoff_target(shell_session_id);
         }
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
     }
 
     fn seed_project_editor_companion_terminal_attach_payload_from_agents_slot(
@@ -46107,7 +46772,7 @@ impl GhostexGpuiApp {
             cx,
         );
         self.persist_shell_layout_state();
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
         true
     }
@@ -46196,7 +46861,7 @@ impl GhostexGpuiApp {
             cx,
         );
         self.persist_shell_layout_state();
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
         true
     }
@@ -46267,7 +46932,7 @@ impl GhostexGpuiApp {
             cx,
         );
         self.persist_shell_layout_state();
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
         true
     }
@@ -47523,7 +48188,7 @@ impl GhostexGpuiApp {
                     let address_value = self.browser_tabs.active_address_value();
                     self.browser_url = address_value.clone();
                 }
-                self.update_browser_visibility_for_active_mode(cx);
+                self.update_active_mode_cef_child_visibility(cx);
                 self.persist_shell_layout_state();
                 cx.notify();
             }
@@ -47612,7 +48277,7 @@ impl GhostexGpuiApp {
         if let Some(surface) = self.ensure_browser_surface_for_pane(pane_id, cx) {
             surface.update(cx, |surface, _| surface.load_url(url));
         }
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
     }
 
     fn perform_browser_toolbar_action(
@@ -47657,7 +48322,7 @@ impl GhostexGpuiApp {
             });
         }
 
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         cx.notify();
     }
@@ -47704,7 +48369,7 @@ impl GhostexGpuiApp {
         self.active_mode = TitlebarMode::Browser;
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         true
     }
@@ -47967,10 +48632,15 @@ impl GhostexGpuiApp {
         }
         let created_tab_id = self
             .browser_tabs
-            .add_loaded_popup_tab(url.clone(), self.browser_profiles.active_profile_id());
-        if created_tab_id.is_none() {
+            .add_loaded_popup_tab(
+                url.clone(),
+                self.browser_profiles.active_profile_id(),
+                cef::BrowserPopupPlacement::Selected,
+            );
+        let Some(created_tab_id) = created_tab_id else {
             return;
-        }
+        };
+        self.request_sidebar_browser_tab_reveal(created_tab_id);
         self.browser_url = url;
         self.active_mode = TitlebarMode::Browser;
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
@@ -48010,7 +48680,7 @@ impl GhostexGpuiApp {
         self.browser_url = address_value.clone();
         self.set_browser_address_input_value(pane_id, address_value, window, cx);
         self.ensure_browser_surface_for_pane(pane_id, cx);
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
     }
 
     fn select_browser_tab_in_pane(
@@ -48064,10 +48734,14 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
         );
-        self.browser_tabs.add_loaded_popup_tab(
+        let created_tab_id = self.browser_tabs.add_loaded_popup_tab(
             default_url.clone(),
             self.browser_profiles.active_profile_id(),
+            cef::BrowserPopupPlacement::Selected,
         );
+        if let Some(created_tab_id) = created_tab_id {
+            self.request_sidebar_browser_tab_reveal(created_tab_id);
+        }
         self.browser_url = default_url;
         let pane_id = self.browser_tabs.focused_pane;
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
@@ -48129,12 +48803,13 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .and_then(|snapshot| snapshot.in_memory_project_path.as_deref()),
         );
-        if self.browser_tabs.split_new_loaded_tab_to_pane(
+        if let Some(created_tab_id) = self.browser_tabs.split_new_loaded_tab_to_pane(
             pane_id,
             zone,
             self.browser_profiles.active_profile_id(),
             default_url.clone(),
         ) {
+            self.request_sidebar_browser_tab_reveal(created_tab_id);
             self.browser_url = default_url;
             self.active_mode = TitlebarMode::Browser;
             self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
@@ -48226,6 +48901,7 @@ impl GhostexGpuiApp {
     fn open_browser_popup_tab(
         &mut self,
         requested_url: String,
+        placement: cef::BrowserPopupPlacement,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -48238,14 +48914,52 @@ impl GhostexGpuiApp {
 
         CDXC:GPUTitlebarAvailability 2026-06-22-15:52:
         Popup callbacks are another Browser activation route. If Quick/projectless context has disabled Browser, discard the popup request before mutating Browser tab state so background CEF callbacks cannot bypass the titlebar guard.
+
+        CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+        Middle-click and Cmd/Ctrl-click link opens arrive here with background
+        placement. They are not an activation route: append the tab, persist,
+        and repaint the tab strip without switching modes, moving shell focus,
+        selecting the new tab, or scrolling the strip away from the page the
+        user is still reading.
         */
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
             return;
         }
-        let popup_tab_id = self
-            .browser_tabs
-            .add_loaded_popup_tab(requested_url, self.browser_profiles.active_profile_id());
-        if popup_tab_id.is_none() {
+        let popup_tab_id = self.browser_tabs.add_loaded_popup_tab(
+            requested_url,
+            self.browser_profiles.active_profile_id(),
+            placement,
+        );
+        let Some(popup_tab_id) = popup_tab_id else {
+            return;
+        };
+        self.request_sidebar_browser_tab_reveal(popup_tab_id);
+        if matches!(placement, cef::BrowserPopupPlacement::Background) {
+            /*
+            CDXC:SidebarBrowserTabReveal 2026-08-18:
+            A background tab is the one open with no other visible feedback: the
+            page does not change, so with the sidebar chrome collapsed the row it
+            created is off screen entirely. Say so, instead of letting the click
+            look like it did nothing. (The reveal itself is still queued above, so
+            the sections are already expanded when the sidebar comes back.)
+            */
+            if !gpui_sidebar_chrome_visible(self.sidebar_collapsed) {
+                self.upsert_gpui_app_toast(
+                    GpuiAppToast {
+                        id: "gpui-browser-tab-created-in-sidebar".to_string(),
+                        level: GpuiAppToastLevel::from_raw(Some("info")),
+                        title: "New tab created in sidebar".to_string(),
+                        description: None,
+                        loading: false,
+                        persistent: false,
+                        duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                        epoch: 0,
+                    },
+                    cx,
+                );
+            }
+            self.persist_shell_layout_state();
+            cx.notify();
             return;
         }
         self.active_mode = TitlebarMode::Browser;
@@ -48323,7 +49037,7 @@ impl GhostexGpuiApp {
             self.sync_active_browser_tab_to_surface(window, cx);
         } else {
             self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
         }
         // Session Chat is also a native CEF child view. Reconcile it at the
         // same mode-switch boundary so entering a project workarea with the
@@ -51606,7 +52320,19 @@ impl GhostexGpuiApp {
 
         let mut changed = false;
         for session_id in newly_eligible {
-            changed |= self.agents_chat_mode_sessions.insert(session_id);
+            if !self.agents_chat_mode_sessions.insert(session_id) {
+                continue;
+            }
+            changed = true;
+            /*
+            CDXC:SessionChatDraftHandoff 2026-08-18:
+            This is the switch a user never asked for: they started an agent by
+            typing into a terminal, and the moment it becomes chat-eligible the
+            app moves them to Chat. Anything already typed into the CLI composer
+            has to come with them, or it is simply gone from view behind the
+            parked terminal.
+            */
+            self.request_session_chat_draft_transfer(session_id, cx);
         }
         if !changed {
             return;
@@ -53415,6 +54141,7 @@ impl GhostexGpuiApp {
                             plan,
                             Some(requested_pane_id),
                             placement,
+                            GpuiRemoteAttachOpenIntent::CreatedByThisAction,
                             cx,
                         );
                         this.refresh_gpui_remote_gxserver_presentation_in_background(
@@ -54622,7 +55349,7 @@ impl GhostexGpuiApp {
                 self.sync_active_browser_tab_to_surface(window, cx);
             } else {
                 self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
-                self.update_browser_visibility_for_active_mode(cx);
+                self.update_active_mode_cef_child_visibility(cx);
             }
             self.persist_shell_layout_state();
         }
@@ -54680,7 +55407,7 @@ impl GhostexGpuiApp {
             TitlebarMode::Agents => return false,
         };
         self.set_shell_focus(focus);
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         self.shell_focus == focus
     }
@@ -54720,7 +55447,7 @@ impl GhostexGpuiApp {
                     self.pending_project_editor_companion_terminal_text_focus_slot = None;
                 }
             }
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
             self.persist_shell_layout_state();
         }
     }
@@ -54907,6 +55634,8 @@ impl GhostexGpuiApp {
         self.project_editor_shell.left_companion_split_enabled = false;
         self.project_editor_companion_split_drag = None;
         self.clear_project_editor_companion_split_divider_hover_state();
+        // The dropped bottom slot may have been rendering a chat CEF child.
+        self.reconcile_agents_chat_surfaces(cx);
         self.persist_shell_layout_state();
 
         if let Some(session_id) = focused_session_id {
@@ -54978,7 +55707,9 @@ impl GhostexGpuiApp {
         self.clear_project_editor_companion_split_divider_hover_state();
         self.mark_project_editor_mode_awake(mode, cx);
         self.focus_project_editor_surface_for_keyboard(mode, window, cx);
-        self.update_browser_visibility_for_active_mode(cx);
+        // Session Chat is a native CEF child view, not GPUI paint, so a
+        // collapsed companion leaves it on screen until this gate runs.
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         cx.notify();
         true
@@ -55042,7 +55773,7 @@ impl GhostexGpuiApp {
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         self.set_shell_focus(focus);
         self.focus_project_editor_companion(mode, window, cx);
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         cx.notify();
         true
@@ -57326,15 +58057,22 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        // The local terminal-to-chat handoff moves the CLI draft through a
-        // local filesystem marker. A remote terminal and its draft stay alive
-        // on the remote machine while the body is parked, so switching that
-        // eligible session must not require a local workspace key.
+        /*
+        The local terminal-to-chat handoff moves the CLI draft through a local
+        filesystem marker, which a remote session's CLI cannot see: its marker
+        files, prompt-editor and Saved Prompts all live on the other machine.
+        Switch immediately (the remote terminal and its draft stay alive while
+        the body is parked) and let the remote daemon run the same handshake
+        through `/api/handoffSessionChatDraft`, delivering the text into the
+        composer when it answers.
+        */
         if self
             .agents_chat_remote_key_for_session(shell_session_id)
             .is_some()
         {
-            let _ = self.show_agents_session_chat_mode(shell_session_id, cx);
+            if self.show_agents_session_chat_mode(shell_session_id, cx) {
+                self.request_session_chat_draft_transfer(shell_session_id, cx);
+            }
             return;
         }
         if !self
@@ -57607,7 +58345,7 @@ impl GhostexGpuiApp {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update(cx, |this, cx| {
                 this.upsert_gpui_app_toast(
                     GpuiAppToast {
                         id: GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID.to_string(),
@@ -57622,7 +58360,6 @@ impl GhostexGpuiApp {
                         duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                         epoch: 0,
                     },
-                    window,
                     cx,
                 );
             });
@@ -57684,7 +58421,6 @@ impl GhostexGpuiApp {
         if !context_is_current || !source_target_is_current {
             self.report_remote_prompt_editor_failure(
                 "The remote project or session changed before its editor could open.",
-                window,
                 cx,
             );
             return false;
@@ -57692,7 +58428,6 @@ impl GhostexGpuiApp {
         if !self.set_active_mode(TitlebarMode::Source, window, cx) {
             self.report_remote_prompt_editor_failure(
                 "Code view is unavailable for this remote project.",
-                window,
                 cx,
             );
             return false;
@@ -57710,7 +58445,6 @@ impl GhostexGpuiApp {
         if !runtime_is_owned_for_request {
             self.report_remote_prompt_editor_failure(
                 "Code view is unavailable for this remote project.",
-                window,
                 cx,
             );
             return false;
@@ -57844,7 +58578,6 @@ impl GhostexGpuiApp {
     fn report_remote_prompt_editor_failure(
         &mut self,
         description: &str,
-        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         self.upsert_gpui_app_toast(
@@ -57858,7 +58591,6 @@ impl GhostexGpuiApp {
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
                 epoch: 0,
             },
-            window,
             cx,
         );
     }
@@ -61330,6 +62062,7 @@ impl GhostexGpuiApp {
             None,
             Some(cef::AppModalHostBridgeSurface::Sidebar),
             Some(app_modal_host_bridge_event_handler),
+            None,
             cx,
         ) {
             Ok(sidebar) => {
@@ -61383,7 +62116,7 @@ impl GhostexGpuiApp {
         }
         self.ensure_active_browser_surface(cx);
         self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         // First-run onboarding may open the CEF app-modal host. Start it only
         // after the required runtime and initial sidebar surface are ready;
         // macOS release first launch can spend time in the native component
@@ -61392,7 +62125,7 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    fn update_browser_visibility_for_active_mode(&mut self, cx: &mut gpui::Context<Self>) {
+    fn update_active_mode_cef_child_visibility(&mut self, cx: &mut gpui::Context<Self>) {
         /*
         CDXC:GPUIProjectEditor 2026-06-22-05:49:
         Browser tab CEF surfaces may show only in Browser mode. Kanban, Automate, and Manage use the separate project-workarea CEF surface map and visibility gate, so Browser CEF child views must still hide under Source, Kanban, Automate, Manage, and Agents instead of sitting underneath non-browser editor panes.
@@ -61434,6 +62167,19 @@ impl GhostexGpuiApp {
             });
         }
         self.update_project_workarea_runtime_cef_surface_visibility(cx);
+        /*
+        CDXC:GPUISessionChatSurface 2026-08-19:
+        Session Chat is a CEF child view gated on exactly the same inputs as
+        the Browser and project-workarea surfaces: active mode, mode
+        wakefulness, companion visibility, and the tab-drag flags. Every mode
+        switch, drag, sleep, and companion mutation already re-runs this pass,
+        so the chat gate belongs here rather than being re-added by hand at
+        each call site. Sites that set `active_mode` and then only synced
+        Browser surfaces (terminal link opens through
+        `open_browser_url_from_renderer_command`, for example) used to leave
+        the Agents chat child painted over the new workarea.
+        */
+        self.reconcile_agents_chat_surfaces(cx);
     }
 
     fn begin_browser_tab_drag(&mut self, cx: &mut gpui::Context<Self>) {
@@ -61442,7 +62188,7 @@ impl GhostexGpuiApp {
         }
 
         self.browser_tab_drag_active = true;
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -61469,7 +62215,7 @@ impl GhostexGpuiApp {
 
         self.browser_tab_drag_active = false;
         self.browser_tab_drop_feedback = None;
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -61621,7 +62367,7 @@ impl GhostexGpuiApp {
             self.scroll_browser_pane_active_tab(pane_id);
             self.persist_shell_layout_state();
         }
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -61672,7 +62418,7 @@ impl GhostexGpuiApp {
             self.scroll_focused_browser_pane_active_tab();
             self.persist_shell_layout_state();
         }
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -61763,8 +62509,7 @@ impl GhostexGpuiApp {
         }
 
         self.workspace_tab_drag_active = true;
-        self.update_browser_visibility_for_active_mode(cx);
-        self.reconcile_agents_chat_surfaces(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -61779,8 +62524,7 @@ impl GhostexGpuiApp {
         self.workspace_tab_drag_active = false;
         self.workspace_drop_feedback = None;
         if drag_was_active {
-            self.update_browser_visibility_for_active_mode(cx);
-            self.reconcile_agents_chat_surfaces(cx);
+            self.update_active_mode_cef_child_visibility(cx);
         }
         true
     }
@@ -62273,7 +63017,7 @@ impl GhostexGpuiApp {
         self.set_shell_focus(ShellFocusTarget::AgentsPane(
             self.agents_workspace.focused_pane,
         ));
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.scroll_workspace_pane_active_tab(inserted_pane_id);
         self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
@@ -62322,7 +63066,7 @@ impl GhostexGpuiApp {
 
         self.active_mode = TitlebarMode::Agents;
         self.set_shell_focus(ShellFocusTarget::AgentsPane(inserted_pane_id));
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         self.scroll_workspace_pane_active_tab(inserted_pane_id);
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         self.persist_shell_layout_state();
@@ -62433,7 +63177,7 @@ impl GhostexGpuiApp {
         }
 
         self.command_tab_drag_active = true;
-        self.update_browser_visibility_for_active_mode(cx);
+        self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
     }
 
@@ -62448,7 +63192,7 @@ impl GhostexGpuiApp {
         self.command_tab_drag_active = false;
         self.command_drop_feedback = None;
         if drag_was_active {
-            self.update_browser_visibility_for_active_mode(cx);
+            self.update_active_mode_cef_child_visibility(cx);
         }
         true
     }
@@ -64628,6 +65372,15 @@ impl GhostexGpuiApp {
             .when(self.update_available || self.update_downloading, |this| {
                 this.child(self.render_titlebar_update_button(cx))
             })
+            /*
+            CDXC:NavigationHistory 2026-08-19:
+            Back/Forward sit LEFT of the project name, next to the sidebar
+            toggle. Placing them after the name made them slide horizontally
+            every time the active project's title changed length, which is
+            exactly the kind of moving target a frequently clicked control must
+            not be.
+            */
+            .child(self.render_titlebar_navigation_history_buttons(cx))
             .child(
                 h_flex()
                     .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -72554,7 +73307,7 @@ impl GhostexGpuiApp {
                     }
                 }
             }
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update(cx, |this, cx| {
                 let should_restart = restart_after_stop && stop_error.is_none();
                 match stop_error {
                     None => {
@@ -72564,7 +73317,6 @@ impl GhostexGpuiApp {
                                 "gxserver stopped",
                                 "The local gxserver control plane was stopped. zmx sessions keep running.",
                                 false,
-                                window,
                                 cx,
                             );
                         }
@@ -72575,7 +73327,6 @@ impl GhostexGpuiApp {
                             "gxserver stop failed",
                             &message,
                             true,
-                            window,
                             cx,
                         );
                     }
@@ -73503,7 +74254,7 @@ impl GhostexGpuiApp {
     fn gpui_native_resources_snapshot_from_samples(
         &self,
         processes: Vec<GpuiNativeResourceProcess>,
-        servers: Vec<(u32, String, String)>,
+        servers: Vec<GpuiNativeResourceServer>,
         cx: &mut gpui::Context<Self>,
     ) -> GpuiNativeResourcesSnapshot {
         let children_by_parent = gpui_native_resource_children_by_parent(&processes);
@@ -73669,42 +74420,103 @@ impl GhostexGpuiApp {
             });
         }
 
-        let mut server_rows = Vec::new();
-        for (pid, label, url) in servers {
-            let Some(process) = processes.iter().find(|process| process.pid == pid) else {
+        /*
+        CDXC:GPUITitlebarResources 2026-08-19-12:10:
+        Dev Servers rows describe one listening *process*, not one listening
+        socket, and never root at the app's own executables. The Ghostex shell
+        listens on the CEF remote-debugging port, so rooting a row there walked
+        the whole app process tree and reported every CEF helper as a single
+        dev server; a process holding several ports repeated its whole tree in
+        one row per port. Both inflated the row and the section total far past
+        the app total. Keep the listener process plus its own descendants, stop
+        at any other listener and at app executables, and fold a process's
+        extra ports into its one row.
+        */
+        let listener_pids = servers
+            .iter()
+            .map(|server| server.pid)
+            .collect::<HashSet<_>>();
+        let mut grouped_servers: Vec<(GpuiNativeResourceServer, Vec<u16>)> = Vec::new();
+        for server in servers {
+            let Some(process) = processes.iter().find(|process| process.pid == server.pid) else {
                 continue;
             };
-            if !claimed_pids.contains(&pid)
+            if gpui_native_resource_is_app_shell_process(process) {
+                continue;
+            }
+            if !claimed_pids.contains(&server.pid)
                 && !gpui_native_resource_is_ghostex_owned_process(process)
             {
                 continue;
             }
+            match grouped_servers
+                .iter_mut()
+                .find(|(existing, _)| existing.pid == server.pid)
+            {
+                Some((existing, extra_ports)) => {
+                    if server.port < existing.port {
+                        extra_ports.push(existing.port);
+                        *existing = server;
+                    } else {
+                        extra_ports.push(server.port);
+                    }
+                }
+                None => grouped_servers.push((server, Vec::new())),
+            }
+        }
+
+        grouped_servers.sort_by_key(|(server, _)| (server.port, server.pid));
+
+        let mut server_rows = Vec::new();
+        for (server, mut extra_ports) in grouped_servers {
+            let Some(process) = processes.iter().find(|process| process.pid == server.pid) else {
+                continue;
+            };
             let owning_session = session_rows.iter().find(|row| {
-                matches!(row.action, GpuiNativeResourceAction::Session) && row.pids.contains(&pid)
+                matches!(row.action, GpuiNativeResourceAction::Session)
+                    && row.pids.contains(&server.pid)
             });
-            let tree = gpui_collect_native_resource_process_tree(
+            let tree = gpui_collect_native_resource_process_tree_bounded(
                 std::slice::from_ref(process),
                 &children_by_parent,
+                &|candidate| {
+                    listener_pids.contains(&candidate.pid)
+                        || gpui_native_resource_is_app_shell_process(candidate)
+                },
             );
             let (cpu, memory_mb) = gpui_sum_native_resource_processes(&tree);
+            extra_ports.sort_unstable();
+            extra_ports.dedup();
+            let mut detail = format!(
+                "{} pid {}",
+                gpui_native_resource_process_name(process),
+                process.system_pid
+            );
+            if !extra_ports.is_empty() {
+                detail.push_str(&format!(
+                    " • also :{}",
+                    extra_ports
+                        .iter()
+                        .map(|port| port.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", :")
+                ));
+            }
             server_rows.push(GpuiNativeResourceRow {
                 action: GpuiNativeResourceAction::Server,
                 agent_icon: owning_session.and_then(|row| row.agent_icon),
-                children: gpui_native_resource_child_rows(&tree, Some(pid)),
+                children: gpui_native_resource_child_rows(&tree, Some(server.pid)),
                 cpu,
-                detail: format!(
-                    "{} pid {}",
-                    gpui_native_resource_process_name(process),
-                    process.system_pid
-                ),
+                detail,
                 icon_path: BROWSER_ICON_WORLD,
-                label,
+                label: server.label,
                 memory_mb,
                 pids: tree.iter().map(|process| process.system_pid).collect(),
                 session_id: owning_session.and_then(|row| row.session_id.clone()),
-                url: Some(url),
+                url: Some(server.url),
             });
         }
+
 
         let mut code_rows = Vec::new();
         if let Some(process) = processes
@@ -77653,6 +78465,9 @@ impl GhostexGpuiApp {
 
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        // Only the main workspace window renders this entity, so this is the
+        // authoritative frame every child popup anchors against.
+        self.main_window_bounds = window.bounds();
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
             return self.render_windows_first_run_setup(cx);
@@ -78784,17 +79599,30 @@ fn gpui_app_toast_stack_height(toasts: &[GpuiAppToast]) -> f32 {
 }
 
 #[cfg(target_os = "macos")]
-fn remove_gpui_app_toast_popup_window_chrome(window: &mut Window) {
+fn remove_gpui_app_toast_popup_window_chrome(
+    window: &mut Window,
+    main_window_native_view: *mut std::ffi::c_void,
+) {
     let Ok(handle) = window.window_handle() else {
         return;
     };
     if let RawWindowHandle::AppKit(handle) = handle.as_raw() {
-        unsafe { GhostexGpuiRemoveToastPopupWindowChrome(handle.ns_view.as_ptr()) };
+        unsafe {
+            GhostexGpuiRemoveToastPopupWindowChrome(handle.ns_view.as_ptr());
+            GhostexGpuiAttachToastPopupToMainWindow(
+                handle.ns_view.as_ptr(),
+                main_window_native_view,
+            );
+        }
     }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn remove_gpui_app_toast_popup_window_chrome(_window: &mut Window) {}
+fn remove_gpui_app_toast_popup_window_chrome(
+    _window: &mut Window,
+    _main_window_native_view: *mut std::ffi::c_void,
+) {
+}
 
 #[cfg(target_os = "macos")]
 fn prepare_gpui_titlebar_popup_window_chrome(window: &mut Window) {
@@ -79016,6 +79844,13 @@ struct GpuiAppModalHostWindow {
     latest_sidebar_state_message: serde_json::Value,
     pending_messages: Vec<serde_json::Value>,
     presented_modal: Option<GpuiAppModalKind>,
+    /*
+    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    "f" toggles the YouTube player's fullscreen state, so the host-side key
+    press is sent at most once per window. Page-internal navigations can raise
+    several main-frame load-end edges, and the modal host outlives them.
+    */
+    tutorial_video_fullscreen_key_sent: bool,
     // None when CEF browser creation failed; the host window then never
     // reports ready and the existing app-modal ready-timeout retry/close
     // flow recovers (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
@@ -79030,6 +79865,7 @@ impl GpuiAppModalHostWindow {
         open_message: serde_json::Value,
         sidebar_state_message: serde_json::Value,
         event_handler: cef::AppModalHostBridgeEventHandler,
+        page_load_end_handler: Option<cef::PageLoadEndHandler>,
         cx: &mut App,
     ) -> Entity<Self> {
         let parent_ns_view = cef_parent_native_view(window)
@@ -79043,6 +79879,14 @@ impl GpuiAppModalHostWindow {
         } else {
             (None, None)
         };
+        /*
+        CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
+        The React modal host serves one app-owned page from the synthetic https
+        origin: the first-launch tutorial player. The handler only answers URLs
+        under that origin, so every other request on this surface is untouched.
+        */
+        let app_served_resource_scope =
+            uses_react_modal_host.then(gpui_app_modal_host_resource_scope);
         let surface = CefSurface::try_new(
             APP_MODAL_HOST_ID.to_string(),
             parent_ns_view,
@@ -79060,9 +79904,10 @@ impl GpuiAppModalHostWindow {
             None,
             None,
             None,
-            None,
+            app_served_resource_scope,
             bridge_surface,
             event_handler,
+            page_load_end_handler,
             cx,
         )
         .map_err(|error| {
@@ -79084,8 +79929,31 @@ impl GpuiAppModalHostWindow {
             latest_sidebar_state_message: sidebar_state_message,
             pending_messages,
             presented_modal: None,
+            tutorial_video_fullscreen_key_sent: false,
             surface,
         })
+    }
+
+    /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: entering fullscreen needs a
+    /// trusted key press from the host (see `CefBrowser::send_fullscreen_toggle_key`),
+    /// and it must happen once, only while the tutorial video is the presented
+    /// modal.
+    fn send_tutorial_video_fullscreen_key(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.current_modal != GpuiAppModalKind::WatchGhostexVideo
+            || self.tutorial_video_fullscreen_key_sent
+        {
+            return;
+        }
+        let Some(surface) = self.surface.clone() else {
+            return;
+        };
+        self.tutorial_video_fullscreen_key_sent = true;
+        surface.update(cx, |surface, _cx| {
+            // The player only reacts to its shortcut when the page owns
+            // Chromium keyboard focus inside this child window.
+            surface.focus();
+            surface.send_fullscreen_toggle_key();
+        });
     }
 
     fn is_ready(&self) -> bool {
@@ -81408,6 +82276,7 @@ impl GpuiTitlebarTipsPanel {
             None,
             Some(cef::AppModalHostBridgeSurface::Titlebar),
             Some(event_handler),
+            None,
             cx,
         )?;
         Ok(cx.new(move |_cx| Self { surface }))
@@ -81511,6 +82380,7 @@ impl GpuiTitlebarResourcesPanel {
             None,
             Some(cef::AppModalHostBridgeSurface::Titlebar),
             Some(event_handler),
+            None,
         )?);
         browser.set_visible(false);
         Ok(browser)
@@ -81817,6 +82687,7 @@ impl CefSurface {
         manage_docs_resource_scope: Option<cef::ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<cef::AppModalHostBridgeSurface>,
         app_modal_host_bridge_event_handler: Option<cef::AppModalHostBridgeEventHandler>,
+        page_load_end_handler: Option<cef::PageLoadEndHandler>,
         cx: &mut gpui::App,
     ) -> Result<gpui::Entity<Self>, String> {
         let browser = Rc::new(CefBrowser::new(
@@ -81836,6 +82707,7 @@ impl CefSurface {
             manage_docs_resource_scope,
             app_modal_host_bridge_surface,
             app_modal_host_bridge_event_handler,
+            page_load_end_handler,
         )?);
         Ok(cx.new(|cx| Self::from_browser(id, background, visible, browser, cx)))
     }
@@ -81965,6 +82837,13 @@ impl CefSurface {
 
     fn focus(&mut self) {
         self.browser.focus();
+    }
+
+    /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: forwards one host-side "f"
+    /// key press (see the CEF backend for why injected JavaScript cannot put
+    /// the tutorial player in fullscreen).
+    fn send_fullscreen_toggle_key(&self) {
+        self.browser.send_fullscreen_toggle_key();
     }
 
     /// The surface's CEF child view, for the AppKit pointer observer that turns
@@ -82980,7 +83859,7 @@ fn gpui_parse_native_resource_processes(
                 cpu,
                 pid: process_id(system_pid),
                 ppid: process_id(system_ppid),
-                rss_mb: rss_kb / 1024.0,
+                memory_mb: rss_kb / 1024.0,
                 system_pid,
             })
         })
@@ -83000,7 +83879,66 @@ fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourceProcess> {
     if !output.status.success() {
         return Vec::new();
     }
-    gpui_parse_native_resource_processes(&String::from_utf8_lossy(&output.stdout), |pid| pid)
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+    let mut processes =
+        gpui_parse_native_resource_processes(&String::from_utf8_lossy(&output.stdout), |pid| pid);
+    /*
+    CDXC:GPUITitlebarResources 2026-08-19-12:10:
+    `ps rss` is resident-set size, which charges every shared page to each
+    process that maps it. The app runs one CEF helper per surface and they all
+    map the same ~76 MB Chromium framework, so summing rss over the process
+    tree invented tens of GB that no process actually owns, while individual
+    helper rows read far below what Activity Monitor shows for the same pid.
+    macOS reports process memory as the phys_footprint ledger (what Activity
+    Monitor and `top` print), so read that per pid instead. Processes owned by
+    another user deny the ledger read and keep their rss sample; those never
+    reach a Resources row.
+    */
+    #[cfg(target_os = "macos")]
+    for process in &mut processes {
+        if let Some(footprint_mb) = gpui_native_resource_phys_footprint_mb(process.system_pid) {
+            process.memory_mb = footprint_mb;
+        }
+    }
+    processes
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_native_resource_phys_footprint_mb(pid: u32) -> Option<f64> {
+    #[repr(C)]
+    #[derive(Default)]
+    struct RusageInfoV0 {
+        ri_uuid: [u8; 16],
+        ri_user_time: u64,
+        ri_system_time: u64,
+        ri_pkg_idle_wkups: u64,
+        ri_interrupt_wkups: u64,
+        ri_pageins: u64,
+        ri_wired_size: u64,
+        ri_resident_size: u64,
+        ri_phys_footprint: u64,
+        ri_proc_start_abstime: u64,
+        ri_proc_exit_abstime: u64,
+    }
+
+    unsafe extern "C" {
+        fn proc_pid_rusage(
+            pid: std::ffi::c_int,
+            flavor: std::ffi::c_int,
+            buffer: *mut std::ffi::c_void,
+        ) -> std::ffi::c_int;
+    }
+
+    const RUSAGE_INFO_V0: std::ffi::c_int = 0;
+    let mut info = RusageInfoV0::default();
+    let status = unsafe {
+        proc_pid_rusage(
+            pid as std::ffi::c_int,
+            RUSAGE_INFO_V0,
+            (&raw mut info).cast::<std::ffi::c_void>(),
+        )
+    };
+    (status == 0).then_some(info.ri_phys_footprint as f64 / (1024.0 * 1024.0))
 }
 
 #[cfg(target_os = "windows")]
@@ -83070,7 +84008,7 @@ fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourceProcess> {
                             .parent()
                             .map(|pid| pid.as_u32() | WINDOWS_PROCESS_ID_BIT)
                             .unwrap_or(WINDOWS_PROCESS_ID_BIT),
-                        rss_mb: process.memory() as f64 / (1024.0 * 1024.0),
+                        memory_mb: process.memory() as f64 / (1024.0 * 1024.0),
                         system_pid,
                     })
                 })
@@ -83084,7 +84022,7 @@ fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourceProcess> {
     native_processes
 }
 
-fn gpui_parse_native_resource_servers(output: &str) -> Vec<(u32, String, String)> {
+fn gpui_parse_native_resource_servers(output: &str) -> Vec<GpuiNativeResourceServer> {
     let mut pid = None;
     let mut seen = HashSet::new();
     let mut servers = Vec::new();
@@ -83108,11 +84046,12 @@ fn gpui_parse_native_resource_servers(output: &str) -> Vec<(u32, String, String)
                 if !seen.insert((pid, port)) {
                     continue;
                 }
-                servers.push((
+                servers.push(GpuiNativeResourceServer {
+                    label: format!("localhost:{port}"),
                     pid,
-                    format!("localhost:{port}"),
-                    format!("http://localhost:{port}"),
-                ));
+                    port,
+                    url: format!("http://localhost:{port}"),
+                });
             }
             _ => {}
         }
@@ -83121,7 +84060,7 @@ fn gpui_parse_native_resource_servers(output: &str) -> Vec<(u32, String, String)
 }
 
 #[cfg(not(target_os = "windows"))]
-fn gpui_read_native_resource_servers() -> Vec<(u32, String, String)> {
+fn gpui_read_native_resource_servers() -> Vec<GpuiNativeResourceServer> {
     let Ok(output) = Command::new("/usr/sbin/lsof")
         .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"])
         .stdout(Stdio::piped())
@@ -83137,7 +84076,7 @@ fn gpui_read_native_resource_servers() -> Vec<(u32, String, String)> {
 }
 
 #[cfg(target_os = "windows")]
-fn gpui_read_native_resource_servers() -> Vec<(u32, String, String)> {
+fn gpui_read_native_resource_servers() -> Vec<GpuiNativeResourceServer> {
     windows_terminal_backend::resource_server_snapshot()
         .map(|output| gpui_parse_native_resource_servers(&output))
         .unwrap_or_default()
@@ -83160,6 +84099,17 @@ fn gpui_collect_native_resource_process_tree(
     seeds: &[GpuiNativeResourceProcess],
     children_by_parent: &HashMap<u32, Vec<GpuiNativeResourceProcess>>,
 ) -> Vec<GpuiNativeResourceProcess> {
+    gpui_collect_native_resource_process_tree_bounded(seeds, children_by_parent, &|_| false)
+}
+
+/// Walk a process tree from `seeds`, skipping every descendant that another
+/// Resources row already owns. Boundary processes are neither counted nor
+/// descended into, so one row can never absorb another row's subtree.
+fn gpui_collect_native_resource_process_tree_bounded(
+    seeds: &[GpuiNativeResourceProcess],
+    children_by_parent: &HashMap<u32, Vec<GpuiNativeResourceProcess>>,
+    is_boundary: &dyn Fn(&GpuiNativeResourceProcess) -> bool,
+) -> Vec<GpuiNativeResourceProcess> {
     let mut collected = HashMap::<u32, GpuiNativeResourceProcess>::new();
     let mut queue = seeds.to_vec();
     while let Some(process) = queue.pop() {
@@ -83171,6 +84121,7 @@ fn gpui_collect_native_resource_process_tree(
                 .get(&process.pid)
                 .into_iter()
                 .flatten()
+                .filter(|child| !is_boundary(child))
                 .cloned(),
         );
         collected.insert(process.pid, process);
@@ -83180,7 +84131,7 @@ fn gpui_collect_native_resource_process_tree(
 
 fn gpui_sum_native_resource_processes(processes: &[GpuiNativeResourceProcess]) -> (f64, f64) {
     processes.iter().fold((0.0, 0.0), |(cpu, memory), process| {
-        (cpu + process.cpu, memory + process.rss_mb)
+        (cpu + process.cpu, memory + process.memory_mb)
     })
 }
 
@@ -83188,6 +84139,28 @@ fn gpui_native_resource_is_app_bundle_process(process: &GpuiNativeResourceProces
     let command = process.command.to_ascii_lowercase();
     command.contains("/ghostex.app/contents/")
         || command.contains("/ghostex-dev.app/contents/")
+        || (cfg!(target_os = "windows")
+            && [
+                "ghostex.exe",
+                "ghostex-gpui.exe",
+                "ghostex-gpui-cef-helper.exe",
+            ]
+            .iter()
+            .any(|executable| command.contains(executable)))
+}
+
+/// True for the app's own executables: the Ghostex binary and its CEF helper
+/// processes. These are the app itself, never a user-owned server or runtime.
+fn gpui_native_resource_is_app_shell_process(process: &GpuiNativeResourceProcess) -> bool {
+    let command = process.command.to_ascii_lowercase();
+    [
+        "/ghostex.app/contents/macos/",
+        "/ghostex.app/contents/frameworks/",
+        "/ghostex-dev.app/contents/macos/",
+        "/ghostex-dev.app/contents/frameworks/",
+    ]
+    .iter()
+    .any(|marker| command.contains(marker))
         || (cfg!(target_os = "windows")
             && [
                 "ghostex.exe",
@@ -83252,7 +84225,7 @@ fn gpui_native_resource_child_rows(
         .map(|process| GpuiNativeResourceChild {
             cpu: process.cpu,
             label: gpui_native_resource_process_name(process),
-            memory_mb: process.rss_mb,
+            memory_mb: process.memory_mb,
             pid: process.system_pid,
         })
         .collect()
@@ -87431,6 +88404,28 @@ fn gpui_cef_html_entry_url(env_var: &str, entry_file_name: &str) -> Result<Strin
     anyhow::bail!("GPUI CEF workarea bundle entry was not found")
 }
 
+/// The one-page document the first-launch tutorial player iframe points at.
+/// Served from the app's synthetic https origin so YouTube's embed player has
+/// a real embedding origin (CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19).
+fn gpui_tutorial_video_player_document() -> Vec<u8> {
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+<style>html,body{{margin:0;height:100%;background:#000;overflow:hidden}}\
+iframe{{border:0;display:block;height:100%;width:100%}}</style></head><body>\
+<iframe src=\"{GHOSTEX_TUTORIAL_VIDEO_EMBED_URL}\" title=\"Ghostex introduction\" \
+allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" \
+allowfullscreen></iframe></body></html>"
+    )
+    .into_bytes()
+}
+
+fn gpui_app_modal_host_resource_scope() -> cef::ManageDocsResourceScope {
+    cef::ManageDocsResourceScope::new_remote(Arc::new(|relative_path: &str| {
+        (relative_path == GPUI_TUTORIAL_VIDEO_PLAYER_RESOURCE_PATH)
+            .then(gpui_tutorial_video_player_document)
+    }))
+}
+
 fn app_modal_host_url() -> Result<String> {
     gpui_cef_html_entry_url("GHOSTEX_GPUI_APP_MODAL_HOST_URL", "modal-host.html")
         .context("failed to resolve GPUI app-modal host bundle URL")
@@ -88853,6 +89848,14 @@ fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String> {
         .map_err(|_| "macOS could not open the requested Ghostex Settings target.".to_string())
 }
 
+/// The OS file manager, named the way this platform's users name it.
+#[cfg(target_os = "macos")]
+const GPUI_FILE_MANAGER_NAME: &str = "Finder";
+#[cfg(target_os = "windows")]
+const GPUI_FILE_MANAGER_NAME: &str = "File Explorer";
+#[cfg(all(unix, not(target_os = "macos")))]
+const GPUI_FILE_MANAGER_NAME: &str = "your file manager";
+
 #[cfg(target_os = "macos")]
 fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
     if !path.exists() {
@@ -88866,12 +89869,53 @@ fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
         .stderr(std::process::Stdio::null())
         .spawn()
         .map(|_| ())
-        .map_err(|_| "Could not reveal the selected Docs item in Finder.".to_string())
+        .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
 }
 
-#[cfg(not(target_os = "macos"))]
-fn gpui_reveal_path_in_finder(_path: &Path) -> Result<(), String> {
-    Err("Reveal in Finder is available only on macOS.".to_string())
+#[cfg(target_os = "windows")]
+fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err("Select an item to reveal.".to_string());
+    }
+    // Explorer's own selection syntax: one "/select,<path>" argument, no space.
+    let mut selection = std::ffi::OsString::from("/select,");
+    selection.push(path.as_os_str());
+    std::process::Command::new("explorer.exe")
+        .arg(selection)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err("Select an item to reveal.".to_string());
+    }
+    // No portable "select this item" verb here, so open the containing folder.
+    let folder = if path.is_dir() {
+        path
+    } else {
+        path.parent()
+            .ok_or_else(|| "That item has no containing folder.".to_string())?
+    };
+    std::process::Command::new("xdg-open")
+        .arg(folder)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
+}
+
+/// A path's file name for toast copy; `None` when the path has no final component.
+fn gpui_path_file_name_label(path: &Path) -> Option<String> {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_string())
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -90730,6 +91774,7 @@ enum GpuiAddProjectDialogOperation {
     Add,
     Browse,
     CancelCloneJob,
+    CreateDirectory,
     DiscoverSourceControl,
     ListMachines,
     LookupRepository,
@@ -90743,6 +91788,7 @@ impl GpuiAddProjectDialogOperation {
             "add" => Some(Self::Add),
             "browse" => Some(Self::Browse),
             "cancelCloneJob" => Some(Self::CancelCloneJob),
+            "createDirectory" => Some(Self::CreateDirectory),
             "discoverSourceControl" => Some(Self::DiscoverSourceControl),
             "listMachines" => Some(Self::ListMachines),
             "lookupRepository" => Some(Self::LookupRepository),
@@ -90757,6 +91803,7 @@ impl GpuiAddProjectDialogOperation {
             Self::Add => "add",
             Self::Browse => "browse",
             Self::CancelCloneJob => "cancelCloneJob",
+            Self::CreateDirectory => "createDirectory",
             Self::DiscoverSourceControl => "discoverSourceControl",
             Self::ListMachines => "listMachines",
             Self::LookupRepository => "lookupRepository",
@@ -90770,6 +91817,7 @@ impl GpuiAddProjectDialogOperation {
             Self::Add => Some("/api/addProjectPath"),
             Self::Browse => Some("/api/browseProjectDirectories"),
             Self::CancelCloneJob => Some("/api/cancelRepositoryCloneJob"),
+            Self::CreateDirectory => Some("/api/createProjectDirectory"),
             Self::DiscoverSourceControl => Some("/api/discoverSourceControl"),
             Self::ListMachines => None,
             Self::LookupRepository => Some("/api/lookupRepository"),
@@ -90784,9 +91832,10 @@ impl GpuiAddProjectDialogOperation {
             Self::Browse => GPUI_ADD_PROJECT_DIALOG_BROWSE_TIMEOUT,
             Self::DiscoverSourceControl => GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT,
             Self::LookupRepository => GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT,
-            Self::CancelCloneJob | Self::ReadCloneJob | Self::ListMachines => {
-                GPUI_ADD_PROJECT_DIALOG_JOB_TIMEOUT
-            }
+            Self::CancelCloneJob
+            | Self::CreateDirectory
+            | Self::ReadCloneJob
+            | Self::ListMachines => GPUI_ADD_PROJECT_DIALOG_JOB_TIMEOUT,
         }
     }
 }
@@ -90821,6 +91870,19 @@ fn gpui_add_project_dialog_params(
             {
                 forwarded.insert("createIfMissing".to_string(), serde_json::json!(true));
             }
+        }
+        GpuiAddProjectDialogOperation::CreateDirectory => {
+            /*
+            CDXC:AddProjectNewFolder 2026-08-18:
+            The new-folder request names an existing parent directory plus one
+            bounded segment. The daemon re-validates both, so the bridge only
+            has to keep the segment from carrying a path.
+            */
+            let parent_path =
+                gpui_remote_path_like_string_from_command(params, "parentPath", false)?;
+            let name = gpui_add_project_dialog_bounded_text(params, "name", 255)?;
+            forwarded.insert("name".to_string(), serde_json::json!(name));
+            forwarded.insert("parentPath".to_string(), serde_json::json!(parent_path));
         }
         GpuiAddProjectDialogOperation::DiscoverSourceControl => {}
         GpuiAddProjectDialogOperation::LookupRepository => {
@@ -90867,6 +91929,7 @@ fn gpui_add_project_dialog_translate_local_windows_paths(
         GpuiAddProjectDialogOperation::Add => &["path"],
         GpuiAddProjectDialogOperation::Browse => &["partialPath", "cwd"],
         GpuiAddProjectDialogOperation::StartClone => &["destinationPath"],
+        GpuiAddProjectDialogOperation::CreateDirectory => &["parentPath"],
         GpuiAddProjectDialogOperation::CancelCloneJob
         | GpuiAddProjectDialogOperation::DiscoverSourceControl
         | GpuiAddProjectDialogOperation::ListMachines
@@ -91102,6 +92165,21 @@ fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/sleepSession"
             | "/api/wakeSession"
             | "/api/killSession"
+            /*
+            CDXC:GPUIRemoteAgentLaunch 2026-08-18:
+            Creating a remote agent session is a two-step daemon operation:
+            `/api/createAgentSession` writes the row and queues the agent's
+            launch startup text, then `/api/startSessionProvider` spawns the
+            zmx provider that actually runs the agent, and `/api/sendSessionMessage`
+            delivers the workflow prompt. Leaving the second and third steps off
+            this allowlist made every remote agent launch report "Remote agent
+            failed" at the Rust boundary and silently dropped Git/worktree
+            workflow prompts. Params below are reshaped to the two ids (plus a
+            bounded message body) so CEF still cannot tunnel startup text,
+            commands, or daemon flags to a remote machine.
+            */
+            | "/api/startSessionProvider"
+            | "/api/sendSessionMessage"
             | "/api/updateSession"
             | "/api/requestSessionRename"
             /*
@@ -91173,6 +92251,8 @@ fn gpui_remote_sidebar_request_params(
         | "/api/mergeWorktreeIntoMain" => gpui_remote_sidebar_project_id_params(params),
         "/api/scheduleDelayedSend" => gpui_remote_sidebar_delayed_send_params(params, false),
         "/api/cancelDelayedSend" => gpui_remote_sidebar_delayed_send_params(params, true),
+        "/api/startSessionProvider" => gpui_remote_sidebar_session_lifecycle_params(params, None),
+        "/api/sendSessionMessage" => gpui_remote_sidebar_send_session_message_params(params),
         "/api/settleSession" | "/api/unsettleSession" | "/api/unsnoozeSession" => {
             gpui_remote_sidebar_session_lifecycle_params(params, None)
         }
@@ -91395,6 +92475,42 @@ fn gpui_remote_sidebar_session_lifecycle_params(
         );
     }
     Some(serde_json::Value::Object(shaped))
+}
+
+/*
+CDXC:GPUIRemoteAgentLaunch 2026-08-18:
+A remote agent prompt is user-authored message text, not a command: gxserver
+types it into the session and submits it. Shape it to the two ids plus the
+bounded body and pin `submit` here so this route can never become a way for CEF
+to write unsubmitted terminal input or pass daemon-only send flags.
+*/
+fn gpui_remote_sidebar_send_session_message_params(
+    params: serde_json::Value,
+) -> Option<serde_json::Value> {
+    const MAX_MESSAGE_BYTES: usize = 32 * 1024;
+    let object = params.as_object()?;
+    let project_id = object
+        .get("projectId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| gpui_remote_sidebar_project_id_allowed(value))?;
+    let session_id = object
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| gpui_remote_sidebar_session_id_allowed(value))?;
+    let text = object
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| {
+            !value.is_empty() && value.len() <= MAX_MESSAGE_BYTES && !value.contains('\0')
+        })?;
+    Some(serde_json::json!({
+        "projectId": project_id,
+        "sessionId": session_id,
+        "submit": true,
+        "text": text,
+    }))
 }
 
 fn gpui_remote_sidebar_iso_timestamp_allowed(value: &str) -> bool {
@@ -94287,6 +95403,18 @@ fn gpui_command_action_status_from_file(path: &Path) -> Option<GpuiCommandAction
     })
 }
 
+/*
+CDXC:SidebarBrowserTabReveal 2026-08-18:
+The reveal payload names the tab in Rust's own vocabulary (project id + tab id).
+Turning that into the sidebar's session id belongs to the sidebar runtime, which
+is the code that builds those rows in the first place.
+*/
+fn gpui_sidebar_reveal_browser_tab_script(payload: &serde_json::Value) -> String {
+    format!(
+        "(function(){{const bridge=window.ghostexGpui;if(bridge&&typeof bridge.onRevealBrowserTab==='function'){{bridge.onRevealBrowserTab({payload});}}}})(); undefined;"
+    )
+}
+
 fn gpui_sidebar_host_message_script(message: &serde_json::Value) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui;if(bridge&&typeof bridge.onSidebarHostMessage==='function'){{bridge.onSidebarHostMessage({message});}}}})(); undefined;"
@@ -95784,6 +96912,22 @@ enum AgentsWorkspaceNewTerminalPlacement {
     SplitRight,
     SplitBelow,
     BottomRow,
+}
+
+/*
+CDXC:GPUIRemoteNewTerminal 2026-08-18:
+`open_gpui_remote_attach_terminal` serves two different intents and they need
+different completion rules. Attaching a session that already existed must not
+yank the workspace back if the user focused something else while the SSH plan
+was prepared in the background. A session this very action just created on the
+remote daemon has nothing to drift away from: dropping it there produced no tab
+and no toast, and left an orphaned terminal row on the remote machine, which is
+exactly what made the sidebar project-header Create Terminal button look inert.
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GpuiRemoteAttachOpenIntent {
+    AttachExistingSession,
+    CreatedByThisAction,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -99040,6 +100184,10 @@ unsafe extern "C" {
         token_len: usize,
     ) -> i32;
     fn GhostexGpuiRemoveToastPopupWindowChrome(native_view: *mut std::ffi::c_void);
+    fn GhostexGpuiAttachToastPopupToMainWindow(
+        toast_native_view: *mut std::ffi::c_void,
+        main_native_view: *mut std::ffi::c_void,
+    );
     fn GhostexGpuiPrepareTitlebarPopupWindow(native_view: *mut std::ffi::c_void);
 }
 
@@ -104373,11 +105521,19 @@ fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
         return true;
     };
     // zmx is the one mandatory GPUI daemon companion. Local contributor
-    // builds intentionally allow optional Zehn and Beads sources to be absent;
-    // require those tools only when this exact build can provide them. This
-    // keeps a deliberately capability-limited build from repeatedly restarting
-    // a daemon that already matches it, while still replacing a stale daemon
-    // that is missing any tool actually bundled with the current app.
+    // builds intentionally allow the optional Zehn source to be absent;
+    // require it only when this exact build can provide it. This keeps a
+    // deliberately capability-limited build from repeatedly restarting a
+    // daemon that already matches it, while still replacing a stale daemon
+    // that is missing a bundled tool the current app can serve.
+    //
+    // Beads is deliberately excluded. gxserver resolves `bd` from the user's
+    // machine-installed Beads release (see `system_bd_tool_candidates`) and
+    // never from the app bundle, so a missing `bd` reports the operator's
+    // environment, not a stale daemon. Gating on it made a first launch on a
+    // machine without Beads report "gxserver toolchain unavailable" and then
+    // restart a perfectly healthy daemon on every later launch. Project board
+    // surfaces already carry their own install guidance for that case.
     let mut required_tools = vec!["zmx"];
     #[cfg(target_os = "windows")]
     if matches!(
@@ -104395,10 +105551,8 @@ fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
     if let Some(bin_dir) =
         gpui_resolve_local_gxserver_binary().and_then(|path| path.parent().map(Path::to_path_buf))
     {
-        for optional_tool in ["zehn", "bd"] {
-            if gpui_is_executable_file(&bin_dir.join(optional_tool)) {
-                required_tools.push(optional_tool);
-            }
+        if gpui_is_executable_file(&bin_dir.join("zehn")) {
+            required_tools.push("zehn");
         }
     }
     required_tools.iter().all(|required| {
@@ -118236,8 +119390,16 @@ struct GpuiFirstRunOnboardingState {
     highlighted_features_seen_revision: Option<String>,
     first_launch_setup_seen_revision: Option<String>,
     os_integration_onboarding_seen: bool,
-    windows_first_launch_setup_complete: bool,
+    first_launch_setup_complete: bool,
     windows_terminal_setup_complete: bool,
+}
+
+/// CDXC:GPUIFirstRunOnboardingOnce 2026-08-18: the markers whose surfaces are
+/// user-visible, so they are written only after that surface is on screen.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GpuiFirstRunOnboardingMarker {
+    FirstLaunchSetupSeen,
+    OsIntegrationOnboardingSeen,
 }
 
 fn load_gpui_first_run_onboarding_state() -> GpuiFirstRunOnboardingState {
@@ -118264,8 +119426,10 @@ fn load_gpui_first_run_onboarding_state() -> GpuiFirstRunOnboardingState {
             .get("osIntegrationOnboardingSeen")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
-        windows_first_launch_setup_complete: value
-            .get("windowsFirstLaunchSetupComplete")
+        first_launch_setup_complete: value
+            .get("firstLaunchSetupComplete")
+            // Written under the Windows-only name until 2026-08-19.
+            .or_else(|| value.get("windowsFirstLaunchSetupComplete"))
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
         windows_terminal_setup_complete: value
@@ -118285,7 +119449,7 @@ fn persist_gpui_first_run_onboarding_state(state: &GpuiFirstRunOnboardingState) 
         "highlightedFeaturesSeenRevision": state.highlighted_features_seen_revision,
         "osIntegrationOnboardingSeen": state.os_integration_onboarding_seen,
         "tipsAndTricksSeen": state.tips_and_tricks_seen,
-        "windowsFirstLaunchSetupComplete": state.windows_first_launch_setup_complete,
+        "firstLaunchSetupComplete": state.first_launch_setup_complete,
         "windowsTerminalSetupComplete": state.windows_terminal_setup_complete,
     });
     let _ = fs::write(path, payload.to_string());
