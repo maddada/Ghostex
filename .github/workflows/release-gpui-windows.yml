@@ -64,14 +64,14 @@ jobs:
   build:
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
     # CDXC:WindowsArm64BuildBudget 2026-08-19:
-    # The ARM64 runner compiles the single ghostex-gpui crate far slower than
-    # x64 does: 7.9.0 took ~5 minutes there, and 7.11.0 was still inside that
-    # one crate 103 minutes in on an identical runner image while x64 finished
-    # it in 5.7. That is an aarch64-windows codegen pathology in our own source,
-    # not a slow runner, and it burned a whole release run against the shared
-    # 120-minute budget. Give ARM64 room to finish while the cliff is diagnosed;
-    # x64 keeps the tight budget so a genuine x64 hang still fails fast.
-    timeout-minutes: ${{ inputs.arch == 'arm64' && 300 || 120 }}
+    # Keep this budget tight. During 7.11.0 an ARM64 build sat inside the single
+    # ghostex-gpui crate for 103 minutes and was killed here, on a runner image
+    # identical to the one that had compiled it in ~14 minutes; the immediate
+    # retry of the same source compiled it in 13m33s. So that was one wedged
+    # runner instance, not a slow build and not a codegen cliff in our source.
+    # A larger budget does not fix a wedged runner, it only burns more runner
+    # time before failing, so raising this is the wrong response if it recurs.
+    timeout-minutes: 120
     env:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
