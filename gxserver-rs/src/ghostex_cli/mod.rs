@@ -153,6 +153,7 @@ fn is_known_command(name: &str) -> bool {
         "kill",
         "k",
         "sleep",
+        "hold-sessions-awake",
         "wake",
         "focus",
         "floating-editor",
@@ -221,6 +222,7 @@ fn is_known_command(name: &str) -> bool {
         "send-session-chat-message",
         "answer-session-chat-prompt",
         "interrupt-session-chat",
+        "handoff-session-chat-draft",
         "wait-for-text",
         "rename-command",
         "set-visible-count",
@@ -427,6 +429,17 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             fail_on_not_ok,
             args,
         ),
+        /*
+        CDXC:MobileKeepAwake 2026-08-19:
+        Ghostex mobile has no HTTP path to gxserver, so the keep-awake lease is a
+        CLI verb it SSH-execs on a timer while its attached tabs are on screen.
+        */
+        "hold-sessions-awake" => run_bridge_action(
+            "holdSessionsAwake",
+            Parser::KeepSessionsAwake,
+            fail_on_not_ok,
+            args,
+        ),
         "sleep-session" => run_bridge_action(
             "sleepSession",
             Parser::SessionBoolean("sleeping"),
@@ -492,6 +505,12 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "interrupt-session-chat" => {
             run_bridge_action("interruptSessionChat", Parser::SessionSelector, plain, args)
         }
+        "handoff-session-chat-draft" => run_bridge_action(
+            "handoffSessionChatDraft",
+            Parser::SessionSelector,
+            fail_on_not_ok,
+            args,
+        ),
         "wait-for-text" => wait::wait_for_text_command(args),
         "rename-command" => {
             run_resolved_session_bridge_action("renameCommand", Parser::Rename, plain, args)

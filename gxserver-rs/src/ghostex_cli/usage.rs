@@ -100,6 +100,10 @@ pub fn usage() -> String {
             "(sleep|wake|kill) --session-id <id> [--json]",
             "Flag form used by Android sidebar actions",
         ),
+        format_help_command(
+            "hold-sessions-awake --sessions-json <json> [--ttl-ms <n>] [--holder-id <id>] [--release] [--json]",
+            "Keep attached sessions out of a client's Auto Sleep sweep while a remote client is viewing them",
+        ),
     ]
     .join("\n");
 
@@ -247,6 +251,7 @@ pub fn usage() -> String {
         format_help_command("send-session-chat-message <selector> <text>", "Send a chat message into an agent session"),
         format_help_command("answer-session-chat-prompt <selector> --answer-json '<json>'", "Answer a pending question/approval prompt"),
         format_help_command("interrupt-session-chat <selector>", "Interrupt the session's running agent turn"),
+        format_help_command("handoff-session-chat-draft <selector>", "Move the agent CLI's composer draft out of the terminal and print it"),
         format_help_command("wait-for-text <selector> <regex> [--timeout-seconds n] [--interval-seconds n] [--lines n] [--json]", "Poll a session until a scrollback line matches the regex; exits 1 on timeout or dead session"),
         format_help_command("rename-session <sessionId> <title> [--json]", "Rename a session"),
         format_help_command("rename-session --session-id <id> --title <title> [--json]", "Flag form used by Android SSH actions"),

@@ -81,6 +81,12 @@ pub enum Parser {
     SessionChatRead,
     /// session selector plus `--answer-json` for answerSessionChatPrompt.
     SessionChatAnswer,
+    /*
+    CDXC:MobileKeepAwake 2026-08-19:
+    `--sessions-json` carries the whole attached-tab set in one exec so a phone
+    renewing several holds costs one SSH round trip, not one per tab.
+    */
+    KeepSessionsAwake,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -199,6 +205,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         }
         "lookupRepository" => rpc::call_gxserver_rpc("/api/lookupRepository", payload, flags),
         "cloneRepository" => clone_repository_and_wait(payload, flags),
+        "holdSessionsAwake" => rpc::call_gxserver_rpc("/api/holdSessionsAwake", payload, flags),
         "removeProject" => rpc::call_gxserver_rpc("/api/removeProject", payload, flags),
         "restoreRecentProject" => {
             rpc::call_gxserver_rpc("/api/restoreRecentProject", payload, flags)
@@ -280,6 +287,19 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "interruptSessionChat" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/interruptSessionChat", &params, flags)
+        }
+        "handoffSessionChatDraft" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            /*
+            The daemon holds this request while the agent CLI answers the
+            Ctrl+G handshake (up to 16s), so the default 15s RPC timeout would
+            cut off a slow-but-successful transfer. Callers can still override.
+            */
+            let mut flags = flags.clone();
+            if !flags.contains("timeout") && !flags.contains("timeoutMs") {
+                flags.insert_text("timeoutMs", "30000");
+            }
+            rpc::call_gxserver_rpc("/api/handoffSessionChatDraft", &params, &flags)
         }
         "sendText" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -984,6 +1004,7 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         }
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
         Parser::SessionChatAnswer => parse_session_chat_answer(rest, flags)?,
+        Parser::KeepSessionsAwake => parse_keep_sessions_awake(flags)?,
     })
 }
 
@@ -1033,6 +1054,39 @@ fn parse_session_chat_answer(rest: &[String], flags: &Flags) -> CliResult<Value>
     };
     for (key, value) in answer {
         map.insert(key.clone(), value.clone());
+    }
+    Ok(Value::Object(map))
+}
+
+/*
+CDXC:MobileKeepAwake 2026-08-19:
+The payload is deliberately a list of `{projectId, sessionId}` pairs the caller
+already knows from `ghostex sessions --json --mobile-summary`, so no lease
+renewal has to re-resolve a bare session id through the daemon inventory.
+*/
+fn parse_keep_sessions_awake(flags: &Flags) -> CliResult<Value> {
+    let sessions_text = flags.text("sessionsJson").unwrap_or_default();
+    if sessions_text.trim().is_empty() {
+        return Err(CliError::Other(
+            "hold-sessions-awake requires --sessions-json '[{\"projectId\":\"...\",\"sessionId\":\"...\"}]'."
+                .to_string(),
+        ));
+    }
+    let sessions: Value = serde_json::from_str(&sessions_text)
+        .map_err(|error| CliError::Other(format!("Invalid --sessions-json: {error}")))?;
+    if !sessions.is_array() {
+        return Err(CliError::Other(
+            "Invalid --sessions-json: expected a JSON array.".to_string(),
+        ));
+    }
+    let mut map = Map::new();
+    map.insert("sessions".to_string(), sessions);
+    if flags.contains("ttlMs") {
+        map.insert("ttlMs".to_string(), flag_number_value(flags, "ttlMs"));
+    }
+    set_or_remove(&mut map, "holderId", flag_json(flags, "holderId"));
+    if flags.truthy("release") {
+        map.insert("release".to_string(), Value::Bool(true));
     }
     Ok(Value::Object(map))
 }
