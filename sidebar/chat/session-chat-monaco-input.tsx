@@ -88,6 +88,15 @@ const CHAT_MONACO_THEMES: Record<SessionChatTheme, string> = {
 };
 const MIN_INPUT_HEIGHT_PX = 24;
 const MAX_INPUT_HEIGHT_PX = 160;
+/*
+CDXC:ChatComposerQuickInputHeight 2026-08-19:
+Monaco's F1 command palette is an overlay widget *inside* the editor, and it
+sizes its list from the editor's layout info. A content-sized composer is a few
+lines tall, so the palette both got clipped by the container and rendered a
+one-row list. Give the editor a palette-sized box for as long as the palette is
+open; the height snaps back to the draft's own content height on close.
+*/
+const QUICK_INPUT_MIN_HEIGHT_PX = 280;
 
 // Monaco has already normalized the browser event into its cross-platform
 // KeyCode enum. GPUI's CEF input path can expose navigation keys with a raw
@@ -234,6 +243,7 @@ export function SessionChatMonacoInput({
   const fillHeightRef = useRef(fillHeight);
   fillHeightRef.current = fillHeight;
   const suppressChangeRef = useRef(false);
+  const quickInputOpenRef = useRef(false);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const callbacksRef = useRef({
@@ -256,28 +266,65 @@ export function SessionChatMonacoInput({
         }
         ensureChatThemes(monaco);
         const editor = monaco.editor.create(container, {
+          acceptSuggestionOnEnter: "off",
           autoClosingBrackets: "never",
+          autoClosingQuotes: "never",
           automaticLayout: true,
+          autoSurround: "never",
+          bracketPairColorization: { enabled: false },
+          codeLens: false,
+          // A prompt that mentions #ff0000 should not sprout a color swatch and
+          // a click-to-open color picker inside the draft.
+          colorDecorators: false,
           contextmenu: false,
+          // Monaco's copy carries HTML styling and, with no selection, silently
+          // copies the whole line. A composer's clipboard behaviour should read
+          // like a plain text field's.
+          copyWithSyntaxHighlighting: false,
+          dropIntoEditor: { enabled: false },
+          emptySelectionClipboard: false,
           folding: false,
           fontFamily: getComputedStyle(container).fontFamily,
           fontSize: 14,
           glyphMargin: false,
+          // Indent guides are code-editor chrome: in a prompt composer they just
+          // draw stray vertical rules next to any indented line the user typed.
+          guides: {
+            bracketPairs: false,
+            bracketPairsHorizontal: false,
+            highlightActiveBracketPair: false,
+            highlightActiveIndentation: false,
+            indentation: false,
+          },
+          hover: { enabled: false },
+          inlayHints: { enabled: "off" },
+          inlineSuggest: { enabled: false },
           // Plain text on purpose: the draft is a prompt, so markdown *emphasis*
           // styling and syntax colorization inside the input read as noise.
           language: "plaintext",
+          lightbulb: { enabled: "off" },
           lineDecorationsWidth: 0,
           lineHeight: 24,
           lineNumbers: "off",
           lineNumbersMinChars: 0,
+          // URL detection turns pasted links into underlined, ctrl-clickable
+          // spans with their own hover widget; the draft is text to send, not a
+          // document to navigate.
+          links: false,
+          matchBrackets: "never",
           minimap: { enabled: false },
           occurrencesHighlight: "off",
           overviewRulerBorder: false,
           overviewRulerLanes: 0,
           padding: { bottom: 0, top: 0 },
+          parameterHints: { enabled: false },
           placeholder,
           quickSuggestions: false,
+          // Control characters and whitespace both render as boxes/dots inside
+          // a selection; in prose that reads as corruption rather than detail.
+          renderControlCharacters: false,
           renderLineHighlight: "none",
+          renderWhitespace: "none",
           scrollBeyondLastLine: false,
           scrollbar: {
             alwaysConsumeMouseWheel: false,
@@ -286,6 +333,9 @@ export function SessionChatMonacoInput({
             vertical: "auto",
             verticalScrollbarSize: 3,
           },
+          selectionHighlight: false,
+          snippetSuggestions: "none",
+          stickyScroll: { enabled: false },
           suggestOnTriggerCharacters: false,
           theme: CHAT_MONACO_THEMES[themeRef.current],
           unicodeHighlight: { ambiguousCharacters: false },
@@ -305,11 +355,47 @@ export function SessionChatMonacoInput({
               Math.max(editor.getContentHeight(), MIN_INPUT_HEIGHT_PX),
               MAX_INPUT_HEIGHT_PX,
             );
-            container.style.height = `${height}px`;
+            container.style.height = `${
+              quickInputOpenRef.current ? Math.max(height, QUICK_INPUT_MIN_HEIGHT_PX) : height
+            }px`;
           }
           editor.layout();
         };
         applyHeightRef.current = applyHeight;
+        // The palette has no open/close event, so the widget's own display
+        // toggle is the signal. It is created lazily on first use and then
+        // stays in the DOM, so watch for it once and observe it directly
+        // afterwards instead of keeping a subtree style observer alive.
+        let quickInputWidgetObserver: MutationObserver | null = null;
+        const syncQuickInputOpen = (widget: HTMLElement): void => {
+          const open = widget.style.display !== "none";
+          if (open === quickInputOpenRef.current) {
+            return;
+          }
+          quickInputOpenRef.current = open;
+          applyHeight();
+        };
+        const observeQuickInputWidget = (): void => {
+          const widget = container.querySelector<HTMLElement>(".quick-input-widget");
+          if (!widget || quickInputWidgetObserver) {
+            return;
+          }
+          quickInputWidgetObserver = new MutationObserver(() => syncQuickInputOpen(widget));
+          quickInputWidgetObserver.observe(widget, {
+            attributeFilter: ["style"],
+            attributes: true,
+          });
+          quickInputMountObserver.disconnect();
+          syncQuickInputOpen(widget);
+        };
+        const quickInputMountObserver = new MutationObserver(observeQuickInputWidget);
+        quickInputMountObserver.observe(container, { childList: true, subtree: true });
+        disposables.push({
+          dispose: () => {
+            quickInputMountObserver.disconnect();
+            quickInputWidgetObserver?.disconnect();
+          },
+        });
         disposables.push(
           editor.onDidChangeModelContent(() => {
             if (suppressChangeRef.current) {

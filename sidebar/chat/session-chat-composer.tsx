@@ -6,7 +6,10 @@
 // Escape dismisses the picker without interrupting. A "$" token opens the same
 // picker over the session's skills and an "@" token over the project's files;
 // both read the token under the caret (see session-chat-composer-trigger.ts),
-// so they open wherever in the draft the mention is being typed.
+// so they open wherever in the draft the mention is being typed. Every picker
+// row carries `data-chat-picker-option`, which keeps the highlighted row's
+// fill out of the dark chat theme's button flattening (sidebar/styles/chat.css)
+// — without it the keyboard selection moves invisibly.
 //
 // Layout (§1.1): input row, then a footer row — session identity/options on
 // the left, with Attach, Maximize and Send/Stop on the right. Styled with
@@ -1109,6 +1112,7 @@ export const SessionChatComposer = forwardRef<
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground",
                   )}
+                  data-chat-picker-option="true"
                   data-highlighted={index === highlightedIndex ? "true" : undefined}
                   key={command.name}
                   onMouseDown={(event) => {
@@ -1158,6 +1162,7 @@ export const SessionChatComposer = forwardRef<
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground",
                   )}
+                  data-chat-picker-option="true"
                   data-highlighted={
                     index === highlightedSkillIndex ? "true" : undefined
                   }
@@ -1218,6 +1223,7 @@ export const SessionChatComposer = forwardRef<
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground",
                   )}
+                  data-chat-picker-option="true"
                   data-highlighted={
                     index === highlightedFileIndex ? "true" : undefined
                   }

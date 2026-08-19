@@ -64,11 +64,26 @@ export function filterSessionChatSkills(
   );
 }
 
-/** Markdown-linked skill mention: the label carries the "$name" the agent reads. */
+/**
+ * Markdown-linked skill mention: the label carries the "$name" the agent reads,
+ * and the destination is the skill's SKILL.md — the thing a reader clicking the
+ * mention wants open in the editor. The folder is not a valid destination: the
+ * host's file-link route only opens files.
+ */
 export function linkedSessionChatSkillMention(skill: SessionChatSkill): string {
   const label = skill.name.replace(/[\\\[\]]/g, "\\$&");
-  const path = skill.directoryPath.replace(/[\\()]/g, "\\$&");
-  return `[$${label}](${path})`;
+  return `[$${label}](${markdownLinkDestination(skill.skillFilePath)})`;
+}
+
+/**
+ * A markdown link destination: bare with the delimiters escaped, or angle-
+ * bracketed when the path carries whitespace a bare destination would end at.
+ */
+function markdownLinkDestination(path: string): string {
+  if (/\s/.test(path)) {
+    return `<${path.replace(/[\\<>]/g, "\\$&")}>`;
+  }
+  return path.replace(/[\\()]/g, "\\$&");
 }
 
 const SIMPLE_MENTION_PATH_PATTERN = /^[^\s@"\\]+$/;
