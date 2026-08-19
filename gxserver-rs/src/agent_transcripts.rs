@@ -46,7 +46,7 @@ pub fn agent_supports_session_history_title_source(agent: Option<&str>) -> bool 
     matches!(agent, Some("claude" | "codex" | "cursor"))
 }
 
-fn resolve_session_transcript_path(
+pub(crate) fn resolve_session_transcript_path(
     agent: &str,
     agent_session_id: Option<&str>,
     agent_session_path: Option<&str>,

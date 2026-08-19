@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
 
@@ -8,6 +9,7 @@ use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 use crate::{
+    agent_transcripts::resolve_session_transcript_path,
     domain::{read_project_id, read_session_id, DomainRepository, DomainStateError},
     ids::is_gxserver_session_id,
     presentation::{normalize_pi_terminal_title, project_session_title_projection},
@@ -1670,7 +1672,7 @@ fn request_session_rename(
         let pending_changed = updated.get("updatedAt") != session.get("updatedAt");
         /*
         CDXC:GxserverAgentTitles 2026-06-21-15:35:
-        Rust requestSessionRename must mirror TypeScript gxserver for Agent CLI renames: the renderer command can ask the CLI to rename, but the app sidebar title must be reconciled from Codex structured session metadata before the RPC returns so macOS receives the canonical session projection.
+        Rust requestSessionRename must mirror TypeScript gxserver for Agent CLI renames: the renderer command can ask the CLI to rename, but the app sidebar title must be reconciled from the agent's own structured session metadata before the RPC returns so clients receive the canonical session projection.
         */
         let reconciled =
             reconcile_agent_metadata_title(repository, lifecycle, home_dir, "pending")?;
@@ -1841,15 +1843,53 @@ fn reconcile_agent_metadata_title(
     })
 }
 
-fn read_agent_metadata_title(home_dir: &Path, session: &Value) -> Option<AgentMetadataTitle> {
-    let (agent_session_id, index_paths) = codex_metadata_title_identity(home_dir, session)?;
-    read_codex_session_index_title(&index_paths, &agent_session_id)
+/*
+CDXC:GxserverAgentTitles 2026-08-18:
+A rename of an agent session is only confirmed once the Agent CLI writes the
+new name into its own session metadata, so every agent Ghostex renames through
+`/rename` needs a reader here. Codex publishes `thread_name` in the shared
+`session_index.jsonl`; Claude Code writes a `custom-title` record into the
+session transcript. While Claude had no reader its renames stayed pending
+forever, `title` was never promoted, and the sidebar card kept the previous
+name until Claude happened to push an unrelated terminal title.
+*/
+enum AgentMetadataTitleSource {
+    ClaudeTranscript {
+        transcript_path: PathBuf,
+    },
+    CodexSessionIndex {
+        agent_session_id: String,
+        index_paths: Vec<PathBuf>,
+    },
 }
 
-fn codex_metadata_title_identity(
+impl AgentMetadataTitleSource {
+    fn revision_paths(&self) -> Vec<&Path> {
+        match self {
+            Self::ClaudeTranscript { transcript_path } => vec![transcript_path.as_path()],
+            Self::CodexSessionIndex { index_paths, .. } => {
+                index_paths.iter().map(PathBuf::as_path).collect()
+            }
+        }
+    }
+}
+
+fn read_agent_metadata_title(home_dir: &Path, session: &Value) -> Option<AgentMetadataTitle> {
+    match agent_metadata_title_source(home_dir, session)? {
+        AgentMetadataTitleSource::ClaudeTranscript { transcript_path } => {
+            read_claude_transcript_title(&transcript_path)
+        }
+        AgentMetadataTitleSource::CodexSessionIndex {
+            agent_session_id,
+            index_paths,
+        } => read_codex_session_index_title(&index_paths, &agent_session_id),
+    }
+}
+
+fn agent_metadata_title_source(
     home_dir: &Path,
     session: &Value,
-) -> Option<(String, Vec<PathBuf>)> {
+) -> Option<AgentMetadataTitleSource> {
     let runtime_settings = object_field(session, "runtimeSettings");
     let identity = resolve_session_identity(&IdentityInput {
         agent_id: read_text_value(session, "agentId"),
@@ -1859,24 +1899,34 @@ fn codex_metadata_title_identity(
         runtime_settings,
         startup_text: None,
     });
-    if identity.agent_id.as_deref() != Some("codex") {
-        return None;
-    }
     let agent_session_id = identity.agent_session_id.as_deref()?.trim();
     if agent_session_id.is_empty() {
         return None;
     }
-    Some((
-        agent_session_id.to_string(),
-        get_codex_session_index_candidate_paths(home_dir, identity.agent_session_path.as_deref()),
-    ))
+    match identity.agent_id.as_deref() {
+        Some("claude") => Some(AgentMetadataTitleSource::ClaudeTranscript {
+            transcript_path: resolve_session_transcript_path(
+                "claude",
+                Some(agent_session_id),
+                identity.agent_session_path.as_deref(),
+            )?,
+        }),
+        Some("codex") => Some(AgentMetadataTitleSource::CodexSessionIndex {
+            agent_session_id: agent_session_id.to_string(),
+            index_paths: get_codex_session_index_candidate_paths(
+                home_dir,
+                identity.agent_session_path.as_deref(),
+            ),
+        }),
+        _ => None,
+    }
 }
 
-pub(crate) fn codex_metadata_title_revision(home_dir: &Path, session: &Value) -> Option<String> {
-    let (_, index_paths) = codex_metadata_title_identity(home_dir, session)?;
+pub(crate) fn agent_metadata_title_revision(home_dir: &Path, session: &Value) -> Option<String> {
+    let source = agent_metadata_title_source(home_dir, session)?;
     let mut revisions = Vec::new();
-    for index_path in index_paths {
-        let Ok(metadata) = fs::metadata(&index_path) else {
+    for path in source.revision_paths() {
+        let Ok(metadata) = fs::metadata(path) else {
             continue;
         };
         let modified_ns = metadata
@@ -1891,11 +1941,67 @@ pub(crate) fn codex_metadata_title_revision(home_dir: &Path, session: &Value) ->
             .unwrap_or_default();
         revisions.push(format!(
             "{}:{}:{modified_ns}",
-            index_path.to_string_lossy(),
+            path.to_string_lossy(),
             metadata.len(),
         ));
     }
     (!revisions.is_empty()).then(|| revisions.join("|"))
+}
+
+/*
+CDXC:GxserverAgentTitles 2026-08-18:
+Claude Code rewrites its `custom-title` state record on every turn, so the
+current name always sits within the last few kilobytes of a live transcript.
+Scan a bounded tail window rather than the whole file: these transcripts reach
+several megabytes and the metadata sync pass re-reads every running session's
+transcript each second. The transcript belongs to exactly one session, so the
+newest record wins without matching the embedded `sessionId`, which diverges
+from the resolved identity on resumed and forked Claude sessions.
+*/
+const CLAUDE_TRANSCRIPT_TITLE_TAIL_BYTES: u64 = 256 * 1024;
+
+fn read_claude_transcript_title(transcript_path: &Path) -> Option<AgentMetadataTitle> {
+    let tail = read_transcript_tail_text(transcript_path, CLAUDE_TRANSCRIPT_TITLE_TAIL_BYTES)?;
+    for line in tail.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(entry) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let Some(entry) = entry.as_object() else {
+            continue;
+        };
+        if entry.get("type").and_then(Value::as_str) != Some("custom-title") {
+            continue;
+        }
+        let title = normalize_metadata_title(entry.get("customTitle"))?;
+        return Some(AgentMetadataTitle {
+            provider: "claude-transcript",
+            title,
+            updated_at: None,
+        });
+    }
+    None
+}
+
+fn read_transcript_tail_text(path: &Path, tail_bytes: u64) -> Option<String> {
+    let mut file = fs::File::open(path).ok()?;
+    let length = file.metadata().ok()?.len();
+    let start = length.saturating_sub(tail_bytes);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut bytes = Vec::with_capacity(length.saturating_sub(start) as usize);
+    file.read_to_end(&mut bytes).ok()?;
+    if start > 0 {
+        match bytes.iter().position(|byte| *byte == b'\n') {
+            Some(first_newline) => {
+                bytes.drain(..=first_newline);
+            }
+            None => bytes.clear(),
+        }
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn read_codex_session_index_title(
