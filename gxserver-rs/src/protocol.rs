@@ -382,6 +382,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/mutateSidebarHudSettings"
         | "/api/readWorkspaceSessionGroups"
         | "/api/updateWorkspaceSessionGroups"
+        /*
+        CDXC:NavigationHistory 2026-08-19:
+        Titlebar Back/Forward walks a daemon-owned trail of previously active
+        sessions and projects. It carries only the same bounded routing ids and
+        display titles the sidebar projection already sends, so it is remote
+        allowed exactly like the other sidebar-state endpoints beside it.
+        */
+        | "/api/readNavigationHistory"
+        | "/api/recordNavigationVisit"
+        | "/api/navigateHistory"
         | "/api/readSidebarProjectCollections"
         | "/api/updateSidebarProjectCollections"
         | "/api/assignProjectToSidebarCollection"
@@ -398,6 +408,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/searchSessions"
         | "/api/listPreviousSessions"
         | "/api/transitionSession"
+        /*
+        CDXC:MobileKeepAwake 2026-08-19:
+        Ghostex mobile attaches over SSH and renews a keep-awake lease so the
+        machine's Auto Sleep sweep cannot retire a terminal the phone is looking
+        at. It carries only bounded project/session ids plus a TTL, exactly like
+        the other session-scoped lifecycle calls next to it.
+        */
+        | "/api/holdSessionsAwake"
         | "/api/sleepSession"
         | "/api/wakeSession"
         | "/api/startSessionProvider"
@@ -415,6 +433,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionChatImage"
         | "/api/answerSessionChatPrompt"
         | "/api/interruptSessionChat"
+        | "/api/handoffSessionChatDraft"
         | "/api/sendSessionText"
         | "/api/sendSessionMessage"
         | "/api/sendSessionEnter"
@@ -489,6 +508,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readRepositoryCloneJob"
         | "/api/cancelRepositoryCloneJob"
         | "/api/browseProjectDirectories"
+        /*
+        CDXC:AddProjectNewFolder 2026-08-18:
+        Creating the destination folder is remote-allowed for the same reason
+        browsing is: the Add Project dialog runs against a chosen machine and
+        has to be able to make a folder there before adding or cloning into it.
+        `parentPath` must already be an existing directory and `name` is a
+        single validated path segment, so this creates one child of a directory
+        the caller could already browse.
+        */
+        | "/api/createProjectDirectory"
         /*
         CDXC:AddProjectDialog 2026-07-30:
         The Add Project dialog runs against a chosen machine, so a GPUI sidebar

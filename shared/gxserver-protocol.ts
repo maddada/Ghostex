@@ -24,6 +24,8 @@ import type {
 export type {
   GxserverAnswerSessionChatPromptParams,
   GxserverAnswerSessionChatPromptResult,
+  GxserverHandoffSessionChatDraftParams,
+  GxserverHandoffSessionChatDraftResult,
   GxserverInterruptSessionChatParams,
   GxserverInterruptSessionChatResult,
   GxserverReadSessionChatParams,
@@ -137,6 +139,15 @@ export type GxserverEndpointPath =
   | "/api/mutateSidebarHudSettings"
   | "/api/readWorkspaceSessionGroups"
   | "/api/updateWorkspaceSessionGroups"
+  /*
+   * CDXC:NavigationHistory 2026-08-19:
+   * Titlebar Back/Forward walks a daemon-owned trail of previously active
+   * sessions and projects, shared by the gpui desktop titlebar and the web
+   * titlebar. See shared/navigation-history for the entry/state contract.
+   */
+  | "/api/readNavigationHistory"
+  | "/api/recordNavigationVisit"
+  | "/api/navigateHistory"
   | "/api/readSidebarProjectCollections"
   | "/api/updateSidebarProjectCollections"
   | "/api/assignProjectToSidebarCollection"
@@ -153,6 +164,7 @@ export type GxserverEndpointPath =
   | "/api/searchSessions"
   | "/api/listPreviousSessions"
   | "/api/transitionSession"
+  | "/api/holdSessionsAwake"
   | "/api/sleepSession"
   | "/api/wakeSession"
   | "/api/startSessionProvider"
@@ -170,6 +182,7 @@ export type GxserverEndpointPath =
   | "/api/readSessionChatImage"
   | "/api/answerSessionChatPrompt"
   | "/api/interruptSessionChat"
+  | "/api/handoffSessionChatDraft"
   | "/api/sendSessionText"
   | "/api/sendSessionMessage"
   | "/api/sendSessionEnter"
@@ -215,6 +228,7 @@ export type GxserverEndpointPath =
   | "/api/readRepositoryCloneJob"
   | "/api/cancelRepositoryCloneJob"
   | "/api/browseProjectDirectories"
+  | "/api/createProjectDirectory"
   | "/api/discoverSourceControl"
   | "/api/lookupRepository"
   | "/api/resolveGitRootForPath"
@@ -705,6 +719,24 @@ export interface GxserverProjectDirectoryBrowseEntry {
 export interface GxserverProjectDirectoryBrowseResult {
   entries: GxserverProjectDirectoryBrowseEntry[];
   parentPath: string;
+}
+
+/**
+ * CDXC:AddProjectNewFolder 2026-08-18:
+ * The Add Project dialog can create a destination folder before it adds or
+ * clones into it. `name` is a single path segment validated by the daemon (no
+ * separators, no `.`/`..`), so the caller names a child of a directory it just
+ * browsed rather than an arbitrary path.
+ */
+export interface GxserverCreateProjectDirectoryParams {
+  name: string;
+  parentPath: string;
+}
+
+export interface GxserverCreateProjectDirectoryResult {
+  name: string;
+  parentPath: string;
+  path: string;
 }
 
 export interface GxserverAddProjectPathParams {
@@ -1804,6 +1836,76 @@ export interface GxserverSessionLifecycleParams {
   projectId: GxserverProjectId;
   reason?: string;
   sessionId: GxserverSessionId;
+}
+
+/*
+CDXC:MobileKeepAwake 2026-08-19:
+A sleep request says WHO asked. `"automatic"` marks a client's "Sleep inactive
+agents" sweep; anything else (including an absent field, which is what every
+caller sent before this existed) is a user action.
+
+Only an automatic sleep can be declined, and only by a live keep-awake lease —
+see `GxserverHoldSessionsAwakeParams`. A user who taps Sleep always gets a sleep.
+*/
+export type GxserverSleepTrigger = "automatic" | "user";
+
+export interface GxserverSleepSessionParams extends GxserverSessionLifecycleParams {
+  sleepTrigger?: GxserverSleepTrigger;
+}
+
+export interface GxserverSleepSessionResult {
+  /*
+  Present ONLY when the daemon refused the request. `"keptAwake"` means an
+  automatic sweep hit a session another client is attached to; the session was
+  not touched, so a client must not optimistically mark the row sleeping.
+  */
+  declined?: "keptAwake";
+  kill?: Record<string, unknown>;
+  session: GxserverSessionDomainState;
+}
+
+/*
+CDXC:MobileKeepAwake 2026-08-19:
+A client that is ATTACHED to sessions it does not own panes for — Ghostex mobile
+over its SSH CLI bridge — renews a keep-awake lease so the machine's Auto Sleep
+sweep cannot retire a terminal the user is looking at on another device.
+
+Contract:
+- Leases are in-memory and TTL-bounded on the daemon. Renew well inside `ttlMs`;
+  stop renewing and the hold lapses on its own. There is no required release.
+- `holderId` scopes the lease to one device, so two phones on one session cannot
+  release each other's hold. Absent means a shared default holder.
+- `release: true` drops this holder's leases for the listed sessions instead of
+  extending them (used when a tab closes, so the session becomes sleepable again
+  without waiting out the TTL).
+- Ids that do not resolve on that daemon come back in `unknownSessions` instead
+  of failing the call: one killed session must not stop the other tabs' holds.
+*/
+export interface GxserverHoldSessionsAwakeParams {
+  holderId?: string;
+  release?: boolean;
+  sessions: readonly {
+    projectId: GxserverProjectId;
+    sessionId: GxserverSessionId;
+  }[];
+  ttlMs?: number;
+}
+
+export interface GxserverHoldSessionsAwakeResult {
+  holderId: string;
+  released: boolean;
+  sessions: {
+    keepAwakeUntil?: string;
+    keptAwake: boolean;
+    projectId: GxserverProjectId;
+    sessionId: GxserverSessionId;
+  }[];
+  /** The TTL actually applied after the daemon clamped it. */
+  ttlMs: number;
+  unknownSessions: {
+    projectId: GxserverProjectId;
+    sessionId: GxserverSessionId;
+  }[];
 }
 
 export type GxserverSessionTransitionAction = "close" | "sleep";

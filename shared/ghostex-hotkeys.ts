@@ -33,6 +33,8 @@ export type ghostexHotkeyActionId =
   | "wakeFocusedSession"
   | "focusPreviousGroup"
   | "focusNextGroup"
+  | "navigateHistoryBack"
+  | "navigateHistoryForward"
   | "focusPreviousSession"
   | "focusNextSession"
   | "focusUp"
@@ -82,6 +84,7 @@ export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: "focusSessionSlot"; slotNumber: number }
   | { id: ghostexHotkeyActionId; kind: "focusedPaneAction"; focusedPaneAction: ghostexFocusedPaneAction }
   | { id: ghostexHotkeyActionId; kind: "jumpToProject"; projectIndex: number }
+  | { direction: "back" | "forward"; id: ghostexHotkeyActionId; kind: "navigateHistory" }
   | { id: ghostexHotkeyActionId; kind: "moveSidebar" }
   | { id: ghostexHotkeyActionId; kind: "openCommandPalette" }
   | { id: ghostexHotkeyActionId; kind: "openSessionSearchPalette" }
@@ -496,6 +499,32 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     id: "focusNextGroup",
     retiredDefaultKeys: ["cmd+shift+]"],
     title: "Next Group",
+  },
+  /**
+   * CDXC:NavigationHistory 2026-08-19:
+   * Back/Forward walk the chronological trail of previously active sessions and
+   * projects — where you have BEEN, not where a session sits in an ordered list.
+   * That is why they are not bound to the bracket chords beside them: Cmd+[ / ]
+   * already move between groups in render order and Cmd+Shift+[ / ] between tabs
+   * in a pane. Cmd+Ctrl reuses the modifier this app already spends on
+   * cross-project movement (Jump to Project 1..9), with the same Cmd+Alt
+   * Windows/Linux substitution those entries use.
+   */
+  {
+    action: { direction: "back", id: "navigateHistoryBack", kind: "navigateHistory" },
+    defaultKey: "cmd+ctrl+[",
+    description: "Go back to the previously active session or project.",
+    id: "navigateHistoryBack",
+    title: "Back",
+    windowsLinuxDefaultKey: "cmd+alt+[",
+  },
+  {
+    action: { direction: "forward", id: "navigateHistoryForward", kind: "navigateHistory" },
+    defaultKey: "cmd+ctrl+]",
+    description: "Go forward again after going back.",
+    id: "navigateHistoryForward",
+    title: "Forward",
+    windowsLinuxDefaultKey: "cmd+alt+]",
   },
   {
     action: { id: "focusPreviousSession", kind: "focusSessionSlot", slotNumber: -1 },

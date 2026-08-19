@@ -28,6 +28,7 @@ import {
   type GxserverSessionId,
   type GxserverSessionRenameRequestResult,
   type GxserverSessionTransitionResult,
+  type GxserverSleepSessionResult,
   type GxserverTerminalTitleEventResult,
   type GxserverSidebarHudResponse,
   type GxserverSidebarHudSettingsMutationParams,
@@ -44,6 +45,14 @@ import {
   type GxserverSessionChatEvent,
 } from "../../shared/session-chat";
 import { createDisplaySessionLayout } from "../../shared/active-sessions-sort";
+import {
+  NAVIGATION_HISTORY_SCOPE_GPUI,
+  type NavigationHistoryEntry,
+} from "../../shared/navigation-history/navigation-history-contract";
+import {
+  NavigationHistoryController,
+  type NavigationHistoryRpc,
+} from "../../shared/navigation-history/navigation-history-controller";
 import {
   createEmptyGpuiWorkspaceSessionGroupsState,
   createGpuiWorkspaceSessionSubgroup,
@@ -259,6 +268,14 @@ export type GhostexGpuiSidebarBridge = {
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
   workspaceSessionDelayedSends?: readonly GpuiWorkspaceSessionDelayedSendSummary[];
   onBrowserTabsChanged?: (tabs: readonly GpuiBrowserTabSummary[]) => void;
+  /**
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * Rust asks the sidebar to reveal one Browser tab row after the user opened
+   * it. Rust owns tab identity (project id + tab id); the session id the
+   * sidebar rows are keyed by is derived here, in the same place that builds
+   * those rows, so Rust never has to know the sidebar's id format.
+   */
+  onRevealBrowserTab?: (payload: unknown) => void;
   gxserverBootstrap?: GpuiGxserverBootstrap;
   onCommandPaletteRunSidebarCommand?: (payload: unknown) => void;
   onCommandPaletteSessionFocus?: (payload: unknown) => void;
@@ -741,6 +758,14 @@ const GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.nativeAppShotPromptResult";
 const GPUI_SIDEBAR_REMOTE_EVENT_NAME = "ghostex-gpui-sidebar-remote-event";
+/*
+CDXC:NavigationHistory 2026-08-19:
+The native titlebar owns the Back/Forward buttons but not the trail: Rust
+dispatches the click here and this runtime performs the same gxserver walk and
+sidebar activation the web app does, so both apps share one implementation.
+*/
+const GPUI_SIDEBAR_NAVIGATION_HISTORY_COMMAND_EVENT_NAME =
+  "ghostex-gpui-sidebar-navigation-history-command";
 const APP_SHOT_RECENT_TARGET_MS = 60_000;
 const APP_SHOT_PROMPT_INSERT_RESULT_TIMEOUT_MS = 2_000;
 const GPUI_STATUS_INDICATOR_MAX_CANDIDATES = 96;
@@ -1083,6 +1108,13 @@ class GpuiSidebarRuntime {
   private gitRepoProjectIds = new Set<string>();
   private activeGroupId: string | undefined;
   private activeProjectId: string | undefined;
+  private lastNavigationHistoryStatePayload: string | undefined;
+  private readonly navigationHistory = new NavigationHistoryController({
+    activate: (entry) => this.activateNavigationHistoryEntry(entry),
+    onStateChange: (state) => this.postNavigationHistoryState(state),
+    resolveRpc: () => this.navigationHistoryRpc(),
+    scopeId: NAVIGATION_HISTORY_SCOPE_GPUI,
+  });
   private appUserData: GxserverAppUserData = createEmptyGpuiAppUserData();
   private attentionAcknowledgementTimeoutsBySessionKey = new Map<string, number>();
   private attentionCompletionSoundEventKeys = new Set<string>();
@@ -1224,6 +1256,10 @@ class GpuiSidebarRuntime {
       this.closeAfterDoneTimersBySessionId.set(sessionId, {});
     }
     window.addEventListener(GPUI_SIDEBAR_REMOTE_EVENT_NAME, this.handleGpuiSidebarRemoteEvent);
+    window.addEventListener(
+      GPUI_SIDEBAR_NAVIGATION_HISTORY_COMMAND_EVENT_NAME,
+      this.handleGpuiSidebarNavigationHistoryCommand,
+    );
     this.publishUnavailable("bootstrap-pending");
     this.tryStartFromInstalledBootstrap(0);
     this.startGpuiAutoSleepMonitor();
@@ -1317,6 +1353,17 @@ class GpuiSidebarRuntime {
     };
     gpuiBridge.onBrowserTabsChanged = applyBrowserTabs;
     applyBrowserTabs(gpuiBridge.browserTabs);
+    gpuiBridge.onRevealBrowserTab = (payload) => {
+      const request = normalizeGpuiBrowserTabRevealRequest(payload);
+      if (!request) {
+        return;
+      }
+      this.messageSource.postMessage({
+        requestId: request.requestId,
+        sessionId: gpuiBrowserSidebarSessionId(request),
+        type: "revealSidebarSession",
+      });
+    };
     gpuiBridge.onWorkspaceTerminalLifecycleRequest = (payload) => {
       /*
       CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
@@ -1998,7 +2045,13 @@ class GpuiSidebarRuntime {
       Auto Sleep must match native bulk sleep pacing: eligible agent sessions sleep one at a time with a 350 ms gap so gxserver and terminal teardown are not hit concurrently. Use the shared aggregate-count helper and ignore its private-data-free result because monitor progress is already reflected by gxserver presentation updates.
       */
       await runGpuiSidebarBulkSleepPaced(sessionIdsToSleep, async (sessionId) => {
-        await this.setSessionSleeping(sessionId, true);
+        /*
+        CDXC:MobileKeepAwake 2026-08-19:
+        The sweep marks itself automatic so gxserver can decline it for a session
+        another client (Ghostex mobile) is attached to. This client cannot see
+        those attachments, and the daemon can.
+        */
+        await this.setSessionSleeping(sessionId, true, { automatic: true });
       });
     } finally {
       this.autoSleepMonitorRunning = false;
@@ -3865,6 +3918,9 @@ class GpuiSidebarRuntime {
     this.gxserverBootstrap = validated;
     this.client = new GpuiGxserverClient(validated);
     this.applyGxserverBootstrapPresentationState(validated);
+    // Adopt whatever trail this scope already has on the daemon so Back keeps
+    // working across an app restart instead of starting from an empty stack.
+    void this.navigationHistory.refresh();
 
     const client = this.client;
     void Promise.all([
@@ -5298,7 +5354,122 @@ class GpuiSidebarRuntime {
     void this.refreshGitState({ force: true, project, toastOnFailure: false });
   }
 
+  /*
+  CDXC:NavigationHistory 2026-08-19:
+  Trail stops are recorded from the SAME projection the titlebar label reads,
+  so "where the user is" can never disagree between the label and Back. A stop
+  needs a real project: Quick/projectless and the synthetic Chats collection
+  publish nothing rather than pushing a stop that cannot be returned to.
+  */
+  private createNavigationHistoryEntry(): NavigationHistoryEntry | undefined {
+    const activeGroup = this.activeProjectContextGroups().find((group) => group.isActive);
+    if (!activeGroup) {
+      return undefined;
+    }
+    const projectId =
+      activeGroup.projectContext?.editor.projectId ??
+      parseGpuiWorkspaceSessionSubgroupId(activeGroup.groupId)?.projectId;
+    if (!projectId) {
+      return undefined;
+    }
+    const focusedSession = activeGroup.sessions.find((session) => session.isFocused);
+    const sessionLabel = focusedSession
+      ? focusedSession.displayTitle ?? focusedSession.primaryTitle ?? focusedSession.alias
+      : undefined;
+    return {
+      groupId: activeGroup.groupId,
+      projectId,
+      ...(activeGroup.title ? { projectLabel: activeGroup.title } : {}),
+      ...(focusedSession ? { sessionId: focusedSession.sessionId } : {}),
+      ...(sessionLabel ? { sessionLabel } : {}),
+    };
+  }
+
+  private navigationHistoryRpc(): NavigationHistoryRpc | undefined {
+    const client = this.client;
+    if (!client) {
+      return undefined;
+    }
+    return (path, params) => client.rpc<unknown>(path, params);
+  }
+
+  /**
+   * Focus a trail stop, or report it as gone so the daemon drops it and Back
+   * keeps walking. Sessions win over their project: the stop recorded a session
+   * because that is what the user was looking at.
+   */
+  private activateNavigationHistoryEntry(entry: NavigationHistoryEntry): boolean {
+    if (entry.sessionId) {
+      const exists = this.latestGroups.some((group) =>
+        group.sessions.some((session) => session.sessionId === entry.sessionId),
+      );
+      if (!exists) {
+        return false;
+      }
+      void this.focusSession(entry.sessionId, {
+        sessionId: entry.sessionId,
+        type: "focusSession",
+      });
+      return true;
+    }
+    const groupId = entry.groupId;
+    if (!groupId || !this.latestGroups.some((group) => group.groupId === groupId)) {
+      return false;
+    }
+    this.focusGroup(groupId, { groupId, type: "focusGroup" });
+    return true;
+  }
+
+  /**
+   * The native titlebar renders the two buttons from this cached state; it must
+   * never issue an RPC of its own on a render pass. Deduplicated so a publish
+   * storm cannot turn into a bridge-message storm.
+   */
+  private postNavigationHistoryState(state: {
+    canGoBack: boolean;
+    canGoForward: boolean;
+  }): void {
+    /*
+    CDXC:NavigationHistory 2026-08-19:
+    Availability only. The native arrows have no hover tooltip, so sending the
+    destination labels would wake the bridge — and a titlebar repaint check —
+    every time a back/forward target's title changed, for pixels that cannot
+    move.
+    */
+    const message = {
+      canGoBack: state.canGoBack,
+      canGoForward: state.canGoForward,
+      type: "navigationHistoryState",
+    };
+    const payload = JSON.stringify(message);
+    if (payload === this.lastNavigationHistoryStatePayload) {
+      return;
+    }
+    this.lastNavigationHistoryStatePayload = payload;
+    window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage(message);
+  }
+
+  private readonly handleGpuiSidebarNavigationHistoryCommand = (event: Event): void => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    const direction =
+      detail && typeof detail === "object"
+        ? (detail as { direction?: unknown }).direction
+        : undefined;
+    if (direction !== "back" && direction !== "forward") {
+      return;
+    }
+    void this.navigationHistory.navigate(direction);
+  };
+
   private postActiveProjectContext(attempt = 0): void {
+    /*
+    CDXC:NavigationHistory 2026-08-19:
+    Every path that republishes active-project identity lands here, which makes
+    it the one place the trail has to be fed from. The controller collapses an
+    unchanged target to a string compare, so this stays free on the hot path.
+    */
+    this.navigationHistory.recordVisit(this.createNavigationHistoryEntry());
+
     if (this.activeProjectContextRetryId !== undefined) {
       window.clearTimeout(this.activeProjectContextRetryId);
       this.activeProjectContextRetryId = undefined;
@@ -7823,7 +7994,7 @@ class GpuiSidebarRuntime {
   private async setSessionSleeping(
     sessionId: string,
     sleeping: boolean,
-    options?: { forceRemount?: boolean },
+    options?: { automatic?: boolean; forceRemount?: boolean },
   ): Promise<void> {
     const browserTab = this.browserTabs.find(
       (candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId,
@@ -7849,6 +8020,7 @@ class GpuiSidebarRuntime {
           projectId: remoteSession.projectId,
           reason: "gpui-sidebar",
           sessionId: remoteSession.sessionId,
+          ...(sleeping && options?.automatic ? { sleepTrigger: "automatic" } : {}),
         },
       );
       await this.refreshRemotePresentationFromGxserver(remoteSession.machineId);
@@ -7864,11 +8036,23 @@ class GpuiSidebarRuntime {
     const replacementFocusSessionId = sleeping
       ? this.resolveLocalProjectListTransitionFocusTarget(reference.projectId, reference.sessionId)
       : undefined;
-    await this.client.rpc(sleeping ? "/api/sleepSession" : "/api/wakeSession", {
-      projectId: reference.projectId,
-      reason: "gpui-sidebar",
-      sessionId: reference.sessionId,
-    });
+    const lifecycleResult = await this.client.rpc<GxserverSleepSessionResult | undefined>(
+      sleeping ? "/api/sleepSession" : "/api/wakeSession",
+      {
+        projectId: reference.projectId,
+        reason: "gpui-sidebar",
+        sessionId: reference.sessionId,
+        ...(sleeping && options?.automatic ? { sleepTrigger: "automatic" } : {}),
+      },
+    );
+    /*
+    CDXC:MobileKeepAwake 2026-08-19:
+    A declined automatic sleep left the session running, so the optimistic
+    "sleeping" patch below would publish a row state the daemon never entered.
+    */
+    if (gxserverSleepWasDeclined(lifecycleResult)) {
+      return;
+    }
     if (sleeping) {
       this.patchPresentationSession(reference.projectId, reference.sessionId, {
         lifecycleState: "sleeping",
@@ -8717,36 +8901,40 @@ class GpuiSidebarRuntime {
       : message.sendWhenAgentStops
         ? "agentStops"
         : "afterDelay";
-    if (
-      trigger === "afterDelay" &&
-      (!Number.isSafeInteger(message.delayMs) ||
-        message.delayMs < GPUI_DELAYED_SEND_MIN_DELAY_MS ||
-        message.delayMs > GPUI_DELAYED_SEND_MAX_DELAY_MS ||
-        message.delayMs % GPUI_DELAYED_SEND_MIN_DELAY_MS !== 0)
-    ) {
-      this.postSidebarActionToast(
-        "warning",
-        "Choose a Delayed Send timer between 1 minute and 24 days.",
-      );
-      return;
+    let delayMs: number | undefined;
+    let description: string;
+    if (trigger === "allAgentsStop") {
+      description =
+        "Presses Enter after all agents in the project have finished working for 10 seconds.";
+    } else if (trigger === "agentStops") {
+      description = "Presses Enter after this agent has finished working for 10 seconds.";
+    } else {
+      delayMs = message.delayMs;
+      if (
+        delayMs === undefined ||
+        !Number.isSafeInteger(delayMs) ||
+        delayMs < GPUI_DELAYED_SEND_MIN_DELAY_MS ||
+        delayMs > GPUI_DELAYED_SEND_MAX_DELAY_MS ||
+        delayMs % GPUI_DELAYED_SEND_MIN_DELAY_MS !== 0
+      ) {
+        this.postSidebarActionToast(
+          "warning",
+          "Choose a Delayed Send timer between 1 minute and 24 days.",
+        );
+        return;
+      }
+      description = `Presses Enter in ${formatGpuiDelayedSendDelay(delayMs)}.`;
     }
 
     try {
       await this.requestRemoteGxserver(reference.machineId, "/api/scheduleDelayedSend", {
-        ...(trigger === "afterDelay" ? { delayMs: message.delayMs } : {}),
+        ...(delayMs === undefined ? {} : { delayMs }),
         projectId: reference.projectId,
         ...(trigger === "allAgentsStop" ? { sendWhenAllProjectSessionsStop: true } : {}),
         ...(trigger === "agentStops" ? { sendWhenAgentStops: true } : {}),
         sessionId: reference.sessionId,
       });
-      this.postSidebarActionToast("info", "Delayed Send scheduled", {
-        description:
-          trigger === "agentStops"
-            ? "Presses Enter after this agent has finished working for 10 seconds."
-            : trigger === "allAgentsStop"
-              ? "Presses Enter after all agents in the project have finished working for 10 seconds."
-              : `Presses Enter in ${formatGpuiDelayedSendDelay(message.delayMs)}.`,
-      });
+      this.postSidebarActionToast("info", "Delayed Send scheduled", { description });
     } catch (error) {
       this.postRemoteToast("error", "Delayed Send unavailable", {
         description: error instanceof Error ? error.message : String(error),
@@ -9538,9 +9726,20 @@ class GpuiSidebarRuntime {
         titleSource: "user",
       },
     );
-    this.patchPresentationSession(reference.projectId, reference.sessionId, {
-      title: message.title,
-    });
+    /*
+    CDXC:GPUISidebarRename 2026-08-18:
+    Session cards render `displayTitle`, so patching only `title` moved the
+    row's alias without changing the text on the card. Apply gxserver's own
+    title projection instead — the same fields presentation publishes — so the
+    card, its tooltip, and the alias stay one consistent title. Agent sessions
+    keep the previous title here until the Agent CLI confirms the rename; the
+    confirmed title lands through the normal presentation delta.
+    */
+    this.patchPresentationSession(
+      reference.projectId,
+      reference.sessionId,
+      result.projection,
+    );
     /*
     CDXC:GPUISidebarRename 2026-07-28:
     gxserver keeps agent-session renames pending until the Agent CLI itself is
@@ -16482,7 +16681,24 @@ function relayoutGpuiSidebarSessions(
   }));
 }
 
-function gpuiBrowserSidebarSessionId(tab: GpuiBrowserTabSummary): string {
+function normalizeGpuiBrowserTabRevealRequest(
+  payload: unknown,
+): { projectId: string; requestId: number; tabId: string } | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const record = payload as Record<string, unknown>;
+  const projectId =
+    typeof record.projectId === "string" ? normalizeNonEmptyString(record.projectId) : undefined;
+  const tabId = typeof record.tabId === "string" ? normalizeNonEmptyString(record.tabId) : undefined;
+  const requestId = typeof record.requestId === "number" ? record.requestId : undefined;
+  if (!projectId || !tabId || requestId === undefined || !Number.isFinite(requestId)) {
+    return undefined;
+  }
+  return { projectId, requestId, tabId };
+}
+
+function gpuiBrowserSidebarSessionId(tab: { projectId: string; tabId: string }): string {
   return `gpui-browser:${encodeURIComponent(tab.projectId)}:${tab.tabId}`;
 }
 
@@ -17353,6 +17569,16 @@ function createGpuiSidebarSettings(runtimeSettings?: GpuiSidebarRuntimeSettings)
     debuggingMode: runtimeSettings?.debuggingMode === true,
     showBetaFeatures: runtimeSettings?.showBetaFeatures === true,
   };
+}
+
+/*
+CDXC:MobileKeepAwake 2026-08-19:
+gxserver answers a declined automatic sleep with `declined: "keptAwake"` and an
+untouched session, which is NOT a failure — another client is attached to that
+terminal. The sweep treats it as "leave this row alone" and moves on.
+*/
+function gxserverSleepWasDeclined(result: GxserverSleepSessionResult | undefined): boolean {
+  return result?.declined === "keptAwake";
 }
 
 export function createGpuiAutoSleepAgentSessionIds({

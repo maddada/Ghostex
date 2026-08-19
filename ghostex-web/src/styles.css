@@ -128,6 +128,42 @@ button {
   color: var(--web-text-strong);
 }
 
+/*
+ * CDXC:NavigationHistory 2026-08-19:
+ * Back/Forward sit right of the active project name. Disabled is a real
+ * `disabled` button, not a class, so keyboard and assistive tech see the same
+ * state the dimming shows; the tooltip lives on the wrapping span because a
+ * disabled button emits no pointer events.
+ */
+.web-titlebar__nav {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 2px 0 4px;
+}
+
+.web-titlebar__nav > span {
+  display: inline-flex;
+  height: 100%;
+}
+
+.web-titlebar__nav-button {
+  width: 26px;
+  flex: 0 0 26px;
+  color: var(--web-text);
+  border-radius: 5px;
+}
+
+.web-titlebar__nav-button:disabled {
+  color: var(--web-text-muted);
+  cursor: default;
+}
+
+.web-titlebar__nav-button:disabled:hover {
+  background: transparent;
+  color: var(--web-text-muted);
+}
+
 .web-titlebar__machines {
   width: 33px;
   flex: 0 0 33px;

@@ -1,6 +1,21 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { AppTooltip, TooltipProvider } from "@/sidebar/app-tooltip";
+import { NavigationHistoryButtons } from "@/shared/navigation-history/navigation-history-buttons";
+import {
+  getConnectionStates,
+  subscribeConnectionStates,
+} from "../connections/connection-registry";
+import {
+  getActiveSidebarProject,
+  subscribeActiveSidebarProject,
+} from "../sidebar-runtime/active-project-store";
 import { AddProjectModalHost } from "../app/add-project-modal-host";
 import { DelayedActionsModalHost } from "../app/delayed-actions-modal-host";
 import { RecentProjectsModalHost } from "../app/recent-projects-modal-host";
@@ -8,7 +23,10 @@ import { SettingsModalHost } from "../app/settings-modal-host";
 import { TitlebarActions } from "../app/titlebar-actions";
 import { MachinesControl } from "../machines/MachinesControl";
 import { WebSidebar } from "../sidebar-runtime/WebSidebar";
-import { createWebSidebarRuntime } from "../sidebar-runtime/sidebar-runtime";
+import {
+  createWebSidebarRuntime,
+  type WebSidebarRuntime,
+} from "../sidebar-runtime/sidebar-runtime";
 
 const WEB_TITLEBAR_HIDDEN_SECTIONS = true;
 const SIDEBAR_WIDTH_STORAGE_KEY = "ghostexWeb.sidebarWidth.v1";
@@ -43,10 +61,41 @@ function ShellIcon({ name }: { name: IconName }) {
   );
 }
 
+/*
+ * CDXC:NavigationHistory 2026-08-19:
+ * The web titlebar names the ACTIVE PROJECT in the same slot the gpui titlebar
+ * does, falling back to the product name before any project is selected. Back
+ * and Forward sit LEFT of it, anchored to the fixed-width sidebar toggle, so
+ * they hold still instead of sliding every time the project title changes
+ * length.
+ */
+function TitlebarProjectName() {
+  const activeProject = useSyncExternalStore(
+    subscribeActiveSidebarProject,
+    getActiveSidebarProject,
+    getActiveSidebarProject,
+  );
+  const connections = useSyncExternalStore(
+    subscribeConnectionStates,
+    getConnectionStates,
+    getConnectionStates,
+  );
+  const title = activeProject
+    ? connections
+      .find((state) => state.machine.machineId === activeProject.machineId)
+      ?.presentation?.projects.find(
+        (project) => project.projectId === activeProject.projectId,
+      )?.title
+    : undefined;
+  return <span className="web-titlebar__title">{title ?? "Ghostex"}</span>;
+}
+
 function Titlebar({
+  runtime,
   sidebarCollapsed,
   toggleSidebar,
 }: {
+  runtime: WebSidebarRuntime;
   sidebarCollapsed: boolean;
   toggleSidebar(): void;
 }) {
@@ -63,7 +112,12 @@ function Titlebar({
             <ShellIcon name="sidebar" />
           </button>
         </AppTooltip>
-        <span className="web-titlebar__title">Ghostex</span>
+        <NavigationHistoryButtons
+          buttonClassName="web-titlebar__icon-button web-titlebar__nav-button"
+          className="web-titlebar__nav"
+          controller={runtime.navigationHistory}
+        />
+        <TitlebarProjectName />
         <MachinesControl />
       </div>
 
@@ -129,6 +183,7 @@ function GhostexWebShell() {
     <TooltipProvider>
       <div className="ghostex-web-shell">
         <Titlebar
+          runtime={runtime}
           sidebarCollapsed={sidebarCollapsed}
           toggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />

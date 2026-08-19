@@ -60,6 +60,16 @@ import {
   type SidebarSessionReference,
 } from "./sidebar-ids";
 import { setActiveSidebarProject } from "./active-project-store";
+import type { NavigationHistoryEntry } from "@/shared/navigation-history/navigation-history-contract";
+import { NAVIGATION_HISTORY_SCOPE_WEB } from "@/shared/navigation-history/navigation-history-contract";
+import {
+  NavigationHistoryController,
+  type NavigationHistoryRpc,
+} from "@/shared/navigation-history/navigation-history-controller";
+import {
+  installNavigationHistoryHotkeys,
+  navigationHistoryHotkeyDirection,
+} from "@/shared/navigation-history/navigation-history-hotkeys";
 
 const DEBUG_SIDEBAR_STORAGE_KEY = "ghostexWeb.debugSidebar";
 const DEFAULT_TERMINAL_TITLE = "Terminal";
@@ -97,6 +107,13 @@ class WebSidebarMessageSource extends EventTarget {
 
 export type WebSidebarRuntime = {
   messageSource: SidebarMessageSource;
+  /**
+   * CDXC:NavigationHistory 2026-08-19:
+   * The titlebar's Back/Forward pair reads this controller. It is owned by the
+   * runtime, not the titlebar component, because the trail is fed by every
+   * active-target change the runtime publishes — not only by clicks.
+   */
+  navigationHistory: NavigationHistoryController;
   start(): void;
   stop(): void;
   updateSettings(settings: ghostexSettings): void;
@@ -114,6 +131,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   let revision = 0;
   let running = false;
   let unsubscribeConnections: (() => void) | undefined;
+  let uninstallNavigationHistoryHotkeys: (() => void) | undefined;
   let hudRequestKey = "";
   let remoteHud: GxserverSidebarHudResponse | undefined;
   let settings = readWebSettings();
@@ -122,6 +140,59 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   const recentProjectsByMachineId = new Map<string, MachineRecentProjects>();
   const recentProjectsRequestSignatures = new Map<string, string>();
   const pendingRecentProjectMutations = new Map<string, Promise<void>>();
+
+  /*
+   * CDXC:NavigationHistory 2026-08-19:
+   * The trail lives on ONE daemon even though entries can point at several
+   * machines, because a back stack split per machine has no meaningful order.
+   * The local daemon (the one serving this page) owns it; if it is not
+   * connected, the first connected machine stands in and the buttons simply
+   * stay disabled until some daemon answers.
+   */
+  const navigationHistoryOwnerMachineId = (): string | undefined => {
+    const states = getConnectionStates();
+    const local = states.find((state) => state.machine.machineId === "local");
+    return (local ?? states[0])?.machine.machineId;
+  };
+
+  const navigationHistoryRpc = (): NavigationHistoryRpc | undefined => {
+    const machineId = navigationHistoryOwnerMachineId();
+    if (!machineId) {
+      return undefined;
+    }
+    return (path, params) => rpcForMachine<unknown>(machineId, path, params);
+  };
+
+  const activateNavigationHistoryEntry = (entry: NavigationHistoryEntry): boolean => {
+    const states = getConnectionStates();
+    const sessionTarget = entry.sessionId ? parseSidebarSessionId(entry.sessionId) : undefined;
+    if (sessionTarget) {
+      if (!presentationHasSession(states, sessionTarget)) {
+        return false;
+      }
+      void focusSession(entry.sessionId as string);
+      return true;
+    }
+    const projectTarget = entry.groupId
+      ? parseSidebarGroupId(entry.groupId)
+      : parseSidebarProjectId(entry.projectId);
+    if (!projectTarget || !presentationHasProject(states, projectTarget)) {
+      return false;
+    }
+    activeTarget = projectTarget;
+    hudRequestKey = "";
+    publish();
+    return true;
+  };
+
+  const navigationHistory = new NavigationHistoryController({
+    activate: activateNavigationHistoryEntry,
+    onError: (error) => debugLog("navigationHistoryError", {
+      error: error instanceof Error ? error.message : String(error),
+    }),
+    resolveRpc: navigationHistoryRpc,
+    scopeId: NAVIGATION_HISTORY_SCOPE_WEB,
+  });
 
   const publish = (): void => {
     if (!running) {
@@ -145,6 +216,11 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     activeTarget = reconcileActiveTarget(activeTarget, states);
     setActiveSidebarProject(activeTarget);
     focusedTarget = reconcileFocusedTarget(focusedTarget, states);
+    // Coalesced inside the controller: an unchanged target costs one string
+    // compare here and never reaches the daemon.
+    navigationHistory.recordVisit(
+      createNavigationHistoryEntry(states, activeTarget, focusedTarget),
+    );
     const groups = createMergedSidebarGroups(
       states,
       activeTarget,
@@ -649,6 +725,21 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         );
         return;
       }
+      case "runGhostexHotkeyAction": {
+        /*
+         * CDXC:NavigationHistory 2026-08-19:
+         * The shared command palette forwards host-owned hotkey rows as action
+         * ids. Back/Forward is the only one this shell owns today; everything
+         * else stays a native-only no-op.
+         */
+        const direction = navigationHistoryHotkeyDirection(message.actionId);
+        if (direction) {
+          void navigationHistory.navigate(direction);
+          return;
+        }
+        debugLog("nativeOnlyNoOp", { actionId: message.actionId, type: message.type });
+        return;
+      }
       case "openRecentProjectInFinder":
         console.warn("[ghostex-web] Open in Finder is unavailable in the browser.");
         return;
@@ -757,6 +848,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
 
   return {
     messageSource,
+    navigationHistory,
     start() {
       if (running) {
         return;
@@ -764,13 +856,22 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       running = true;
       unsubscribeConnections = subscribeConnectionStates(publish);
       window.addEventListener("ghostex-web:activeSessionContext", onActiveSessionContext);
+      uninstallNavigationHistoryHotkeys = installNavigationHistoryHotkeys({
+        navigate: (direction) => void navigationHistory.navigate(direction),
+        readHotkeys: () => settings.hotkeys,
+      });
       queueMicrotask(publish);
+      // Adopt the trail this scope already has on the daemon, so a page reload
+      // keeps Back working instead of starting from an empty stack.
+      void navigationHistory.refresh();
     },
     stop() {
       running = false;
       unsubscribeConnections?.();
       unsubscribeConnections = undefined;
       window.removeEventListener("ghostex-web:activeSessionContext", onActiveSessionContext);
+      uninstallNavigationHistoryHotkeys?.();
+      uninstallNavigationHistoryHotkeys = undefined;
     },
     updateSettings(nextSettings) {
       settings = nextSettings;
@@ -1104,6 +1205,53 @@ function lifecycleParams(target: SidebarSessionReference): Record<string, unknow
     projectId: target.projectId,
     reason: "ghostex-web-sidebar",
     sessionId: target.sessionId,
+  };
+}
+
+/*
+ * CDXC:NavigationHistory 2026-08-19:
+ * A trail stop is the project the user is on plus the session inside it, in the
+ * SIDEBAR id vocabulary, so activating one later is a plain focusSession /
+ * focusGroup call with no re-resolution. Labels are the same titles the sidebar
+ * renders, carried only for the "Back to …" tooltip.
+ */
+function createNavigationHistoryEntry(
+  states: readonly MachineConnectionState[],
+  activeTarget: SidebarProjectReference | undefined,
+  focusedTarget: SidebarSessionReference | undefined,
+): NavigationHistoryEntry | undefined {
+  if (!activeTarget) {
+    return undefined;
+  }
+  const state = states.find((candidate) => candidate.machine.machineId === activeTarget.machineId);
+  const project = state?.presentation?.projects.find(
+    (candidate) => candidate.projectId === activeTarget.projectId,
+  );
+  if (!project) {
+    return undefined;
+  }
+  const session = focusedTarget
+    && focusedTarget.machineId === activeTarget.machineId
+    && focusedTarget.projectId === activeTarget.projectId
+    ? findPresentationSession(states, focusedTarget)
+    : undefined;
+  const sessionTitle = session
+    ? session.displayTitle ?? session.primaryTitle ?? session.title
+    : undefined;
+  return {
+    groupId: createSidebarGroupId(activeTarget.machineId, activeTarget.projectId),
+    projectId: createSidebarProjectId(activeTarget.machineId, activeTarget.projectId),
+    ...(project.title ? { projectLabel: project.title } : {}),
+    ...(focusedTarget && session
+      ? {
+        sessionId: createSidebarSessionId(
+          focusedTarget.machineId,
+          focusedTarget.projectId,
+          focusedTarget.sessionId,
+        ),
+      }
+      : {}),
+    ...(sessionTitle ? { sessionLabel: sessionTitle } : {}),
   };
 }
 
