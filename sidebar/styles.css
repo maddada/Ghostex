@@ -2048,6 +2048,31 @@ body {
   overflow: hidden;
 }
 
+.ghostex-settings-shadcn .first-launch-setup-video-shell {
+  /*
+   * CDXC:FirstLaunchTutorialVideo 2026-08-19:
+   * The tutorial player is the first page of the first-run modal instead of a
+   * second window. The shell owns the 16/9 box and caps its width so the page
+   * still fits the 1120x850 setup window without scrolling.
+   */
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  margin-inline: auto;
+  max-width: 760px;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .first-launch-setup-video {
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
 .ghostex-settings-shadcn .first-launch-setup-guide-visual {
   aspect-ratio: 16 / 9;
   display: block;

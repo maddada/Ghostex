@@ -37,7 +37,9 @@ describe("first launch setup modal source", () => {
     expect(visiblePages).not.toContain('"agentsSessions"');
     expect(visiblePages).not.toContain('"remoteAccess"');
     expect(firstLaunchSetupModalSource).toContain("function getVisibleFirstLaunchSetupPage");
-    expect(firstLaunchSetupModalSource).toContain('return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : "welcome";');
+    expect(firstLaunchSetupModalSource).toContain(
+      "return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : FIRST_LAUNCH_SETUP_PAGES[0];",
+    );
     expect(firstLaunchSetupModalSource).toContain(
       "const FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS = DEFAULT_SIDEBAR_AGENTS;",
     );
@@ -57,8 +59,8 @@ describe("first launch setup modal source", () => {
     */
     expect(firstLaunchSetupModalSource).toContain('type FirstLaunchContinueWarning = "hooks" | "skills"');
     expect(firstLaunchSetupModalSource).toContain("areFirstLaunchAgentHooksReady(agentHookStatus)");
-    expect(firstLaunchSetupModalSource).toContain("areFirstLaunchBundledSkillsInstalled(ghostexCliStatus)");
-    expect(firstLaunchSetupModalSource).toContain("ghostexCliStatus.embeddedBrowserSkillInstalled === true");
+    expect(firstLaunchSetupModalSource).toContain("isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus)");
+    expect(firstLaunchSetupModalSource).toContain("ghostexCliStatus?.embeddedBrowserSkillInstalled === true");
     expect(firstLaunchSetupModalSource).toContain('title: "Continue without bundled agent skills?"');
     expect(firstLaunchSetupModalSource).toContain('className="first-launch-setup-warning-backdrop"');
     expect(firstLaunchSetupModalSource).toContain('role="alertdialog"');
@@ -83,7 +85,7 @@ describe("first launch setup modal source", () => {
     const hookReadiness = sourceBetween(
       firstLaunchSetupModalSource,
       "function areFirstLaunchAgentHooksReady",
-      "function areFirstLaunchBundledSkillsInstalled",
+      "function isAnyFirstLaunchBundledSkillInstalled",
     );
 
     expect(hookReadiness).toContain("FIRST_LAUNCH_HOOK_SKIP_WARNING_AGENT_IDS.some");

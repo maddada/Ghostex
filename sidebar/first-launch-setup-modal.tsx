@@ -8,6 +8,7 @@ import {
   IconBrowser,
   IconBrandAndroid,
   IconBrandOpenai,
+  IconBrandYoutube,
   IconCircleCheck,
   IconCircleCheckFilled,
   IconCircleX,
@@ -61,6 +62,7 @@ import type { WebviewApi } from "./webview-api";
 import ghostexIntroImage from "./assets/first-launch/ghostex-intro.png";
 
 export type FirstLaunchSetupPage =
+  | "video"
   | "welcome"
   | "preferences"
   | "hooks"
@@ -78,6 +80,8 @@ export type FirstLaunchSetupModalProps = {
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading?: boolean;
   initialPage?: FirstLaunchSetupPage;
+  /** Player page URL for hosts that cannot embed YouTube from their own origin. */
+  tutorialVideoEmbedUrl?: string;
   isOpen: boolean;
   onClose: () => void;
   onChange: (settings: ghostexSettings) => void;
@@ -186,6 +190,18 @@ const FIRST_LAUNCH_SIDEBAR_PRESETS = FIRST_LAUNCH_SIDEBAR_PRESET_ORDER.flatMap((
 const FIRST_LAUNCH_ANDROID_APK_URL =
   "https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk";
 const FIRST_LAUNCH_DISCORD_URL = "https://discord.gg/df7b3G92CS";
+/*
+ * CDXC:FirstLaunchTutorialVideo 2026-08-19:
+ * The tutorial used to open as its own window on startup, so a new user got two
+ * modals in a row. It is the first page of this one modal instead. Hosts whose
+ * document has a real http(s) origin can embed YouTube directly; the GPUI app
+ * serves the modal host from file://, where the embed player answers "Error 153
+ * - Video player configuration error", so it passes its own same-origin player
+ * page through `tutorialVideoEmbedUrl`.
+ */
+const FIRST_LAUNCH_TUTORIAL_VIDEO_EMBED_URL =
+  "https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&modestbranding=1";
+const FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL = "https://www.youtube.com/watch?v=APdP-j5n4Mw";
 const FIRST_LAUNCH_RELEASES_URL = "https://github.com/maddada/ghostex/releases";
 
 const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
@@ -218,6 +234,7 @@ const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
  * secondary providers one at a time so the page fills progressively.
  */
 const FIRST_LAUNCH_SETUP_PAGES: readonly FirstLaunchSetupPage[] = [
+  "video",
   "welcome",
   "hooks",
   "skills",
@@ -429,7 +446,8 @@ const FIRST_LAUNCH_GUIDE_PAGE_BY_ID = new Map(
 );
 
 function getVisibleFirstLaunchSetupPage(page: FirstLaunchSetupPage): FirstLaunchSetupPage {
-  return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : "welcome";
+  // No requested page (or a dormant one) starts the sequence at its first page.
+  return FIRST_LAUNCH_SETUP_PAGES.includes(page) ? page : FIRST_LAUNCH_SETUP_PAGES[0];
 }
 
 const FIRST_LAUNCH_CONTINUE_WARNINGS: Record<
@@ -657,7 +675,7 @@ export function FirstLaunchSetupModal({
   agentHookStatusLoading = false,
   ghostexCliStatus,
   ghostexCliStatusLoading = false,
-  initialPage = "welcome",
+  initialPage = FIRST_LAUNCH_SETUP_PAGES[0],
   isOpen,
   onClose,
   onInstallAgentHooks,
@@ -678,6 +696,7 @@ export function FirstLaunchSetupModal({
   onChange,
   settings = DEFAULT_ghostex_SETTINGS,
   theme = "dark-blue",
+  tutorialVideoEmbedUrl,
   vscode,
 }: FirstLaunchSetupModalProps) {
   const [activePage, setActivePage] = useState<FirstLaunchSetupPage>(
@@ -709,7 +728,7 @@ export function FirstLaunchSetupModal({
     agentHookStatus?.agents.map((status) => [status.agentId, status]) ?? [],
   );
   const firstLaunchHooksReady = areFirstLaunchAgentHooksReady(agentHookStatus);
-  const firstLaunchBundledSkillsReady = areFirstLaunchBundledSkillsInstalled(ghostexCliStatus);
+  const firstLaunchBundledSkillsReady = isAnyFirstLaunchBundledSkillInstalled(ghostexCliStatus);
   const activePageIndex = Math.max(0, FIRST_LAUNCH_SETUP_PAGES.indexOf(activePage));
   const isLastPage = activePageIndex === FIRST_LAUNCH_SETUP_PAGES.length - 1;
   const previousPage = FIRST_LAUNCH_SETUP_PAGES[Math.max(0, activePageIndex - 1)];
@@ -717,7 +736,7 @@ export function FirstLaunchSetupModal({
     FIRST_LAUNCH_SETUP_PAGES[Math.min(FIRST_LAUNCH_SETUP_PAGES.length - 1, activePageIndex + 1)];
   const installFirstLaunchAgentHooks = () => onInstallAgentHooks?.();
   const installMissingBundledSkills =
-    ghostexCliStatus?.installed === true && !firstLaunchBundledSkillsReady
+    ghostexCliStatus?.installed === true
       ? () => {
           if (ghostexCliStatus.browserSkillInstalled !== true) {
             onInstallBrowserUseSkill?.();
@@ -808,7 +827,12 @@ export function FirstLaunchSetupModal({
         </DialogHeader>
 
         <div className="first-launch-setup-body">
-          {activePage === "welcome" ? (
+          {activePage === "video" ? (
+            <FirstLaunchVideoPage
+              embedUrl={tutorialVideoEmbedUrl ?? FIRST_LAUNCH_TUTORIAL_VIDEO_EMBED_URL}
+              vscode={vscode}
+            />
+          ) : activePage === "welcome" ? (
             <FirstLaunchWelcomePage vscode={vscode} />
           ) : activePage === "preferences" ? (
             <FirstLaunchPreferencesPage onChange={onChange} settings={settings} />
@@ -830,6 +854,8 @@ export function FirstLaunchSetupModal({
               ghostexCliStatus={ghostexCliStatus}
               ghostexCliStatusLoading={ghostexCliStatusLoading}
               onInstallAgentOrchestrationSkill={onInstallAgentOrchestrationSkill}
+              onInstallCuaDriver={onInstallCuaDriver}
+              onOpenExternalUrl={(url) => openFirstLaunchExternalUrl(vscode, url)}
               onInstallBrowserControl={onInstallBrowserControl}
               onInstallBrowserUseSkill={onInstallBrowserUseSkill}
               onInstallComputerUseSkill={onInstallComputerUseSkill}
@@ -1483,6 +1509,66 @@ function FirstLaunchContinueWarningView({
   );
 }
 
+/*
+ * CDXC:FirstLaunchTutorialVideo 2026-08-19:
+ * First page of the one first-run modal. The player is a plain iframe so this
+ * page owns no playback state: whatever the host hands us in `embedUrl` is a
+ * document that is allowed to embed YouTube from its own origin.
+ */
+function FirstLaunchVideoPage({
+  embedUrl,
+  vscode,
+}: {
+  embedUrl: string;
+  vscode?: WebviewApi;
+}) {
+  return (
+    <section className="first-launch-setup-guide-page" aria-labelledby="first-launch-video-title">
+      <div className="first-launch-setup-guide-hero">
+        <span className="first-launch-setup-guide-icon-shell">
+          <IconBrandYoutube aria-hidden="true" className="first-launch-setup-guide-icon" size={26} />
+        </span>
+        <div className="first-launch-setup-guide-copy">
+          <div className="first-launch-setup-kicker">Two minute tour</div>
+          <h2 className="first-launch-setup-title" id="first-launch-video-title">
+            See what Ghostex can do.
+          </h2>
+          <p className="first-launch-setup-description">
+            A quick look at terminals, agents, and the workflows the next few pages set up for you.
+          </p>
+        </div>
+      </div>
+      <div className="first-launch-setup-video-shell">
+        <iframe
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          className="first-launch-setup-video"
+          src={embedUrl}
+          title="Ghostex introduction and highlighted features"
+        />
+      </div>
+      <p className="first-launch-setup-description">
+        Prefer YouTube?{" "}
+        <a
+          href={FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL}
+          onClick={(event) => {
+            if (!vscode) {
+              return;
+            }
+            event.preventDefault();
+            openFirstLaunchExternalUrl(vscode, FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL);
+          }}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Open the video in your browser
+        </a>
+        .
+      </p>
+    </section>
+  );
+}
+
 function FirstLaunchSkillsPage({
   ghostexCliStatus,
   ghostexCliStatusLoading,
@@ -1490,15 +1576,19 @@ function FirstLaunchSkillsPage({
   onInstallBrowserControl,
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
+  onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallMoveCodexSessionSkill,
+  onOpenExternalUrl,
   onUninstallBundledAgentSkill,
 }: {
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading: boolean;
   onInstallAgentOrchestrationSkill?: () => void;
+  onInstallCuaDriver?: () => void;
+  onOpenExternalUrl?: (url: string) => void;
   onInstallBrowserControl?: () => void;
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
@@ -1528,6 +1618,8 @@ function FirstLaunchSkillsPage({
       <BundledAgentSkillsPanel
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}
+        onInstallCuaDriver={onInstallCuaDriver}
+        onOpenExternalUrl={onOpenExternalUrl}
         onInstallSkill={{
           agentOrchestration: onInstallAgentOrchestrationSkill,
           browserUse: onInstallBrowserUseSkill,
@@ -1899,18 +1991,25 @@ function areFirstLaunchAgentHooksReady(
   );
 }
 
-function areFirstLaunchBundledSkillsInstalled(
+/*
+ * CDXC:FirstLaunchSetup 2026-08-19:
+ * The skip warning used to demand all eight bundled skills, so anyone who
+ * deliberately installed just the ones they wanted still got a full-page
+ * warning overlay on the way out. It now only protects users who installed
+ * nothing at all, matching how the hooks page treats partial coverage.
+ */
+function isAnyFirstLaunchBundledSkillInstalled(
   ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined,
 ): boolean {
   return (
-    ghostexCliStatus?.browserSkillInstalled === true &&
-    ghostexCliStatus.embeddedBrowserSkillInstalled === true &&
-    ghostexCliStatus.computerUseSkillInstalled === true &&
-    ghostexCliStatus.agentOrchestrationSkillInstalled === true &&
-    ghostexCliStatus.fable56OrchestrationSkillInstalled === true &&
-    ghostexCliStatus.findPrevSessionSkillInstalled === true &&
-    ghostexCliStatus.generateTitleSkillInstalled === true &&
-    ghostexCliStatus.moveCodexSessionSkillInstalled === true
+    ghostexCliStatus?.browserSkillInstalled === true ||
+    ghostexCliStatus?.embeddedBrowserSkillInstalled === true ||
+    ghostexCliStatus?.computerUseSkillInstalled === true ||
+    ghostexCliStatus?.agentOrchestrationSkillInstalled === true ||
+    ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
+    ghostexCliStatus?.findPrevSessionSkillInstalled === true ||
+    ghostexCliStatus?.generateTitleSkillInstalled === true ||
+    ghostexCliStatus?.moveCodexSessionSkillInstalled === true
   );
 }
 

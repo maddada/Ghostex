@@ -7,6 +7,7 @@ import type {
   AddProjectBrowseResult,
   AddProjectCloneJob,
   AddProjectCloneJobHandle,
+  AddProjectCreateDirectoryResult,
   AddProjectMachineOption,
   AddProjectRepositoryInfo,
   AddProjectSourceControlDiscovery,
@@ -255,6 +256,14 @@ type AppModalHostMessage =
       showFirstLaunchSetupOnClose?: boolean;
       threadId?: string;
       title?: string;
+      /*
+       * CDXC:FirstLaunchTutorialVideo 2026-08-19:
+       * The modal host document is loaded from file://, where YouTube's embed
+       * player refuses to start ("Error 153"). The native side owns a page it
+       * can serve from a real origin, so it hands the setup modal that URL
+       * instead of letting this document try to embed YouTube itself.
+       */
+      tutorialVideoEmbedUrl?: string;
       notesMarkdown?: string;
       portable?: boolean;
       state?: "available" | "ready";
@@ -848,6 +857,22 @@ function readAddProjectBrowseResult(value: unknown): AddProjectBrowseResult {
   return { entries: value.entries, parentPath: value.parentPath };
 }
 
+function readAddProjectCreateDirectoryResult(
+  value: unknown,
+  requestedParentPath: string,
+  requestedName: string,
+): AddProjectCreateDirectoryResult {
+  const record = (value ?? {}) as Record<string, unknown>;
+  return {
+    name: typeof record.name === "string" && record.name ? record.name : requestedName,
+    parentPath:
+      typeof record.parentPath === "string" && record.parentPath
+        ? record.parentPath
+        : requestedParentPath,
+    path: readAddProjectRequiredString(record, "path"),
+  };
+}
+
 function readAddProjectAddResult(
   value: unknown,
   machineId: string,
@@ -965,6 +990,7 @@ function AppModalHost() {
     settingsInitialRemoteMachineId,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
+    tutorialVideoEmbedUrl,
   } = useModalStateFromNative();
   const [agentHookStatusLoading, setAgentHookStatusLoading] = useState(false);
   const [ghostexCliStatusLoading, setGhostexCliStatusLoading] = useState(false);
@@ -1649,6 +1675,17 @@ function AppModalHost() {
             { machineId, params: { jobId } },
           );
         }}
+        createDirectory={async ({ machineId, name, parentPath }) =>
+          readAddProjectCreateDirectoryResult(
+            await requestAddProjectDialogOperation(
+              "createDirectory",
+              ADD_PROJECT_DIALOG_JOB_TIMEOUT_MS,
+              { machineId, params: { name, parentPath } },
+            ),
+            parentPath,
+            name,
+          )
+        }
         discoverSourceControl={async ({ machineId }) =>
           readAddProjectDiscovery(
             await requestAddProjectDialogOperation(
@@ -1756,7 +1793,7 @@ function AppModalHost() {
             return;
           }
           vscode.postMessage({
-            delayMs,
+            ...(delayMs === undefined ? {} : { delayMs }),
             sendWhenAllProjectSessionsStop,
             sendWhenAgentStops,
             sessionId: delayedSend.sessionId,
@@ -2175,6 +2212,7 @@ function AppModalHost() {
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
         agentHookStatusLoading={agentHookStatusLoading}
+        tutorialVideoEmbedUrl={tutorialVideoEmbedUrl}
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}
         isOpen={isFirstLaunchSetupRenderable}
@@ -2434,6 +2472,9 @@ function useModalStateFromNative() {
   const [pluginSettingsStatus, setPluginSettingsStatus] = useState<PluginSettingsStatusMessage>();
   // CDXC:AppIconPicker 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
+  const [tutorialVideoEmbedUrl, setTutorialVideoEmbedUrl] = useState<string | undefined>(
+    undefined,
+  );
   const [settingsInitialSection, setSettingsInitialSection] =
     useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
@@ -2560,6 +2601,11 @@ function useModalStateFromNative() {
             });
           }
           if (isFirstLaunchSetupModalKind(message.modal)) {
+            setTutorialVideoEmbedUrl(
+              typeof message.tutorialVideoEmbedUrl === "string"
+                ? message.tutorialVideoEmbedUrl
+                : undefined,
+            );
             /*
              * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
              * Capture the setup open boundary after any inline sidebar-state
@@ -3197,6 +3243,7 @@ function useModalStateFromNative() {
     settingsInitialRemoteMachineId,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
+    tutorialVideoEmbedUrl,
   };
 }
 
