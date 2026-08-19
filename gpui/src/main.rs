@@ -30311,7 +30311,7 @@ impl GhostexGpuiApp {
             return;
         }
         let open_in_app =
-            shared_settings::shared_sidebar_settings_snapshot().open_terminal_links_in_app();
+            shared_settings::shared_sidebar_settings_snapshot().web_links_open_in_app();
         if external || !open_in_app {
             if let Some(url) = normalize_address(url) {
                 let _ = gpui_open_external_http_url(&url);
@@ -31234,9 +31234,7 @@ impl GhostexGpuiApp {
             ),
             "showBetaFeatures": settings_snapshot.show_beta_features(),
             "sidebarTheme": gpui_app_modal_sidebar_theme_from_settings(settings_object),
-            "terminalDevServerOpenTarget": gpui_titlebar_terminal_dev_server_open_target_from_settings(
-                settings_object,
-            ),
+            "webLinkOpenTarget": gpui_titlebar_web_link_open_target_from_settings(settings_object),
         });
         if let Some(project_id) = active_project_id {
             update["projectId"] = serde_json::json!(project_id);
@@ -57926,7 +57924,7 @@ impl GhostexGpuiApp {
         }
         let open_value = gpui_terminal_markdown_image_reference_path(trimmed).unwrap_or(trimmed);
         if gpui_terminal_link_is_web_url(open_value) {
-            if !shared_settings::shared_sidebar_settings_snapshot().open_terminal_links_in_app() {
+            if !shared_settings::shared_sidebar_settings_snapshot().web_links_open_in_app() {
                 let _ = gpui_open_terminal_action_url(open_value);
                 return;
             }
@@ -81006,10 +81004,7 @@ impl GpuiTitlebarReadingPanel {
                             let main_url = main_url.clone();
                             let _ = this.main_app.update_in(cx, move |app, main_window, cx| {
                                 let settings = shared_settings::shared_sidebar_settings_snapshot();
-                                if gpui_titlebar_terminal_dev_server_open_target_from_settings(
-                                    settings.object(),
-                                ) == "system-default-browser"
-                                {
+                                if !settings.web_links_open_in_app() {
                                     let _ = gpui_spawn_os_open(std::ffi::OsStr::new(&main_url));
                                 } else {
                                     app.open_gpui_browser_action_url(main_url, main_window, cx);
@@ -87573,16 +87568,19 @@ fn gpui_titlebar_resources_project_editor_kind(
     }
 }
 
-fn gpui_titlebar_terminal_dev_server_open_target_from_settings(
+/*
+CDXC:WebLinkOpenTarget 2026-08-19:
+The titlebar Resources list needs the merged web-link destination as a string
+for its own payload, so route it through the same snapshot accessor that owns
+the legacy-key precedence instead of reading the raw field a second time.
+*/
+fn gpui_titlebar_web_link_open_target_from_settings(
     settings: &serde_json::Map<String, serde_json::Value>,
 ) -> &'static str {
-    match settings
-        .get("terminalDevServerOpenTarget")
-        .and_then(serde_json::Value::as_str)
-    {
-        Some("internal-browser") => "internal-browser",
-        Some("system-default-browser") => "system-default-browser",
-        _ => "system-default-browser",
+    if shared_settings::web_links_open_in_app_from_object(settings) {
+        "internal-browser"
+    } else {
+        "system-default-browser"
     }
 }
 

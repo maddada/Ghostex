@@ -93,7 +93,7 @@ import {
   type KeepAwakeDurationMinutes,
   type SidebarSide,
   type SessionPersistenceProvider,
-  type TerminalDevServerOpenTarget,
+  type WebLinkOpenTarget,
 } from "../../shared/ghostex-settings";
 import {
   normalizeghostexHotkeySettings,
@@ -347,7 +347,7 @@ type TitlebarProjectState = {
   hotkeys: ghostexHotkeySettings;
   showProjectEditorDiffFileCount: boolean;
   sessionPersistenceProvider: SessionPersistenceProvider;
-  terminalDevServerOpenTarget: TerminalDevServerOpenTarget;
+  webLinkOpenTarget: WebLinkOpenTarget;
   toggleSidebarHotkeyLabel: string;
   workspaceOpenTargets: TitlebarOpenTargetsSettings;
   isFocusModeActive?: boolean;
@@ -4658,7 +4658,7 @@ function App() {
           selectedActionCommandId={selectedActionCommandId}
           hotkeys={projectState.hotkeys}
           sidebarTheme={projectState.sidebarTheme}
-          serverOpenTarget={projectState.terminalDevServerOpenTarget}
+          linkOpenTarget={projectState.webLinkOpenTarget}
           sessionPersistenceProvider={
             projectState.sessionPersistenceProvider === "off"
               ? undefined
@@ -5126,7 +5126,7 @@ function TitlebarDropdownPanelSurface({
   selectedActionCommandId,
   hotkeys,
   sidebarTheme,
-  serverOpenTarget,
+  linkOpenTarget,
   sessionPersistenceProvider,
   visibleActions,
   visibleTargets,
@@ -5187,7 +5187,7 @@ function TitlebarDropdownPanelSurface({
   selectedActionCommandId: string | undefined;
   hotkeys: ghostexHotkeySettings;
   sidebarTheme: SidebarTheme;
-  serverOpenTarget: TerminalDevServerOpenTarget;
+  linkOpenTarget: WebLinkOpenTarget;
   sessionPersistenceProvider: Exclude<SessionPersistenceProvider, "off"> | undefined;
   visibleActions: SidebarCommandButton[];
   visibleTargets: ResolvedOpenTarget[];
@@ -5321,7 +5321,7 @@ function TitlebarDropdownPanelSurface({
             processTotals={resourceProcessTotals}
             quittingKeys={quittingResourceKeys}
             serverBundles={serverBundles}
-            serverOpenTarget={serverOpenTarget}
+            linkOpenTarget={linkOpenTarget}
             sessionPersistenceProvider={sessionPersistenceProvider}
           />
         </div>
@@ -6004,7 +6004,7 @@ function createInitialProjectState(bootstrap: Record<string, unknown>): Titlebar
     },
     showProjectEditorDiffFileCount: settings.showProjectEditorDiffFileCount,
     sessionPersistenceProvider: settings.sessionPersistenceProvider,
-    terminalDevServerOpenTarget: settings.terminalDevServerOpenTarget,
+    webLinkOpenTarget: settings.webLinkOpenTarget,
     toggleSidebarHotkeyLabel: formatToggleSidebarTooltipLabel(
       settings.hotkeys.toggleSidebarCollapsed,
     ),
@@ -6545,7 +6545,7 @@ function TitlebarResourcesMenu({
   orphanBundles,
   quittingKeys,
   serverBundles,
-  serverOpenTarget,
+  linkOpenTarget,
   sessionPersistenceProvider,
 }: {
   browserBundles: ResourceProcessBundle[];
@@ -6571,7 +6571,7 @@ function TitlebarResourcesMenu({
   orphanBundles: ResourceProcessBundle[];
   quittingKeys: Set<string>;
   serverBundles: ResourceProcessBundle[];
-  serverOpenTarget: TerminalDevServerOpenTarget;
+  linkOpenTarget: WebLinkOpenTarget;
   sessionPersistenceProvider?: Exclude<SessionPersistenceProvider, "off">;
 }) {
   const visibleGroupViews = processSnapshotReady
@@ -6822,7 +6822,7 @@ function TitlebarResourcesMenu({
               onFocusSession={onFocusSession}
               onToggle={onToggle}
               quittingKeys={quittingKeys}
-              serverOpenTarget={serverOpenTarget}
+              linkOpenTarget={linkOpenTarget}
               title="Dev Servers"
               bundles={serverBundles}
             />
@@ -6979,7 +6979,7 @@ function TitlebarResourceSection({
   onFocusSession,
   onToggle,
   quittingKeys,
-  serverOpenTarget,
+  linkOpenTarget,
   title,
 }: {
   bundles: ResourceProcessBundle[];
@@ -6988,7 +6988,7 @@ function TitlebarResourceSection({
   onFocusSession: (sessionId: string) => void;
   onToggle: (key: string) => void;
   quittingKeys: Set<string>;
-  serverOpenTarget?: TerminalDevServerOpenTarget;
+  linkOpenTarget?: WebLinkOpenTarget;
   title: string;
 }) {
   if (bundles.length === 0) {
@@ -7100,7 +7100,7 @@ function TitlebarResourceSection({
             onFocusSession={onFocusSession}
             onQuit={onQuit}
             onToggle={onToggle}
-            serverOpenTarget={serverOpenTarget}
+            linkOpenTarget={linkOpenTarget}
           />
         ))}
       </div>
@@ -7115,7 +7115,7 @@ function TitlebarResourceBundle({
   onQuit,
   onFocusSession,
   onToggle,
-  serverOpenTarget,
+  linkOpenTarget,
 }: {
   bundle: ResourceProcessBundle;
   collapsedKeys: Set<string>;
@@ -7123,7 +7123,7 @@ function TitlebarResourceBundle({
   onQuit: (bundles: ResourceProcessBundle[]) => void;
   onFocusSession: (sessionId: string) => void;
   onToggle: (key: string) => void;
-  serverOpenTarget?: TerminalDevServerOpenTarget;
+  linkOpenTarget?: WebLinkOpenTarget;
 }) {
   const hasChildren = bundle.childProcesses.length > 0;
   /**
@@ -7222,7 +7222,7 @@ function TitlebarResourceBundle({
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  openResourceBundleMainUrl(bundle, mainUrl, serverOpenTarget);
+                  openResourceBundleMainUrl(bundle, mainUrl, linkOpenTarget);
                 }}
               >
                 {mainLabel}
@@ -7403,13 +7403,16 @@ function getResourceBundleMainUrl(bundle: ResourceProcessBundle): string | undef
 function openResourceBundleMainUrl(
   bundle: ResourceProcessBundle,
   url: string,
-  serverOpenTarget: TerminalDevServerOpenTarget | undefined,
+  linkOpenTarget: WebLinkOpenTarget | undefined,
 ): void {
   /*
    * CDXC:TerminalDevServers 2026-06-23-19:22:
    * Resources dev-server links should open either in the user's system default browser or the internal browser. Do not expose a per-browser target list here; only server bundles should read this setting so future resource links keep their existing route.
+   *
+   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * That choice is now the app-wide webLinkOpenTarget shared with terminal and session chat links, so these rows stop disagreeing with the Browser setting.
    */
-  if (bundle.type === "server" && serverOpenTarget === "system-default-browser") {
+  if (bundle.type === "server" && linkOpenTarget === "system-default-browser") {
     postNative({ type: "openExternalUrl", url });
     return;
   }
