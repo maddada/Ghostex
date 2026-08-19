@@ -36,6 +36,34 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void* nativeView) {
   }
 }
 
+/*
+ CDXC:GPUIMainWindowToasts 2026-08-18:
+ gpui gives every WindowKind::PopUp window NSPopUpWindowLevel, which floats the
+ toast panel above every other application. Toasts belong to the Ghostex main
+ window, so attach the panel as a real AppKit child window at the parent's own
+ level: it then stays ordered directly above the main window, follows it when
+ the user moves it, disappears with it on miniaturize/hide, and no longer draws
+ over whatever app the user switched to.
+ */
+void GhostexGpuiAttachToastPopupToMainWindow(void* toastNativeView, void* mainNativeView) {
+  @autoreleasepool {
+    if (toastNativeView == NULL || mainNativeView == NULL) {
+      return;
+    }
+
+    NSWindow* toastWindow = ((__bridge NSView*)toastNativeView).window;
+    NSWindow* mainWindow = ((__bridge NSView*)mainNativeView).window;
+    if (toastWindow == nil || mainWindow == nil || toastWindow == mainWindow) {
+      return;
+    }
+
+    toastWindow.level = mainWindow.level;
+    if (toastWindow.parentWindow != mainWindow) {
+      [mainWindow addChildWindow:toastWindow ordered:NSWindowAbove];
+    }
+  }
+}
+
 void GhostexGpuiPrepareTitlebarPopupWindow(void* nativeView) {
   @autoreleasepool {
     if (nativeView == NULL) {
