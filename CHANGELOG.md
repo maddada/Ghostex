@@ -1,12 +1,32 @@
 # Changelog
 
-## 7.11.0 - 2026-08-18
+## 7.11.0 - 2026-08-19
 
 - Major
+  - Chat now tells you when the agent's terminal needs you, showing a notice for the CLI screen that is waiting and flagging a message the CLI swallowed instead of leaving it silently unanswered.
+  - Back and forward navigation moves through recently visited sessions from the sidebar buttons or a hotkey, on both the desktop and web apps.
   - The chat composer can now attach project files by typing `@` and picking from the session's project, with the picker opening wherever the mention is typed in the draft.
   - The Monaco prompt editor now ships inside the macOS app, so Ctrl+G opens it on installed builds instead of quietly falling back to the machine's default terminal editor.
   - A new Command Pane Side setting docks the command pane as a full-height column to the right of the workspace instead of a strip along the bottom, remembering its own width per project.
 - Minor
+  - Programs running in the terminal can copy to the system clipboard again.
+  - Switching a session from the terminal to chat now carries whatever you had typed into the agent CLI over to the chat composer, on the desktop and Android apps.
+  - Pictures in a conversation can now be saved to disk from the chat image viewer.
+  - Long thinking blocks are capped with an expand toggle, so a single reasoning dump no longer owns the whole transcript scroll.
+  - An agent's background task notifications now read as one status row with its result, instead of a block of raw tags.
+  - The chat composer no longer behaves like a code editor, and F1 opens its command palette instead of typing a stray character.
+  - Sessions you are viewing from your phone are no longer put to sleep by the owning machine's automatic sleep sweep.
+  - Reconnect on Android now replaces the dead terminal instead of reporting success while the exited process stayed on screen.
+  - The Add Project dialog can create a new folder in place and start the project in it.
+  - Renaming a Claude Code session from Ghostex now updates the sidebar card as soon as Claude confirms the new name.
+  - Settings sorts the bundled agent skills into recommended and optional, adds a Ghostex Computer Use skill, and offers the one-time Cua Driver setup the machine-automation skills need.
+  - First launch now shows a single setup flow that opens with the tutorial video, instead of a separate video window followed by setup.
+  - Notifications stay attached to the Ghostex window instead of floating above whatever app you switch to.
+  - Opening a link from a browser page in a new tab now reveals that tab's row in the sidebar, including background middle-click tabs.
+  - Launching an agent session on a remote machine works again instead of reporting a failure and dropping the workflow prompt.
+  - Resources now reports process memory the way Activity Monitor does and lists one row per dev server, so its totals stop being inflated.
+  - Delayed Send in the web app now runs on the machine hosting the session, matching the desktop and phone apps.
+  - Project bodies and sidebar sections animate open and closed again instead of snapping shut.
   - Chat no longer shows prompts that were revised or re-sent before the agent replied, so the conversation matches what the agent actually ran.
   - Sending a chat message to a resumed Claude session now answers its resume-usage prompt first, so the message reaches the agent instead of being swallowed as menu keystrokes.
   - Clicking a picture in chat now toggles between fitted and full size, zooming to the spot you clicked and panning by scroll.
