@@ -5376,11 +5376,13 @@ export function SettingsModal({
               onInstallBrowserControl={onInstallBrowserControl}
               onInstallBrowserUseSkill={onInstallBrowserUseSkill}
               onInstallComputerUseSkill={onInstallComputerUseSkill}
+              onInstallCuaDriver={onInstallCuaDriver}
               onInstallFable56OrchestrationSkill={onInstallFable56OrchestrationSkill}
               onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
               onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
               onInstallGhostexCli={onInstallGhostexCli}
               onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
+              onOpenExternalUrl={(url) => vscode?.postMessage({ type: "openExternalUrl", url })}
               onUninstallAgentHooks={onUninstallAgentHooks}
               onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
               onUninstallBundledAgentSkills={onUninstallBundledAgentSkills}
@@ -8560,11 +8562,13 @@ function IntegrationsSettingsTab({
   onInstallBrowserControl,
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
+  onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
   onInstallFindPrevSessionSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
+  onOpenExternalUrl,
   onUninstallAgentHooks,
   onUninstallBundledAgentSkill,
   onUninstallBundledAgentSkills,
@@ -8588,11 +8592,13 @@ function IntegrationsSettingsTab({
   onInstallBrowserControl?: () => void;
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
+  onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
   onInstallFindPrevSessionSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
+  onOpenExternalUrl?: (url: string) => void;
   onUninstallAgentHooks?: () => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
@@ -8686,6 +8692,8 @@ function IntegrationsSettingsTab({
           <BundledAgentSkillsPanel
             ghostexCliStatus={ghostexCliStatus}
             ghostexCliStatusLoading={ghostexCliStatusLoading}
+            onInstallCuaDriver={onInstallCuaDriver}
+            onOpenExternalUrl={onOpenExternalUrl}
             onInstallSkill={{
               agentOrchestration: onInstallAgentOrchestrationSkill,
               browserUse: onInstallBrowserUseSkill,

@@ -8,13 +8,25 @@ export type BundledGhostexAgentSkillId =
   | "generateTitle"
   | "moveCodexSession";
 
+export type BundledGhostexAgentSkillTier = "recommended" | "optional";
+
 export type BundledGhostexAgentSkill = {
   command: string;
   description: string;
   id: BundledGhostexAgentSkillId;
   name: string;
+  /**
+   * Skills that drive the real machine or a real browser go through Cua Driver
+   * (https://github.com/trycua/cua), so the install surfaces offer that
+   * one-time setup next to the skill instead of letting agents discover the
+   * missing driver at the moment they try to use it.
+   */
+  requiresCuaDriver?: boolean;
   skillName: string;
+  tier: BundledGhostexAgentSkillTier;
 };
+
+export const GHOSTEX_CUA_PROJECT_URL = "https://github.com/trycua/cua";
 
 /**
  * CDXC:AgentSkills 2026-05-31-09:18:
@@ -29,12 +41,24 @@ export type BundledGhostexAgentSkill = {
  */
 export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] = [
   {
+    command: "ghostex computer-use install-skill",
+    description:
+      "Teaches agents the Ghostex-named workflow for native macOS app automation through Cua Driver, including Accessibility and Screen Recording requirements.",
+    id: "computerUse",
+    name: "Ghostex Computer Use",
+    requiresCuaDriver: true,
+    skillName: "ghostex-computer-use",
+    tier: "recommended",
+  },
+  {
     command: "ghostex browser-use install-skill",
     description:
       "Teaches agents to inspect and operate supported external browser pages through Cua Driver's typed browser tools.",
     id: "browserUse",
     name: "Ghostex Browser Use",
+    requiresCuaDriver: true,
     skillName: "ghostex-browser-use",
+    tier: "recommended",
   },
   {
     command: "ghostex browser install-skill",
@@ -43,14 +67,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "embeddedBrowserUse",
     name: "Ghostex Embedded Browser Use",
     skillName: "ghostex-embedded-browser-use",
-  },
-  {
-    command: "ghostex computer-use install-skill",
-    description:
-      "Teaches agents the Ghostex-named workflow for native macOS app automation through Cua Driver, including Accessibility and Screen Recording requirements.",
-    id: "computerUse",
-    name: "Ghostex Computer Use",
-    skillName: "ghostex-computer-use",
+    tier: "recommended",
   },
   {
     command: "ghostex agent-orchestration install-skill",
@@ -59,6 +76,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "agentOrchestration",
     name: "Ghostex Agent Orchestration",
     skillName: "ghostex-agent-orchestration",
+    tier: "optional",
   },
   {
     command: "ghostex fable-5.6-orchestration install-skill",
@@ -67,6 +85,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "fable56Orchestration",
     name: "Ghostex Fable 5.6 Orchestration",
     skillName: "ghostex-fable-5.6-orchestration",
+    tier: "optional",
   },
   {
     command: "ghostex find-prev-session install-skill",
@@ -75,6 +94,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "findPrevSession",
     name: "Ghostex Find Previous Session",
     skillName: "ghostex-find-prev-session",
+    tier: "optional",
   },
   {
     command: "ghostex generate-title install-skill",
@@ -83,6 +103,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "generateTitle",
     name: "Ghostex Auto Rename Session",
     skillName: "ghostex-auto-rename-session",
+    tier: "optional",
   },
   {
     command: "ghostex move-codex-session install-skill",
@@ -91,5 +112,6 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: "moveCodexSession",
     name: "Ghostex Move Codex Session",
     skillName: "ghostex-move-codex-session",
+    tier: "optional",
   },
 ];

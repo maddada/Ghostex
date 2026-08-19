@@ -1,7 +1,9 @@
 import {
   IconBrowser,
+  IconCircleCheckFilled,
   IconDeviceDesktop,
   IconDownload,
+  IconExternalLink,
   IconGitPullRequest,
   IconHistory,
   IconPencil,
@@ -21,8 +23,10 @@ import { AppTooltip } from "./app-tooltip";
 import { DisabledSettingControlTooltip } from "./disabled-setting-control-tooltip";
 import {
   BUNDLED_GHOSTEX_AGENT_SKILLS,
+  GHOSTEX_CUA_PROJECT_URL,
   type BundledGhostexAgentSkill,
   type BundledGhostexAgentSkillId,
+  type BundledGhostexAgentSkillTier,
 } from "../shared/ghostex-agent-skills";
 import type { SidebarGhostexCliStatusMessage } from "../shared/session-grid-contract";
 
@@ -38,11 +42,37 @@ type BundledAgentSkillsPanelProps = {
   className?: string;
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading?: boolean;
+  onInstallCuaDriver?: () => void;
   onInstallSkill?: BundledAgentSkillInstallHandlers;
+  onOpenExternalUrl?: (url: string) => void;
   onRefreshStatus?: () => void;
   onUninstallSkill?: BundledAgentSkillUninstallHandler;
   showHeader?: boolean;
 };
+
+/*
+ * CDXC:AgentSkills 2026-08-19:
+ * The bundled skills list is ordered by how much a new user needs it, so the
+ * install surfaces split it into Recommended and Optional instead of showing
+ * eight equally-weighted rows. Tiers live in the shared catalog so Settings and
+ * first launch cannot disagree about what is recommended.
+ */
+const BUNDLED_AGENT_SKILL_TIER_SECTIONS: readonly {
+  description: string;
+  tier: BundledGhostexAgentSkillTier;
+  title: string;
+}[] = [
+  {
+    description: "What most people want on day one — agents that can drive your Mac and your browser.",
+    tier: "recommended",
+    title: "Recommended",
+  },
+  {
+    description: "Handy extras. Install them whenever you need them.",
+    tier: "optional",
+    title: "Optional",
+  },
+];
 
 const BUNDLED_AGENT_SKILL_ICONS: Record<
   BundledGhostexAgentSkillId,
@@ -69,12 +99,15 @@ export function BundledAgentSkillsPanel({
   className,
   ghostexCliStatus,
   ghostexCliStatusLoading = false,
+  onInstallCuaDriver,
   onInstallSkill,
+  onOpenExternalUrl,
   onRefreshStatus,
   onUninstallSkill,
   showHeader = true,
 }: BundledAgentSkillsPanelProps) {
   const cliReady = ghostexCliStatus?.installed === true;
+  const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -87,21 +120,34 @@ export function BundledAgentSkillsPanel({
           </p>
         </div>
       ) : null}
-      <div className="flex flex-col gap-3">
-        {BUNDLED_GHOSTEX_AGENT_SKILLS.map((skill) => (
-          <BundledAgentSkillRow
-            cliReady={cliReady}
-            ghostexCliStatus={ghostexCliStatus}
-            ghostexCliStatusLoading={ghostexCliStatusLoading}
-            key={skill.id}
-            onInstall={onInstallSkill?.[skill.id]}
-            onUninstall={
-              onUninstallSkill ? () => onUninstallSkill(skill.id) : undefined
-            }
-            skill={skill}
-          />
-        ))}
-      </div>
+      {BUNDLED_AGENT_SKILL_TIER_SECTIONS.map((section) => (
+        <div className="flex flex-col gap-3" key={section.tier}>
+          <div className="flex flex-col gap-0.5">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {section.title}
+            </h4>
+            <p className="text-xs text-muted-foreground">{section.description}</p>
+          </div>
+          {BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === section.tier).map(
+            (skill) => (
+              <BundledAgentSkillRow
+                cliReady={cliReady}
+                cuaDriverInstalled={cuaDriverInstalled}
+                ghostexCliStatus={ghostexCliStatus}
+                ghostexCliStatusLoading={ghostexCliStatusLoading}
+                key={skill.id}
+                onInstall={onInstallSkill?.[skill.id]}
+                onInstallCuaDriver={onInstallCuaDriver}
+                onOpenExternalUrl={onOpenExternalUrl}
+                onUninstall={
+                  onUninstallSkill ? () => onUninstallSkill(skill.id) : undefined
+                }
+                skill={skill}
+              />
+            ),
+          )}
+        </div>
+      ))}
       {onRefreshStatus ? (
         <div className="flex justify-end">
           <DisabledSettingControlTooltip
@@ -126,16 +172,22 @@ export function BundledAgentSkillsPanel({
 
 function BundledAgentSkillRow({
   cliReady,
+  cuaDriverInstalled,
   ghostexCliStatus,
   ghostexCliStatusLoading,
   onInstall,
+  onInstallCuaDriver,
+  onOpenExternalUrl,
   onUninstall,
   skill,
 }: {
   cliReady: boolean;
+  cuaDriverInstalled: boolean;
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading: boolean;
   onInstall?: () => void;
+  onInstallCuaDriver?: () => void;
+  onOpenExternalUrl?: (url: string) => void;
   onUninstall?: () => void;
   skill: BundledGhostexAgentSkill;
 }) {
@@ -170,6 +222,14 @@ function BundledAgentSkillRow({
             <code className="mt-2 block select-text rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
               {skill.command}
             </code>
+            {skill.requiresCuaDriver ? (
+              <CuaDriverNote
+                cuaDriverInstalled={cuaDriverInstalled}
+                ghostexCliStatusLoading={ghostexCliStatusLoading}
+                onInstallCuaDriver={onInstallCuaDriver}
+                onOpenExternalUrl={onOpenExternalUrl}
+              />
+            ) : null}
           </FieldContent>
         </div>
         <div className="flex w-[110px] shrink-0 flex-wrap gap-1 sm:justify-end">
@@ -216,6 +276,70 @@ function BundledAgentSkillRow({
         </div>
       </div>
     </Field>
+  );
+}
+
+/*
+ * CDXC:AgentSkills 2026-08-19:
+ * Ghostex Computer Use and Ghostex Browser Use both drive the real machine
+ * through Cua Driver, so the skill row asks about that one-time install right
+ * here instead of letting the user find out when an agent first tries to click
+ * something.
+ */
+function CuaDriverNote({
+  cuaDriverInstalled,
+  ghostexCliStatusLoading,
+  onInstallCuaDriver,
+  onOpenExternalUrl,
+}: {
+  cuaDriverInstalled: boolean;
+  ghostexCliStatusLoading: boolean;
+  onInstallCuaDriver?: () => void;
+  onOpenExternalUrl?: (url: string) => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-col gap-2 border border-border bg-muted/30 px-2.5 py-2">
+      <p className="text-xs text-muted-foreground">
+        {cuaDriverInstalled ? (
+          <>
+            <strong className="font-semibold text-foreground">Cua Driver is ready.</strong> This
+            skill uses it to click, type, and see what is on screen.
+          </>
+        ) : (
+          <>
+            <strong className="font-semibold text-foreground">
+              Want agents to really control your Mac and browser?
+            </strong>{" "}
+            This skill needs Cua Driver, the open-source helper from the Cua project. It is a
+            one-time setup — install it once and every Ghostex agent can use it.
+          </>
+        )}
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          disabled={ghostexCliStatusLoading || cuaDriverInstalled || !onInstallCuaDriver}
+          onClick={onInstallCuaDriver}
+          type="button"
+          variant={cuaDriverInstalled ? "outline" : "default"}
+        >
+          {cuaDriverInstalled ? (
+            <IconCircleCheckFilled aria-hidden="true" data-icon="inline-start" />
+          ) : (
+            <IconDownload aria-hidden="true" data-icon="inline-start" />
+          )}
+          {cuaDriverInstalled ? "Cua Driver Installed" : "Install Cua Driver"}
+        </Button>
+        <Button
+          disabled={!onOpenExternalUrl}
+          onClick={() => onOpenExternalUrl?.(GHOSTEX_CUA_PROJECT_URL)}
+          type="button"
+          variant="ghost"
+        >
+          <IconExternalLink aria-hidden="true" data-icon="inline-start" />
+          trycua/cua
+        </Button>
+      </div>
+    </div>
   );
 }
 
