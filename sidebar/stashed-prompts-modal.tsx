@@ -437,7 +437,6 @@ export function StashedPromptsModal({
               <AppTooltip
                 content={STASH_PROMPT_HINT}
                 contentClassName='ghostex-stashed-prompts-stash-hint-tooltip'
-                contentStyle={{ fontSize: '17px', lineHeight: '24px' }}
                 defaultOpen={stashHintTooltipDefaultOpen}
                 side='left'
                 sideOffset={8}
