@@ -726,6 +726,16 @@ type SidebarProjectGroupOrderItem = ProjectWorktreeOrderItem & {
   orderId: string;
 };
 
+/**
+ * CDXC:SidebarBrowserTabReveal 2026-08-18:
+ * `requestId` is what makes a reveal one-shot: two consecutive middle-clicks on
+ * the same link name the same session and must each scroll it back into view.
+ */
+type SidebarSessionRevealRequest = {
+  requestId: number;
+  sessionId: string;
+};
+
 type SidebarProjectCollectionRenderItem =
   | { collection: SidebarProjectCollection; groupIds: string[]; kind: "collection" }
   | { groupId: string; kind: "project" };
@@ -1110,6 +1120,16 @@ export function SidebarApp({
   const [ sessionDropIndicator, setSessionDropIndicator ] = useState<SidebarSessionDropTarget>();
   const [ isSessionSearchSelectionVisible, setIsSessionSearchSelectionVisible ] = useState(false);
   const [ focusedSessionRevealRequestId, setFocusedSessionRevealRequestId ] = useState(0);
+  /**
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * The host's pending "make this row visible" request. It is kept in state
+   * rather than handled inline because the row it names can arrive after the
+   * request: gpui creates a Browser tab and asks for the reveal in the same
+   * turn the tab is first published, so the reveal effect re-runs with the
+   * displayed session list until the row exists.
+   */
+  const [ sessionRevealRequest, setSessionRevealRequest ] =
+    useState<SidebarSessionRevealRequest>();
   const [ showGxserverUnavailableEmptyState, setShowGxserverUnavailableEmptyState ] =
     useState(false);
   const [ selectedSessionSearchResult, setSelectedSessionSearchResult ] =
@@ -1161,6 +1181,8 @@ export function SidebarApp({
   const lastCollapseStateHydrateShapeRef = useRef<string | undefined>(undefined);
   const focusedSessionScrollLogSequenceRef = useRef(0);
   const previousFocusedSessionRevealRequestIdRef = useRef(focusedSessionRevealRequestId);
+  const handledSessionRevealRequestIdRef = useRef<number | undefined>(undefined);
+  const pendingSessionRevealScrollRequestIdRef = useRef<number | undefined>(undefined);
 
   if (!didResetStoreRef.current) {
     resetSidebarStore();
@@ -1952,6 +1974,14 @@ export function SidebarApp({
 
     if (event.data.type === "sidebarCommandRunStateCleared") {
       applyCommandRunStateClearedMessage(event.data);
+      return;
+    }
+
+    if (event.data.type === "revealSidebarSession") {
+      setSessionRevealRequest({
+        requestId: event.data.requestId,
+        sessionId: event.data.sessionId,
+      });
       return;
     }
 
@@ -3416,6 +3446,14 @@ export function SidebarApp({
       action.kind === "focusDirection" ||
       action.kind === "focusedPaneAction" ||
       action.kind === "jumpToProject" ||
+      /*
+       * CDXC:NavigationHistory 2026-08-19:
+       * Back/Forward is host-owned: gpui walks the trail through its native
+       * titlebar route and the web shell through its sidebar runtime, so the
+       * palette row forwards the action id and nothing else, exactly like the
+       * other host-owned navigation rows here.
+       */
+      action.kind === "navigateHistory" ||
       action.kind === "openCommandsPanel" ||
       action.kind === "renameActiveSession" ||
       action.kind === "runActionSlot" ||
@@ -3771,6 +3809,126 @@ export function SidebarApp({
       }
     };
   }, [ consumeFocusedSessionScrollSuppression, focusedSessionId, focusedSessionRevealRequestId ]);
+
+  /*
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * Opening a Browser tab must leave the user able to SEE it in the sidebar.
+   * Every collapsed container between the sidebar scroller and the row is
+   * expanded for real (the same persisted collapse state the chevrons write, so
+   * the expansion sticks), the group section is told to open the row's own
+   * kind section, and the row is scrolled into view only if it is off screen.
+   *
+   * The scroll waits for the expand transitions the browser actually created
+   * instead of a matching JS timer, exactly like `useSidebarCollapsiblePresence`
+   * waits to unmount: measuring mid-animation reads a collapsed body as
+   * zero-height and decides the row is already visible when it is not.
+   */
+  useEffect(() => {
+    if (!sessionRevealRequest) {
+      return;
+    }
+    const { requestId, sessionId } = sessionRevealRequest;
+    if (handledSessionRevealRequestIdRef.current !== requestId) {
+      const groupId = Object.keys(displayedWorkspaceSessionIdsByGroup).find((candidateGroupId) =>
+        displayedWorkspaceSessionIdsByGroup[ candidateGroupId ]?.includes(sessionId),
+      );
+      if (!groupId) {
+        // The row has not been published yet; this effect re-runs when it is.
+        return;
+      }
+      handledSessionRevealRequestIdRef.current = requestId;
+      pendingSessionRevealScrollRequestIdRef.current = requestId;
+
+      if (isReferenceProjectsCollapsed) {
+        triggerReferenceSectionChildAnimation("projects");
+        setIsReferenceProjectsCollapsed(false);
+      }
+      const collectionItem = displayedProjectCollectionItems.find(
+        (item) => item.kind === "collection" && item.groupIds.includes(groupId),
+      );
+      if (collectionItem?.kind === "collection") {
+        setProjectCollectionCollapsed(
+          createLocalProjectCollectionCollapseKey(collectionItem.collection.collectionId),
+          false,
+        );
+      }
+      setGroupCollapsed(groupId, false);
+      const projectId = groupsById[ groupId ]?.projectContext?.editor.projectId;
+      if (projectId) {
+        setProjectSessionListCollapsed(projectId, false);
+      }
+    }
+
+    /*
+     * The expansions above happen once, but the scroll they enable must survive
+     * this effect being torn down and re-run: a sidebar refresh landing in the
+     * same frame changes the deps, which cancels the pending frame. Keeping the
+     * scroll pending until it actually runs makes the re-run reschedule it
+     * instead of dropping it.
+     */
+    if (pendingSessionRevealScrollRequestIdRef.current !== requestId) {
+      return;
+    }
+
+    let cancelled = false;
+    const scrollRevealedRowIntoView = () => {
+      const scrollViewport = sessionGroupsContentRef.current;
+      const revealedRow = document.querySelector<HTMLElement>(
+        `[data-sidebar-session-id="${sessionId}"]`,
+      );
+      if (cancelled || !scrollViewport || !revealedRow) {
+        return;
+      }
+      pendingSessionRevealScrollRequestIdRef.current = undefined;
+      scrollElementIntoViewIfNeeded(revealedRow, scrollViewport);
+    };
+    const animationFrameId = window.requestAnimationFrame(() => {
+      if (cancelled) {
+        return;
+      }
+      const scrollViewport = sessionGroupsContentRef.current;
+      const revealedRow = document.querySelector<HTMLElement>(
+        `[data-sidebar-session-id="${sessionId}"]`,
+      );
+      if (!scrollViewport || !revealedRow) {
+        return;
+      }
+      const expandAnimations: Animation[] = [];
+      for (
+        let ancestor = revealedRow.parentElement;
+        ancestor && ancestor !== scrollViewport;
+        ancestor = ancestor.parentElement
+      ) {
+        expandAnimations.push(...ancestor.getAnimations());
+      }
+      if (expandAnimations.length === 0) {
+        scrollRevealedRowIntoView();
+        return;
+      }
+      void Promise.allSettled(
+        expandAnimations.map((expandAnimation) => expandAnimation.finished),
+      ).then(scrollRevealedRowIntoView);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [
+    /*
+     * The collapse state is a real dependency, not incidental: expanding a
+     * collapsed project mounts its body, so the row this effect scrolls to only
+     * exists in the DOM on the run that follows its own expansion.
+     */
+    collapsedGroupsById,
+    collapsedProjectCollectionsByKey,
+    collapsedProjectSessionListsById,
+    displayedProjectCollectionItems,
+    displayedWorkspaceSessionIdsByGroup,
+    groupsById,
+    isReferenceProjectsCollapsed,
+    sessionRevealRequest,
+  ]);
 
   const unlockCompletionSoundPlayback = useEffectEvent(() => {
     void prepareCompletionSoundPlayback((soundEvent, details) => {
@@ -5394,6 +5552,7 @@ export function SidebarApp({
         projectCollectionId={projectId ? projectCollectionIdByProjectId.get(projectId) : undefined}
         projectCollectionOptions={enableProjectCollections ? projectCollections.collections : undefined}
         projectSessionListCollapsedState={collapsedProjectSessionListsById}
+        revealSessionRequest={sessionRevealRequest}
         selectedSearchSessionId={
           isSessionSearchSelectionVisible && selectedSessionSearchResult?.kind === "session"
             ? selectedSessionSearchResult.sessionId

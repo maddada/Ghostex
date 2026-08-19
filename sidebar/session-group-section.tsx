@@ -512,6 +512,14 @@ export type SessionGroupSectionProps = {
   projectCollectionId?: string;
   projectCollectionOptions?: readonly { collectionId: string; color: string; title: string }[];
   projectSessionListCollapsedState?: Readonly<ProjectSessionListCollapsedState>;
+  /**
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * A host reveal request for one session row. The kind sections inside a
+   * project group (Browser / Pinned / Sessions) are this component's own state,
+   * so revealing a row it owns has to reach it as a request instead of being
+   * decided by SidebarApp.
+   */
+  revealSessionRequest?: { requestId: number; sessionId: string };
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   showHeaderActions?: boolean;
   showSessionDropPositionIndicators?: boolean;
@@ -723,6 +731,7 @@ export function SessionGroupSection({
   projectCollectionId,
   projectCollectionOptions = [],
   projectSessionListCollapsedState = {},
+  revealSessionRequest,
   sessionDropIndicator,
   sessionDraggingDisabled = false,
   sessionTagListItems,
@@ -807,6 +816,7 @@ export function SessionGroupSection({
   const projectTitleButtonRef = useRef<HTMLButtonElement>(null);
   const groupTitleInputRef = useRef<HTMLInputElement>(null);
   const groupSectionRef = useRef<HTMLElement | null>(null);
+  const handledRevealSessionRequestIdRef = useRef<number | undefined>(undefined);
   const sessionsShellRef = useRef<HTMLDivElement | null>(null);
   const debugInstanceIdRef = useRef(createSessionGroupDebugInstanceId());
 
@@ -1019,6 +1029,29 @@ export function SessionGroupSection({
       [section]: !previous[section],
     }));
   };
+  /*
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * A revealed row is useless inside a collapsed kind section, so open the one
+   * that owns it (Browser for a new Browser tab) and leave it open — the user
+   * can close it again, and nothing re-collapses it behind their back.
+   */
+  useEffect(() => {
+    if (
+      !revealSessionRequest ||
+      handledRevealSessionRequestIdRef.current === revealSessionRequest.requestId
+    ) {
+      return;
+    }
+    const revealedSession = sessionsById[revealSessionRequest.sessionId];
+    if (!revealedSession || !orderedSessionIds.includes(revealSessionRequest.sessionId)) {
+      return;
+    }
+    handledRevealSessionRequestIdRef.current = revealSessionRequest.requestId;
+    const revealedSection = getProjectSessionSection(revealedSession);
+    setCollapsedProjectSessionSections((previous) =>
+      previous[revealedSection] ? { ...previous, [revealedSection]: false } : previous,
+    );
+  }, [orderedSessionIds, revealSessionRequest, sessionsById]);
   const expandedVisibleSessionIds = projectContext
     ? visibleSessionIds.filter(
         (sessionId) =>
