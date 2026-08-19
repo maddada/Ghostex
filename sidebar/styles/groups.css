@@ -1631,12 +1631,22 @@ section.project-collection.project-collection-drag-ghost {
   transform: rotate(90deg);
 }
 
-.project-collection-title {
-  flex: 1;
+/*
+ * The rename field shows the same group name the header shows, so it carries
+ * the title's own type instead of the header's smaller base font. Inputs do
+ * not inherit the page font family by default, so state it here.
+ */
+.project-collection-title,
+.project-collection-title-input {
+  font-family: inherit;
   font-size: 11px;
   font-weight: 650;
-  justify-content: flex-start;
   letter-spacing: 0.025em;
+}
+
+.project-collection-title {
+  flex: 1;
+  justify-content: flex-start;
   overflow: hidden;
   padding: 0;
   text-align: left;
@@ -1650,8 +1660,6 @@ section.project-collection.project-collection-drag-ghost {
   border-radius: 4px;
   color: inherit;
   flex: 1;
-  font: inherit;
-  height: 22px;
   min-width: 0;
   outline: none;
   padding: 0 5px;

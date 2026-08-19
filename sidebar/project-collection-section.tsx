@@ -17,7 +17,14 @@ import {
 } from "@tabler/icons-react";
 import { PointerSensor } from "@dnd-kit/dom";
 import { useSortable } from "@dnd-kit/react/sortable";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { SidebarSessionItem } from "../shared/session-grid-contract";
 import {
   getSidebarSessionTagLabel,
@@ -141,6 +148,7 @@ export function ProjectCollectionSection({
   const [menuView, setMenuView] = useState<MenuView>();
   const [menuPosition, setMenuPosition] = useState<ContextMenuPosition>();
   const menuRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   /*
    * The visible colored header is both the exact collapse click surface and
    * the drag handle. The collection section is the bounded drop target, so its
@@ -208,6 +216,22 @@ export function ProjectCollectionSection({
     setIsEditing(true);
     onAutoEditHandled();
   }, [autoEdit, collection.title, onAutoEditHandled]);
+
+  /*
+   * Renaming a group starts from its current name, so the field opens with
+   * that name selected: typing replaces it outright and editing it stays one
+   * arrow key away. Focus is taken here instead of through `autoFocus` because
+   * the selection has to be applied to the same element in the same pass.
+   */
+  useLayoutEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    const input = titleInputRef.current;
+    input?.focus({ preventScroll: true });
+    input?.select();
+  }, [isEditing]);
 
   const submitRename = () => {
     const title = draftTitle.trim().slice(0, 80);
@@ -316,7 +340,6 @@ export function ProjectCollectionSection({
         </button>
         {isEditing ? (
           <input
-            autoFocus
             className="project-collection-title-input"
             onBlur={submitRename}
             onChange={(event) => setDraftTitle(event.currentTarget.value)}
@@ -332,6 +355,7 @@ export function ProjectCollectionSection({
                 setIsEditing(false);
               }
             }}
+            ref={titleInputRef}
             value={draftTitle}
           />
         ) : (

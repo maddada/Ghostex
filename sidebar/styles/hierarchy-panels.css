@@ -308,6 +308,7 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
  * titles keeps the headers distinct without making them visually heavy.
  */
 .project-collection-title,
+.project-collection-title-input,
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .group[data-project-group="true"]
   .group-title {
@@ -317,7 +318,8 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
   text-transform: none;
 }
 
-.project-collection-title {
+.project-collection-title,
+.project-collection-title-input {
   font-weight: 800;
 }
 
