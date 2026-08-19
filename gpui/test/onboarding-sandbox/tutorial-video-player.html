@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ghostex tutorial player</title>
+    <style>
+      html,
+      body {
+        background: #000;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+      iframe {
+        border: 0;
+        display: block;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Mirrors gpui_tutorial_video_player_document() in gpui/src/main.rs: the
+      one page the app serves from its own origin so the YouTube embed has a
+      real embedding origin. Keep both in sync.
+    -->
+    <iframe
+      src="https://www.youtube.com/embed/APdP-j5n4Mw?rel=0&amp;modestbranding=1"
+      title="Ghostex introduction"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+    ></iframe>
+  </body>
+</html>

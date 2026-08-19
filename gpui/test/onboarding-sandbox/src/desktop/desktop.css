@@ -1,0 +1,72 @@
+.sbx-desktop {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--sandbox-font);
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * Wallpaper sits behind everything and also acts as the "click the desktop to
+ * unfocus the app window" surface, mirroring Finder behavior.
+ */
+.sbx-desktop-wallpaper {
+  background:
+    radial-gradient(90% 60% at 18% 8%, rgba(84, 128, 255, 0.5) 0%, rgba(84, 128, 255, 0) 62%),
+    radial-gradient(70% 55% at 88% 22%, rgba(220, 92, 190, 0.38) 0%, rgba(220, 92, 190, 0) 60%),
+    radial-gradient(80% 70% at 62% 96%, rgba(34, 190, 190, 0.32) 0%, rgba(34, 190, 190, 0) 58%),
+    linear-gradient(165deg, #1b1f3a 0%, #131629 42%, #0b0c16 100%);
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+
+.sbx-desktop-surface {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  padding: 22px 26px 96px;
+  position: relative;
+  z-index: 10;
+}
+
+.sbx-window-slot {
+  height: 100%;
+  max-width: 1180px;
+  transition: transform 180ms ease;
+  width: 100%;
+}
+
+.sbx-window-slot[data-modal-open="true"] {
+  transform: scale(0.995);
+}
+
+.sbx-desktop-hint {
+  align-self: center;
+  background: rgba(12, 12, 18, 0.42);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin-bottom: 60px;
+  padding: 12px 18px;
+  pointer-events: none;
+}
+
+.sbx-modal-layer {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
+  z-index: 100;
+}
+
+.sbx-modal-slot {
+  pointer-events: auto;
+  position: absolute;
+}

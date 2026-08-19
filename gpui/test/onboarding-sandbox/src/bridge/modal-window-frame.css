@@ -1,0 +1,131 @@
+/* Fake NSPanel chrome for one sandbox modal window. Plain CSS only. */
+
+.sandbox-modal-window {
+  --sandbox-modal-chrome-height: 34px;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.62),
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 0.5px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: absolute;
+  z-index: 40;
+}
+
+.sandbox-modal-window-dragging {
+  user-select: none;
+}
+
+.sandbox-modal-window-titlebar {
+  align-items: center;
+  background: linear-gradient(180deg, #2c2c30 0%, #232326 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  cursor: default;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  height: var(--sandbox-modal-chrome-height);
+  padding: 0 10px;
+  position: relative;
+}
+
+.sandbox-modal-window-close {
+  align-items: center;
+  background: #ff5f57;
+  border: 0.5px solid rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  color: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  display: flex;
+  font-size: 9px;
+  height: 12px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 12px;
+}
+
+.sandbox-modal-window-close span {
+  opacity: 0;
+}
+
+.sandbox-modal-window-titlebar:hover .sandbox-modal-window-close span {
+  opacity: 1;
+}
+
+.sandbox-modal-window-title {
+  color: #d9d9de;
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  pointer-events: none;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sandbox-modal-window-badge {
+  color: #8a8a94;
+  flex: 0 0 auto;
+  font-family: var(--sandbox-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sandbox-modal-window-body {
+  background: #0e0e0e;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.sandbox-modal-window-iframe {
+  background: #0e0e0e;
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.sandbox-modal-window-iframe-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sandbox-modal-window-iframe-inert {
+  pointer-events: none;
+}
+
+.sandbox-modal-window-loading {
+  align-items: center;
+  background: #0e0e0e;
+  color: #8a8a94;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 10px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.sandbox-modal-window-spinner {
+  animation: sandbox-modal-window-spin 0.9s linear infinite;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  border-top-color: rgba(255, 255, 255, 0.7);
+  height: 18px;
+  width: 18px;
+}
+
+@keyframes sandbox-modal-window-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

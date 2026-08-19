@@ -1,0 +1,245 @@
+/* Event log pane — pinned to the bottom of the inspector drawer. */
+
+.cp-log {
+  border-top: 1px solid var(--sandbox-border);
+  display: flex;
+  flex: 0 0 42%;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cp-log.is-collapsed {
+  flex: 0 0 auto;
+}
+
+.cp-log-head {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 5px 10px;
+}
+
+.cp-log-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--sandbox-text);
+  cursor: pointer;
+  display: flex;
+  font-size: 10.5px;
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.07em;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.cp-log-toggle .cp-section-badge {
+  margin-left: 4px;
+}
+
+.cp-log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 10px 5px;
+}
+
+.cp-filter {
+  background: transparent;
+  border: 1px solid var(--sandbox-border);
+  border-radius: 20px;
+  color: var(--sandbox-text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9.5px;
+  opacity: 0.45;
+  padding: 1px 7px;
+}
+
+.cp-filter.is-on {
+  opacity: 1;
+}
+
+.cp-filter--flow.is-on {
+  border-color: rgb(79 140 255 / 60%);
+  color: #8fb6ff;
+}
+
+.cp-filter--state.is-on {
+  border-color: rgb(178 130 255 / 60%);
+  color: #c3a2ff;
+}
+
+.cp-filter--modal.is-on {
+  border-color: rgb(76 196 120 / 60%);
+  color: #7fdc9f;
+}
+
+.cp-filter--toast.is-on {
+  border-color: rgb(229 165 58 / 60%);
+  color: #f0c477;
+}
+
+.cp-filter--message.is-on {
+  border-color: rgb(154 154 164 / 60%);
+  color: var(--sandbox-text-dim);
+}
+
+.cp-filter--warning.is-on {
+  border-color: rgb(224 92 92 / 65%);
+  color: #ff9b9b;
+}
+
+.cp-log-scroll {
+  border-top: 1px solid var(--sandbox-border);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 10px;
+  scrollbar-width: thin;
+}
+
+.cp-log-empty {
+  color: var(--sandbox-text-dim);
+  margin: 10px;
+}
+
+.cp-log-divider {
+  background: rgb(255 255 255 / 4%);
+  color: var(--sandbox-text-dim);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  margin: 6px 0 2px;
+  padding: 2px 10px;
+  text-transform: uppercase;
+}
+
+.cp-event {
+  border-left: 2px solid transparent;
+  padding: 0 8px 0 6px;
+}
+
+.cp-event:hover {
+  background: rgb(255 255 255 / 3%);
+}
+
+.cp-event--warning {
+  background: rgb(224 92 92 / 9%);
+  border-left-color: #e05c5c;
+}
+
+.cp-event--warning:hover {
+  background: rgb(224 92 92 / 14%);
+}
+
+.cp-event-head {
+  align-items: baseline;
+  background: transparent;
+  border: 0;
+  color: var(--sandbox-text);
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.cp-event-time {
+  color: var(--sandbox-text-dim);
+  flex: 0 0 52px;
+  font-family: var(--sandbox-mono);
+  font-size: 9.5px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-event-chip {
+  border-radius: 3px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  min-width: 48px;
+  padding: 0 4px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cp-event-chip--flow {
+  background: rgb(79 140 255 / 20%);
+  color: #8fb6ff;
+}
+
+.cp-event-chip--state {
+  background: rgb(178 130 255 / 20%);
+  color: #c3a2ff;
+}
+
+.cp-event-chip--modal {
+  background: rgb(76 196 120 / 20%);
+  color: #7fdc9f;
+}
+
+.cp-event-chip--toast {
+  background: rgb(229 165 58 / 20%);
+  color: #f0c477;
+}
+
+.cp-event-chip--message {
+  background: rgb(255 255 255 / 8%);
+  color: var(--sandbox-text-dim);
+}
+
+.cp-event-chip--warning {
+  background: rgb(224 92 92 / 26%);
+  color: #ffb0b0;
+  font-weight: 600;
+}
+
+.cp-event-label {
+  flex: 1 1 auto;
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cp-event--warning .cp-event-label {
+  color: #ffd4d4;
+}
+
+.cp-event-caret {
+  color: var(--sandbox-text-dim);
+  flex: 0 0 auto;
+  font-size: 9px;
+}
+
+.cp-event-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 6px 60px;
+}
+
+.cp-event-detail p {
+  color: var(--sandbox-text-dim);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.cp-event-ref {
+  color: #6f6f7c;
+  display: block;
+  font-family: var(--sandbox-mono);
+  font-size: 9.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-event-ref--inline {
+  padding: 0 0 2px 60px;
+}

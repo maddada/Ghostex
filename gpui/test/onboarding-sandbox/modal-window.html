@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Ghostex Modal Window</title>
+    <style>
+      html,
+      body {
+        background: #0e0e0e;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Entry installs the ghostexAppModalHost shim BEFORE importing the real
+         native/sidebar/modal-host.tsx (which self-mounts into #root). -->
+    <script type="module" src="/src/modal-window/modal-window-main.ts"></script>
+  </body>
+</html>

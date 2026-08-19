@@ -1,0 +1,69 @@
+.sbx-menu-bar {
+  align-items: center;
+  backdrop-filter: blur(24px) saturate(160%);
+  background: rgba(22, 22, 28, 0.55);
+  box-shadow: inset 0 -0.5px 0 rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  height: 26px;
+  justify-content: space-between;
+  padding: 0 10px;
+  position: relative;
+  user-select: none;
+  z-index: 30;
+}
+
+.sbx-menu-bar-left,
+.sbx-menu-bar-right {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.sbx-menu-bar-right {
+  gap: 12px;
+}
+
+.sbx-menu-bar-apple {
+  align-items: center;
+  display: flex;
+  opacity: 0.95;
+  padding-bottom: 1px;
+}
+
+.sbx-menu-bar-app {
+  font-weight: 700;
+  letter-spacing: 0.1px;
+}
+
+.sbx-menu-bar-app[data-launching="true"] {
+  animation: sbx-menu-app-fade 1.1s ease-in-out infinite;
+}
+
+@keyframes sbx-menu-app-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.sbx-menu-bar-item {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.sbx-menu-bar-status {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.88);
+  display: flex;
+}
+
+.sbx-menu-bar-clock {
+  font-variant-numeric: tabular-nums;
+  min-width: 138px;
+  text-align: right;
+}

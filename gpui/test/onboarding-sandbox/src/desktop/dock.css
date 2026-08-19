@@ -1,0 +1,144 @@
+.sbx-dock-area {
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding-bottom: 8px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 60;
+}
+
+.sbx-dock {
+  align-items: flex-end;
+  backdrop-filter: blur(30px) saturate(180%);
+  background: rgba(58, 58, 70, 0.42);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  display: flex;
+  gap: 7px;
+  padding: 7px 9px 5px;
+  pointer-events: auto;
+}
+
+.sbx-dock-item {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.sbx-dock-tile {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 13px;
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.35),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  display: flex;
+  height: 52px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease;
+  width: 52px;
+}
+
+.sbx-dock-item:hover .sbx-dock-tile {
+  transform: translateY(-6px) scale(1.06);
+}
+
+.sbx-dock-tile-decoy {
+  cursor: default;
+}
+
+.sbx-dock-tile-glyph {
+  color: rgba(255, 255, 255, 0.95);
+  display: flex;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.sbx-dock-tile-glyph[data-dark="true"] {
+  color: rgba(30, 34, 42, 0.86);
+  filter: none;
+}
+
+.sbx-dock-tile-ghostex {
+  background: transparent;
+  box-shadow: none;
+}
+
+.sbx-dock-ghostex-icon {
+  display: block;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.45));
+  height: 52px;
+  width: 52px;
+}
+
+.sbx-dock-tile-ghostex[data-launching="true"] {
+  animation: sbx-dock-bounce 0.72s cubic-bezier(0.3, 0.1, 0.3, 1) infinite;
+}
+
+@keyframes sbx-dock-bounce {
+  0% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-22px);
+  }
+  70% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.sbx-dock-running {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  height: 4px;
+  margin-top: 3px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+  width: 4px;
+}
+
+.sbx-dock-running[data-on="true"] {
+  opacity: 0.85;
+}
+
+.sbx-dock-separator {
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.16);
+  margin: 4px 3px 8px;
+  width: 1px;
+}
+
+.sbx-dock-tooltip {
+  background: rgba(28, 28, 34, 0.92);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  bottom: 68px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 11.5px;
+  left: 50%;
+  opacity: 0;
+  padding: 3px 8px;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+  white-space: nowrap;
+}
+
+.sbx-dock-item:hover .sbx-dock-tooltip {
+  opacity: 1;
+}

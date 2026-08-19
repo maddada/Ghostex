@@ -48,6 +48,7 @@
     "web:dev": "vite --config ghostex-web/vite.config.ts",
     "web:build": "vite build --config ghostex-web/vite.config.ts",
     "web:typecheck": "tsc -p ghostex-web/tsconfig.json --noEmit",
+    "sandbox:onboarding": "vite --config gpui/test/onboarding-sandbox/vite.config.ts",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run"
   },

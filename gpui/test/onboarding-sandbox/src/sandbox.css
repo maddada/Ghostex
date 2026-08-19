@@ -1,0 +1,40 @@
+/* Base layout shell only — desktop/controls agents own their own stylesheets. */
+:root {
+  --sandbox-bg: #101014;
+  --sandbox-panel-bg: #17171c;
+  --sandbox-border: #2a2a32;
+  --sandbox-text: #e6e6ea;
+  --sandbox-text-dim: #9a9aa4;
+  --sandbox-accent: #4f8cff;
+  --sandbox-warning: #e5a53a;
+  --sandbox-font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+  --sandbox-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html,
+body,
+#sandbox-root {
+  height: 100%;
+  margin: 0;
+  width: 100%;
+}
+
+body {
+  background: var(--sandbox-bg);
+  color: var(--sandbox-text);
+  font-family: var(--sandbox-font);
+  overflow: hidden;
+}
+
+.sandbox-root {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.sandbox-stage {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}

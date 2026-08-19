@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../../../*"]
+    },
+    "noEmit": true
+  },
+  "include": ["src/**/*", "vite.config.ts", "yt-proxy.ts", "dev-cert.ts", "../../../shared/asset-modules.d.ts"]
+}
