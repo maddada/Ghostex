@@ -577,6 +577,32 @@ pub fn dispatch_zmx_lifecycle_endpoint(
         }
         "/api/sleepSession" | "/api/killSession" => {
             let lifecycle = read_lifecycle_params(params)?;
+            /*
+            CDXC:MobileKeepAwake 2026-08-19:
+            An AUTOMATIC sleep (a client's "Sleep inactive agents" sweep) loses to
+            a live keep-awake lease, because the sweeping client cannot see that a
+            phone is attached to this terminal. The decision belongs here rather
+            than in each client's sweep: gxserver owns the lease, so every client's
+            sweep gets the same answer without learning a new presentation field.
+
+            A user-triggered Sleep is never declined — the caller asked for it.
+            */
+            if endpoint_path == "/api/sleepSession"
+                && crate::session_keep_awake::sleep_trigger_is_automatic(
+                    params.get("sleepTrigger").and_then(Value::as_str),
+                )
+                && crate::session_keep_awake::is_held_awake(
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                )
+            {
+                let session = require_session(repository, &lifecycle)?;
+                return Ok(ZmxEndpointOutput {
+                    created_workspace_terminal: None,
+                    result: json!({ "declined": "keptAwake", "session": session }),
+                    presentation_session: None,
+                });
+            }
             let target_lifecycle = if endpoint_path == "/api/sleepSession" {
                 "sleeping"
             } else {
@@ -604,11 +630,15 @@ pub fn dispatch_zmx_lifecycle_endpoint(
 /// In-server `zmx history` read: the exact `/api/readSessionText` path (same
 /// 256 KiB cap, same one-shot process) without the HTTP/JSON round trip, for
 /// server-side scrollback consumers such as the chat option detector.
-pub fn read_zmx_session_history_text(
+///
+/// CDXC:SessionChatTerminalNotices 2026-08-19: the truncation flag travels with
+/// the text now. A capture that hit the cap lost its TAIL — the live screen —
+/// so screen-state readers must not conclude anything from it.
+pub(crate) fn read_zmx_session_history_capture(
     repository: &DomainRepository<'_>,
     project_id: &str,
     session_id: &str,
-) -> ZmxEndpointResult<String> {
+) -> ZmxEndpointResult<ZmxHistoryCapture> {
     let mut params = Map::new();
     params.insert(
         "projectId".to_string(),
@@ -620,11 +650,14 @@ pub fn read_zmx_session_history_text(
     );
     let result =
         dispatch_zmx_session_interaction_endpoint(repository, "/api/readSessionText", &params)?;
-    Ok(result
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string())
+    Ok(ZmxHistoryCapture {
+        text: result
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        truncated: result.get("truncated").and_then(Value::as_bool) == Some(true),
+    })
 }
 
 pub fn dispatch_zmx_session_interaction_endpoint(

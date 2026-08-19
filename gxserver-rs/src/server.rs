@@ -44,7 +44,7 @@ use crate::{
     agent_skills::{install_agent_skills, read_agent_skill_status},
     agents::{
         apply_created_session_identity, apply_live_process_session_identity,
-        codex_metadata_title_revision, create_agent_session_params_for_project,
+        agent_metadata_title_revision, create_agent_session_params_for_project,
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
         normalize_agent_hook_activity, read_agent_settings, read_text_from_map,
         reconcile_agent_metadata_title_for_session, resolve_project_agent_config,
@@ -102,10 +102,11 @@ use crate::{
         create_source_build_identity, is_build_identity_reusable, remove_runtime_metadata,
         write_runtime_metadata,
     },
+    navigation_history::{navigate_history, read_navigation_history, record_navigation_visit},
     session_chat_files::read_session_chat_files,
     session_chat_skills::read_session_chat_skills,
-    session_git_status, session_lifecycle,
-    session_status::agent_activity_presentation_refresh_delay_ms,
+    session_git_status, session_keep_awake, session_lifecycle,
+    session_status::{agent_activity_presentation_refresh_delay_ms, iso_from_ms},
     sidebar_hud::{
         create_sidebar_hud_settings_mutation, read_sidebar_hud,
         read_sidebar_hud_commands_by_project, read_sidebar_hud_global_commands,
@@ -258,7 +259,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "waitFor",
 ];
 const PORTLESS_BACKGROUND_SYNC_INTERVAL: Duration = Duration::from_secs(10);
-const CODEX_METADATA_TITLE_SYNC_INTERVAL: Duration = Duration::from_secs(1);
+const AGENT_METADATA_TITLE_SYNC_INTERVAL: Duration = Duration::from_secs(1);
 const SESSION_LIFECYCLE_SWEEP_INTERVAL: Duration =
     Duration::from_secs(session_lifecycle::SESSION_LIFECYCLE_SWEEP_INTERVAL_SECONDS);
 const SESSION_GIT_STATUS_REFRESH_INTERVAL: Duration =
@@ -424,7 +425,7 @@ pub async fn run_gxserver_foreground(
     state.delayed_send_runtime.start(shutdown_tx.subscribe());
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
-    let codex_metadata_title_sync_task = spawn_codex_metadata_title_sync_task(&state);
+    let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
     let portless_background_sync_task = spawn_portless_background_sync_task(&state);
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);
@@ -444,7 +445,7 @@ pub async fn run_gxserver_foreground(
             let _ = shutdown_rx.recv().await;
         })
         .await;
-    codex_metadata_title_sync_task.abort();
+    agent_metadata_title_sync_task.abort();
     portless_background_sync_task.abort();
     session_lifecycle_sweep_task.abort();
     session_git_status_refresh_task.abort();
@@ -465,7 +466,7 @@ revision for each live, identified Codex session on gxserver's clock and only
 reconcile when that file changes. The sidebar then receives the ordinary
 authoritative presentation delta without client-local title state.
 */
-fn spawn_codex_metadata_title_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+fn spawn_agent_metadata_title_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
     let sync_state = state.clone();
     let revisions = Arc::new(Mutex::new(HashMap::<String, String>::new()));
     let mut shutdown_rx = state.shutdown_tx.subscribe();
@@ -474,19 +475,19 @@ fn spawn_codex_metadata_title_sync_task(state: &Arc<AppState>) -> tokio::task::J
             let pass_state = sync_state.clone();
             let pass_revisions = revisions.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                run_codex_metadata_title_sync_once(&pass_state, &pass_revisions)
+                run_agent_metadata_title_sync_once(&pass_state, &pass_revisions)
             })
             .await;
 
             tokio::select! {
                 _ = shutdown_rx.recv() => break,
-                _ = tokio::time::sleep(CODEX_METADATA_TITLE_SYNC_INTERVAL) => {}
+                _ = tokio::time::sleep(AGENT_METADATA_TITLE_SYNC_INTERVAL) => {}
             }
         }
     })
 }
 
-fn run_codex_metadata_title_sync_once(
+fn run_agent_metadata_title_sync_once(
     state: &Arc<AppState>,
     revisions: &Arc<Mutex<HashMap<String, String>>>,
 ) -> std::result::Result<(), DomainStateError> {
@@ -507,7 +508,7 @@ fn run_codex_metadata_title_sync_once(
         let Some(session_id) = read_session_text(&session, "sessionId") else {
             continue;
         };
-        let Some(revision) = codex_metadata_title_revision(&state.paths.home_dir, &session) else {
+        let Some(revision) = agent_metadata_title_revision(&state.paths.home_dir, &session) else {
             continue;
         };
         let key = session_observer_key(&project_id, &session_id);
@@ -2530,6 +2531,36 @@ async fn route_http(
                 Ok(Value::Object(result))
             },
         ),
+        /*
+        CDXC:NavigationHistory 2026-08-19:
+        Titlebar Back/Forward is one daemon-owned trail of previously active
+        sessions and projects, shared by the gpui desktop titlebar and the web
+        titlebar — see `navigation_history`. These three calls carry only
+        opaque routing ids plus the display titles the sidebar already renders,
+        so they sit with the other sidebar-state endpoints and need no
+        repository or database access.
+        */
+        "/api/readNavigationHistory" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, _, params, _| read_navigation_history(params),
+        ),
+        "/api/recordNavigationVisit" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, _, params, _| record_navigation_visit(params),
+        ),
+        "/api/navigateHistory" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, _, params, _| navigate_history(params),
+        ),
         "/api/readWorkspaceSessionGroups" => handle_domain_http(
             &state,
             endpoint.path,
@@ -2690,6 +2721,21 @@ async fn route_http(
             &body_json,
             |repository, _, params, _| repository.delete_stashed_prompt(params),
         ),
+        /*
+        CDXC:MobileKeepAwake 2026-08-19:
+        A client that is ATTACHED to a session (Ghostex mobile, over its SSH CLI
+        bridge) renews a keep-awake lease here so this machine's Auto Sleep sweep
+        cannot retire a terminal somebody is actually looking at. The lease lives
+        in memory with a TTL — see `session_keep_awake` — and is honored by
+        `/api/sleepSession` only for automatic sweeps.
+        */
+        "/api/holdSessionsAwake" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _db, params, _| hold_sessions_awake(repository, params),
+        ),
         "/api/searchSessions" => handle_domain_http(
             &state,
             endpoint.path,
@@ -2823,6 +2869,10 @@ async fn route_http(
         "/api/interruptSessionChat" => {
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json)
         }
+        "/api/handoffSessionChatDraft" => {
+            handle_handoff_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
+                .await
+        }
         "/api/createPullRequest" => {
             handle_create_pull_request_http(&state, endpoint.path, request_id, &body_json).await
         }
@@ -2838,6 +2888,9 @@ async fn route_http(
         }
         "/api/browseProjectDirectories" => {
             handle_browse_project_directories_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/createProjectDirectory" => {
+            handle_create_project_directory_http(&state, endpoint.path, request_id, &body_json)
         }
         "/api/discoverSourceControl" | "/api/lookupRepository" => {
             handle_source_control_http(&state, endpoint.path, request_id, &body_json).await
@@ -3018,6 +3071,76 @@ fn handle_portless_state_http(
 CDXC:GxserverRustPort 2026-06-14-22:38:
 Phase 3 Rust domain endpoints must share the TypeScript RPC envelope, durable SQLite database, and error-status mapping. Keep routing synchronous and explicit here so unsupported lifecycle/provider endpoints still return milestone notImplemented instead of silently mutating partial state.
 */
+/*
+CDXC:MobileKeepAwake 2026-08-19:
+`/api/holdSessionsAwake` takes ONE list so a phone tailing several attached tabs
+renews every hold in a single SSH round trip instead of one exec per tab.
+
+Every entry is validated against this daemon's own sessions table before a lease
+is recorded: the request carries selectors, never authority, and an id that does
+not resolve is reported back as `unknown` rather than failing the whole renewal —
+a tab whose session was killed elsewhere must not stop the other tabs' holds.
+*/
+fn hold_sessions_awake(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+) -> std::result::Result<Value, DomainStateError> {
+    let holder_id = session_keep_awake::normalize_holder_id(
+        params.get("holderId").and_then(Value::as_str),
+    );
+    let ttl_ms = session_keep_awake::normalize_ttl_ms(
+        params.get("ttlMs").and_then(Value::as_i64),
+    );
+    let release = params.get("release").and_then(Value::as_bool) == Some(true);
+    let requested = params
+        .get("sessions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if requested.is_empty() {
+        return Err(DomainStateError::bad_request(
+            "holdSessionsAwake requires a non-empty sessions list.",
+        ));
+    }
+    let mut held: Vec<Value> = Vec::new();
+    let mut unknown: Vec<Value> = Vec::new();
+    for entry in &requested {
+        let Some(entry) = entry.as_object() else {
+            continue;
+        };
+        let project_id = read_project_id(entry)?;
+        let session_id = read_session_id(entry)?;
+        if repository.get_session(&project_id, &session_id)?.is_none() {
+            unknown.push(json!({ "projectId": project_id, "sessionId": session_id }));
+            continue;
+        }
+        if release {
+            session_keep_awake::release(&project_id, &session_id, &holder_id);
+            held.push(json!({
+                "projectId": project_id,
+                "sessionId": session_id,
+                "keptAwake": session_keep_awake::is_held_awake(&project_id, &session_id),
+            }));
+            continue;
+        }
+        let expires_at =
+            session_keep_awake::hold(&project_id, &session_id, &holder_id, ttl_ms);
+        held.push(json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+            "keptAwake": true,
+            "keepAwakeUntil": iso_from_ms(expires_at),
+        }));
+    }
+    Ok(json!({
+        "holderId": holder_id,
+        "released": release,
+        "sessions": held,
+        "ttlMs": ttl_ms,
+        "unknownSessions": unknown,
+    }))
+}
+
 fn handle_domain_http<F>(
     state: &AppState,
     endpoint_path: String,
@@ -3502,7 +3625,7 @@ async fn handle_agent_http(
 fn schedule_agent_title_metadata_check(state: AppState, project_id: String, session_id: String) {
     /*
     CDXC:GxserverAgentTitles 2026-06-21-15:35:
-    Agent CLI renames are accepted asynchronously after Ghostex submits `/rename`. Match TypeScript gxserver's three-second trailing metadata check so Rust promotes the Codex session-index title and broadcasts a presentation delta after the CLI writes the canonical thread name.
+    Agent CLI renames are accepted asynchronously after Ghostex submits `/rename`. Match TypeScript gxserver's three-second trailing metadata check so Rust promotes the agent's own session-metadata title (Codex `thread_name`, Claude `custom-title`) and broadcasts a presentation delta after the CLI writes it.
     */
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(
@@ -9327,6 +9450,100 @@ fn handle_browse_project_directories_http(
     }
 }
 
+/*
+CDXC:AddProjectNewFolder 2026-08-18:
+The Add Project dialog creates its destination folder through this endpoint
+instead of relying on the add/clone step to `mkdir -p` a typed path, so a user
+can make a folder, browse into it, and only then decide whether to add it or
+clone into it. The parent must already be an existing directory and the name is
+a single segment, which keeps this strictly weaker than the browse endpoint the
+caller already used to reach that parent.
+*/
+fn handle_create_project_directory_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_project_directory_browse_params(body) {
+        Ok(params) => params,
+        Err(error) => return project_path_error_response(endpoint_path, request_id, error),
+    };
+    match create_project_directory(&params, &state.paths.home_dir) {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(error) => project_path_error_response(endpoint_path, request_id, error),
+    }
+}
+
+fn create_project_directory(
+    params: &Map<String, Value>,
+    home_dir: &Path,
+) -> std::result::Result<Value, ProjectPathHttpError> {
+    let parent_path = normalize_existing_directory_path(params.get("parentPath"), "parentPath", home_dir)?;
+    let name = normalize_new_directory_name(params.get("name"))?;
+    let path = PathBuf::from(&parent_path).join(&name);
+    if path.exists() {
+        return Err(ProjectPathHttpError::bad_request(format!(
+            "A folder named {name} already exists here."
+        )));
+    }
+    fs::create_dir(&path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::PermissionDenied => ProjectPathHttpError {
+            code: "forbidden",
+            message: format!("No permission to create a folder in {parent_path}"),
+        },
+        _ => ProjectPathHttpError::bad_request(format!(
+            "Failed to create folder: {}",
+            path_to_string(&path)
+        )),
+    })?;
+    Ok(json!({
+        "name": name,
+        "parentPath": parent_path,
+        "path": path_to_string(&path),
+    }))
+}
+
+/*
+A new folder name is a single path segment, never a path: separators, `.`, `..`,
+and null bytes are rejected so `parentPath` stays the only directory this
+endpoint can write into.
+*/
+fn normalize_new_directory_name(
+    input: Option<&Value>,
+) -> std::result::Result<String, ProjectPathHttpError> {
+    let Some(value) = input.and_then(Value::as_str).map(str::trim) else {
+        return Err(ProjectPathHttpError::bad_request(
+            "name must be a non-empty folder name.",
+        ));
+    };
+    if value.is_empty() {
+        return Err(ProjectPathHttpError::bad_request(
+            "name must be a non-empty folder name.",
+        ));
+    }
+    if value.chars().count() > 255 {
+        return Err(ProjectPathHttpError::bad_request(
+            "name exceeds 255 characters.",
+        ));
+    }
+    if value.contains('\0') || value.contains('/') || value.contains('\\') {
+        return Err(ProjectPathHttpError::bad_request(
+            "name must be a single folder name, without path separators.",
+        ));
+    }
+    if value == "." || value == ".." {
+        return Err(ProjectPathHttpError::bad_request(
+            "name must be a single folder name, without path separators.",
+        ));
+    }
+    Ok(value.to_string())
+}
+
 fn handle_resolve_git_root_for_path_http(
     state: &AppState,
     endpoint_path: String,
@@ -10645,10 +10862,14 @@ follower's ~30s piggyback. A miss is cached too — a session whose agent prints
 no statusline must not re-spawn `zmx history` on every read. Detection is
 deliberately absent from resolve_session_chat_read_state's fingerprint: hashing
 it would make each 500ms long-poll tick spawn a process.
+
+CDXC:SessionChatTerminalNotices 2026-08-19: the SAME capture is classified for
+terminal-state notices (login expired, trust dialog, usage limit, a crashed
+CLI), so the cache entry carries both readings and neither costs an extra spawn.
 */
 struct SessionChatOptionCacheEntry {
     fetched_at: std::time::Instant,
-    value: Option<crate::session_chat_options::SessionChatDetectedOptions>,
+    value: crate::session_chat_options::SessionChatTerminalDetection,
 }
 
 #[derive(Clone)]
@@ -10673,12 +10894,13 @@ impl SessionChatOptionDetector {
         &self,
         project_id: &str,
         session_id: &str,
-    ) -> Option<crate::session_chat_options::SessionChatDetectedOptions> {
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
         let key = session_observer_key(project_id, session_id);
         self.cache
             .lock()
             .ok()
-            .and_then(|cache| cache.get(&key).and_then(|entry| entry.value.clone()))
+            .and_then(|cache| cache.get(&key).map(|entry| entry.value.clone()))
+            .unwrap_or_default()
     }
 
     /// BLOCKING: refreshes through the TTL (`force` bypasses it).
@@ -10688,8 +10910,10 @@ impl SessionChatOptionDetector {
         session_id: &str,
         agent: Option<&str>,
         force: bool,
-    ) -> Option<crate::session_chat_options::SessionChatDetectedOptions> {
-        crate::session_chat_options::session_chat_option_agent(agent)?;
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
+        if crate::session_chat_options::session_chat_option_agent(agent).is_none() {
+            return crate::session_chat_options::SessionChatTerminalDetection::default();
+        }
         let key = session_observer_key(project_id, session_id);
         if !force {
             if let Ok(cache) = self.cache.lock() {
@@ -10702,16 +10926,48 @@ impl SessionChatOptionDetector {
                 }
             }
         }
-        let detected = open_gxserver_database(&self.paths).ok().and_then(|db| {
-            let repository = DomainRepository::new(&db, self.server_id.as_str());
-            crate::session_chat_options::detect_session_chat_options(
-                &repository,
-                project_id,
-                session_id,
-                agent,
-            )
-        });
+        let mut detected = open_gxserver_database(&self.paths)
+            .ok()
+            .map(|db| {
+                let repository = DomainRepository::new(&db, self.server_id.as_str());
+                crate::session_chat_options::detect_session_chat_terminal_state(
+                    &repository,
+                    project_id,
+                    session_id,
+                    agent,
+                )
+            })
+            .unwrap_or_default();
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        This is the ONE funnel every fresh capture goes through (the follower's
+        probe, a read-triggered detect, the post-dispatch redetect), so it owns
+        the two rules a single detection cannot state on its own:
+
+        1. A capture that succeeded WHOLE and classified to nothing proves the
+           screen is clean, which retires a watchdog verdict about screen state.
+           `deliveryFailed` is exempt inside the store — it describes a lost
+           message, not the current screen.
+        2. A re-classification that says the same thing as the cached one is the
+           SAME notice instance and keeps its `detectedAt`; see
+           `SessionChatTerminalNotice::carry_forward_detected_at`.
+
+        Neither publishes anything itself: every consumer already re-reads this
+        cache (plus the watchdog store) and emits on change.
+        */
+        if detected.captured && detected.notice.is_none() {
+            crate::session_chat_notice::retire_session_chat_watchdog_notice_on_clean_screen(
+                project_id, session_id,
+            );
+        }
         if let Ok(mut cache) = self.cache.lock() {
+            if let Some(notice) = detected.notice.as_mut() {
+                notice.carry_forward_detected_at(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.value.notice.as_ref()),
+                );
+            }
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -10730,7 +10986,7 @@ impl SessionChatOptionDetector {
         session_id: &str,
         agent: Option<&str>,
         force: bool,
-    ) -> Option<crate::session_chat_options::SessionChatDetectedOptions> {
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
         let detector = self.clone();
         let project_id = project_id.to_string();
         let session_id = session_id.to_string();
@@ -10739,9 +10995,105 @@ impl SessionChatOptionDetector {
             detector.detect_blocking(&project_id, &session_id, agent.as_deref(), force)
         })
         .await
-        .ok()
-        .flatten()
+        .unwrap_or_default()
     }
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+The notice a session should be showing RIGHT NOW, with no detection of its own:
+the last classification the shared 5s cache holds, overridden by a watchdog
+notice when one is pending. Every path that must stay spawn-free — the 500ms
+long-poll fingerprint, prompt-driven state frames — reads it through here.
+*/
+fn cached_session_chat_terminal_notice(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
+    let screen = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| {
+            cache
+                .get(&session_observer_key(project_id, session_id))
+                .and_then(|entry| entry.value.notice.clone())
+        });
+    crate::session_chat_notice::resolve_session_chat_terminal_notice(project_id, session_id, screen)
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+The send watchdog owns no frames and no database: it mutates the watchdog notice
+store and then calls this, which republishes whatever the session should be
+showing now — the cached model/effort pills included, so a notice frame can
+never blank them.
+*/
+fn session_chat_terminal_notice_publisher(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_watchdog::SessionChatWatchdogPublisher {
+    let followers = state.session_chat_followers.clone();
+    let event_hub = state.event_hub.clone();
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let option_cache = state.session_chat_option_cache.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move || {
+        let key = session_observer_key(&project_id, &session_id);
+        let (options, screen_notice) = option_cache
+            .lock()
+            .ok()
+            .and_then(|cache| {
+                cache
+                    .get(&key)
+                    .map(|entry| (entry.value.options.clone(), entry.value.notice.clone()))
+            })
+            .unwrap_or_default();
+        let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &project_id,
+            &session_id,
+            screen_notice,
+        );
+        emit_session_chat_options_state_frame(
+            &followers,
+            &event_hub,
+            &paths,
+            &server_id,
+            &project_id,
+            &session_id,
+            options.as_ref(),
+            notice.as_ref(),
+        );
+    })
+}
+
+/// Fresh lifecycle/working truth for the watchdog's timeout decision. Blocking
+/// (SQLite), so the watchdog calls it from a blocking task.
+fn session_chat_watchdog_state_reader(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_watchdog::SessionChatWatchdogStateReader {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move || {
+        let read = || -> Option<crate::session_chat_watchdog::SessionChatWatchdogLiveState> {
+            let db = open_gxserver_database(&paths).ok()?;
+            let repository = DomainRepository::new(&db, server_id.as_str());
+            let session = repository.get_session(&project_id, &session_id).ok()??;
+            Some(crate::session_chat_watchdog::SessionChatWatchdogLiveState {
+                running: is_session_chat_followable_session(&session),
+                working: session_chat_hook_working(&session),
+            })
+        };
+        read().unwrap_or_default()
+    })
 }
 
 fn forget_session_chat_options(state: &AppState, project_id: &str, session_id: &str) {
@@ -10807,18 +11159,29 @@ fn sync_session_chat_follower_for_session(state: &AppState, session: &Value, _re
     let agent = session_chat_agent_for_session(session);
     // Detection source for snapshot/replaced frames (cached) and the follower's
     // ~30s probe (refresh). Both run through the shared 5s-TTL cache.
+    // CDXC:SessionChatTerminalNotices 2026-08-19: the reader also answers with
+    // the session's terminal notice, watchdog-first, so the follower never
+    // learns about the watchdog store.
     let options_reader: crate::session_chat_options::SessionChatOptionsReader = {
         let detector = SessionChatOptionDetector::new(state);
         let project_id = project_id.clone();
         let session_id = session_id.clone();
         let agent = agent.clone();
-        Arc::new(move |mode| match mode {
-            crate::session_chat_options::SessionChatOptionsReadMode::Cached => {
-                detector.cached(&project_id, &session_id)
-            }
-            crate::session_chat_options::SessionChatOptionsReadMode::Refresh => {
-                detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true)
-            }
+        Arc::new(move |mode| {
+            let mut detection = match mode {
+                crate::session_chat_options::SessionChatOptionsReadMode::Cached => {
+                    detector.cached(&project_id, &session_id)
+                }
+                crate::session_chat_options::SessionChatOptionsReadMode::Refresh => {
+                    detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true)
+                }
+            };
+            detection.notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+                &project_id,
+                &session_id,
+                detection.notice,
+            );
+            detection
         })
     };
     /*
@@ -11409,6 +11772,19 @@ fn resolve_session_chat_read_state(
             0u8.hash(&mut hasher);
         }
     }
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CACHED notice identity only — kind plus the human text, never `detectedAt`
+    and never the raw screen (both churn every probe). This loop runs every
+    500ms per long-poller, so it reads the detector cache and the watchdog map
+    and NOTHING else: a detection here would spawn a process per tick. Cost of
+    that discipline: an SSH-only client can learn about a new SCREEN notice one
+    poll cycle (≤20s) late, when the next probe refreshes the cache.
+    */
+    match cached_session_chat_terminal_notice(state, project_id, session_id) {
+        Some(notice) => notice.identity().hash(&mut hasher),
+        None => 0u8.hash(&mut hasher),
+    }
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -11546,11 +11922,25 @@ async fn handle_read_session_chat_http(
     spawns anything and simply omits the field.
     */
     if lifecycle_running {
-        if let Some(detected) = SessionChatOptionDetector::new(state)
+        let detection = SessionChatOptionDetector::new(state)
             .detect(&project_id, &session_id, agent.as_deref(), false)
-            .await
-        {
+            .await;
+        if let Some(detected) = detection.options {
             result.insert("selectedOptions".to_string(), detected.to_value());
+        }
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        Same capture, same 5s cache, same running-only gate: a stopped session
+        has no live screen to classify. Followerless clients (mobile long-poll)
+        get watchdog notices here, which is why the merge happens on the read
+        path too and not only in the follower's reader.
+        */
+        if let Some(notice) = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &project_id,
+            &session_id,
+            detection.notice,
+        ) {
+            result.insert("terminalNotice".to_string(), notice.to_value());
         }
     }
     let stored_prompt = stored_prompt
@@ -11861,6 +12251,26 @@ async fn handle_send_session_chat_message_http(
         );
     }
     let agent = session_chat_agent_for_session(&target.session);
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    Sample where the transcript ends BEFORE the message is enqueued: everything
+    written past this offset is a candidate for "the agent recorded it". Sampling
+    afterwards would race the agent's own write. This is the only work the
+    watchdog puts in front of a send — a path resolve plus one `metadata()`, both
+    on a blocking thread — and it is skipped entirely for agents the watchdog
+    does not cover.
+    */
+    let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+        agent.as_deref(),
+        read_runtime_text(&target.session, "agentSessionId").as_deref(),
+        read_runtime_text(&target.session, "agentSessionPath").as_deref(),
+        session_chat_hook_working(&target.session),
+        &text,
+    )
+    .await;
     let mut steps = crate::session_chat_send::build_session_chat_message_steps(&text, &image_paths);
     /*
     Grok Build fullscreen maps Ctrl+G to its Tasks pane rather than its
@@ -11887,7 +12297,7 @@ async fn handle_send_session_chat_message_http(
         0,
         crate::session_chat_send::SessionChatSendStep::ResolveResumePrompt,
     );
-    if let Err(message) = crate::session_chat_send::execute_session_chat_send(
+    if let Err(error) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
         &target.zmx_name,
@@ -11896,13 +12306,57 @@ async fn handle_send_session_chat_message_http(
     )
     .await
     {
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        The case this feature exists for — the agent CLI in this pane is dead —
+        fails HERE, not at the delivery watchdog: the Ctrl+G draft handshake
+        never gets an answer, so the send errors out long before any watchdog is
+        started, and the user would see only a generic toast. When the TERMINAL
+        is what refused the message (as opposed to the send being superseded or
+        cancelled), escalate once with the same one-capture verdict the watchdog
+        takes at its deadline. It runs as its own task so the error response is
+        not made to wait for the capture, it never retries the send, and the
+        response below is unchanged.
+        */
+        if error.terminal_refused() {
+            if let Some(send_probe) = send_probe {
+                crate::session_chat_watchdog::escalate_failed_session_chat_send(
+                    send_probe,
+                    session_chat_terminal_notice_publisher(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    ),
+                    session_chat_watchdog_state_reader(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    ),
+                );
+            }
+        }
         return domain_error_response(
             endpoint_path,
             request_id,
             DomainStateError {
                 code: "dependencyUnavailable",
-                message,
+                message: error.message,
             },
+        );
+    }
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    The bytes reached zmx, which says nothing about the agent having received
+    them: a message typed into a login screen, a trust dialog or a shell where
+    the CLI already exited is accepted and lost. The watchdog verifies delivery
+    against the transcript and surfaces the terminal's own explanation when it
+    cannot. It never retries and never writes to the terminal.
+    */
+    if let Some(send_probe) = send_probe {
+        crate::session_chat_watchdog::start_session_chat_send_watchdog(
+            send_probe,
+            session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id),
+            session_chat_watchdog_state_reader(state, &target.project_id, &target.session_id),
         );
     }
     // An option command changes what the statusline reports: read it back.
@@ -12533,6 +12987,129 @@ fn handle_answer_session_chat_prompt_http(
     )
 }
 
+/*
+CDXC:SessionChatDraftHandoff 2026-08-18:
+Terminal → chat draft transfer for every host. A user who typed into the agent
+CLI and then lands on the chat surface — by tapping the toggle, or because the
+app auto-switched a terminal-started agent into Chat — must find that text in
+the chat composer instead of stranded behind the parked terminal. The capture
+is the Ctrl+G prompt-editor handshake, which parks the draft in Saved Prompts;
+this reads that row back and (when this capture created it) removes it again,
+so a transfer leaves no residue in the user's Saved Prompts list.
+
+Grok Build binds Ctrl+G to its Tasks pane and can never answer the handshake,
+so its sessions are rejected up front rather than made to wait out the timeout.
+*/
+async fn handle_handoff_session_chat_draft_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let target = match resolve_session_chat_send_target(state, &params, "handoffSessionChatDraft") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("grok") {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "unsupported",
+                message: "Grok Build cannot transfer its composer draft.".to_string(),
+            },
+        );
+    }
+    let captured = match crate::session_chat_send::capture_session_chat_terminal_draft(
+        &state.paths.app_state_dir,
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+    )
+    .await
+    {
+        Ok(captured) => captured,
+        Err(message) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message,
+                },
+            );
+        }
+    };
+    let Some(prompt_id) = captured.prompt_id else {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "content": "", "transferred": false })),
+        );
+    };
+    let content = match read_and_release_stashed_prompt(
+        state,
+        &target.project_id,
+        &prompt_id,
+        captured.created,
+    ) {
+        Ok(content) => content,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({ "content": content, "transferred": !content.is_empty() }),
+        ),
+    )
+}
+
+/// Reads back the Saved Prompt the draft capture just wrote and, when the
+/// capture created that row, deletes it — the text is moving to a composer, not
+/// into the user's stash. An update of a pre-existing row is left alone.
+fn read_and_release_stashed_prompt(
+    state: &AppState,
+    project_id: &str,
+    prompt_id: &str,
+    created: bool,
+) -> std::result::Result<String, DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let mut list_params = Map::new();
+    list_params.insert("projectId".to_string(), json!(project_id));
+    let listed = repository.list_stashed_prompts(&list_params)?;
+    let content = listed
+        .get("prompts")
+        .and_then(Value::as_array)
+        .and_then(|prompts| {
+            prompts
+                .iter()
+                .find(|prompt| prompt.get("promptId").and_then(Value::as_str) == Some(prompt_id))
+        })
+        .and_then(|prompt| prompt.get("content"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| DomainStateError {
+            code: "notFound",
+            message: "The transferred draft could not be recalled.".to_string(),
+        })?
+        .to_string();
+    if created {
+        let mut delete_params = Map::new();
+        delete_params.insert("promptId".to_string(), json!(prompt_id));
+        let _ = repository.delete_stashed_prompt(&delete_params);
+    }
+    Ok(content)
+}
+
 fn handle_interrupt_session_chat_http(
     state: &AppState,
     endpoint_path: String,
@@ -12608,6 +13185,14 @@ fn emit_session_chat_prompt_state_frame(state: &AppState, session: &Value) {
     let (epoch, _) = stream.current();
     let agent_session_id = read_runtime_text(session, "agentSessionId");
     /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    Clients treat an OMITTED `terminalNotice` on a state frame as "cleared"
+    (prompt semantics), so a prompt-driven frame has to re-state the notice the
+    session is currently showing or the card would blink away on every hook
+    event. Cached read only — this runs on the hook-ingest thread.
+    */
+    let terminal_notice = cached_session_chat_terminal_notice(state, &project_id, &session_id);
+    /*
     The seq must be taken and the frame published as one step: this runs on a
     hook-ingest thread while the follower task publishes into the SAME counter,
     and a frame that reaches the hub out of seq order makes every client treat
@@ -12627,6 +13212,7 @@ fn emit_session_chat_prompt_state_frame(state: &AppState, session: &Value) {
                 &state.metadata.server_id,
                 working,
                 None,
+                terminal_notice.as_ref(),
             )
         },
         |frame| state.event_hub.broadcast(frame),
@@ -12661,17 +13247,43 @@ fn schedule_session_chat_option_redetect(
     let session_id = session_id.to_string();
     let agent = agent.map(str::to_string);
     tokio::spawn(async move {
-        let mut published = detector.cached(&project_id, &session_id);
+        let cached = detector.cached(&project_id, &session_id);
+        let mut published = cached.options;
+        // CDXC:SessionChatTerminalNotices 2026-08-19: this probe re-reads the
+        // screen anyway, so a notice that appeared or cleared with the dispatch
+        // rides the same frame instead of waiting for the ~30s follower probe.
+        let mut published_notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &project_id,
+            &session_id,
+            cached.notice,
+        );
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-            let Some(detected) = detector
+            let detection = detector
                 .detect(&project_id, &session_id, agent.as_deref(), true)
-                .await
-            else {
+                .await;
+            let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+                &project_id,
+                &session_id,
+                detection.notice,
+            );
+            let notice_changed = detection.captured
+                && !crate::session_chat_notice::same_session_chat_terminal_notice(
+                    notice.as_ref(),
+                    published_notice.as_ref(),
+                );
+            let options_changed = detection
+                .options
+                .as_ref()
+                .is_some_and(|detected| !detected.same_selection(published.as_ref()));
+            if !options_changed && !notice_changed {
                 continue;
-            };
-            if detected.same_selection(published.as_ref()) {
-                continue;
+            }
+            if options_changed {
+                published = detection.options;
+            }
+            if notice_changed {
+                published_notice = notice;
             }
             emit_session_chat_options_state_frame(
                 &followers,
@@ -12680,13 +13292,14 @@ fn schedule_session_chat_option_redetect(
                 &server_id,
                 &project_id,
                 &session_id,
-                &detected,
+                published.as_ref(),
+                published_notice.as_ref(),
             );
-            published = Some(detected);
         }
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_session_chat_options_state_frame(
     followers: &Arc<Mutex<HashMap<String, SessionChatFollowerEntry>>>,
     event_hub: &GxserverEventHub,
@@ -12694,7 +13307,8 @@ fn emit_session_chat_options_state_frame(
     server_id: &str,
     project_id: &str,
     session_id: &str,
-    detected: &crate::session_chat_options::SessionChatDetectedOptions,
+    detected: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
 ) {
     let stream = {
         let Ok(followers) = followers.lock() else {
@@ -12743,7 +13357,8 @@ fn emit_session_chat_options_state_frame(
                 GXSERVER_PROTOCOL_VERSION,
                 server_id,
                 working,
-                Some(detected),
+                detected,
+                terminal_notice,
             )
         },
         |frame| event_hub.broadcast(frame),

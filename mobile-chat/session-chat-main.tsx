@@ -14,7 +14,10 @@ import {
   type SessionChatTheme,
 } from "../shared/session-chat";
 import { GXSERVER_PROTOCOL_VERSION } from "../shared/gxserver-protocol";
-import { SessionChatView } from "../sidebar/chat/session-chat-view";
+import {
+  SessionChatView,
+  type SessionChatHostComposerBridge,
+} from "../sidebar/chat/session-chat-view";
 import type { SessionChatTransport } from "../sidebar/chat/session-chat-transport";
 
 /*
@@ -47,6 +50,8 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
   })
 - RN host state (pushed on every change, may arrive before or after mount):
   window.ghostexMobileChatSetHostState({ working?, canSend? })
+- RN terminal-draft transfer (pushed when the user switches into chat and the
+  agent CLI's composer held text): window.ghostexMobileChatInsertDraft(content)
 */
 
 interface MobileChatConfig {
@@ -119,6 +124,7 @@ declare global {
     ghostexMobileChatDeliver?: (response: BridgeResponse) => void;
     ghostexMobileChatSetPresentation?: (state: Partial<MobileChatPresentation>) => void;
     ghostexMobileChatSetHostState?: (state: Partial<MobileChatHostState>) => void;
+    ghostexMobileChatInsertDraft?: (content: string) => void;
     __ghostexMobileChatConfig?: MobileChatConfig;
   }
 }
@@ -136,6 +142,47 @@ function subscribeHostState(listener: () => void): () => void {
 function readHostState(): MobileChatHostState {
   return hostState;
 }
+
+/*
+CDXC:SessionChatDraftHandoff 2026-08-18:
+Text the user typed into the agent CLI follows them into this composer when
+they switch views. RN owns the capture (it is a slow SSH round trip through the
+daemon's Ctrl+G handshake) and pushes the result here. The hook is installed at
+module scope, before React mounts, with a pending box: a transfer that lands
+before the composer registers is held rather than dropped.
+*/
+let insertDraftIntoComposer: ((content: string) => boolean) | null = null;
+let pendingComposerDraft = "";
+
+window.ghostexMobileChatInsertDraft = (content) => {
+  if (typeof content !== "string" || content.length === 0) {
+    return;
+  }
+  if (insertDraftIntoComposer?.(content) === true) {
+    return;
+  }
+  pendingComposerDraft = content;
+};
+
+/*
+The mobile host registers composer actions but cannot stash: gxserver's stash
+endpoints have no CLI verb, and this page reaches the machine only through
+SSH-exec'd verbs. Omitting `stashPrompt` keeps the composer's Stash control
+unrendered instead of offering a button that would always fail.
+*/
+const mobileComposerBridge: SessionChatHostComposerBridge = {
+  register(actions) {
+    insertDraftIntoComposer = actions.insertPrompt;
+    if (pendingComposerDraft.length > 0 && actions.insertPrompt(pendingComposerDraft)) {
+      pendingComposerDraft = "";
+    }
+    return () => {
+      if (insertDraftIntoComposer === actions.insertPrompt) {
+        insertDraftIntoComposer = null;
+      }
+    };
+  },
+};
 
 window.ghostexMobileChatSetHostState = (state) => {
   const next: MobileChatHostState = {
@@ -304,6 +351,12 @@ function snapshotEventFromRead(
     ...(result.selectedOptions !== undefined
       ? { selectedOptions: result.selectedOptions }
       : {}),
+    // CDXC:SessionChatTerminalNotices 2026-08-19: terminal-screen state the
+    // transcript can never show. Omitted means cleared, and this synthesized
+    // snapshot is the host's only frame, so the omission has to survive too.
+    ...(result.terminalNotice !== undefined
+      ? { terminalNotice: result.terminalNotice }
+      : {}),
     status: result.status,
   };
 }
@@ -435,6 +488,14 @@ if (!rootElement) {
 }
 document.body.dataset.sidebarTheme = "plain-dark";
 document.body.classList.add("vscode-dark", "native-sidebar-body");
+/*
+The document has to carry the page's starting presentation before any host
+push arrives: the setter below short-circuits when nothing changed, so a host
+config that happens to match these defaults (100% transcript width, dark, app
+font) would otherwise leave the CSS custom properties unset and the stylesheet
+fallbacks — notably the desktop's 75% transcript width — in charge.
+*/
+applyDocumentPresentation(presentationState);
 
 function MobileSessionChat({
   agentLabel,
@@ -461,6 +522,7 @@ function MobileSessionChat({
         agentLabel={agentLabel}
         canSend={canSend}
         className="gpui-session-chat-view"
+        hostComposerBridge={mobileComposerBridge}
         onSwitchToTerminalForAgentPicker={() => {
           void bridgeCall("switchToTerminalForAgentPicker");
         }}

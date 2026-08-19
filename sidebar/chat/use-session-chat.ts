@@ -18,6 +18,7 @@ import type {
   SessionChatMessage,
   SessionChatSendKey,
   SessionChatStatus,
+  SessionChatTerminalNotice,
   SessionChatTurnLifecycle,
 } from "../../shared/session-chat";
 import {
@@ -131,6 +132,13 @@ export interface UseSessionChatResult {
    * keep their local truth.
    */
   selectedOptions: SessionChatDetectedOptions | null;
+  /*
+  CDXC:SessionChatTerminalNotices 2026-08-19:
+  Blocking/failed terminal state gxserver classified off the agent's screen (or
+  the send watchdog). Follows `prompt` semantics: a frame that can carry it and
+  does not means CLEARED, so this drops back to null on its own.
+  */
+  terminalNotice: SessionChatTerminalNotice | null;
   agent: string | null;
   agentSessionId: string | null;
   error: string | null;
@@ -179,6 +187,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [selectedOptions, setSelectedOptions] = useState<SessionChatDetectedOptions | null>(
     null,
   );
+  // Terminal-state notice: carried by read results and by
+  // snapshot/replaced/state frames. Omitted ⇒ CLEARED (prompt semantics, unlike
+  // selectedOptions) — the server only stops sending it once the state is gone.
+  const [terminalNotice, setTerminalNotice] = useState<SessionChatTerminalNotice | null>(
+    null,
+  );
 
   const mergerRef = useRef<SessionChatMerger>(createSessionChatMerger());
   const assemblerRef = useRef(createIncrementalSessionChatAssembler());
@@ -218,6 +232,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       working?: boolean;
       /** Detected model/effort; omitted when the agent's screen said nothing. */
       selectedOptions?: SessionChatDetectedOptions;
+      /** Blocking/failed terminal state; omitted ⇒ cleared. */
+      terminalNotice?: SessionChatTerminalNotice;
     }): void => {
       replaceSessionChatMergerList(mergerRef.current, result.messages);
       setTranscript(mergerRef.current.list);
@@ -234,6 +250,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       if (result.selectedOptions) {
         setSelectedOptions(result.selectedOptions);
       }
+      setTerminalNotice(result.terminalNotice ?? null);
       setError(result.status === "error" ? (result.error ?? "Conversation could not be loaded.") : null);
       // A fresh authoritative generation cancels an in-flight older page.
       loadEarlierEpochRef.current = null;
@@ -422,6 +439,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       if (event.selectedOptions) {
         setSelectedOptions(event.selectedOptions);
       }
+      setTerminalNotice(event.terminalNotice ?? null);
       if (event.agentSessionId !== undefined) {
         setAgentSessionId(event.agentSessionId);
       }
@@ -760,6 +778,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     selectedOptions,
     send,
     status,
+    terminalNotice,
     view,
     working,
     ...(transportSendKey ? { sendKey } : {}),

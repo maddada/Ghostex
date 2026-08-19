@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fs::{self, File},
     io::{self, BufRead, BufReader, Read},
     path::{Path, PathBuf},
@@ -149,6 +149,20 @@ pub struct SessionChatMessage {
         default
     )]
     pub byte_offset: Option<u64>,
+    /*
+    CDXC:SessionChatCore 2026-08-19:
+    The row is a prompt sitting in the agent's own queue that has NOT been
+    handed to the model yet (see `TranscriptQueueOp`). Clients label it; the
+    server retracts it the moment the queue releases it, and the delivered row
+    takes its place. Never set on client-sourced optimistic echoes — those
+    render identically to real turns by design.
+    */
+    #[serde(default, skip_serializing_if = "is_not_queued")]
+    pub queued: bool,
+}
+
+fn is_not_queued(queued: &bool) -> bool {
+    !queued
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,16 +249,45 @@ pub fn session_chat_lifecycle_decoder(
     }
 }
 
+/*
+CDXC:SessionChatCore 2026-08-19:
+Agent-side prompt queue. Typing while the model is mid-turn does NOT write a
+prompt row — the harness parks the text in its own queue and writes bookkeeping
+rows instead, then delivers it later (Claude: `queue-operation`
+enqueue/dequeue/remove/popAll). The queue is a FIFO, and only the removal rows
+name WHICH entry left, so the readers replay these ops in file order rather
+than pairing them by position.
+*/
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TranscriptQueueOp {
+    /// A prompt entered the queue. `key` is its normalized text, empty when
+    /// the row does not carry the text (still tracked, so the FIFO stays
+    /// aligned).
+    Enqueued { key: String },
+    /// One entry left the queue — delivered to the model, or dropped by the
+    /// user. `None` means the row does not name it, which for a FIFO is the
+    /// oldest entry.
+    Left { key: Option<String> },
+    /// The whole queue was discarded at once.
+    Cleared,
+}
+
 /// One row's position in a transcript that is a message TREE rather than a
 /// flat log. Only Claude writes one (`uuid` / `parentUuid`); Pi has its own
-/// tree reader, and the Codex/Grok rollouts are linear.
+/// tree reader, and the Codex/Grok rollouts are linear. Queue bookkeeping rows
+/// ride the same extractor because they are the only other rows whose meaning
+/// spans lines.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TranscriptLineage {
     pub id: String,
     pub parent_id: Option<String>,
+    #[allow(clippy::struct_field_names)]
+    pub queue: Option<TranscriptQueueOp>,
 }
 
-pub type SessionChatLineageExtractor = fn(&str) -> Option<TranscriptLineage>;
+/// `(line, fallback_id)` — queue rows carry no `uuid`, so they are identified
+/// by the same `<path>:<byte offset>` id the decoder stamps on them.
+pub type SessionChatLineageExtractor = fn(&str, &str) -> Option<TranscriptLineage>;
 
 pub fn session_chat_lineage_extractor(
     agent: SessionChatTranscriptAgent,
@@ -542,15 +585,48 @@ fn image_ref_block(record: &Map<String, Value>) -> Option<SessionChatBlock> {
 /// Claude stamps `uuid`/`parentUuid` on every non-sidechain row, including the
 /// `system` and `attachment` rows a prompt can hang off, so the whole tree is
 /// readable from the same scan the decoder already runs.
-fn claude_transcript_lineage(line: &str) -> Option<TranscriptLineage> {
+fn claude_transcript_lineage(line: &str, fallback_id: &str) -> Option<TranscriptLineage> {
     let record = parse_json_object(line)?;
     if record.get("isSidechain") == Some(&Value::Bool(true)) {
         return None;
     }
+    if record.get("type").and_then(Value::as_str) == Some(CLAUDE_QUEUE_RECORD_TYPE) {
+        return Some(TranscriptLineage {
+            id: fallback_id.to_string(),
+            parent_id: None,
+            queue: Some(claude_queue_operation(&record)?),
+        });
+    }
     Some(TranscriptLineage {
         id: extract_string(record.get("uuid"))?,
         parent_id: extract_string(record.get("parentUuid")),
+        queue: None,
     })
+}
+
+/*
+CDXC:SessionChatCore 2026-08-19:
+Queue text is matched between the enqueue row and the removal row that releases
+it, and the two are not byte-identical (the removal echoes what the composer
+finally submitted). Whitespace folding is the narrowest normalization that
+makes them agree.
+*/
+fn queued_prompt_key(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn claude_queue_operation(record: &Map<String, Value>) -> Option<TranscriptQueueOp> {
+    let key = extract_string(record.get("content"))
+        .map(|content| queued_prompt_key(&content))
+        .filter(|key| !key.is_empty());
+    match record.get("operation").and_then(Value::as_str)? {
+        "enqueue" => Some(TranscriptQueueOp::Enqueued {
+            key: key.unwrap_or_default(),
+        }),
+        "dequeue" | "remove" => Some(TranscriptQueueOp::Left { key }),
+        "popAll" => Some(TranscriptQueueOp::Cleared),
+        _ => None,
+    }
 }
 
 fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> {
@@ -560,9 +636,88 @@ fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> 
     extract_string(record.get("interruptedMessageId"))
 }
 
+const CLAUDE_QUEUE_RECORD_TYPE: &str = "queue-operation";
+const CLAUDE_ATTACHMENT_RECORD_TYPE: &str = "attachment";
+const CLAUDE_QUEUED_COMMAND_ATTACHMENT: &str = "queued_command";
+
+/*
+CDXC:SessionChatCore 2026-08-19:
+A prompt the user typed mid-turn is NOT written as a `user` row when the
+harness injects it into the running turn: the queue entry is released as an
+`attachment`/`queued_command` row and the model answers from that. The prompt
+therefore exists nowhere else in the file (verified on `13b6c3ae…`, where "please
+babysit this pr …" appears only as the enqueue row, its removal row, and this
+attachment), so skipping it dropped a real, answered user turn from chat while
+the terminal showed it — and the optimistic echo that stood in for it vanished
+on the next remount.
+
+Every `queued_command` is decoded, not just the human-authored ones: the
+harness-injected envelopes it also carries (`<task-notification>`,
+`<cross-session-message>`) are exactly what the shared noise classifier already
+collapses for ordinary user rows, so routing them through the same rule keeps
+one source of truth instead of an `origin.kind` whitelist that silently drops
+turns whenever the harness adds a kind.
+*/
+fn decode_claude_queued_command(
+    record: &Map<String, Value>,
+    fallback_id: &str,
+) -> Option<SessionChatMessage> {
+    let attachment = as_record(record.get("attachment"))?;
+    if attachment.get("type").and_then(Value::as_str) != Some(CLAUDE_QUEUED_COMMAND_ATTACHMENT) {
+        return None;
+    }
+    let prompt = extract_string(attachment.get("prompt"))?;
+    if prompt.trim().is_empty() {
+        return None;
+    }
+    Some(SessionChatMessage {
+        id: extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()),
+        role: SessionChatRole::User,
+        blocks: vec![text_block(prompt)],
+        timestamp: parse_timestamp(record.get("timestamp"))
+            .or_else(|| parse_timestamp(attachment.get("timestamp"))),
+        source: SessionChatSource::Transcript,
+        turn_id: None,
+        byte_offset: None,
+        queued: false,
+    })
+}
+
+/// The enqueue row is the only record of a prompt while it waits in the queue.
+/// It is published immediately and retracted by the reader the moment the queue
+/// releases it, so the label can never outlive the wait.
+fn decode_claude_queued_prompt(
+    record: &Map<String, Value>,
+    fallback_id: &str,
+) -> Option<SessionChatMessage> {
+    if record.get("operation").and_then(Value::as_str) != Some("enqueue") {
+        return None;
+    }
+    let content = extract_string(record.get("content"))?;
+    if content.trim().is_empty() {
+        return None;
+    }
+    Some(SessionChatMessage {
+        id: fallback_id.to_string(),
+        role: SessionChatRole::User,
+        blocks: vec![text_block(content)],
+        timestamp: parse_timestamp(record.get("timestamp")),
+        source: SessionChatSource::Transcript,
+        turn_id: None,
+        byte_offset: None,
+        queued: true,
+    })
+}
+
 pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
     let role = record.get("type").and_then(Value::as_str)?;
+    if role == CLAUDE_ATTACHMENT_RECORD_TYPE {
+        return decode_claude_queued_command(&record, fallback_id);
+    }
+    if role == CLAUDE_QUEUE_RECORD_TYPE {
+        return decode_claude_queued_prompt(&record, fallback_id);
+    }
     if role != "user" && role != "assistant" {
         return None;
     }
@@ -580,6 +735,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         });
     }
 
@@ -638,6 +794,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        queued: false,
     })
 }
 
@@ -694,6 +851,7 @@ fn codex_response_item(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        queued: false,
     };
     match payload.get("type").and_then(Value::as_str) {
         Some("reasoning") => {
@@ -795,6 +953,7 @@ fn codex_event_message(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        queued: false,
     };
     match payload.get("type").and_then(Value::as_str) {
         Some(CODEX_EVENT_TURN_ABORTED) => Some(transcript_message(
@@ -841,6 +1000,7 @@ fn codex_event_message(
                 source: SessionChatSource::Transcript,
                 turn_id: None,
                 byte_offset: None,
+                queued: false,
             })
         }
         _ => None,
@@ -939,6 +1099,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        queued: false,
     };
 
     match record_type.as_str() {
@@ -1282,6 +1443,7 @@ pub fn decode_pi_transcript_line(line: &str, fallback_id: &str) -> Option<Sessio
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        queued: false,
     };
 
     if record_type == "compaction" || record_type == "branch_summary" {
@@ -1636,6 +1798,15 @@ pub struct SessionChatTailFileResult {
     pub before_offset: u64,
     pub malformed_record_count: usize,
     pub oversized_record_count: usize,
+    /*
+    CDXC:SessionChatCore 2026-08-19:
+    Prompts still sitting in the agent's queue at `consumed_to`, oldest first,
+    as `(normalized text, message id)`. The follower seeds the append stream
+    with these after every snapshot: `rebase` clears the forward state, so
+    without the hand-off the release row that lands a second later has nothing
+    to retract and the "Queued" label sticks forever.
+    */
+    pub outstanding_queued_prompts: Vec<(String, String)>,
 }
 
 struct TailLineAccumulator {
@@ -1754,6 +1925,8 @@ pub fn read_session_chat_transcript_tail_file(
 
     let mut parents_of_newer_messages: HashSet<String> = HashSet::new();
     let mut parents_of_newer_prompts: HashSet<String> = HashSet::new();
+    // Newest-first; replayed in file order once the window is complete.
+    let mut queue_ops: Vec<(u64, TranscriptQueueOp)> = Vec::new();
 
     let decode_line = |accumulator: &mut TailLineAccumulator,
                        line_offset: u64,
@@ -1762,7 +1935,8 @@ pub fn read_session_chat_transcript_tail_file(
                        ignore_next_malformed_record: &mut bool,
                        malformed_record_count: &mut usize,
                        parents_of_newer_messages: &mut HashSet<String>,
-                       parents_of_newer_prompts: &mut HashSet<String>| {
+                       parents_of_newer_prompts: &mut HashSet<String>,
+                       queue_ops: &mut Vec<(u64, TranscriptQueueOp)>| {
         let Some(line) = accumulator.take_line() else {
             return;
         };
@@ -1782,8 +1956,16 @@ pub fn read_session_chat_transcript_tail_file(
             }
         }
         let decoded = decode(&line, &fallback_id);
-        let row_lineage = lineage.and_then(|extract| extract(&line));
-        if let Some(row_lineage) = row_lineage {
+        let row_lineage = lineage.and_then(|extract| extract(&line, &fallback_id));
+        if let Some(mut row_lineage) = row_lineage {
+            if let Some(queue_op) = row_lineage.queue.take() {
+                queue_ops.push((line_offset, queue_op));
+                if let Some(mut message) = decoded {
+                    message.byte_offset = Some(line_offset);
+                    newest_first.push((message, line_offset));
+                }
+                return;
+            }
             let superseded = superseded_prompt_id(
                 &row_lineage,
                 decoded.as_ref(),
@@ -1834,6 +2016,7 @@ pub fn read_session_chat_transcript_tail_file(
                     &mut malformed_record_count,
                     &mut parents_of_newer_messages,
                     &mut parents_of_newer_prompts,
+                    &mut queue_ops,
                 );
             }
             segment_end = index;
@@ -1853,10 +2036,21 @@ pub fn read_session_chat_transcript_tail_file(
             &mut malformed_record_count,
             &mut parents_of_newer_messages,
             &mut parents_of_newer_prompts,
+            &mut queue_ops,
         );
     }
 
     newest_first.reverse();
+    queue_ops.reverse();
+    let outstanding = replay_transcript_queue(&queue_ops);
+    let still_queued: HashSet<u64> = outstanding.iter().map(|(_, offset)| *offset).collect();
+    let outstanding_queued_prompts: Vec<(String, String)> = outstanding
+        .iter()
+        .map(|(key, offset)| (key.clone(), transcript_fallback_id(file_path, *offset)))
+        .collect();
+    // A released entry's bubble is replaced by the row the harness wrote for
+    // the delivery, so it must not survive in the window that carries both.
+    newest_first.retain(|(message, offset)| !message.queued || still_queued.contains(offset));
     let chronological = newest_first;
     let selected: Vec<(SessionChatMessage, u64)> = if limit > 0 {
         // limit <= 0 must yield [] — a slice(-0) style bug would return EVERYTHING.
@@ -1875,7 +2069,33 @@ pub fn read_session_chat_transcript_tail_file(
         before_offset,
         malformed_record_count,
         oversized_record_count,
+        outstanding_queued_prompts,
     })
+}
+
+/// Replays queue bookkeeping rows in file order and returns what is still
+/// waiting, oldest first, as `(normalized text, enqueue byte offset)`.
+///
+/// A removal whose text matches nothing is IGNORED rather than treated as a
+/// FIFO pop: in a bounded window its enqueue is usually just off the top, and
+/// popping would retract a prompt that is genuinely still queued.
+fn replay_transcript_queue(ops: &[(u64, TranscriptQueueOp)]) -> Vec<(String, u64)> {
+    let mut queue: VecDeque<(String, u64)> = VecDeque::new();
+    for (offset, op) in ops {
+        match op {
+            TranscriptQueueOp::Enqueued { key } => queue.push_back((key.clone(), *offset)),
+            TranscriptQueueOp::Left { key: Some(key) } => {
+                if let Some(index) = queue.iter().position(|(queued, _)| queued == key) {
+                    queue.remove(index);
+                }
+            }
+            TranscriptQueueOp::Left { key: None } => {
+                queue.pop_front();
+            }
+            TranscriptQueueOp::Cleared => queue.clear(),
+        }
+    }
+    queue.into_iter().collect()
 }
 
 struct PiTranscriptTreeEntry {
@@ -2000,6 +2220,8 @@ fn read_pi_session_chat_transcript_tail_file(
         before_offset,
         malformed_record_count,
         oversized_record_count,
+        // Pi has no prompt queue.
+        outstanding_queued_prompts: Vec::new(),
     })
 }
 
@@ -2103,6 +2325,15 @@ pub struct SessionChatIncrementalState {
     unanswered_prompt_by_parent: HashMap<String, String>,
     unanswered_prompt_parents: HashMap<String, String>,
     superseded_prompt_ids: Vec<String>,
+    /*
+    CDXC:SessionChatCore 2026-08-19:
+    Prompts published with the "Queued" label that the agent's queue has not
+    released yet, oldest first, as `(normalized text, message id)`. The release
+    row retracts them through the same channel abandoned prompts use. Seeded
+    from the tail read after every snapshot, because `rebase` wipes this state
+    while the queue itself keeps waiting.
+    */
+    queued_prompts: VecDeque<(String, String)>,
 }
 
 impl SessionChatIncrementalState {
@@ -2116,6 +2347,7 @@ impl SessionChatIncrementalState {
             unanswered_prompt_by_parent: HashMap::new(),
             unanswered_prompt_parents: HashMap::new(),
             superseded_prompt_ids: Vec::new(),
+            queued_prompts: VecDeque::new(),
         }
     }
 
@@ -2128,6 +2360,13 @@ impl SessionChatIncrementalState {
         self.unanswered_prompt_by_parent.clear();
         self.unanswered_prompt_parents.clear();
         self.superseded_prompt_ids.clear();
+        self.queued_prompts.clear();
+    }
+
+    /// Hands the tail read's still-waiting queue entries to the append stream
+    /// so their release rows can retract them. Call AFTER `rebase`.
+    pub fn seed_queued_prompts(&mut self, entries: Vec<(String, String)>) {
+        self.queued_prompts = entries.into_iter().collect();
     }
 
     /// Ids of already-published prompts that a later row proved abandoned.
@@ -2138,6 +2377,10 @@ impl SessionChatIncrementalState {
     }
 
     fn observe_lineage(&mut self, row: &TranscriptLineage, message: Option<&SessionChatMessage>) {
+        if let Some(queue_op) = row.queue.as_ref() {
+            self.observe_queue_operation(queue_op, &row.id);
+            return;
+        }
         let Some(message) = message else {
             // Hook `attachment` and bookkeeping rows are neither an answer nor
             // a re-taken branch (see `superseded_prompt_id`).
@@ -2166,6 +2409,39 @@ impl SessionChatIncrementalState {
             .insert(parent_id.clone(), row.id.clone());
         self.unanswered_prompt_parents
             .insert(row.id.clone(), parent_id);
+    }
+
+    /// Forward half of the queue rule (see `replay_transcript_queue`, which is
+    /// the newest-first half). A removal that matches nothing is ignored, not
+    /// treated as a FIFO pop, for the same reason.
+    fn observe_queue_operation(&mut self, op: &TranscriptQueueOp, row_id: &str) {
+        match op {
+            TranscriptQueueOp::Enqueued { key } => {
+                self.queued_prompts
+                    .push_back((key.clone(), row_id.to_string()));
+            }
+            TranscriptQueueOp::Left { key: Some(key) } => {
+                if let Some(index) = self
+                    .queued_prompts
+                    .iter()
+                    .position(|(queued, _)| queued == key)
+                {
+                    if let Some((_, id)) = self.queued_prompts.remove(index) {
+                        self.superseded_prompt_ids.push(id);
+                    }
+                }
+            }
+            TranscriptQueueOp::Left { key: None } => {
+                if let Some((_, id)) = self.queued_prompts.pop_front() {
+                    self.superseded_prompt_ids.push(id);
+                }
+            }
+            TranscriptQueueOp::Cleared => {
+                for (_, id) in self.queued_prompts.drain(..) {
+                    self.superseded_prompt_ids.push(id);
+                }
+            }
+        }
     }
 
     pub fn rebase(&mut self, offset: u64) {
@@ -2253,7 +2529,7 @@ pub fn read_incremental_transcript_messages(
                     }
                     let decoded = decode(&line, &fallback_id);
                     if let Some(extract) = lineage {
-                        if let Some(row) = extract(&line) {
+                        if let Some(row) = extract(&line, &fallback_id) {
                             state.observe_lineage(&row, decoded.as_ref());
                         }
                     }
@@ -3387,6 +3663,9 @@ fn follower_drain_once(
             Err(_) => return FollowerDrainOutcome::Missing,
             Ok(tail) => {
                 state.incremental.rebase(tail.consumed_to);
+                state
+                    .incremental
+                    .seed_queued_prompts(tail.outstanding_queued_prompts.clone());
                 // Pick up anything written after consumed_to before we settle.
                 let mut appended_lifecycle: Option<SessionChatTurnLifecycle> = None;
                 let mut capture_lifecycle =
@@ -3552,6 +3831,22 @@ fn insert_optional_selected_options(
     }
 }
 
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+Terminal-state notice (login expired, trust dialog, usage limit, undelivered
+send). Absent ⇒ the field is omitted ⇒ clients CLEAR the card, exactly like
+`prompt` and unlike `selectedOptions`. Every frame that can carry it must
+therefore carry the CURRENT value, never `None` as a shorthand for "unchanged".
+*/
+fn insert_optional_terminal_notice(
+    frame: &mut Map<String, Value>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+) {
+    if let Some(terminal_notice) = terminal_notice {
+        frame.insert("terminalNotice".to_string(), terminal_notice.to_value());
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_state_frame(
     emit: &SessionChatFrameEmitter,
@@ -3562,6 +3857,7 @@ fn emit_state_frame(
     prompt: Option<&SessionChatInteractivePrompt>,
     working: Option<bool>,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
 ) {
     stream.emit_sequenced(
         |seq| {
@@ -3572,6 +3868,7 @@ fn emit_state_frame(
                 frame.insert("working".to_string(), json!(working));
             }
             insert_optional_selected_options(&mut frame, selected_options);
+            insert_optional_terminal_notice(&mut frame, terminal_notice);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -3590,6 +3887,7 @@ fn emit_snapshot_frame(
     prompt: Option<&SessionChatInteractivePrompt>,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
 ) {
     stream.emit_sequenced(
         |seq| {
@@ -3610,6 +3908,7 @@ fn emit_snapshot_frame(
             frame.insert("working".to_string(), json!(working));
             insert_optional_prompt(&mut frame, prompt);
             insert_optional_selected_options(&mut frame, selected_options);
+            insert_optional_terminal_notice(&mut frame, terminal_notice);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -3795,11 +4094,14 @@ pub async fn run_session_chat_follower(
         Some(reader) => reader(),
         None => SessionChatLiveState::default(),
     };
-    // Cached detection only: frames must never pay for a process spawn.
-    let read_cached_options = || {
-        config.options_reader.as_ref().and_then(|reader| {
-            reader(crate::session_chat_options::SessionChatOptionsReadMode::Cached)
-        })
+    // Cached detection only: frames must never pay for a process spawn. Carries
+    // BOTH the model/effort pills and the terminal-state notice.
+    let read_cached_detection = || {
+        config
+            .options_reader
+            .as_ref()
+            .map(|reader| reader(crate::session_chat_options::SessionChatOptionsReadMode::Cached))
+            .unwrap_or_default()
     };
     let Some(transcript_agent) = resolve_session_chat_transcript_agent(config.agent.as_deref())
     else {
@@ -3811,6 +4113,7 @@ pub async fn run_session_chat_follower(
                 &stream,
                 epoch,
                 SessionChatStatus::Unsupported,
+                None,
                 None,
                 None,
                 None,
@@ -3846,6 +4149,10 @@ pub async fn run_session_chat_follower(
     // fast startup probes and periodic steady-state re-detects.
     let mut published_options: Option<crate::session_chat_options::SessionChatDetectedOptions> =
         None;
+    // Terminal-state notice the follower has published. Tracked separately
+    // because it can legitimately go back to `None` (the screen cleared), which
+    // MUST be published as an omitted field.
+    let mut published_notice: Option<crate::session_chat_notice::SessionChatTerminalNotice> = None;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
 
@@ -3866,6 +4173,7 @@ pub async fn run_session_chat_follower(
             if resolved.is_none() {
                 if !emitted_starting {
                     let live = read_live_state();
+                    let detection = read_cached_detection();
                     emit_state_frame(
                         &emit,
                         &config,
@@ -3874,8 +4182,10 @@ pub async fn run_session_chat_follower(
                         SessionChatStatus::Starting,
                         live.prompt.as_ref(),
                         Some(live.working),
-                        read_cached_options().as_ref(),
+                        detection.options.as_ref(),
+                        detection.notice.as_ref(),
                     );
+                    published_notice = detection.notice;
                     emitted_starting = true;
                 }
                 tokio::select! {
@@ -3953,9 +4263,10 @@ pub async fn run_session_chat_follower(
                 transcript_prompt.advance(&tail.messages);
                 transcript_prompt.advance(&appended);
                 let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
-                // A subscribing client gets the detected pills value with its
-                // snapshot, so it needs no separate read.
-                let snapshot_options = read_cached_options();
+                // A subscribing client gets the detected pills value and any
+                // terminal-state notice with its snapshot, so it needs no
+                // separate read.
+                let snapshot_detection = read_cached_detection();
                 emit_snapshot_frame(
                     &emit,
                     &config,
@@ -3965,11 +4276,13 @@ pub async fn run_session_chat_follower(
                     &tail,
                     prompt.as_ref(),
                     live.working,
-                    snapshot_options.as_ref(),
+                    snapshot_detection.options.as_ref(),
+                    snapshot_detection.notice.as_ref(),
                 );
-                if snapshot_options.is_some() {
-                    published_options = snapshot_options;
+                if snapshot_detection.options.is_some() {
+                    published_options = snapshot_detection.options;
                 }
+                published_notice = snapshot_detection.notice;
                 published_prompt = prompt;
                 published_working = live.working;
                 published_state_valid = true;
@@ -4061,6 +4374,7 @@ pub async fn run_session_chat_follower(
                     effective_prompt.as_ref(),
                     Some(live.working),
                     published_options.as_ref(),
+                    published_notice.as_ref(),
                 );
             }
             published_prompt = effective_prompt;
@@ -4076,6 +4390,13 @@ pub async fn run_session_chat_follower(
         steady-state cadence that catches direct TUI changes. The follower only
         exists while subscribed, and a frame is emitted only when the detected
         value actually changed.
+
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        The same probe classifies the captured screen, so a trust dialog or an
+        expired login reaches chat on this cadence for free. A notice may also
+        legitimately CLEAR, which the options half can never do — but only a
+        capture that actually succeeded proves a clean screen, so a failed or
+        capped read leaves the published notice standing.
         */
         reconcile_ticks = reconcile_ticks.wrapping_add(1);
         let startup_probe_due = published_state_valid
@@ -4097,32 +4418,46 @@ pub async fn run_session_chat_follower(
             && (startup_probe_due || periodic_probe_due)
         {
             let reader = config.options_reader.clone();
-            let detected = tokio::task::spawn_blocking(move || {
-                reader.and_then(|reader| {
-                    reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
-                })
+            let detection = tokio::task::spawn_blocking(move || {
+                reader
+                    .map(|reader| {
+                        reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
+                    })
+                    .unwrap_or_default()
             })
             .await
-            .ok()
-            .flatten();
-            if let Some(detected) = detected {
-                if !detected.same_selection(published_options.as_ref()) {
-                    emit_state_frame(
-                        &emit,
-                        &config,
-                        &stream,
-                        epoch,
-                        if published_working {
-                            SessionChatStatus::Working
-                        } else {
-                            SessionChatStatus::Ready
-                        },
-                        published_prompt.as_ref(),
-                        Some(published_working),
-                        Some(&detected),
-                    );
-                    published_options = Some(detected);
+            .unwrap_or_default();
+            let options_changed = detection
+                .options
+                .as_ref()
+                .is_some_and(|detected| !detected.same_selection(published_options.as_ref()));
+            let notice_changed = detection.captured
+                && !crate::session_chat_notice::same_session_chat_terminal_notice(
+                    detection.notice.as_ref(),
+                    published_notice.as_ref(),
+                );
+            if options_changed || notice_changed {
+                if options_changed {
+                    published_options = detection.options;
                 }
+                if notice_changed {
+                    published_notice = detection.notice;
+                }
+                emit_state_frame(
+                    &emit,
+                    &config,
+                    &stream,
+                    epoch,
+                    if published_working {
+                        SessionChatStatus::Working
+                    } else {
+                        SessionChatStatus::Ready
+                    },
+                    published_prompt.as_ref(),
+                    Some(published_working),
+                    published_options.as_ref(),
+                    published_notice.as_ref(),
+                );
             }
         }
 
@@ -4599,6 +4934,10 @@ pub fn resolve_session_chat_prompt(
 /// Builds a `sessionChatState` frame carrying a prompt change (hook ingest) or
 /// a fresh model/effort detection (post-dispatch probe) so a producer outside
 /// the follower task can push it through a live stream.
+///
+/// CDXC:SessionChatTerminalNotices 2026-08-19: `terminal_notice` is the notice
+/// the session is showing right now, not a delta — an omitted field clears the
+/// client's card, so every producer restates it.
 #[allow(clippy::too_many_arguments)]
 pub fn build_session_chat_prompt_state_frame(
     project_id: &str,
@@ -4612,6 +4951,7 @@ pub fn build_session_chat_prompt_state_frame(
     server_id: &str,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
 ) -> Value {
     let mut frame = Map::new();
     frame.insert("type".to_string(), json!("sessionChatState"));
@@ -4629,6 +4969,7 @@ pub fn build_session_chat_prompt_state_frame(
         }
     }
     insert_optional_selected_options(&mut frame, selected_options);
+    insert_optional_terminal_notice(&mut frame, terminal_notice);
     if let Some(agent_session_id) = agent_session_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -4672,6 +5013,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         };
         let serialized = serde_json::to_value(&message).expect("serialize");
         assert_eq!(
@@ -5136,6 +5478,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         };
         let result = SessionChatMessage {
             id: "res".to_string(),
@@ -5148,6 +5491,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         };
         let input = json!({
             "questions": [{"question": "Which approach?", "options": ["Fast", "Careful"]}],
@@ -5216,6 +5560,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         };
         let result = SessionChatMessage {
             id: "res-old".to_string(),
@@ -5228,6 +5573,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            queued: false,
         };
         let old_question = json!({
             "questions": [{"question": "Which color do you prefer?", "options": ["Red", "Blue"]}],

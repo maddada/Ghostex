@@ -147,6 +147,23 @@ impl SessionChatDetectedOptions {
     }
 }
 
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+One `zmx history` capture, two readings. The model/effort grammar and the
+terminal-state classifier (session_chat_notice.rs) both want the same screen, so
+they are produced together and cached together — a notice must never cost a
+second process spawn.
+*/
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionChatTerminalDetection {
+    pub options: Option<SessionChatDetectedOptions>,
+    pub notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
+    /// True when a usable (non-truncated) screen backed this detection. It is
+    /// the ONLY case where `notice: None` means "the screen is clean" — a failed
+    /// or capped capture must never retire a notice.
+    pub captured: bool,
+}
+
 /// How a consumer wants its detection served.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatOptionsReadMode {
@@ -159,7 +176,7 @@ pub enum SessionChatOptionsReadMode {
 /// Lets the follower engine ask for a detection without owning the cache or the
 /// domain repository, mirroring `SessionChatStateReader`.
 pub type SessionChatOptionsReader = std::sync::Arc<
-    dyn Fn(SessionChatOptionsReadMode) -> Option<SessionChatDetectedOptions> + Send + Sync,
+    dyn Fn(SessionChatOptionsReadMode) -> SessionChatTerminalDetection + Send + Sync,
 >;
 
 // ---------------------------------------------------------------------------
@@ -638,19 +655,38 @@ fn merge_session_chat_option_selections(
 /// Full detection for one session: resolve structured transcript metadata,
 /// then let any current terminal statusline value win per option. `None` means
 /// neither agent-owned source proved a value.
-pub fn detect_session_chat_options(
+///
+/// CDXC:SessionChatTerminalNotices 2026-08-19: the same capture is classified
+/// for terminal-state notices, so both readings ride one process spawn.
+pub fn detect_session_chat_terminal_state(
     repository: &DomainRepository<'_>,
     project_id: &str,
     session_id: &str,
-    agent: Option<&str>,
-) -> Option<SessionChatDetectedOptions> {
-    let agent = session_chat_option_agent(agent)?;
+    agent_id: Option<&str>,
+) -> SessionChatTerminalDetection {
+    let Some(agent) = session_chat_option_agent(agent_id) else {
+        return SessionChatTerminalDetection::default();
+    };
     let transcript =
         read_session_chat_transcript_selection(repository, project_id, session_id, agent);
-    let terminal = crate::zmx::read_zmx_session_history_text(repository, project_id, session_id)
-        .ok()
-        .and_then(|text| detect_session_chat_selection(agent, &text));
-    merge_session_chat_option_selections(transcript, terminal).map(SessionChatDetectedOptions::new)
+    let capture =
+        crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id).ok();
+    let terminal = capture
+        .as_ref()
+        .and_then(|capture| detect_session_chat_selection(agent, &capture.text));
+    // A capped capture lost its tail, so the live screen is not in it.
+    let screen = capture.as_ref().filter(|capture| !capture.truncated);
+    SessionChatTerminalDetection {
+        options: merge_session_chat_option_selections(transcript, terminal)
+            .map(SessionChatDetectedOptions::new),
+        notice: screen.and_then(|capture| {
+            crate::session_chat_notice::classify_session_chat_terminal_notice(
+                agent_id,
+                &capture.text,
+            )
+        }),
+        captured: screen.is_some(),
+    }
 }
 
 // ---------------------------------------------------------------------------

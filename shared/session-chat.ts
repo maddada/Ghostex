@@ -95,6 +95,14 @@ export interface SessionChatMessage {
    * Absent on hook/client-sourced messages.
    */
   byteOffset?: number;
+  /**
+   * The prompt is still waiting in the agent's own queue and has NOT been
+   * handed to the model yet (the user typed it mid-turn). The server retracts
+   * the row the moment the queue releases it and the delivered turn replaces
+   * it. Never set on client-sourced optimistic echoes: those render
+   * identically to real turns so the swap is invisible.
+   */
+  queued?: boolean;
 }
 
 export type SessionChatTurnLifecycleState =
@@ -168,6 +176,52 @@ export interface SessionChatDetectedOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Terminal-state notices
+// ---------------------------------------------------------------------------
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+State the agent TUI paints only on SCREEN, which a transcript projection can
+never show: an expired login, a workspace-trust dialog, a usage-limit banner, a
+stream error, the CLI having exited — plus the send watchdog's report that a
+message could not be proven delivered. gxserver classifies the terminal capture
+it already reads for the option pills, so this costs no extra work.
+
+Carried by read results and by snapshot/replaced/state frames, NEVER by appended
+frames. Semantics follow `prompt`, not `selectedOptions`: an OMITTED field means
+CLEARED, so a client must reset its card whenever a frame that can carry it does
+not.
+*/
+export interface SessionChatTerminalNoticeAction {
+  id: string;
+  label: string;
+  kind: "switchToTerminal" | "sendKeys";
+  /** Raw bytes for `sendKeys`, written verbatim through answerSessionChatPrompt. */
+  send?: string;
+}
+
+export interface SessionChatTerminalNotice {
+  /**
+   * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
+   * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
+   * `queuedInput`, `deliveryFailed`). Clients MUST render an unknown kind
+   * generically — title/detail/severity are self-sufficient.
+   */
+  kind: string;
+  severity: "error" | "warning" | "info";
+  /** Short human line, e.g. "Codex login expired". */
+  title: string;
+  /** One or two sentences of guidance, including quoted terminal evidence. */
+  detail?: string;
+  /** SGR-stripped last visible lines (trimmed, capped ~2000 chars). */
+  screenTail?: string;
+  source: "screen" | "watchdog";
+  /** ISO-8601 millis; also the key a client's local dismissal remembers. */
+  detectedAt: string;
+  actions?: SessionChatTerminalNoticeAction[];
+}
+
+// ---------------------------------------------------------------------------
 // /api/readSessionChat
 // ---------------------------------------------------------------------------
 
@@ -209,6 +263,8 @@ export interface GxserverReadSessionChatResult {
   working?: boolean;
   /** Model/effort read out of the session's terminal, when detectable. */
   selectedOptions?: SessionChatDetectedOptions;
+  /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
+  terminalNotice?: SessionChatTerminalNotice;
   error?: string;
 }
 
@@ -361,6 +417,22 @@ export interface GxserverInterruptSessionChatResult {
   interrupted: boolean;
 }
 
+export interface GxserverHandoffSessionChatDraftParams {
+  projectId: string;
+  sessionId: string;
+}
+
+/**
+ * Result of moving the agent CLI's composer draft out of the terminal so the
+ * chat composer can own it. `content` is empty (and `transferred` false) when
+ * the CLI composer held nothing — a successful capture of nothing, not an
+ * error. The draft is cleared from the terminal before this resolves.
+ */
+export interface GxserverHandoffSessionChatDraftResult {
+  content: string;
+  transferred: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // /api/events frames
 // ---------------------------------------------------------------------------
@@ -412,6 +484,8 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   prompt?: SessionChatInteractivePrompt;
   /** Model/effort read out of the session's terminal, when detectable. */
   selectedOptions?: SessionChatDetectedOptions;
+  /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
+  terminalNotice?: SessionChatTerminalNotice;
   agentSessionId?: string;
 }
 
@@ -439,6 +513,8 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   prompt?: SessionChatInteractivePrompt;
   /** Model/effort read out of the session's terminal, when detectable. */
   selectedOptions?: SessionChatDetectedOptions;
+  /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
+  terminalNotice?: SessionChatTerminalNotice;
   agentSessionId?: string;
 }
 
@@ -449,6 +525,8 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   prompt?: SessionChatInteractivePrompt;
   /** Model/effort read out of the session's terminal, when detectable. */
   selectedOptions?: SessionChatDetectedOptions;
+  /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
+  terminalNotice?: SessionChatTerminalNotice;
   agentSessionId?: string;
 }
 

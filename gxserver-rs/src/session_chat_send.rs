@@ -447,8 +447,51 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
 // Per-session send queue (upstream chat spec §7.6)
 // ---------------------------------------------------------------------------
 
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+Why a send did not complete. The message a caller shows the user is the same as
+before; what is new is that the caller can tell "the terminal refused this
+message" (the agent CLI in the pane never answered the Ctrl+G handshake, or zmx
+would not take the bytes — the crashed-agent case this feature exists to
+explain) apart from "this send was never attempted" (superseded by a newer send,
+cancelled, or the queue was gone). Only the former is evidence about the
+terminal, so only the former may raise a notice.
+*/
+const SESSION_CHAT_SEND_CANCELLED: &str = "The session chat send was cancelled.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionChatSendFailure {
+    /// Superseded, cancelled, or never dequeued: the terminal was never asked.
+    NotAttempted,
+    /// The Ctrl+G draft-preservation handshake never completed.
+    PreserveTerminalDraft,
+    /// A `zmx send` burst was refused.
+    Write,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChatSendError {
+    pub failure: SessionChatSendFailure,
+    pub message: String,
+}
+
+impl SessionChatSendError {
+    fn new(failure: SessionChatSendFailure, message: String) -> Self {
+        Self { failure, message }
+    }
+
+    fn not_attempted(message: String) -> Self {
+        Self::new(SessionChatSendFailure::NotAttempted, message)
+    }
+
+    /// True when the session's own terminal is what refused the message.
+    pub fn terminal_refused(&self) -> bool {
+        self.failure != SessionChatSendFailure::NotAttempted
+    }
+}
+
 struct SessionChatSendJob {
-    completion: Option<oneshot::Sender<Result<(), String>>>,
+    completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
     project_id: String,
     session_id: String,
     source: &'static str,
@@ -498,7 +541,7 @@ pub async fn execute_session_chat_send(
     zmx_name: &str,
     source: &'static str,
     steps: Vec<SessionChatSendStep>,
-) -> Result<(), String> {
+) -> Result<(), SessionChatSendError> {
     let (completion_tx, completion_rx) = oneshot::channel();
     queue_session_chat_send(
         project_id,
@@ -507,9 +550,12 @@ pub async fn execute_session_chat_send(
         source,
         steps,
         Some(completion_tx),
-    )?;
+    )
+    .map_err(SessionChatSendError::not_attempted)?;
     completion_rx.await.map_err(|_| {
-        "The session chat send worker stopped before completing the message.".to_string()
+        SessionChatSendError::not_attempted(
+            "The session chat send worker stopped before completing the message.".to_string(),
+        )
     })?
 }
 
@@ -519,7 +565,7 @@ fn queue_session_chat_send(
     zmx_name: &str,
     source: &'static str,
     steps: Vec<SessionChatSendStep>,
-    completion: Option<oneshot::Sender<Result<(), String>>>,
+    completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
 ) -> Result<(), String> {
     if steps.is_empty() {
         return Ok(());
@@ -581,14 +627,18 @@ async fn run_session_chat_send_worker(
         } = job;
         if job_generation != generation.load(Ordering::SeqCst) {
             if let Some(completion) = completion.take() {
-                let _ = completion.send(Err("The session chat send was cancelled.".to_string()));
+                let _ = completion.send(Err(SessionChatSendError::not_attempted(
+                    SESSION_CHAT_SEND_CANCELLED.to_string(),
+                )));
             }
             continue; // cancelled while queued
         }
         let mut outcome = Ok(());
         for step in steps {
             if job_generation != generation.load(Ordering::SeqCst) {
-                outcome = Err("The session chat send was cancelled.".to_string());
+                outcome = Err(SessionChatSendError::not_attempted(
+                    SESSION_CHAT_SEND_CANCELLED.to_string(),
+                ));
                 break; // cancelled mid-sequence
             }
             match step {
@@ -631,7 +681,10 @@ async fn run_session_chat_send_worker(
                     )
                     .await
                     {
-                        outcome = Err(error);
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            error,
+                        ));
                         break;
                     }
                 }
@@ -674,7 +727,9 @@ async fn write_session_chat_payload(
 
 /// Current terminal text for the session, or `None` when it could not be read
 /// whole — a capture whose tail was dropped cannot prove what is on screen.
-async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
+/// Shared with the send-delivery watchdog (session_chat_watchdog.rs), which
+/// takes exactly one of these per timeout event.
+pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
     let zmx_name = zmx_name.to_string();
     let capture = tokio::task::spawn_blocking(move || {
         crate::zmx::read_zmx_session_history_text_by_name(&zmx_name)
@@ -769,6 +824,27 @@ fn prompt_handoff_response_path(state_dir: &Path, request_id: &str) -> PathBuf {
         .join(format!("{request_id}.json"))
 }
 
+/// What the CLI's prompt-editor handshake reported about the composer draft it
+/// just moved out of the agent TUI. `prompt_id` is `None` when the composer was
+/// empty; `created` marks a stash row this capture owns (as opposed to an
+/// update of an existing one), so a caller that only wanted the text can delete
+/// it again without destroying a prompt the user had stashed themselves.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CapturedTerminalDraft {
+    pub created: bool,
+    pub prompt_id: Option<String>,
+}
+
+/*
+CDXC:SessionChatDraftHandoff 2026-08-18:
+Terminal → chat draft transfer, shared by every host. The bytes a user typed
+into the agent TUI live only in that TUI's composer, so the sole way to read
+them is the Ctrl+G prompt-editor contract: drop a one-shot `handoff:<id>`
+marker, send BEL, and let `ghostex prompt-editor` stash the composer into
+Saved Prompts, clear it, and answer through the response file. Running it here
+rather than in each client is what lets remote gpui sessions and the phone use
+it at all — they have no filesystem on the agent's machine.
+*/
 async fn preserve_terminal_draft(
     state_dir: &Path,
     project_id: &str,
@@ -776,7 +852,53 @@ async fn preserve_terminal_draft(
     zmx_name: &str,
     generation: &AtomicU64,
     job_generation: u64,
-) -> Result<(), String> {
+) -> Result<(), SessionChatSendError> {
+    run_terminal_draft_capture(
+        state_dir,
+        project_id,
+        session_id,
+        zmx_name,
+        Some((generation, job_generation)),
+    )
+    .await
+    .map(|_| ())
+    .map_err(|message| {
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        The generation, not the message text, is what says whether this send was
+        superseded while the handshake ran. Anything else here is the CLI in the
+        pane failing to answer Ctrl+G at all, which is exactly the evidence the
+        terminal-notice escalation acts on.
+        */
+        if job_generation != generation.load(Ordering::SeqCst) {
+            SessionChatSendError::not_attempted(message)
+        } else {
+            SessionChatSendError::new(SessionChatSendFailure::PreserveTerminalDraft, message)
+        }
+    })
+}
+
+/// Standalone terminal-draft capture for the `/api/handoffSessionChatDraft`
+/// endpoint. It deliberately does NOT ride the per-session send queue: the
+/// marker's `create_new` open is already the mutual exclusion against a
+/// concurrent chat send's preserve step, and a view switch never races a send
+/// from the same client.
+pub async fn capture_session_chat_terminal_draft(
+    state_dir: &Path,
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+) -> Result<CapturedTerminalDraft, String> {
+    run_terminal_draft_capture(state_dir, project_id, session_id, zmx_name, None).await
+}
+
+async fn run_terminal_draft_capture(
+    state_dir: &Path,
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    cancellation: Option<(&AtomicU64, u64)>,
+) -> Result<CapturedTerminalDraft, String> {
     let request_id = format!(
         "chat-{}-{}",
         std::process::id(),
@@ -835,18 +957,35 @@ async fn preserve_terminal_draft(
 
     let started = std::time::Instant::now();
     loop {
-        if job_generation != generation.load(Ordering::SeqCst) {
+        let cancelled = cancellation.is_some_and(|(generation, job_generation)| {
+            job_generation != generation.load(Ordering::SeqCst)
+        });
+        if cancelled {
             let _ = fs::remove_file(&marker_path);
             let _ = fs::remove_file(&response_path);
-            return Err("The session chat send was cancelled.".to_string());
+            return Err(SESSION_CHAT_SEND_CANCELLED.to_string());
         }
         if let Ok(text) = fs::read_to_string(&response_path) {
             if let Ok(response) = serde_json::from_str::<serde_json::Value>(&text) {
                 let _ = fs::remove_file(&response_path);
-                if response.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
-                    return Ok(());
+                if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+                    return Err("The terminal draft could not be saved.".to_string());
                 }
-                return Err("The terminal draft could not be saved.".to_string());
+                // An empty composer is a successful capture of nothing: the
+                // CLI answers `empty` without touching Saved Prompts.
+                if response.get("empty").and_then(serde_json::Value::as_bool) == Some(true) {
+                    return Ok(CapturedTerminalDraft::default());
+                }
+                return Ok(CapturedTerminalDraft {
+                    created: response
+                        .get("created")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
+                    prompt_id: response
+                        .get("promptId")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string),
+                });
             }
         }
         if started.elapsed() >= SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT {
