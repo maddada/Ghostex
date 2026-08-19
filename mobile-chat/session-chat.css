@@ -8,3 +8,21 @@
 @import "../sidebar/styles/theme.css";
 @import "../sidebar/styles/workspace-theme.css";
 @import "../sidebar/styles/chat.css";
+
+/*
+ * Phone/tablet transcript gutter. The shared rule reserves 30px each side
+ * (max-width: calc(100% - 60px)) so desktop chat panes keep the transcript
+ * clear of the pane edges; on the mobile surface that gutter is 20px per side
+ * wider than the app wants, so trim it here instead of in the shared sheet the
+ * desktop and web hosts read. The narrow-viewport full-bleed case the shared
+ * sheet already handles stays full-bleed.
+ */
+.ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+  max-width: calc(100% - 20px);
+}
+
+@media (max-width: 1070px) {
+  .ghostex-session-chat-scope [data-slot="message-scroller-content"] {
+    max-width: 100%;
+  }
+}

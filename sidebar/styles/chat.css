@@ -131,7 +131,12 @@
   background: #343434;
 }
 
-@media (max-width: 700px) {
+/*
+ * The Chat message width setting only applies above 1070px. At 1070px and
+ * below the transcript goes full-bleed regardless of the percentage, so
+ * narrow panes and phones never squeeze the conversation further.
+ */
+@media (max-width: 1070px) {
   .ghostex-session-chat-scope [data-slot="message-scroller-content"] {
     max-width: 100%;
     width: 100%;
@@ -208,6 +213,18 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   border-radius: 1rem;
   color: #fcfcfc;
   padding: 0.75rem;
+}
+
+/* Prompt accepted by the agent but still waiting in its queue. Sits above the
+   bubble on the user's side; muted so it reads as status, not content. */
+.ghostex-chat-queued-label {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  padding-block-end: 0.25rem;
+  padding-inline-end: 0.125rem;
+  text-transform: uppercase;
 }
 
 .ghostex-chat-user-bubble .ghostex-chat-markdown p,
@@ -323,6 +340,25 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* Collapsed, the trigger carries a one-line teaser of the reasoning. Keep it
+   on one line: the point of the collapsed state is that a long thought costs
+   one row, and pre-wrap is inherited from the row for the expanded body. */
+.ghostex-chat-thinking-text > [data-ghostex-thinking-text] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The reasoning body is markdown, so it owns its own block spacing and must
+   not inherit the row's pre-wrap (that would double every blank line). */
+.ghostex-chat-thinking-body {
+  white-space: normal;
+}
+
+.ghostex-chat-thinking-body + .ghostex-chat-tool-run {
+  margin-block-start: 0.5rem;
 }
 
 .ghostex-chat-thinking-detail {
@@ -741,20 +777,49 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
    neutral hover. Controls that own a deliberate fill opt out — including the
    interactive prompt card's option rows and its primary answer button, whose
    `bg-primary` would otherwise be stripped while `text-primary-foreground`
-   stayed dark, leaving dark text on a dark surface. */
+   stayed dark, leaving dark text on a dark surface.
+
+   CDXC:SessionChatPickerHighlight 2026-08-19: the composer's "/", "$" and "@"
+   picker rows are in that group too. Their keyboard highlight is a `bg-accent`
+   fill on the active row, and flattening it left the arrow keys moving an
+   invisible selection — only the CSS `:hover` fill below ever showed, so the
+   pickers read as mouse-only. */
 .ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]),
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]),
 body[data-session-chat-theme="dark"]
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]) {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]) {
   background-color: transparent;
 }
 
 .ghostex-session-chat-scope[data-chat-theme="dark"]
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not(:disabled):hover,
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]):not(:disabled):hover,
 body[data-session-chat-theme="dark"]
   .ghostex-session-chat-popup
-  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not(:disabled):hover {
+  button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(.ghostex-chat-scroll-bottom-button):not([data-slot="session-chat-host-action"]):not([data-chat-answer-control]):not([data-chat-picker-option]):not(:disabled):hover {
+  background-color: #333333;
+}
+
+/* CDXC:SessionChatPickerHighlight 2026-08-19: the composer's "/", "$" and "@"
+   pickers own their active-row fill, and tailwind's `bg-accent` cannot deliver
+   it: the sidebar theme's unlayered `button:where(:not([data-slot]))` reset
+   beats any layered utility on a button, so the highlighted row needs a real
+   rule here. Without one the arrow keys moved a selection nothing rendered,
+   and only the CSS :hover fill above ever showed — the pickers read as
+   mouse-only. Hover now runs through the same highlight (the rows track the
+   pointer into the same index), so both inputs share one visual. */
+.ghostex-chat-composer-picker [role="option"][data-highlighted="true"] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.ghostex-session-chat-scope[data-chat-theme="dark"]
+  .ghostex-chat-composer-picker
+  [role="option"][data-highlighted="true"],
+body[data-session-chat-theme="dark"]
+  .ghostex-session-chat-popup
+  .ghostex-chat-composer-picker
+  [role="option"][data-highlighted="true"] {
   background-color: #333333;
 }
 
@@ -821,6 +886,96 @@ body[data-session-chat-theme="dark"]
 
 [data-slot="message-scroller-viewport"][data-user-scrolling]:not([data-autoscrolling]) {
   scrollbar-color: color-mix(in srgb, var(--foreground) 30%, transparent) transparent;
+}
+
+/* --- Suppressed harness turns ----------------------------------------------- */
+
+/* Short harness turns (a background task reporting back, a note from another
+   session, a line of local command output) read as prose in the reasoning
+   lane's voice rather than behind a chevron. Same marker dot, same muted type,
+   so they sit at the same altitude as thinking and never compete with the
+   answer. Deliberately NOT the .ghostex-chat-thinking-* classes: those carry
+   the reasoning lane's own geometry contract. */
+.ghostex-chat-suppressed-inline {
+  align-items: start;
+  color: var(--muted-foreground);
+  column-gap: 0.625rem;
+  display: grid;
+  font-size: 0.8125rem;
+  grid-template-columns: 0.375rem minmax(0, 1fr);
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-block-end: calc(0.375rem + 7px);
+  padding-inline-start: 6.5px;
+  white-space: pre-wrap;
+  width: 100%;
+}
+
+.ghostex-chat-suppressed-inline::before {
+  align-self: start;
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 0.25rem;
+  justify-self: center;
+  margin-block-start: 0.484375rem;
+  width: 0.25rem;
+}
+
+/* The marker label stays as the sentence's lead-in so the line still says
+   WHICH kind of harness turn it is without a separate row. */
+.ghostex-chat-suppressed-inline-label {
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  font-weight: 600;
+}
+
+.ghostex-chat-suppressed-inline-label::after {
+  content: " · ";
+  font-weight: 400;
+}
+
+/* --- Long-block height cap -------------------------------------------------- */
+
+/* Reasoning is secondary to the answer it belongs to, so a long thought should
+   not own the transcript's scrollbar. Capping it and letting it scroll in place
+   keeps the conversation scrollbar proportional to the number of turns instead
+   of to the longest thought. Nothing is hidden: this is a scroller, so
+   selection, copy, and find highlights still reach the tail.
+   Answers are deliberately NOT capped — an answer is the thing being read, and
+   burying its tail behind an inner scrollbar is worse than a long turn. */
+.ghostex-chat-scroll-cap-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ghostex-chat-scroll-cap {
+  max-height: var(--ghostex-chat-scroll-cap-height, 18rem);
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.ghostex-chat-scroll-cap[data-expanded="true"] {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.ghostex-chat-scroll-cap-toggle {
+  align-items: center;
+  align-self: flex-start;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  gap: 0.25rem;
+  margin-block-start: 0.25rem;
+  padding: 0.125rem 0.375rem 0.125rem 0.25rem;
+}
+
+.ghostex-chat-scroll-cap-toggle:hover {
+  color: var(--foreground);
 }
 
 /* --- Markdown ------------------------------------------------------------- */
@@ -1056,8 +1211,60 @@ body[data-session-chat-theme="dark"]
 
 .ghostex-chat-image-preview[data-zoom="out"] {
   cursor: zoom-out;
+}
+
+/* Zoomed: the level's width is set inline and the height follows the aspect
+   ratio, so both fitted caps have to come off. */
+.ghostex-chat-image-preview[data-zoomed="true"] {
   max-height: none;
   max-width: none;
+}
+
+/* Right-clicking the picture offers Copy image / Save image. Anchored to the
+   click in viewport coordinates: the overlay is `fixed inset-0`, so `fixed`
+   here lands on exactly the pixel that was clicked, and staying out of the
+   scrolling layer keeps the menu still while a zoomed picture pans. */
+.ghostex-chat-image-menu {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  color: var(--popover-foreground);
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  padding: 0.25rem;
+  position: fixed;
+  z-index: 20;
+}
+
+.ghostex-chat-image-menu-item {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: inherit;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ghostex-chat-image-menu-item:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.ghostex-chat-image-menu-error {
+  background: rgb(0 0 0 / 0.8);
+  border-radius: 8px;
+  bottom: 1.25rem;
+  color: rgb(255 255 255 / 0.9);
+  font-size: 0.8125rem;
+  left: 50%;
+  padding: 0.5rem 0.875rem;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 20;
 }
 
 .ghostex-chat-inline-image-pending {
