@@ -281,8 +281,16 @@
   pointer-events: none;
 }
 
-.group-sessions-shell[data-project-session-list-clipped="true"] {
+.group-sessions-shell[data-project-session-list-clipped="true"][data-collapsed="false"] {
   /*
+   * CDXC:SidebarCollapseAnimation 2026-08-19:
+   * Show more / Show less and the inner scroll cap only describe an *expanded*
+   * project body. They used to match while collapsed too, and because they sit
+   * later in this file at the same specificity as the collapsed rule they beat
+   * `max-height: 0`. A project with enough sessions to own a Show more toggle
+   * therefore expanded and collapsed at full height, with no height animation
+   * in either direction.
+   *
    * CDXC:ProjectSessionLists 2026-06-12-23:53:
    * Show less uses the project expand/collapse max-height path. Clip only this header-toggle state because normal expanded project bodies allow visible overflow for anchored status affordances.
    *
@@ -296,7 +304,7 @@
   overflow: hidden;
 }
 
-.group-sessions-shell[data-project-session-list-scrollable="true"] {
+.group-sessions-shell[data-project-session-list-scrollable="true"][data-collapsed="false"] {
   /*
    * CDXC:ProjectSessionLists 2026-06-25-12:20:
    * Keep the Show more / Show less interaction, but make the expanded project
@@ -1978,8 +1986,15 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
 
 .sidebar-reference-layout[data-reference-sidebar="true"]
   .reference-sidebar-collapsible-body[data-collapsed="true"] {
+  /*
+   * CDXC:SidebarCollapseAnimation 2026-08-19:
+   * `height: 0` plus `overflow: hidden` is the whole collapsed contract here.
+   * Do not add `max-height: 0` back: max-height is not in the transition list,
+   * so it clamps the box to zero on the first collapsed frame and the section
+   * body snaps shut while only opacity animates. Expanding looked animated
+   * only because max-height went straight back to `none`.
+   */
   height: 0;
-  max-height: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
@@ -2004,13 +2019,26 @@ body[data-sidebar-tooltips-suppressed="true"] [data-slot="tooltip-content"] {
   transform-origin: top;
   transition:
     height var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    padding-block-start var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
+    padding-block-end var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1),
     opacity var(--sidebar-collapse-duration, 0ms) ease,
     transform var(--sidebar-collapse-duration, 0ms) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/*
+ * CDXC:SidebarCollapseAnimation 2026-08-19:
+ * Collapsible bodies like the project collection list carry block padding
+ * (`.project-collection-projects` has 5px on top). With `box-sizing:
+ * border-box` that padding survives `height: 0`, so the body still occupied a
+ * few pixels when its transition ended and then lost them in one step at
+ * unmount: the animation looked like it stalled just short of closed and then
+ * jumped. Animate the block padding to zero alongside the height so the final
+ * animated box is exactly the unmounted box.
+ */
 .sidebar-animated-collapse-body[data-collapsed="true"] {
   height: 0;
   opacity: 0;
+  padding-block: 0;
   pointer-events: none;
   transform: translateY(-4px) scaleY(0.985);
 }
@@ -2369,7 +2397,8 @@ manual mode visibly selected without adding text to the section row.
   font-weight: 800;
 }
 
-.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title {
+.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title,
+.sidebar-reference-layout[data-reference-sidebar="true"] .project-collection-title-input {
   font-weight: 800;
 }
 
