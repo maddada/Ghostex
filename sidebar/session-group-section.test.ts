@@ -630,11 +630,18 @@ describe("reference sidebar group spacing styles", () => {
       "data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}",
     );
 
+    /*
+     * CDXC:SidebarCollapseAnimation 2026-08-19:
+     * The bounded inner scroll surface is scoped to the expanded body, so the
+     * collapsed rule's max-height is not overridden by a later rule at the same
+     * specificity. Match that exact selector; the unscoped prefix also appears
+     * on the drag-lock and ::-webkit-scrollbar rules below it.
+     */
     const scrollableRuleStart = groupPanelStylesSource.indexOf(
-      '.group-sessions-shell[data-project-session-list-scrollable="true"] {',
+      '.group-sessions-shell[data-project-session-list-scrollable="true"][data-collapsed="false"] {',
     );
     const scrollableRuleEnd = groupPanelStylesSource.indexOf(
-      "\n}\n\n.sidebar-collapse-content {",
+      "\n}\n",
       scrollableRuleStart,
     );
     const scrollableRuleSource = groupPanelStylesSource.slice(
