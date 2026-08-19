@@ -116,6 +116,12 @@ fn main() -> anyhow::Result<()> {
         match event {
             TerminalEvent::Bell => println!("event: bell"),
             TerminalEvent::TitleChanged => println!("event: title changed"),
+            TerminalEvent::ClipboardWriteRequested => {
+                // Standalone consumer: report and drop; only the GPUI host
+                // performs real clipboard access.
+                let count = model.take_clipboard_write_requests().len();
+                println!("event: clipboard write requested ({count} pending)");
+            }
             TerminalEvent::Exited(exit) => {
                 println!("event: exited with {exit:?}");
                 exited = Some(exit);

@@ -108,9 +108,10 @@ const TERMINAL_SCROLLBAR_THICKNESS: f32 = 2.0;
 const TERMINAL_SCROLLBAR_MIN_KNOB_HEIGHT: f32 = 18.0;
 const TERMINAL_SCROLL_BUTTON_SIZE: f32 = 28.125;
 /// Shared edge inset for terminal overlay chrome: Agent Actions (top-right) and
-/// scroll-to-top/bottom (bottom-right) both sit 13px in from the pane edge.
+/// scroll-to-top/bottom (bottom-right) both sit 13px in from the pane edge,
+/// matching the chat surface's floating cluster
+/// (sidebar/chat/session-chat-host-actions-cluster.tsx).
 const TERMINAL_ACTION_BUTTON_EDGE_INSET: f32 = 13.0;
-const TERMINAL_AGENT_ACTIONS_EDGE_INSET: f32 = TERMINAL_ACTION_BUTTON_EDGE_INSET;
 /// Vertical gap between the cluster row and the expanded Agent Actions menu.
 const TERMINAL_AGENT_ACTIONS_MENU_GAP: f32 = 13.0;
 const TERMINAL_BUTTON_GAP: f32 = 0.0;
@@ -897,6 +898,14 @@ impl TerminalView {
             // The changed title (and any pwd that came with it) is read back
             // from the terminal; the event itself carries no string.
             TerminalEvent::TitleChanged => self.sync_title_and_pwd(cx),
+            // OSC 52 / OSC 1337 Copy: the mounted view is the authorized
+            // owner (mirroring the embedded-Ghostty drain policy), and only
+            // runtime-provided text is written — never logged or persisted.
+            TerminalEvent::ClipboardWriteRequested => {
+                for text in self.model.take_clipboard_write_requests() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+            }
         }
     }
 
@@ -2446,15 +2455,14 @@ fn terminal_agent_action_button(
         ),
     };
     let tooltip = terminal_overlay_tooltip(tooltip, hotkey_action_id);
-    let right = TERMINAL_AGENT_ACTIONS_EDGE_INSET
-        + column_from_right as f32 * (TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_BUTTON_GAP);
+    let (edge_right, edge_top) = terminal_overlay_edge_insets();
+    let right =
+        edge_right + column_from_right as f32 * (TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_BUTTON_GAP);
     let top = match row {
-        TerminalAgentActionRow::Cluster => TERMINAL_AGENT_ACTIONS_EDGE_INSET,
+        TerminalAgentActionRow::Cluster => edge_top,
         // The Agent Actions menu bar sits 13px below the cluster row.
         TerminalAgentActionRow::Menu => {
-            TERMINAL_AGENT_ACTIONS_EDGE_INSET
-                + TERMINAL_SCROLL_BUTTON_SIZE
-                + TERMINAL_AGENT_ACTIONS_MENU_GAP
+            edge_top + TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_AGENT_ACTIONS_MENU_GAP
         }
     };
     terminal_overlay_button(id)
@@ -2586,6 +2594,21 @@ fn terminal_agent_actions_glyph() -> impl IntoElement {
     )
 }
 
+/// Overlay chrome is anchored to the *pane body*, not to the terminal grid.
+/// `main.rs` mounts this view inside a wrapper inset by the configured terminal
+/// pane padding, so anchoring at a plain 13px would render the buttons
+/// `padding + 13`px in from the pane edge and no longer line up with the chat
+/// surface's cluster. Subtract the padding back out so both surfaces show the
+/// same 13px gap regardless of the terminal padding setting.
+fn terminal_overlay_edge_insets() -> (f32, f32) {
+    let (horizontal_padding, vertical_padding) =
+        crate::shared_settings::shared_sidebar_settings_snapshot().terminal_pane_padding_px();
+    (
+        TERMINAL_ACTION_BUTTON_EDGE_INSET - horizontal_padding,
+        TERMINAL_ACTION_BUTTON_EDGE_INSET - vertical_padding,
+    )
+}
+
 fn terminal_overlay_button(id: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
@@ -2621,24 +2644,25 @@ fn terminal_scroll_button(
     bottom_button_visible: bool,
     cx: &mut Context<TerminalView>,
 ) -> impl IntoElement {
+    let (edge_right, edge_bottom) = terminal_overlay_edge_insets();
     let (id, tooltip, hotkey_action_id, bottom) = match edge {
         TerminalScrollEdge::Top => (
             "ghostex-terminal-scroll-to-top",
             "Scroll terminal to top",
             "scrollTerminalToTop",
-            TERMINAL_ACTION_BUTTON_EDGE_INSET + TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_BUTTON_GAP,
+            edge_bottom + TERMINAL_SCROLL_BUTTON_SIZE + TERMINAL_BUTTON_GAP,
         ),
         TerminalScrollEdge::Bottom => (
             "ghostex-terminal-scroll-to-bottom",
             "Scroll terminal to bottom",
             "scrollTerminalToBottom",
-            TERMINAL_ACTION_BUTTON_EDGE_INSET,
+            edge_bottom,
         ),
     };
     let tooltip = terminal_overlay_tooltip(tooltip, hotkey_action_id);
 
     terminal_overlay_button(id)
-        .right(px(TERMINAL_ACTION_BUTTON_EDGE_INSET))
+        .right(px(edge_right))
         .bottom(px(bottom))
         .border_l_1()
         .border_r_1()

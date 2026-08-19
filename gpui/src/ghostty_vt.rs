@@ -206,6 +206,7 @@ pub mod ffi {
     pub const GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND: GhosttyTerminalOption = 12;
     pub const GHOSTTY_TERMINAL_OPT_COLOR_CURSOR: GhosttyTerminalOption = 13;
     pub const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE: GhosttyTerminalOption = 14;
+    pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE: GhosttyTerminalOption = 26;
     pub const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES: GhosttyTerminalOption = 27;
 
     #[repr(C)]
@@ -549,6 +550,47 @@ pub mod ffi {
     /// from the terminal after the callback returns.
     pub type GhosttyTerminalTitleChangedFn =
         unsafe extern "C" fn(terminal: GhosttyTerminal, userdata: *mut c_void);
+
+    /// terminal.h `GhosttyClipboardLocation`: normalized clipboard
+    /// destination of a program-initiated clipboard write.
+    pub type GhosttyClipboardLocation = c_int;
+    pub const GHOSTTY_CLIPBOARD_LOCATION_STANDARD: GhosttyClipboardLocation = 0;
+
+    /// terminal.h `GhosttyClipboardWriteResult`. Protocols without write
+    /// acknowledgements (OSC 52, OSC 1337 Copy) ignore the result.
+    pub type GhosttyClipboardWriteResult = c_int;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS: GhosttyClipboardWriteResult = 0;
+    pub const GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED: GhosttyClipboardWriteResult = 2;
+
+    /// terminal.h `GhosttyClipboardContent`: one MIME representation in a
+    /// clipboard write. Both strings are borrowed and only valid for the
+    /// duration of the callback; `data` is already protocol-decoded.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct GhosttyClipboardContent {
+        pub mime: GhosttyString,
+        pub data: GhosttyString,
+    }
+
+    /// Sized struct (terminal.h `GhosttyClipboardWrite`): a semantic, atomic
+    /// clipboard write. `contents_len == 0` requests clearing the
+    /// destination. Borrowed for the duration of the callback.
+    #[repr(C)]
+    pub struct GhosttyClipboardWrite {
+        pub size: usize,
+        pub location: GhosttyClipboardLocation,
+        pub contents: *const GhosttyClipboardContent,
+        pub contents_len: usize,
+    }
+
+    /// terminal.h `GhosttyTerminalClipboardWriteFn`: invoked synchronously
+    /// from feed() when the running program performs a clipboard write
+    /// (OSC 52, OSC 1337 Copy). Read requests are never forwarded.
+    pub type GhosttyTerminalClipboardWriteFn = unsafe extern "C" fn(
+        terminal: GhosttyTerminal,
+        userdata: *mut c_void,
+        write: *const GhosttyClipboardWrite,
+    ) -> GhosttyClipboardWriteResult;
 
     pub type GhosttyStyleColorTag = c_int;
     pub const GHOSTTY_STYLE_COLOR_NONE: GhosttyStyleColorTag = 0;
@@ -972,6 +1014,12 @@ impl VtTerminal {
         } else {
             std::ptr::null()
         };
+        let clipboard_write_fn: *const c_void = if callbacks.clipboard_write.is_some() {
+            let f: ffi::GhosttyTerminalClipboardWriteFn = clipboard_write_trampoline;
+            f as *const c_void
+        } else {
+            std::ptr::null()
+        };
 
         let boxed = Box::into_raw(Box::new(callbacks));
         let result = unsafe {
@@ -1001,6 +1049,13 @@ impl VtTerminal {
                     title_fn,
                 ))
             })
+            .and_then(|()| {
+                check(ffi::ghostty_terminal_set(
+                    self.raw,
+                    ffi::GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+                    clipboard_write_fn,
+                ))
+            })
         };
         if let Err(error) = result {
             // Leave the terminal with no hooks rather than half a set wired
@@ -1019,6 +1074,11 @@ impl VtTerminal {
                 ffi::ghostty_terminal_set(
                     self.raw,
                     ffi::GHOSTTY_TERMINAL_OPT_TITLE_CHANGED,
+                    std::ptr::null(),
+                );
+                ffi::ghostty_terminal_set(
+                    self.raw,
+                    ffi::GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
                     std::ptr::null(),
                 );
                 ffi::ghostty_terminal_set(
@@ -1344,11 +1404,16 @@ impl Drop for VtTerminal {
 /// receives query auto-replies (DA1, DSR, DECRQM, ...) that must reach the
 /// PTY for applications to keep working; `bell` and `title_changed` are
 /// notification hooks (the new title is queried from the terminal later).
+/// `clipboard_write` receives program-initiated standard-clipboard text
+/// (OSC 52 / OSC 1337 Copy), already decoded; selection/primary
+/// destinations, clears, and non-`text/plain` representations are reported
+/// unsupported, matching the embedded-Ghostty surface path.
 #[derive(Default)]
 pub struct VtHostCallbacks {
     pub write_pty: Option<Box<dyn FnMut(&[u8]) + Send>>,
     pub bell: Option<Box<dyn FnMut() + Send>>,
     pub title_changed: Option<Box<dyn FnMut() + Send>>,
+    pub clipboard_write: Option<Box<dyn FnMut(String) + Send>>,
 }
 
 unsafe extern "C" fn write_pty_trampoline(
@@ -1383,6 +1448,55 @@ unsafe extern "C" fn title_changed_trampoline(
     if let Some(title_changed) = callbacks.title_changed.as_mut() {
         title_changed();
     }
+}
+
+unsafe extern "C" fn clipboard_write_trampoline(
+    _terminal: ffi::GhosttyTerminal,
+    userdata: *mut c_void,
+    write: *const ffi::GhosttyClipboardWrite,
+) -> ffi::GhosttyClipboardWriteResult {
+    let callbacks = unsafe { &mut *userdata.cast::<VtHostCallbacks>() };
+    let Some(clipboard_write) = callbacks.clipboard_write.as_mut() else {
+        return ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    };
+    let Some(text) = (unsafe { clipboard_write_standard_text_plain(write) }) else {
+        return ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    };
+    clipboard_write(text);
+    ffi::GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS
+}
+
+/// Copy the non-empty `text/plain` representation out of a standard-clipboard
+/// write. Selection/primary destinations, clears, and non-text
+/// representations yield `None` (reported unsupported to the library).
+unsafe fn clipboard_write_standard_text_plain(
+    write: *const ffi::GhosttyClipboardWrite,
+) -> Option<String> {
+    let write = unsafe { write.as_ref() }?;
+    // Sized struct: only trust fields the producing library actually filled.
+    if write.size < std::mem::size_of::<ffi::GhosttyClipboardWrite>()
+        || write.location != ffi::GHOSTTY_CLIPBOARD_LOCATION_STANDARD
+        || write.contents.is_null()
+        || write.contents_len == 0
+    {
+        return None;
+    }
+    let contents = unsafe { std::slice::from_raw_parts(write.contents, write.contents_len) };
+    for content in contents {
+        if content.mime.ptr.is_null() || content.data.ptr.is_null() || content.data.len == 0 {
+            continue;
+        }
+        let mime = unsafe { std::slice::from_raw_parts(content.mime.ptr, content.mime.len) };
+        if mime != b"text/plain" {
+            continue;
+        }
+        let data = unsafe { std::slice::from_raw_parts(content.data.ptr, content.data.len) };
+        let Ok(text) = std::str::from_utf8(data) else {
+            continue;
+        };
+        return Some(text.to_string());
+    }
+    None
 }
 
 /// Resolve an SGR style color (e.g. `GhosttyStyle::underline_color`) against

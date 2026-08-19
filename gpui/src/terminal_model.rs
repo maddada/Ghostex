@@ -40,6 +40,7 @@ flags are a skip-work hint for the renderer, not a completeness marker.
 */
 
 use std::{
+    collections::VecDeque,
     io::{Read, Write},
     path::PathBuf,
     sync::{
@@ -61,6 +62,11 @@ use crate::ghostty_vt::{
 /// Wakeup coalescing window: bytes arriving within this span of the first
 /// unnotified feed produce a single Wakeup.
 const WAKEUP_COALESCE_WINDOW: Duration = Duration::from_millis(4);
+
+/// Bound on undrained program-initiated clipboard writes. The consumer
+/// drains on every ClipboardWriteRequested event, so the cap only matters
+/// when no consumer is pumping events; oldest writes drop first.
+const CLIPBOARD_WRITE_QUEUE_LIMIT: usize = 16;
 
 /// PTY read buffer size per read call.
 const PTY_READ_BUFFER_LEN: usize = 64 * 1024;
@@ -104,6 +110,11 @@ pub enum TerminalEvent {
     Bell,
     /// Terminal title changed (OSC 0/2); query lives with P1e.
     TitleChanged,
+    /// The running program wrote to the system clipboard (OSC 52 / OSC 1337
+    /// Copy). The event carries no content; the consumer drains the queued
+    /// text via [`TerminalModel::take_clipboard_write_requests`] and performs
+    /// the actual clipboard access on its own thread.
+    ClipboardWriteRequested,
     /// Child process exited. Terminal contents stay readable afterwards.
     Exited(TerminalExit),
 }
@@ -339,6 +350,10 @@ pub struct TerminalModel {
     mouse_encoder: VtMouseEncoder,
     /// Host-owned macOS option-key setting; P1e syncs it from app settings.
     option_as_alt: VtOptionAsAlt,
+    /// Program-initiated clipboard writes (OSC 52 / OSC 1337 Copy) queued by
+    /// the vt callback until the consumer drains them on
+    /// ClipboardWriteRequested. Text only; never logged or persisted.
+    clipboard_writes: Arc<Mutex<VecDeque<String>>>,
 }
 
 impl TerminalModel {
@@ -415,14 +430,19 @@ impl TerminalModel {
             })?;
 
         let mut vt = VtTerminal::new(config.cols, config.rows, config.max_scrollback)?;
+        let clipboard_writes: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
         {
             // Terminal → host hooks. write_pty fires inside feed() on the
             // pty-read thread while the terminal lock is held; it only
             // queues bytes for the pty-write thread, so no blocking write
-            // ever runs under the terminal lock.
+            // ever runs under the terminal lock. clipboard_write likewise
+            // only queues text; the UI-side consumer performs the actual
+            // clipboard access when it handles ClipboardWriteRequested.
             let reply_tx = write_tx.clone();
             let bell_events = Arc::clone(&events);
             let title_events = Arc::clone(&events);
+            let clipboard_events = Arc::clone(&events);
+            let clipboard_write_queue = Arc::clone(&clipboard_writes);
             vt.set_host_callbacks(VtHostCallbacks {
                 write_pty: Some(Box::new(move |bytes| {
                     let _ = reply_tx.send(PtyWriteRequest {
@@ -432,6 +452,15 @@ impl TerminalModel {
                 })),
                 bell: Some(Box::new(move || bell_events(TerminalEvent::Bell))),
                 title_changed: Some(Box::new(move || title_events(TerminalEvent::TitleChanged))),
+                clipboard_write: Some(Box::new(move |text| {
+                    if let Ok(mut queue) = clipboard_write_queue.lock() {
+                        if queue.len() >= CLIPBOARD_WRITE_QUEUE_LIMIT {
+                            queue.pop_front();
+                        }
+                        queue.push_back(text);
+                    }
+                    clipboard_events(TerminalEvent::ClipboardWriteRequested);
+                })),
             })?;
         }
         let terminal = Arc::new(Mutex::new(vt));
@@ -530,7 +559,18 @@ impl TerminalModel {
             key_encoder: VtKeyEncoder::new()?,
             mouse_encoder: VtMouseEncoder::new()?,
             option_as_alt: VtOptionAsAlt::default(),
+            clipboard_writes,
         })
+    }
+
+    /// Drain pending program-initiated clipboard writes (OSC 52 / OSC 1337
+    /// Copy), oldest first. The caller performs the actual clipboard access;
+    /// the model never touches the system clipboard itself.
+    pub fn take_clipboard_write_requests(&self) -> Vec<String> {
+        self.clipboard_writes
+            .lock()
+            .map(|mut queue| queue.drain(..).collect())
+            .unwrap_or_default()
     }
 
     /// Queue input bytes (encoded key/mouse/paste data) for the PTY. The
