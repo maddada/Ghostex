@@ -89,3 +89,8 @@ react-doctor.config.json
 # and are not part of the public Ghostex source tree.
 docs/
 
+
+# Beads runtime lock files. The CLI creates these while it holds a board or
+# embedded-database gate; they are machine state, not board content.
+.beads.gate.lock
+.beads/*.gate.lock
