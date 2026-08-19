@@ -24,6 +24,8 @@ import {
   type GxserverPresentationDelta,
   type GxserverAnswerSessionChatPromptParams,
   type GxserverAnswerSessionChatPromptResult,
+  type GxserverHandoffSessionChatDraftParams,
+  type GxserverHandoffSessionChatDraftResult,
   type GxserverInterruptSessionChatParams,
   type GxserverInterruptSessionChatResult,
   type GxserverReadSessionChatParams,
@@ -520,6 +522,21 @@ export function createNativeSidebarGxserverClient(
     );
   }
 
+  async function handoffSessionChatDraft(
+    params: GxserverHandoffSessionChatDraftParams,
+  ): Promise<GxserverHandoffSessionChatDraftResult> {
+    /*
+    CDXC:SessionChatDraftHandoff 2026-08-18:
+    Moves whatever the user typed into the agent CLI out of the terminal and
+    returns it, so the caller can put it in the chat composer. Slow by nature:
+    the daemon waits on the CLI's Ctrl+G prompt-editor handshake.
+    */
+    return rpc<GxserverHandoffSessionChatDraftResult>(
+      "/api/handoffSessionChatDraft",
+      params as unknown as Record<string, unknown>,
+    );
+  }
+
   function subscribePresentation(
     clientId: string,
     handlers: NativeSidebarPresentationSubscriptionHandlers,
@@ -957,6 +974,7 @@ export function createNativeSidebarGxserverClient(
     listPreviousSessions,
     listRecentProjects,
     answerSessionChatPrompt,
+    handoffSessionChatDraft,
     interruptSessionChat,
     readAppUserData,
     readSessionChat,
@@ -1316,6 +1334,12 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "load sidebar state";
     case "/api/mutateSidebarHudSettings":
       return "save sidebar settings";
+    case "/api/readNavigationHistory":
+      return "load the navigation history";
+    case "/api/recordNavigationVisit":
+      return "record the navigation history entry";
+    case "/api/navigateHistory":
+      return "go through the navigation history";
     case "/api/readWorkspaceSessionGroups":
       return "load workspace session groups";
     case "/api/updateWorkspaceSessionGroups":
@@ -1351,6 +1375,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "load previous sessions";
     case "/api/transitionSession":
       return "change the session state";
+    case "/api/holdSessionsAwake":
+      return "keep the attached sessions awake";
     case "/api/sleepSession":
       return "sleep the session";
     case "/api/wakeSession":
@@ -1385,6 +1411,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "answer the agent prompt";
     case "/api/interruptSessionChat":
       return "interrupt the agent";
+    case "/api/handoffSessionChatDraft":
+      return "move the terminal draft into chat";
     case "/api/sendSessionText":
     case "/api/sendSessionMessage":
     case "/api/sendSessionEnter":
@@ -1472,6 +1500,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "cancel the repository clone";
     case "/api/browseProjectDirectories":
       return "browse project folders";
+    case "/api/createProjectDirectory":
+      return "create the folder";
     case "/api/discoverSourceControl":
       return "check which source control tools are available";
     case "/api/lookupRepository":
