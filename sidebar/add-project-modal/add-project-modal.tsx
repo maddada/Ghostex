@@ -9,6 +9,7 @@ import {
   IconDeviceDesktop,
   IconFolder,
   IconFolderPlus,
+  IconFolderRoot,
   IconLink,
   IconSearch,
   IconServer,
@@ -42,9 +43,11 @@ import {
 } from "../remote-project-picker/remote-project-paths";
 import { filterBrowseEntries } from "../remote-project-picker/remote-command-palette-logic";
 import {
+  ADD_PROJECT_ROOT_BROWSE_PATH,
   addProjectEmptyStateMessage,
   addProjectInitialBrowseQuery,
   addProjectModifierLabel,
+  addProjectNewFolderMessage,
   addProjectPathPlaceholder,
   addProjectRepositoryActionLabel,
   addProjectRepositoryPlaceholder,
@@ -92,7 +95,31 @@ const EMPTY_BROWSE_ENTRIES: readonly AddProjectBrowseEntry[] = [];
 const BROWSE_UP_VALUE = "browse:up";
 const ADD_PROJECT_ROW_ICON_CLASS = "size-4 text-muted-foreground/80";
 
-type AddProjectBusyKind = "add" | "clone" | "lookup";
+/*
+ * CDXC:AddProjectChrome 2026-08-18:
+ * The dialog's action buttons are titlebar chrome, not inset controls: each one
+ * fills its container's full height, sits flush against the container edge, and
+ * carries a single side border as the only separator. A row of them therefore
+ * reads as one connected strip the way the titlebar Tips actions do, instead of
+ * as floating pills with gaps around them.
+ */
+const ADD_PROJECT_ACTION_ADDON_CLASS =
+  "h-full gap-0 self-stretch p-0 has-[>button]:ml-0 has-[>button]:mr-0";
+const ADD_PROJECT_ACTION_BUTTON_CLASS =
+  "h-full self-stretch border-y-0 border-r-0 border-l border-l-border/70 px-3";
+
+/*
+ * CDXC:AddProjectChrome 2026-08-19:
+ * The path bar is the dialog's only text field and it is autofocused, so the
+ * shared InputGroup focus treatment (ring + accent border) would draw a
+ * permanent highlight frame around the whole strip. Keep the resting border and
+ * drop the focus ring instead of hiding focus outright: the caret already shows
+ * where typing lands.
+ */
+const ADD_PROJECT_PATH_BAR_CLASS =
+  "h-10 bg-input/30 has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0";
+
+type AddProjectBusyKind = "add" | "clone" | "createFolder" | "lookup";
 
 interface AddProjectCloneFlow {
   readonly remoteUrl: string;
@@ -185,6 +212,12 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     Readonly<Record<string, AddProjectSourceControlDiscovery | null>>
   >({});
   const [pendingDiscoveryMachineId, setPendingDiscoveryMachineId] = useState<string | null>(null);
+  /*
+   * `null` means "not naming a folder". The browse query is deliberately left
+   * untouched while this step is open, so the listing behind it keeps showing
+   * the directory the folder is about to be created in.
+   */
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
 
   const browseRequestRef = useRef(0);
   const cloneJobIdRef = useRef<string | null>(null);
@@ -241,6 +274,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   const isRepositoryStep = cloneFlow?.step === "repository";
   const isCloneDestinationStep = cloneFlow?.step === "confirm";
   const isBrowsing = !isRepositoryStep && isFilesystemBrowseQuery(query, platform);
+  const isNewFolderStep = newFolderName !== null;
 
   const browseDirectoryPath = isBrowsing ? getBrowseDirectoryPath(query) : "";
   const browseFilterQuery =
@@ -364,6 +398,22 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     !hasHighlightedBrowseItem &&
     (hasTrailingPathSeparator(query) ? !browseResult : exactEntry === null);
 
+  /*
+   * CDXC:AddProjectNewFolder 2026-08-18:
+   * The folder is created inside the directory whose entries are on screen,
+   * which is the server-resolved parent of the current query. A typed leaf
+   * filter narrows that listing but never changes which directory it belongs
+   * to, so the affordance stays available while the user is filtering.
+   */
+  const newFolderParentPath = browseResult?.parentPath ?? "";
+  const canCreateNewFolder =
+    isBrowsing &&
+    machineId !== null &&
+    !isBrowsePending &&
+    newFolderParentPath.length > 0 &&
+    !unsupportedWindowsPath &&
+    !relativePathNeedsActiveProject;
+
   const submitActionLabel = isCloneDestinationStep
     ? willCreateProjectPath
       ? "Create & Clone"
@@ -428,12 +478,14 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     setBrowseGeneration((generation) => generation + 1);
   }
 
-  function startLocalBrowse(targetMachineId: string): void {
+  function startLocalBrowse(targetMachineId: string, startDirectory?: string): void {
     const targetMachine =
       machines.find((option) => option.machineId === targetMachineId) ?? null;
     setCloneFlow(null);
     pushView({
-      initialQuery: ensureBrowseDirectoryPath(addProjectInitialBrowseQuery(targetMachine)),
+      initialQuery: ensureBrowseDirectoryPath(
+        startDirectory ?? addProjectInitialBrowseQuery(targetMachine),
+      ),
       kind: "browse",
       machineId: targetMachineId,
     });
@@ -615,6 +667,57 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     }
   }
 
+  function startNewFolder(): void {
+    if (!canCreateNewFolder || busy) {
+      return;
+    }
+    setErrorMessage(null);
+    setHighlightedItemValue(null);
+    setNewFolderName("");
+  }
+
+  function cancelNewFolder(): void {
+    setNewFolderName(null);
+    setErrorMessage(null);
+  }
+
+  async function submitNewFolder(): Promise<void> {
+    const name = (newFolderName ?? "").trim();
+    if (busy || !machineId || name.length === 0 || newFolderParentPath.length === 0) {
+      return;
+    }
+    setBusy("createFolder");
+    setErrorMessage(null);
+    try {
+      const created = await propsRef.current.createDirectory({
+        machineId,
+        name,
+        parentPath: newFolderParentPath,
+      });
+      if (!isMountedRef.current) {
+        return;
+      }
+      /*
+       * The new folder becomes the browse location, so the very next Enter adds
+       * or clones into it. The query keeps whatever prefix the user typed
+       * (`~/dev/`), because the created path is only ever a child of it.
+       */
+      setNewFolderName(null);
+      setHighlightedItemValue(null);
+      setQuery(appendBrowsePathSegment(query, created.name));
+      setBrowseResult(null);
+      setBrowseGeneration((generation) => generation + 1);
+    } catch (error) {
+      if (isMountedRef.current) {
+        setErrorMessage(describeError(error, "Failed to create the folder."));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setBusy(null);
+      }
+    }
+  }
+
   function submitResolvedPath(): void {
     if (isCloneDestinationStep) {
       void submitCloneDestination(resolvedAddProjectPath);
@@ -637,7 +740,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   }
 
   const rows = useMemo<readonly AddProjectRow[]>(() => {
-    if (isRepositoryStep) {
+    if (isRepositoryStep || isNewFolderStep) {
       return [];
     }
     if (isBrowsing) {
@@ -699,6 +802,28 @@ function AddProjectModalBody(props: AddProjectModalProps) {
           value: "source:local",
         });
       }
+      if (
+        matchesAddProjectFilter(query, "External drives and other folders", [
+          "root",
+          "volumes",
+          "external",
+          "drive",
+          "disk",
+          "usb",
+          "/",
+        ])
+      ) {
+        sourceRows.push({
+          dataAttributes: { "data-add-project-source": "root" },
+          description: "Browse from the root of the filesystem",
+          field: "sourceOption",
+          icon: <IconFolderRoot className={ADD_PROJECT_ROW_ICON_CLASS} />,
+          onSelect: () => startLocalBrowse(machineId, ADD_PROJECT_ROOT_BROWSE_PATH),
+          submenu: true,
+          title: "External drives and other folders",
+          value: "source:root",
+        });
+      }
       for (const source of orderedAddProjectSources(readiness)) {
         const title = addProjectSourceRowTitle(source);
         if (!matchesAddProjectFilter(query, title, [source, "clone", "repository", "git"])) {
@@ -750,6 +875,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     currentView?.kind,
     filteredEntries,
     isBrowsing,
+    isNewFolderStep,
     isRepositoryStep,
     machineId,
     machines,
@@ -801,6 +927,18 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   }
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
+    if (isNewFolderStep) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submitNewFolder();
+        return;
+      }
+      if (event.key === "Backspace" && (newFolderName ?? "").length === 0) {
+        event.preventDefault();
+        cancelNewFolder();
+      }
+      return;
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       moveHighlight(1);
@@ -836,15 +974,20 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     }
   }
 
-  const emptyStateMessage = addProjectEmptyStateMessage({
-    cloneSource: cloneFlow?.source ?? null,
-    cloneStep: cloneFlow?.step ?? null,
-    hasMachines: machines.length > 0,
-    isLoadingMachines,
-    relativePathNeedsActiveProject,
-    unsupportedWindowsPath,
-    willCreateProjectPath,
-  });
+  const emptyStateMessage = isNewFolderStep
+    ? addProjectNewFolderMessage({
+        name: newFolderName ?? "",
+        parentPath: newFolderParentPath,
+      })
+    : addProjectEmptyStateMessage({
+        cloneSource: cloneFlow?.source ?? null,
+        cloneStep: cloneFlow?.step ?? null,
+        hasMachines: machines.length > 0,
+        isLoadingMachines,
+        relativePathNeedsActiveProject,
+        unsupportedWindowsPath,
+        willCreateProjectPath,
+      });
   const groupLabel = isBrowsing
     ? isCloneDestinationStep
       ? "Select where to clone"
@@ -852,13 +995,23 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     : currentView?.kind === "machines"
       ? "Machines"
       : "Sources";
-  const placeholder = isRepositoryStep
-    ? addProjectRepositoryPlaceholder(cloneFlow.source)
-    : addProjectPathPlaceholder(canPopView);
+  const placeholder = isNewFolderStep
+    ? "New folder name"
+    : isRepositoryStep
+      ? addProjectRepositoryPlaceholder(cloneFlow.source)
+      : addProjectPathPlaceholder(canPopView);
   const repositoryActionLabel = cloneFlow ? addProjectRepositoryActionLabel(cloneFlow.source) : "";
   const isCloning = busy === "clone";
   const busyLabel =
-    busy === "add" ? "Adding" : busy === "clone" ? "Cloning" : busy === "lookup" ? "Working" : null;
+    busy === "add"
+      ? "Adding"
+      : busy === "clone"
+        ? "Cloning"
+        : busy === "createFolder"
+          ? "Creating"
+          : busy === "lookup"
+            ? "Working"
+            : null;
 
   return (
     /*
@@ -868,14 +1021,14 @@ function AddProjectModalBody(props: AddProjectModalProps) {
      */
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col" data-add-project-modal="">
       <div className="shrink-0 px-3 pt-3">
-        <InputGroup className="h-10 bg-input/30">
-          <InputGroupAddon align="inline-start">
-            {canPopView ? (
+        <InputGroup className={ADD_PROJECT_PATH_BAR_CLASS}>
+          {isNewFolderStep || canPopView ? (
+            <InputGroupAddon align="inline-start" className={ADD_PROJECT_ACTION_ADDON_CLASS}>
               <button
-                aria-label="Back"
-                className="flex size-6 items-center justify-center rounded-none text-muted-foreground hover:text-foreground"
+                aria-label={isNewFolderStep ? "Cancel new folder" : "Back"}
+                className="flex h-full w-10 items-center justify-center self-stretch rounded-none border-r border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
                 data-add-project-field="back"
-                onClick={popView}
+                onClick={isNewFolderStep ? cancelNewFolder : popView}
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}
@@ -883,30 +1036,62 @@ function AddProjectModalBody(props: AddProjectModalProps) {
               >
                 <IconArrowLeft aria-hidden="true" className="size-4" />
               </button>
-            ) : isBrowsing ? (
-              <IconFolderPlus aria-hidden="true" className="size-4" />
-            ) : (
-              <IconSearch aria-hidden="true" className="size-4 opacity-50" />
-            )}
-          </InputGroupAddon>
+            </InputGroupAddon>
+          ) : (
+            <InputGroupAddon align="inline-start">
+              {isBrowsing ? (
+                <IconFolderPlus aria-hidden="true" className="size-4" />
+              ) : (
+                <IconSearch aria-hidden="true" className="size-4 opacity-50" />
+              )}
+            </InputGroupAddon>
+          )}
           <InputGroupInput
-            aria-label={isRepositoryStep ? "Repository" : "Project path"}
+            aria-label={
+              isNewFolderStep ? "New folder name" : isRepositoryStep ? "Repository" : "Project path"
+            }
             autoComplete="off"
             autoFocus
-            data-add-project-field="pathInput"
+            data-add-project-field={isNewFolderStep ? "newFolderInput" : "pathInput"}
             onChange={(event) => {
+              if (isNewFolderStep) {
+                setErrorMessage(null);
+                setNewFolderName(event.currentTarget.value);
+                return;
+              }
               handleQueryChange(event.currentTarget.value);
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             spellCheck={false}
-            value={query}
+            value={isNewFolderStep ? (newFolderName ?? "") : query}
           />
-          {isRepositoryStep ? (
-            <InputGroupAddon align="inline-end">
+          {isNewFolderStep ? (
+            <InputGroupAddon align="inline-end" className={ADD_PROJECT_ACTION_ADDON_CLASS}>
+              <Button
+                aria-label="Create folder (Enter)"
+                className={ADD_PROJECT_ACTION_BUTTON_CLASS}
+                data-add-project-field="newFolderSubmit"
+                disabled={(newFolderName ?? "").trim().length === 0 || busy !== null}
+                onClick={() => {
+                  void submitNewFolder();
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                size="xs"
+                tabIndex={-1}
+                type="button"
+                variant="ghost"
+              >
+                {busy === "createFolder" ? "Creating" : "Create Folder"}
+              </Button>
+            </InputGroupAddon>
+          ) : isRepositoryStep ? (
+            <InputGroupAddon align="inline-end" className={ADD_PROJECT_ACTION_ADDON_CLASS}>
               <Button
                 aria-label={`${repositoryActionLabel} (Enter)`}
-                className="gap-1.5"
+                className={cn(ADD_PROJECT_ACTION_BUTTON_CLASS, "gap-1.5")}
                 data-add-project-field="repositoryAction"
                 disabled={query.trim().length === 0 || busy !== null}
                 onClick={() => {
@@ -918,16 +1103,34 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 size="xs"
                 tabIndex={-1}
                 type="button"
-                variant="outline"
+                variant="ghost"
               >
                 {busy === "lookup" ? "Working" : repositoryActionLabel}
                 <kbd className="rounded-none bg-muted-foreground/10 px-1 text-[10px]">Enter</kbd>
               </Button>
             </InputGroupAddon>
           ) : isBrowsing ? (
-            <InputGroupAddon align="inline-end">
+            <InputGroupAddon align="inline-end" className={ADD_PROJECT_ACTION_ADDON_CLASS}>
+              <Button
+                aria-label="New folder"
+                className={cn(ADD_PROJECT_ACTION_BUTTON_CLASS, "gap-1.5")}
+                data-add-project-field="newFolder"
+                disabled={!canCreateNewFolder || busy !== null}
+                onClick={startNewFolder}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                size="xs"
+                tabIndex={-1}
+                type="button"
+                variant="ghost"
+              >
+                <IconFolderPlus aria-hidden="true" className="size-3.5" />
+                New Folder
+              </Button>
               <Button
                 aria-label={`${submitActionLabel} (${addShortcutLabel})`}
+                className={ADD_PROJECT_ACTION_BUTTON_CLASS}
                 data-add-project-field="submit"
                 disabled={!canSubmitBrowsePath || busy !== null}
                 onClick={() => {
@@ -939,7 +1142,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 size="xs"
                 tabIndex={-1}
                 type="button"
-                variant="outline"
+                variant="ghost"
               >
                 {busyLabel ?? submitActionLabel}
               </Button>
@@ -1073,15 +1276,21 @@ function AddProjectModalBody(props: AddProjectModalProps) {
         className="flex shrink-0 items-center gap-4 border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground"
         data-add-project-field="footer"
       >
-        <AddProjectFooterHint keys="↑ ↓" label="Navigate" />
-        {isRepositoryStep ? (
+        {isNewFolderStep ? null : <AddProjectFooterHint keys="↑ ↓" label="Navigate" />}
+        {isNewFolderStep ? (
+          <AddProjectFooterHint keys="Enter" label="Create folder" />
+        ) : isRepositoryStep ? (
           <AddProjectFooterHint keys="Enter" label={repositoryActionLabel} />
         ) : isBrowsing ? (
           <AddProjectFooterHint keys={addShortcutLabel} label={submitActionLabel} />
         ) : (
           <AddProjectFooterHint keys="Enter" label="Select" />
         )}
-        {canPopView ? <AddProjectFooterHint keys="Backspace" label="Back" /> : null}
+        {isNewFolderStep ? (
+          <AddProjectFooterHint keys="Backspace" label="Cancel" />
+        ) : canPopView ? (
+          <AddProjectFooterHint keys="Backspace" label="Back" />
+        ) : null}
         <AddProjectFooterHint keys="Esc" label="Close" />
         {machine ? (
           <span

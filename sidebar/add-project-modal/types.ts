@@ -48,6 +48,26 @@ export interface AddProjectBrowseResult {
   readonly parentPath: string;
 }
 
+/*
+ * CDXC:AddProjectNewFolder 2026-08-18:
+ * Creating a folder is its own round trip rather than a side effect of adding
+ * or cloning, so the browser can make a folder, step into it, and only then
+ * decide what to do with it. `name` is a single segment; the daemon rejects
+ * separators, so `parentPath` is the only directory that can be written to.
+ */
+export interface AddProjectCreateDirectoryInput {
+  readonly machineId: string;
+  readonly name: string;
+  readonly parentPath: string;
+}
+
+export interface AddProjectCreateDirectoryResult {
+  readonly name: string;
+  readonly parentPath: string;
+  /** Server-normalized absolute path of the created folder. */
+  readonly path: string;
+}
+
 export interface AddProjectAddInput {
   /** True when the dialog decided the folder does not exist yet ("Create & Add"). */
   readonly createIfMissing: boolean;
@@ -148,6 +168,9 @@ export interface AddProjectModalCallbacks {
   readonly addProject: (input: AddProjectAddInput) => Promise<AddProjectAddResult>;
   readonly browse: (input: AddProjectBrowseInput) => Promise<AddProjectBrowseResult | null>;
   readonly cancelCloneJob?: (input: AddProjectCloneJobInput) => Promise<void>;
+  readonly createDirectory: (
+    input: AddProjectCreateDirectoryInput,
+  ) => Promise<AddProjectCreateDirectoryResult>;
   readonly discoverSourceControl: (input: {
     readonly machineId: string;
   }) => Promise<AddProjectSourceControlDiscovery | null>;

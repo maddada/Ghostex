@@ -15,6 +15,8 @@ import type {
   AddProjectCloneJobHandle,
   AddProjectCloneJobInput,
   AddProjectCloneStartInput,
+  AddProjectCreateDirectoryInput,
+  AddProjectCreateDirectoryResult,
   AddProjectMachineOption,
   AddProjectModalCallbacks,
   AddProjectProviderDiscovery,
@@ -44,6 +46,8 @@ export const ADD_PROJECT_STORY_REMOTE_MACHINE: AddProjectMachineOption = {
  * dialog filters those the way the server would).
  */
 const ADD_PROJECT_STORY_TREE: Readonly<Record<string, readonly string[]>> = {
+  "/": ["Applications", "Library", "Users", "Volumes", "opt", "srv", "tmp"],
+  "/Volumes/": ["Backup SSD", "Macintosh HD", "Scratch"],
   "/Users/story/": [".config", "Desktop", "dev", "Documents", "Downloads"],
   "/Users/story/dev/": [".cache", "ghostex", "ghostex-web", "playground", "scratch"],
   "/Users/story/dev/ghostex/": ["gpui", "sidebar", "shared"],
@@ -61,6 +65,8 @@ export interface AddProjectStoryMockOptions {
   readonly machines?: readonly AddProjectMachineOption[];
   /** Fails `addProject` with this message. */
   readonly addProjectError?: string;
+  /** Fails `createDirectory` with this message. */
+  readonly createDirectoryError?: string;
   /** Fails `lookupRepository` with this message. */
   readonly lookupError?: string;
   /** Fails the clone job with this message. */
@@ -120,6 +126,42 @@ export function createAddProjectStoryMocks(
   const cloneJobPolls = new Map<string, number>();
   const cloneJobDestinations = new Map<string, string>();
   const cancelledCloneJobs = new Set<string>();
+  /*
+   * CDXC:AddProjectNewFolder 2026-08-18:
+   * A created folder has to be browsable right after it is made, because the
+   * dialog steps into it. The fixture tree is immutable, so the mock keeps an
+   * overlay of created children per parent and layers it over every browse.
+   */
+  const createdChildren = new Map<string, string[]>();
+
+  function browseWithCreatedDirectories(
+    input: AddProjectBrowseInput,
+  ): AddProjectBrowseResult | null {
+    const base = browseStoryTree(input);
+    const parentPath = base
+      ? base.parentPath
+      : trimStoryTrailingSeparator(
+          expandStoryHome(
+            input.partialPath,
+            input.machineId === ADD_PROJECT_STORY_REMOTE_MACHINE.machineId
+              ? ADD_PROJECT_STORY_REMOTE_HOME
+              : ADD_PROJECT_STORY_HOME,
+          ),
+        );
+    const created = createdChildren.get(parentPath);
+    if (!created) {
+      return base;
+    }
+    const entries = [...(base?.entries ?? [])];
+    for (const name of created) {
+      if (entries.some((entry) => entry.name === name)) {
+        continue;
+      }
+      entries.push({ fullPath: `${parentPath}/${name}`, name });
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    return { entries, parentPath };
+  }
 
   function record(name: string, payload: unknown): void {
     calls.push({ name, payload });
@@ -151,12 +193,27 @@ export function createAddProjectStoryMocks(
     browse: async (input: AddProjectBrowseInput): Promise<AddProjectBrowseResult | null> => {
       record("browse", input);
       await settle(null);
-      return browseStoryTree(input);
+      return browseWithCreatedDirectories(input);
     },
     cancelCloneJob: async (input: AddProjectCloneJobInput): Promise<void> => {
       record("cancelCloneJob", input);
       cancelledCloneJobs.add(input.jobId);
       await settle(null);
+    },
+    createDirectory: async (
+      input: AddProjectCreateDirectoryInput,
+    ): Promise<AddProjectCreateDirectoryResult> => {
+      record("createDirectory", input);
+      await settle(null);
+      if (options.createDirectoryError) {
+        throw new Error(options.createDirectoryError);
+      }
+      const parentPath = trimStoryTrailingSeparator(input.parentPath);
+      const path = `${parentPath}/${input.name}`;
+      createdChildren.set(parentPath, [...(createdChildren.get(parentPath) ?? []), input.name]);
+      /* The new folder itself is browsable and empty. */
+      createdChildren.set(path, createdChildren.get(path) ?? []);
+      return { name: input.name, parentPath, path };
     },
     discoverSourceControl: async (input: {
       readonly machineId: string;

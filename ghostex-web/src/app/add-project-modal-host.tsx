@@ -20,12 +20,15 @@ import type {
   AddProjectCloneJobHandle,
   AddProjectCloneJobInput,
   AddProjectCloneStartInput,
+  AddProjectCreateDirectoryInput,
+  AddProjectCreateDirectoryResult,
   AddProjectMachineOption,
   AddProjectRepositoryInfo,
   AddProjectRepositoryLookupInput,
   AddProjectSourceControlDiscovery,
 } from "@/sidebar/add-project-modal/types";
 import type {
+  GxserverCreateProjectDirectoryResult,
   GxserverDiscoverSourceControlResult,
   GxserverLookupRepositoryResult,
   GxserverProjectDirectoryBrowseResult,
@@ -92,6 +95,20 @@ export function AddProjectModalHost() {
         },
       );
       return { entries: result.entries, parentPath: result.parentPath };
+    },
+    [],
+  );
+
+  const createDirectory = useCallback(
+    async (
+      input: AddProjectCreateDirectoryInput,
+    ): Promise<AddProjectCreateDirectoryResult> => {
+      const result = await rpcForMachine<GxserverCreateProjectDirectoryResult>(
+        input.machineId,
+        "/api/createProjectDirectory",
+        { name: input.name, parentPath: input.parentPath },
+      );
+      return { name: result.name, parentPath: result.parentPath, path: result.path };
     },
     [],
   );
@@ -197,6 +214,7 @@ export function AddProjectModalHost() {
       addProject={addProject}
       browse={browse}
       cancelCloneJob={cancelCloneJob}
+      createDirectory={createDirectory}
       discoverSourceControl={discoverSourceControl}
       initialMachineId={modalState?.machineId}
       isOpen={modalState !== undefined}

@@ -48,6 +48,17 @@ const ADD_PROJECT_PROVIDER_UNAVAILABLE_HINT =
 
 export const ADD_PROJECT_DEFAULT_BROWSE_PATH = "~/";
 
+/*
+ * CDXC:AddProjectRootBrowse 2026-08-19:
+ * Home is the default starting point, but external volumes and system folders
+ * live outside it (`/Volumes` on macOS, `/mnt` and `/media` on Linux), and the
+ * browser can only walk down from wherever it starts. The root entry gives that
+ * whole half of the filesystem a starting point instead of making the user type
+ * the path. On Windows machines the daemon resolves `/` to the current drive
+ * root, which is the same "everything else" location.
+ */
+export const ADD_PROJECT_ROOT_BROWSE_PATH = "/";
+
 export function addProjectSourceLabel(source: AddProjectSourceId): string {
   return ADD_PROJECT_SOURCE_LABELS[source];
 }
@@ -216,6 +227,26 @@ export function addProjectEmptyStateMessage(input: AddProjectEmptyStateInput): s
     return "Press Enter to create this folder and add it as a project.";
   }
   return "No matching directories.";
+}
+
+/*
+ * CDXC:AddProjectNewFolder 2026-08-18:
+ * The new-folder step reuses the dialog's single input, so the list area is
+ * where the pending folder is spelled out in full. It names the parent the
+ * folder lands in, because the typed name alone never shows that.
+ */
+export function addProjectNewFolderMessage(input: {
+  readonly name: string;
+  readonly parentPath: string;
+}): string {
+  const name = input.name.trim();
+  if (name.length === 0) {
+    return `Name the new folder to create in ${input.parentPath}.`;
+  }
+  if (/[/\\]/u.test(name)) {
+    return "A folder name cannot contain a path separator.";
+  }
+  return `Press Enter to create ${input.parentPath.replace(/[/\\]+$/u, "")}/${name}.`;
 }
 
 export function isPrimaryModifierPlatform(platform: string): boolean {
