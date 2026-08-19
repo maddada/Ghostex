@@ -54,8 +54,15 @@ export type DelayedSendModalProps = {
   isOpen: boolean;
   onCancel: () => void;
   onCancelTimer?: () => void;
+  /**
+   * CDXC:DelayedSend 2026-08-19:
+   * Delayed Send carries exactly one trigger. The duration inputs keep their
+   * last value while a status trigger is selected, so `delayMs` is reported as
+   * `undefined` for `agentStops`/`allAgentsStop`; sending a stale duration
+   * alongside a status trigger reads as two triggers and gxserver rejects it.
+   */
   onConfirm: (
-    delayMs: number,
+    delayMs: number | undefined,
     sendWhenAgentStops: boolean,
     sendWhenAllProjectSessionsStop: boolean
   ) => void;
@@ -271,7 +278,11 @@ export function DelayedSendModal({
       onToggleCloseAfterDone();
     }
     if (sendEnterEnabled) {
-      onConfirm(delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop);
+      onConfirm(
+        hasStatusTrigger ? undefined : delayMs,
+        sendWhenAgentStops,
+        sendWhenAllProjectSessionsStop
+      );
     } else if (hasActiveSend) {
       onCancelTimer?.();
     }

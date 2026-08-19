@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { DelayedSendModal } from "@/sidebar/delayed-send-modal";
+import type { GxserverRpcEndpointPath } from "@/shared/gxserver-protocol";
 import { rpcForMachine } from "../connections/connection-registry";
 import { parseSidebarSessionId } from "../sidebar-runtime/sidebar-ids";
 import type { OpenDelayedActionsModalDetail } from "./action-events";
 
-type DelayedActionRendererCommand =
-  "cancelDelayedSend" | "scheduleDelayedSend" | "toggleCloseAfterDone";
+/*
+CDXC:GxserverDelayedSends 2026-08-19:
+Delayed Send is a first-class daemon endpoint: gxserver owns the clock, the
+activity watcher, and the eventual Enter, so it no longer accepts
+`scheduleDelayedSend`/`cancelDelayedSend` as renderer commands. Close After
+Done is still renderer-owned and keeps the renderer-command route.
+*/
+type DelayedActionRendererCommand = "toggleCloseAfterDone";
 
 export function DelayedActionsModalHost() {
   const [detail, setDetail] = useState<OpenDelayedActionsModalDetail>();
@@ -25,6 +32,27 @@ export function DelayedActionsModalHost() {
   }, []);
 
   const close = useCallback(() => setDetail(undefined), []);
+
+  const request = useCallback(
+    (label: string, path: GxserverRpcEndpointPath, params: Record<string, unknown> = {}) => {
+      if (!detail) {
+        return;
+      }
+      const target = parseSidebarSessionId(detail.sessionId);
+      if (!target) {
+        console.warn("[ghostex-web] Ignoring Session Automations for an invalid session id.");
+        return;
+      }
+      void rpcForMachine(target.machineId, path, {
+        ...params,
+        projectId: target.projectId,
+        sessionId: target.sessionId,
+      }).catch((error: unknown) => {
+        console.error(`[ghostex-web] Session Automations ${label} failed:`, error);
+      });
+    },
+    [detail]
+  );
 
   const dispatch = useCallback(
     (action: DelayedActionRendererCommand, payload: Record<string, unknown> = {}) => {
@@ -59,14 +87,18 @@ export function DelayedActionsModalHost() {
       isOpen={detail !== undefined}
       onCancel={close}
       onCancelTimer={() => {
-        dispatch("cancelDelayedSend");
+        request("cancelDelayedSend", "/api/cancelDelayedSend");
         close();
       }}
       onConfirm={(delayMs, sendWhenAgentStops, sendWhenAllProjectSessionsStop) => {
-        dispatch("scheduleDelayedSend", {
-          delayMs,
-          sendWhenAgentStops,
-          sendWhenAllProjectSessionsStop,
+        /*
+        Exactly one trigger reaches the daemon: the modal reports `delayMs` only
+        for "After a delay", and the two status triggers are mutually exclusive.
+        */
+        request("scheduleDelayedSend", "/api/scheduleDelayedSend", {
+          ...(delayMs === undefined ? {} : { delayMs }),
+          ...(sendWhenAllProjectSessionsStop ? { sendWhenAllProjectSessionsStop: true } : {}),
+          ...(sendWhenAgentStops ? { sendWhenAgentStops: true } : {}),
         });
         close();
       }}

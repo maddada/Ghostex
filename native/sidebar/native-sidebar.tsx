@@ -46420,7 +46420,7 @@ function handleSidebarMessage(message: SidebarToExtensionMessage): void {
       void forkNativeSession(message.sessionId);
       return;
     case "scheduleDelayedSend":
-      scheduleDelayedSend(message.sessionId, message.delayMs);
+      scheduleDelayedSend(message.sessionId, message.delayMs ?? Number.NaN);
       return;
     case "cancelDelayedSend":
       cancelDelayedSend(message.sessionId);

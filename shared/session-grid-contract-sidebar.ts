@@ -1024,6 +1024,21 @@ export type SidebarCommandRunStateClearedMessage = {
   type: "sidebarCommandRunStateCleared";
 };
 
+/**
+ * CDXC:SidebarBrowserTabReveal 2026-08-18:
+ * A host-owned request to make one existing session row visible in the sidebar:
+ * expand every collapsed container above it and scroll it into view if it is
+ * off screen. gpui sends this when the user opens a new Browser tab, because a
+ * background tab (middle-click) has no other visible feedback. `requestId`
+ * makes repeat reveals of the same row distinct one-shot requests, since a
+ * second middle-click on the same link must reveal it again.
+ */
+export type SidebarRevealSessionMessage = {
+  requestId: number;
+  sessionId: string;
+  type: "revealSidebarSession";
+};
+
 export type SidebarDaemonInfo = {
   pid: number;
   port: number;
@@ -1329,6 +1344,7 @@ export type ExtensionToSidebarMessage =
   | SidebarOrderSyncResultMessage
   | SidebarCommandRunStateChangedMessage
   | SidebarCommandRunStateClearedMessage
+  | SidebarRevealSessionMessage
   | SidebarDaemonSessionsStateMessage
   | SidebarPromptGitCommitMessage
   | SidebarGitFileDiffMessage
@@ -1361,6 +1377,7 @@ export type SidebarAddProjectDialogOperation =
   | "add"
   | "browse"
   | "cancelCloneJob"
+  | "createDirectory"
   | "discoverSourceControl"
   | "listMachines"
   | "lookupRepository"
@@ -1379,6 +1396,9 @@ export type SidebarAddProjectDialogRequestParams = {
   readonly cwd?: string;
   readonly destinationPath?: string;
   readonly jobId?: string;
+  /** New-folder step: the single path segment to create under `parentPath`. */
+  readonly name?: string;
+  readonly parentPath?: string;
   readonly partialPath?: string;
   readonly path?: string;
   readonly provider?: string;
@@ -2317,8 +2337,13 @@ export type SidebarToExtensionMessage =
        * Delayed Send schedules an Enter keypress for an already-staged terminal
        * command. The sidebar/modal sends only the trusted session id and delay;
        * native resolves the terminal and uses the existing Enter-key path.
+       *
+       * CDXC:DelayedSend 2026-08-19:
+       * Exactly one trigger travels in this message. `delayMs` is present only
+       * for the "after a delay" trigger, so the status triggers cannot be read
+       * as a second, conflicting trigger by the daemon endpoint.
        */
-      delayMs: number;
+      delayMs?: number;
       sendWhenAllProjectSessionsStop?: boolean;
       sendWhenAgentStops?: boolean;
       sessionId: string;
