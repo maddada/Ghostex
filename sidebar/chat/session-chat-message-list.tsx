@@ -14,9 +14,11 @@
 // edge of the conversation.
 
 import {
+  IconAlertTriangle,
   IconCheck,
   IconChevronRight,
   IconCopy,
+  IconInfoCircle,
   IconPhoto,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -58,11 +60,14 @@ import {
   SessionChatExpansion,
 } from "./session-chat-expansion";
 import { SessionChatMarkdown } from "./session-chat-markdown";
+import { SessionChatScrollCap } from "./session-chat-scroll-cap";
 import { isSessionChatPendingMessageId } from "./session-chat-pending";
 import {
   dropSessionChatHiddenMessages,
   sessionChatSuppressedTurnLabel,
   sessionChatSuppressedTurnPresentation,
+  type SessionChatStatusRow,
+  type SessionChatStatusTone,
 } from "./session-chat-noise";
 import { SESSION_CHAT_STREAMING_ID } from "./session-chat-streaming";
 import {
@@ -181,6 +186,15 @@ function CopyFooter({ markdown }: { markdown: string }) {
   );
 }
 
+/** Marks a prompt the agent has accepted but not started on yet. */
+function QueuedLabel() {
+  return (
+    <div className="ghostex-chat-queued-label self-end" data-queued="true">
+      Queued
+    </div>
+  );
+}
+
 /**
  * A harness-injected turn the terminal prints too: one muted line that expands
  * to the verbatim text. Collapsed by default so orchestration chatter never
@@ -194,6 +208,9 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
       <button
         aria-expanded={expanded}
         className="flex min-w-0 items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+        // Opts out of the sidebar's legacy `button:where(:not([data-slot]))`
+        // base, which otherwise paints a 1px app border around the marker.
+        data-slot="session-chat-suppressed-trigger"
         onClick={() => {
           if (!expanded) {
             centerSessionChatExpansion(triggerRef.current);
@@ -224,16 +241,98 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
   );
 }
 
-function ModelConfigurationStatus({ label }: { label: string }) {
+/**
+ * A harness turn short enough to read in place: one muted line of prose with
+ * the marker's label as its lead-in, styled like a reasoning line. Beats a
+ * chevron the reader has to click to learn the task exited 0.
+ */
+function InlineSuppressedTurn({ label, text }: { label: string; text: string }) {
   return (
-    <div className="flex w-full min-w-0 pb-3">
-      <div className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-          <IconCheck aria-hidden="true" className="size-3" stroke={2.4} />
-        </span>
-        <span className="truncate">{label}</span>
+    <div className="ghostex-chat-suppressed-inline">
+      <div>
+        <span className="ghostex-chat-suppressed-inline-label">{label}</span>
+        {text}
       </div>
     </div>
+  );
+}
+
+const STATUS_TONE_ICON: Record<
+  SessionChatStatusTone,
+  { Icon: typeof IconCheck; className: string }
+> = {
+  ok: { Icon: IconCheck, className: "bg-emerald-500/15 text-emerald-400" },
+  error: {
+    Icon: IconAlertTriangle,
+    className: "bg-destructive/15 text-destructive",
+  },
+  neutral: { Icon: IconInfoCircle, className: "bg-muted text-muted-foreground" },
+};
+
+/**
+ * The one durable row for a completed action — a model/effort change, a
+ * compaction, a background task reporting back. Non-expandable on purpose:
+ * the label already says everything the row is for.
+ */
+function StatusRow({
+  label,
+  tone = "ok",
+}: {
+  label: string;
+  tone?: SessionChatStatusTone;
+}) {
+  const { Icon, className } = STATUS_TONE_ICON[tone];
+  return (
+    <div className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+      <span
+        className={cn(
+          "flex size-4 shrink-0 items-center justify-center rounded-full",
+          className,
+        )}
+      >
+        <Icon aria-hidden="true" className="size-3" stroke={2.4} />
+      </span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+    </div>
+  );
+}
+
+/** One row per status; a turn carrying several reports each of them. */
+function StatusRows({ statuses }: { statuses: readonly SessionChatStatusRow[] }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col items-start gap-1.5 pb-3">
+      {statuses.map((status, index) => (
+        <StatusRow key={index} label={status.label} tone={status.tone} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Reasoning turn ("thinking"). The body is real markdown — a reasoning summary
+ * can carry lists, tables, and code just like an answer, and the old regex
+ * strip flattened all of it into one gapless run of lines.
+ *
+ * `plainReasoningTeaser` still strips, but only for the ONE line shown on the
+ * collapsed trigger: markdown cannot render inside a <button> (its links and
+ * the code block's copy control are interactive) and a teaser wants no block
+ * structure anyway.
+ */
+function plainReasoningTeaser(markdown: string): string {
+  const text = markdown
+    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, "")
+    .replace(/(?:\*\*|__|\*|_|~~)/g, "")
+    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, "$1")
+    .trim();
+  return (
+    text
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
   );
 }
 
@@ -249,21 +348,17 @@ function ReasoningRow({
   const [open, setOpen] = useState(verboseMode);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(verboseMode), [verboseMode]);
-  const text = markdown
-    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, "")
-    .replace(/(?:\*\*|__|\*|_|~~)/g, "")
-    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, "$1")
-    .trim();
 
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const body = (
+    <SessionChatScrollCap className="ghostex-chat-thinking-body">
+      <SessionChatMarkdown markdown={markdown} />
+    </SessionChatScrollCap>
+  );
 
+  // With tools, the caret owns BOTH the reasoning body and the tool rows: a
+  // long reasoning turn collapses to its first line instead of pushing the
+  // answer it belongs to off the screen. Verbose mode still opens it by
+  // default, so nothing is hidden from anyone who wants it.
   if (tools.length > 0) {
     return (
       <div className="ghostex-chat-thinking-row is-disclosure">
@@ -289,19 +384,20 @@ function ReasoningRow({
             />
           </span>
           <span className="ghostex-chat-thinking-text">
-            {lines.map((line, index) => (
-              <span data-ghostex-thinking-text key={index}>
-                {line}
-              </span>
-            ))}
+            {/* Open, the body below already opens with this sentence — a
+                static label instead of the teaser avoids saying it twice. */}
+            <span data-ghostex-thinking-text>
+              {open ? "Thinking" : plainReasoningTeaser(markdown)}
+            </span>
           </span>
         </button>
         {open ? (
           <SessionChatExpansion
             className="ghostex-chat-thinking-detail"
-            label="Collapse thinking tools"
+            label="Collapse thinking"
             onCollapse={() => setOpen(false)}
           >
+            {body}
             <SessionChatToolRun blocks={tools} showAllRows />
           </SessionChatExpansion>
         ) : null}
@@ -311,11 +407,9 @@ function ReasoningRow({
 
   return (
     <div className="ghostex-chat-thinking-row">
-      {lines.map((line, index) => (
-        <div className="ghostex-chat-thinking-line" key={index}>
-          <span data-ghostex-thinking-text>{line}</span>
-        </div>
-      ))}
+      <div className="ghostex-chat-thinking-line">
+        <div data-ghostex-thinking-text>{body}</div>
+      </div>
     </div>
   );
 }
@@ -402,7 +496,23 @@ function MessageRow({
   const suppressedTurn = sessionChatSuppressedTurnPresentation(message);
   if (suppressedTurn !== null) {
     if (suppressedTurn.kind === "status") {
-      return <ModelConfigurationStatus label={suppressedTurn.label} />;
+      return (
+        <StatusRows
+          statuses={
+            suppressedTurn.statuses ?? [
+              { label: suppressedTurn.label, tone: suppressedTurn.tone ?? "ok" },
+            ]
+          }
+        />
+      );
+    }
+    if (suppressedTurn.kind === "inline") {
+      return (
+        <InlineSuppressedTurn
+          label={suppressedTurn.label}
+          text={suppressedTurn.text}
+        />
+      );
     }
     return (
       <SuppressedTurn
@@ -415,7 +525,6 @@ function MessageRow({
   const isUser = message.role === "user";
   const isReasoning = message.role === "reasoning";
   const isSystem = message.role === "system";
-  const hasToolCall = tools.some((block) => block.type === "tool-call");
   const userMarkdown = isUser ? normalizeUserMessageMarkdown(markdown) : "";
   const userCopyMarkdown = isUser
     ? userTurnCopyMarkdown(userMarkdown, images)
@@ -435,27 +544,32 @@ function MessageRow({
   }
 
   /*
-   * Claude can place thinking + text + tool_use in one assistant record, while
-   * Codex commonly emits reasoning and calls as adjacent records. Treat both
-   * normalized shapes as the same provider-neutral work disclosure.
+   * ONLY a genuine reasoning turn goes to the thinking lane. This used to also
+   * catch any turn carrying a tool call, which silently demoted real answers:
+   * `foldSessionChatToolMessages` folds the following tool-only rows INTO the
+   * assistant turn, so a plain prose answer followed by a tool call was
+   * rendered as stripped, unformatted thinking. An assistant turn now keeps
+   * its markdown and shows the tools it owns beneath it.
    */
-  if (
-    (isReasoning || hasToolCall) &&
-    markdown.length > 0 &&
-    images.length === 0
-  ) {
+  if (isReasoning && markdown.length > 0 && images.length === 0) {
     return (
       <ReasoningRow markdown={markdown} tools={tools} verboseMode={verboseMode} />
     );
   }
 
   if (isUser) {
-    // Optimistic echoes render IDENTICALLY to real turns — no muting, no
-    // "Queued" label — so replacement by the transcript turn causes no
-    // visible state change.
+    /*
+     * The "Queued" label is driven ONLY by the agent's own queue bookkeeping
+     * in the transcript (`message.queued`), never by an optimistic echo:
+     * an echo says "we typed it", not "the agent is holding it", and echoes
+     * render IDENTICALLY to real turns so replacement by the transcript turn
+     * causes no visible state change. The server retracts the queued row the
+     * moment the queue releases it, so the label cannot outlive the wait.
+     */
     return (
       <Message align="end" className="pb-4" data-role="user">
         <MessageContent>
+          {message.queued === true ? <QueuedLabel /> : null}
           {/* justify-end keeps wrapped rows against the user's side. */}
           <ImageAttachments blocks={images} className="self-end justify-end" />
           {userMarkdown.length > 0 ? (

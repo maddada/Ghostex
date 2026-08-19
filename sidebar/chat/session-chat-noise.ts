@@ -36,6 +36,84 @@ const MODEL_DEFAULT_OUTPUT =
   /^set model to\s+(.+?)\s+and saved as your default for new sessions\s*[.!…]*$/i;
 const EFFORT_DEFAULT_OUTPUT = /^set effort level to\s+\S+/i;
 
+/*
+ * Claude Code's background-task notifications. The wrapper carries four fields
+ * of plumbing (task id, tool-use id, output file) around the one line a reader
+ * wants — the summary — plus the status that colours it. Observed statuses in
+ * real transcripts: completed, failed, killed, stopped, and an empty status on
+ * "Monitor event" rows.
+ *
+ * Harness turns carry exactly one notification, but a genuine user turn can
+ * PASTE several while asking about them; that turn is never classified as
+ * harness (the leading-tag law), so parsing every block here is just defence
+ * against a harness that starts batching them.
+ */
+const TASK_NOTIFICATION_BLOCK = /<task-notification>([\s\S]*?)<\/task-notification>/gi;
+const TASK_NOTIFICATION_FIELD = (name: string): RegExp =>
+  new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, "i");
+
+export type SessionChatStatusTone = "ok" | "error" | "neutral";
+
+export interface SessionChatStatusRow {
+  label: string;
+  tone: SessionChatStatusTone;
+}
+
+function taskNotificationTone(status: string): SessionChatStatusTone {
+  if (status === "completed") {
+    return "ok";
+  }
+  if (status === "failed") {
+    return "error";
+  }
+  // killed/stopped were not failures, they were halted; an empty status is a
+  // Monitor event. Neither deserves a red row.
+  return "neutral";
+}
+
+/** One status row per `<task-notification>`, or [] when none parse. */
+export function parseSessionChatTaskNotifications(
+  text: string,
+): SessionChatStatusRow[] {
+  const rows: SessionChatStatusRow[] = [];
+  for (const match of text.matchAll(TASK_NOTIFICATION_BLOCK)) {
+    const block = match[1] ?? "";
+    const status = (TASK_NOTIFICATION_FIELD("status").exec(block)?.[1] ?? "")
+      .trim()
+      .toLowerCase();
+    const summary = (TASK_NOTIFICATION_FIELD("summary").exec(block)?.[1] ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (summary.length === 0 && status.length === 0) {
+      continue;
+    }
+    rows.push({
+      // The summary already states what ran and how it ended. Without one, the
+      // status is all there is to say.
+      label: summary.length > 0 ? summary : `Background task ${status}`,
+      tone: taskNotificationTone(status),
+    });
+  }
+  return rows;
+}
+
+/*
+ * A short harness turn reads better as one muted line of prose than as a
+ * chevron the reader has to click to learn it said "exit code 0". Long output
+ * still collapses: inlining a hundred lines of stdout is what buries the
+ * conversation.
+ */
+const INLINE_BODY_MAX_CHARS = 320;
+const INLINE_BODY_MAX_LINES = 4;
+
+function fitsInlineSuppressedTurn(body: string): boolean {
+  return (
+    body.length > 0 &&
+    body.length <= INLINE_BODY_MAX_CHARS &&
+    body.split(/\n/).length <= INLINE_BODY_MAX_LINES
+  );
+}
+
 function normalizedSuppressedTurnBody(text: string): string {
   return sessionChatSuppressedTurnBody(text)
     .replace(ANSI_STYLE_SEQUENCE, "")
@@ -155,7 +233,7 @@ export type SessionChatSuppressedTurn =
   /** One-line marker that expands to the full text on click. */
   | { kind: "collapsed"; label: string }
   /** A polished, non-expandable status row for a completed UI action. */
-  | { kind: "status"; label: string };
+  | { kind: "status"; label: string; tone?: SessionChatStatusTone };
 
 export function classifySessionChatSuppressedTurn(
   message: SessionChatMessage,
@@ -207,6 +285,12 @@ export function classifySessionChatSuppressedTurn(
       return { kind: "hidden" };
     }
   }
+  if (label === "Task notification") {
+    const [first] = parseSessionChatTaskNotifications(text);
+    if (first) {
+      return { kind: "status", label: first.label, tone: first.tone };
+    }
+  }
   return { kind: "collapsed", label };
 }
 
@@ -230,9 +314,13 @@ export function sessionChatSuppressedTurnLabel(
 }
 
 export interface SessionChatSuppressedTurnPresentation {
-  kind: "collapsed" | "status";
+  /** "inline" is a short "collapsed" turn shown as prose instead of a chevron. */
+  kind: "collapsed" | "inline" | "status";
   label: string;
   text: string;
+  tone?: SessionChatStatusTone;
+  /** Set for task notifications: one row per notification in the turn. */
+  statuses?: readonly SessionChatStatusRow[];
 }
 
 /** Human-readable label and expandable text for a suppressed harness turn. */
@@ -245,6 +333,20 @@ export function sessionChatSuppressedTurnPresentation(
   }
 
   const rawText = sessionChatMessageText(message);
+
+  if (suppressed.kind === "status") {
+    const statuses = parseSessionChatTaskNotifications(rawText);
+    if (statuses.length > 0) {
+      return {
+        kind: "status",
+        label: suppressed.label,
+        text: rawText,
+        ...(suppressed.tone ? { tone: suppressed.tone } : {}),
+        statuses,
+      };
+    }
+  }
+
   const command = parseSessionChatCommandEnvelope(rawText);
   let text = rawText;
   if (command?.name.toLowerCase() === "/model") {
@@ -252,7 +354,24 @@ export function sessionChatSuppressedTurnPresentation(
   } else if (modelSetByCommandOutput(rawText)) {
     text = normalizedSuppressedTurnBody(rawText);
   }
-  return { kind: suppressed.kind, label: suppressed.label, text };
+
+  // Short harness turns read as prose; the body without its markup IS the
+  // sentence, so the inline row shows that rather than the raw envelope.
+  if (suppressed.kind === "collapsed") {
+    const body = sessionChatSuppressedTurnBody(rawText);
+    if (fitsInlineSuppressedTurn(body)) {
+      return { kind: "inline", label: suppressed.label, text: body };
+    }
+  }
+
+  return {
+    kind: suppressed.kind,
+    label: suppressed.label,
+    text,
+    ...(suppressed.kind === "status" && suppressed.tone
+      ? { tone: suppressed.tone }
+      : {}),
+  };
 }
 
 export function stripSessionChatNoiseMessages(
