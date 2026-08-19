@@ -77,6 +77,13 @@ export interface SessionChatTransport {
    * attach button uses a browser file input + upload instead.
    */
   pickAttachmentPaths?(): Promise<string[]>;
+  /**
+   * Writes an image from the conversation wherever the user chooses, through
+   * the host's own save panel (gpui — a CEF page has no download handler to
+   * write through). Hosts without one omit it and the image viewer's "Save
+   * image" uses a browser download instead.
+   */
+  saveImageAs?(params: { base64Data: string; suggestedName: string }): Promise<void>;
   answerPrompt(
     params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
   ): Promise<void>;

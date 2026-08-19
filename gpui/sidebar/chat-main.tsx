@@ -259,6 +259,11 @@ function createGpuiSessionChatTransport(
             return requestNativeAttachmentPaths();
           },
         }),
+    // The save panel writes to this Mac, so it is offered for every session:
+    // the bytes travel with the request and never touch the session's machine.
+    saveImageAs(params) {
+      return requestNativeImageSave(params.base64Data, params.suggestedName);
+    },
     subscribe({ currentLimit, onEvent }) {
       /*
       Own /api/events socket per subscription: send subscribeSessionChat on
@@ -494,6 +499,61 @@ function installAttachmentPickCallback(): void {
       : [];
     resolve(paths);
   };
+}
+
+/*
+CDXC:GPUISessionChatImageSave 2026-08-19:
+"Save image" in the chat image overlay cannot be a browser download: gpui
+installs no CEF download handler, so a <a download> click is cancelled without
+a trace. The page posts a saveImage host action carrying the bytes and a
+suggested name, Rust runs the native save panel and writes the file, then
+answers through the fixed window.ghostexGpui.onSessionChatImageSaved callback
+with {requestId, error} — no error means saved or cancelled, both of which the
+panel already told the user about.
+*/
+const IMAGE_SAVE_TIMEOUT_MS = 180_000;
+
+interface ChatImageSaveNamespace {
+  onSessionChatImageSaved?: (payload: { requestId?: string; error?: unknown }) => void;
+}
+
+let imageSaveSequence = 0;
+const pendingImageSaves = new Map<string, (error: string | null) => void>();
+
+function installImageSaveCallback(): void {
+  const namespace = chatBridgeNamespace() as ChatBridgeNamespace & ChatImageSaveNamespace;
+  namespace.onSessionChatImageSaved = (payload) => {
+    const requestId = typeof payload?.requestId === "string" ? payload.requestId : "";
+    const settle = pendingImageSaves.get(requestId);
+    if (!settle) {
+      return;
+    }
+    pendingImageSaves.delete(requestId);
+    settle(typeof payload.error === "string" && payload.error !== "" ? payload.error : null);
+  };
+}
+
+function requestNativeImageSave(base64Data: string, suggestedName: string): Promise<void> {
+  installImageSaveCallback();
+  imageSaveSequence += 1;
+  const requestId = `image-save-${imageSaveSequence}`;
+  return new Promise<void>((resolve, reject) => {
+    pendingImageSaves.set(requestId, (error) => {
+      if (error === null) {
+        resolve();
+      } else {
+        reject(new Error(error));
+      }
+    });
+    // The panel can sit open indefinitely; the timeout only reclaims the entry
+    // if the host never answers at all (e.g. the pane was torn down).
+    window.setTimeout(() => {
+      if (pendingImageSaves.delete(requestId)) {
+        resolve();
+      }
+    }, IMAGE_SAVE_TIMEOUT_MS);
+    postSessionChatHostAction("saveImage", { base64Data, requestId, suggestedName });
+  });
 }
 
 function requestNativeAttachmentPaths(): Promise<string[]> {

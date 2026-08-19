@@ -30,6 +30,7 @@ import {
 import { SessionChatInteractiveCard } from "./session-chat-interactive-card";
 import { SessionChatMessageList } from "./session-chat-message-list";
 import { SessionChatSearch } from "./session-chat-search";
+import { SessionChatTerminalNoticeCard } from "./session-chat-terminal-notice-card";
 import {
   SessionChatSessionOptionPills,
   useSessionChatSessionOptions,
@@ -76,7 +77,15 @@ export interface SessionChatHostComposerActions {
 
 export interface SessionChatHostComposerBridge {
   register: (actions: SessionChatHostComposerActions) => () => void;
-  stashPrompt: (content: string, options?: { transient?: boolean }) => Promise<void>;
+  /**
+   * Parks the composer draft in Saved Prompts. Optional because a host can
+   * want the registration channel (to insert text into the composer, say)
+   * without being able to stash: the mobile host reaches gxserver over SSH
+   * CLI verbs and has no stash verb, and offering a Stash button that cannot
+   * work would be worse than not offering one. Absent it, the composer's stash
+   * control is not rendered and the chat → terminal handoff is unavailable.
+   */
+  stashPrompt?: (content: string, options?: { transient?: boolean }) => Promise<void>;
 }
 
 export interface SessionChatViewProps {
@@ -417,11 +426,11 @@ export function SessionChatView({
   const stashComposerDraft = useCallback((): void => {
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? "";
-    if (!hostComposerBridge || !draft.trim()) {
+    const stashPrompt = hostComposerBridge?.stashPrompt;
+    if (!stashPrompt || !draft.trim()) {
       return;
     }
-    void hostComposerBridge
-      .stashPrompt(draft)
+    void stashPrompt(draft)
       .then(() => {
         // A save can overlap more typing. Move only the exact saved snapshot;
         // never clear text the user added while gxserver was answering.
@@ -437,13 +446,14 @@ export function SessionChatView({
   const handoffComposerDraft = useCallback(async (): Promise<string> => {
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? "";
-    if (!hostComposerBridge || !draft.trim()) {
+    const stashPrompt = hostComposerBridge?.stashPrompt;
+    if (!stashPrompt || !draft.trim()) {
       if (draft.length > 0) {
         composer?.clearDraft(draft);
       }
       return "";
     }
-    await hostComposerBridge.stashPrompt(draft, { transient: true });
+    await stashPrompt(draft, { transient: true });
     // The exact snapshot that became durable must still own the composer.
     // If more text arrived during the save, remain in chat with all text
     // intact instead of switching with a partial draft.
@@ -486,6 +496,12 @@ export function SessionChatView({
     const pickAttachmentPaths = transport.pickAttachmentPaths?.bind(transport);
     return pickAttachmentPaths ? () => pickAttachmentPaths() : undefined;
   }, [transport]);
+  const saveImageAs = useMemo(() => {
+    const save = transport.saveImageAs?.bind(transport);
+    return save
+      ? (params: { base64Data: string; suggestedName: string }) => save(params)
+      : undefined;
+  }, [transport]);
   // Machine-path image bytes as a data URL: chat-log overlay + picked-image
   // composer thumbnails both read through it.
   const loadImageDataUrl = useMemo(() => {
@@ -503,6 +519,16 @@ export function SessionChatView({
   const interrupt = useCallback((): void => {
     void chat.interrupt();
   }, [chat]);
+
+  // A terminal-notice `sendKeys` action writes its raw bytes through the
+  // approval lane of answerSessionChatPrompt — the same verbatim-write path the
+  // interactive card's Allow/Deny buttons use.
+  const chatAnswerPrompt = chat.answerPrompt;
+  const sendNoticeKeys = useCallback(
+    (send: string): Promise<void> =>
+      chatAnswerPrompt({ approvalSend: send, kind: "approval" }),
+    [chatAnswerPrompt],
+  );
 
   // A command the user types themselves reconciles the pills (§1.4), so the
   // Model pill follows a hand-typed "/model opus" without a second dispatch.
@@ -620,6 +646,7 @@ export function SessionChatView({
       >
       <SessionChatImageViewerProvider
         {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
+        {...(saveImageAs ? { saveImageAs } : {})}
       >
       <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -662,6 +689,14 @@ export function SessionChatView({
         ) : null}
       </div>
       <div className="mx-auto grid w-full max-w-3xl flex-none gap-2 px-4 pt-2 pb-3">
+        <SessionChatTerminalNoticeCard
+          canSend={canSend}
+          notice={chat.terminalNotice}
+          onSendKeys={sendNoticeKeys}
+          {...(hostActions?.onSwitchToTerminal
+            ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
+            : {})}
+        />
         <SessionChatInteractiveCard
           canSend={canSend}
           onAnswer={chat.answerPrompt}
@@ -685,7 +720,7 @@ export function SessionChatView({
             onPickPaths={pickPaths}
             onSend={send}
             sendOnEnter={sendOnEnter}
-            {...(hostComposerBridge ? { onStash: stashComposerDraft } : {})}
+            {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
             optionPills={
               <>
                 {chat.view.kind === "ready" ? (
