@@ -8,6 +8,55 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>7.11.0</title>
+            <pubDate>Wed, 19 Aug 2026 03:17:47 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.11.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>71100</sparkle:version>
+            <sparkle:shortVersionString>7.11.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.11.0
+
+## 7.11.0 - 2026-08-19
+
+- Major
+  - Chat now tells you when the agent's terminal needs you, showing a notice for the CLI screen that is waiting and flagging a message the CLI swallowed instead of leaving it silently unanswered.
+  - Back and forward navigation moves through recently visited sessions from the sidebar buttons or a hotkey, on both the desktop and web apps.
+  - The chat composer can now attach project files by typing `@` and picking from the session's project, with the picker opening wherever the mention is typed in the draft.
+  - The Monaco prompt editor now ships inside the macOS app, so Ctrl+G opens it on installed builds instead of quietly falling back to the machine's default terminal editor.
+  - A new Command Pane Side setting docks the command pane as a full-height column to the right of the workspace instead of a strip along the bottom, remembering its own width per project.
+- Minor
+  - Programs running in the terminal can copy to the system clipboard again.
+  - Switching a session from the terminal to chat now carries whatever you had typed into the agent CLI over to the chat composer, on the desktop and Android apps.
+  - Pictures in a conversation can now be saved to disk from the chat image viewer.
+  - Long thinking blocks are capped with an expand toggle, so a single reasoning dump no longer owns the whole transcript scroll.
+  - An agent's background task notifications now read as one status row with its result, instead of a block of raw tags.
+  - The chat composer no longer behaves like a code editor, and F1 opens its command palette instead of typing a stray character.
+  - Sessions you are viewing from your phone are no longer put to sleep by the owning machine's automatic sleep sweep.
+  - Reconnect on Android now replaces the dead terminal instead of reporting success while the exited process stayed on screen.
+  - The Add Project dialog can create a new folder in place and start the project in it.
+  - Renaming a Claude Code session from Ghostex now updates the sidebar card as soon as Claude confirms the new name.
+  - Settings sorts the bundled agent skills into recommended and optional, adds a Ghostex Computer Use skill, and offers the one-time Cua Driver setup the machine-automation skills need.
+  - First launch now shows a single setup flow that opens with the tutorial video, instead of a separate video window followed by setup.
+  - Notifications stay attached to the Ghostex window instead of floating above whatever app you switch to.
+  - Opening a link from a browser page in a new tab now reveals that tab's row in the sidebar, including background middle-click tabs.
+  - Launching an agent session on a remote machine works again instead of reporting a failure and dropping the workflow prompt.
+  - Resources now reports process memory the way Activity Monitor does and lists one row per dev server, so its totals stop being inflated.
+  - Delayed Send in the web app now runs on the machine hosting the session, matching the desktop and phone apps.
+  - Project bodies and sidebar sections animate open and closed again instead of snapping shut.
+  - Chat no longer shows prompts that were revised or re-sent before the agent replied, so the conversation matches what the agent actually ran.
+  - Sending a chat message to a resumed Claude session now answers its resume-usage prompt first, so the message reaches the agent instead of being swallowed as menu keystrokes.
+  - Clicking a picture in chat now toggles between fitted and full size, zooming to the spot you clicked and panning by scroll.
+  - Interactive prompt cards now ask one question at a time with numbered shortcut keys, a collapsible header, and a free-text answer row in the composer's place.
+  - Sending a chat message scrolls it into view without leaving an empty gap above the composer.
+  - Copying one of your own chat turns now includes its image references, so pasting it into another composer still attaches the same pictures.
+  - The sidebar session filter menu gained a No tag row for isolating sessions that carry no marker.
+  - Sessions from agents that use half-circle spinner glyphs now report working status correctly and keep those glyphs out of the session title.
+  - The Docs pane in Manage now fills the full height of the pane and follows the shared app theme.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.11.0/ghostex-7.11.0-arm64.dmg" length="120829582" type="application/octet-stream" sparkle:edSignature="d2m5Wxjaj9teJqCaHdjUfsfXivwC5317bpwJK5WZAyi7P/Xz/PgG06UgFnUJQsGAKcGpA/C0RM3TgyBpASRZDA=="/>
+        </item>
+        <item>
             <title>7.10.0</title>
             <pubDate>Mon, 17 Aug 2026 17:36:02 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.10.0</sparkle:fullReleaseNotesLink>
@@ -141,29 +190,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.7.0/ghostex-7.7.0-arm64.dmg" length="114651581" type="application/octet-stream" sparkle:edSignature="Ps6RpaNkj08UdBrr1bN9h9l5C+ixfBq2dxfyZJykomEdIabSG+oLv2hNxRp9Cd3+Q0CvAgCI9TWYxBI++0EkAg=="/>
         </item>
         <item>
-            <title>7.6.0</title>
-            <pubDate>Wed, 12 Aug 2026 04:23:44 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.6.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>70600</sparkle:version>
-            <sparkle:shortVersionString>7.6.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.6.0
-
-## 7.6.0 - 2026-08-12
-
-- Major
-  - Docs can mount an additional folder beside each project's own files, with clear copyable paths for everything in that collection, thanks to @banozz.
-  - Worktrees can rename both their folder and branch directly from the sidebar, thanks to @banozz.
-  - Project sessions are organized into collapsible Browser, Pinned, and Sessions sections so busy workspaces stay easier to scan.
-- Minor
-  - Session Chat presents tool activity and hidden work more clearly, keeps long output manageable, and adds a focused copy action to each final response.
-  - Browser panes can open their current page in the system browser, and titlebar customization is easier to reach from its context menu.
-  - Windows runtime setup, WSL terminal integration, session recovery, and on-demand component handling are more dependable.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.6.0/ghostex-7.6.0-arm64.dmg" length="115040035" type="application/octet-stream" sparkle:edSignature="1n4eSXGCNPWpnOyqWhpvybQ8ZfTOnatbbMnDgabo3xyya1tbiQnnpMl1mZMfOmtWKSFkio2OYzDQEJcRwCIyDg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -175,6 +201,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 5Rz59JYPfOxjsBAPHVvmhxnu0GSeCAwoP9TQ+abgbW91RXxS1HVtkHmmJykqRKObPQiREH2yzbTkA4ISFXR4DA==
-length: 13791
+edSignature: PvFrmyBnl+xsuaxnOKOdlVv9Q0h3mn6ySUuC49J1iOZarnfQ8Vd3tSQ/pkjw87bKHtV653htg+BdBAWaj2PoBQ==
+length: 17278
 -->
