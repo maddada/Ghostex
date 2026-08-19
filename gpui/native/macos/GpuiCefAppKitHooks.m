@@ -72,6 +72,7 @@ static BOOL g_ghostexGpuiCEFMessagePumpInstalled = NO;
 static BOOL g_ghostexGpuiCEFApplicationHooksInstalled = NO;
 static BOOL g_ghostexGpuiCEFHandlingSendEvent = NO;
 static BOOL g_ghostexGpuiCEFEditCommandBridged = NO;
+static BOOL g_ghostexGpuiCEFSelectAllBridged = NO;
 static const void* GhostexGpuiFirstResponderObserverKey =
   &GhostexGpuiFirstResponderObserverKey;
 static const void* GhostexGpuiCEFMouseFocusPassiveKey =
@@ -335,7 +336,8 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
    CGEvent-posting automation) deliver arrow/Home/End/PageUp/PageDown and
    backspace/forward-delete key events whose underlying CGEvent unicode
    payload is the raw layout translation of those keys: legacy control
-   codes (0x1C-0x1F for arrows, 0x08/0x7F for the delete keys). The NSEvent fields still read as the normal F700-range
+   codes (0x1C-0x1F for arrows, 0x08/0x7F for the delete keys, 0x10 for
+   F1-F20). The NSEvent fields still read as the normal F700-range
    function-key characters, but macOS's async TSM input-method path reads
    the raw CGEvent payload and commits it as literal text to the focused
    NSTextInputClient without any keyDown dispatch — inserting invisible
@@ -465,15 +467,29 @@ static BOOL GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow* window)
 
   BOOL wasHandlingSendEvent = g_ghostexGpuiCEFHandlingSendEvent;
   BOOL wasEditCommandBridged = g_ghostexGpuiCEFEditCommandBridged;
+  BOOL wasSelectAllBridged = g_ghostexGpuiCEFSelectAllBridged;
   g_ghostexGpuiCEFHandlingSendEvent = YES;
   g_ghostexGpuiCEFEditCommandBridged = NO;
+  g_ghostexGpuiCEFSelectAllBridged = NO;
   @try {
     [self ghostexGpuiCEFSendEvent:event];
   } @finally {
     g_ghostexGpuiCEFHandlingSendEvent = wasHandlingSendEvent;
   }
 
-  if (shouldSelectAllInActiveCEF) {
+  /*
+   CDXC:GPUICefEditCommands 2026-08-18:
+   The mirror exists for the case where GPUI chrome still holds the focus
+   handle, so it resolves its target from the last-active CEF registry rather
+   than the real first responder. Repeating it after normal dispatch already
+   bridged Select All would re-issue the command against a possibly different
+   surface and move native focus there, which blurs the field the user was
+   typing in (a sidebar rename commits and closes on that blur). Skip the
+   mirror whenever the responder chain already delivered the command.
+   */
+  BOOL selectAllBridgedDuringDispatch = g_ghostexGpuiCEFSelectAllBridged;
+  g_ghostexGpuiCEFSelectAllBridged = wasSelectAllBridged;
+  if (shouldSelectAllInActiveCEF && !selectAllBridgedDuringDispatch) {
     GhostexGpuiCEFHandleSelectAllForActiveNativeView();
   }
 
@@ -1434,6 +1450,36 @@ static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event) {
     // (0x7F) with no function modifier.
     {51, 0x7F, NO, NO},
     {117, NSDeleteFunctionKey, YES, NO},
+    /*
+     CDXC:GPUIFunctionKeyEventNormalization 2026-08-18:
+     F1-F20 carry the same defect in the same place: their raw layout
+     translation is the single control code 0x10, so a CGEvent-synthesized
+     F1 gets committed by TSM as a literal DLE character into whatever text
+     client has focus — Monaco's chat composer showed a control-character box
+     instead of opening its F1 command palette. Their canonical NSEvent
+     characters are the sequential F700-range function-key codes with the
+     function modifier set, which is exactly what a hardware F-key reports.
+     */
+    {122, NSF1FunctionKey, YES, NO},
+    {120, NSF2FunctionKey, YES, NO},
+    {99, NSF3FunctionKey, YES, NO},
+    {118, NSF4FunctionKey, YES, NO},
+    {96, NSF5FunctionKey, YES, NO},
+    {97, NSF6FunctionKey, YES, NO},
+    {98, NSF7FunctionKey, YES, NO},
+    {100, NSF8FunctionKey, YES, NO},
+    {101, NSF9FunctionKey, YES, NO},
+    {109, NSF10FunctionKey, YES, NO},
+    {103, NSF11FunctionKey, YES, NO},
+    {111, NSF12FunctionKey, YES, NO},
+    {105, NSF13FunctionKey, YES, NO},
+    {107, NSF14FunctionKey, YES, NO},
+    {113, NSF15FunctionKey, YES, NO},
+    {106, NSF16FunctionKey, YES, NO},
+    {64, NSF17FunctionKey, YES, NO},
+    {79, NSF18FunctionKey, YES, NO},
+    {80, NSF19FunctionKey, YES, NO},
+    {90, NSF20FunctionKey, YES, NO},
   };
 
   for (size_t i = 0; i < sizeof(normalizations) / sizeof(normalizations[0]); i++) {
@@ -1618,6 +1664,7 @@ static BOOL GhostexGpuiCEFHandleSelectAllForResponder(id responder) {
 
   for (NSView* view = (NSView*)responder; view; view = view.superview) {
     if (GhostexGpuiCEFHandleSelectAllForNativeView((__bridge void*)view)) {
+      g_ghostexGpuiCEFSelectAllBridged = YES;
       return YES;
     }
   }
