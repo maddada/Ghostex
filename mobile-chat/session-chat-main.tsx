@@ -531,6 +531,7 @@ function MobileSessionChat({
         showComposerAgentName={false}
         showNewSessionWelcomeTitle={false}
         showSearchButton
+        showVerbosePill={false}
         theme={theme}
         transport={transport}
         verboseMode={verboseMode}
