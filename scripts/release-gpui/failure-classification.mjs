@@ -69,14 +69,39 @@ export const RETRYABLE_RULES = Object.freeze([
 ]);
 
 /*
- * Fatal rules are evaluated first and win outright. Everything that matches no
- * rule is fatal too: retrying an unknown failure is how deterministic breakage
- * gets papered over.
+ * CDXC:ReleaseWedgedRunnerClassification 2026-08-19:
+ * A job killed by its own `timeout-minutes` carries no error signature at all —
+ * just GitHub's cancellation line — so it lands in `unclassified`/FATAL and
+ * reads like deterministic breakage. During 7.11.0 that misread cost a wrong
+ * diagnosis: Windows ARM64 sat inside one crate for 103 minutes and was killed,
+ * which looked like an aarch64 codegen cliff in our own source, but the
+ * immediate retry compiled the identical source in 13m33s on the same runner
+ * image. It was one wedged runner instance.
+ *
+ * This is deliberately NOT `retryable: true`. The same line is printed in every
+ * job of a run cancelled because a sibling failed, where the real cause lives in
+ * the sibling's log and blind retrying would hide it. The category exists to
+ * tell the operator which question to ask, not to authorize an automatic rerun.
+ */
+export const WEDGED_RUNNER_RULES = Object.freeze([
+  { id: "job-cancelled", pattern: /##\[error\]The operation was canceled\./ },
+]);
+
+/*
+ * Fatal rules are evaluated first and win outright: a cancelled job whose log
+ * also carries a real compiler error is that compiler error. Everything that
+ * matches no rule is fatal too: retrying an unknown failure is how deterministic
+ * breakage gets papered over.
  */
 export function classifyFailure(text) {
   const output = typeof text === "string" ? text : String(text ?? "");
   for (const rule of FATAL_RULES) {
     if (rule.pattern.test(output)) return { category: "fatal", matchedRule: rule.id, retryable: false };
+  }
+  for (const rule of WEDGED_RUNNER_RULES) {
+    if (rule.pattern.test(output)) {
+      return { category: "cancelled", matchedRule: rule.id, retryable: false };
+    }
   }
   for (const rule of RETRYABLE_RULES) {
     if (rule.pattern.test(output)) return { category: "transient", matchedRule: rule.id, retryable: true };
@@ -107,12 +132,24 @@ function main() {
   const [source] = process.argv.slice(2);
   const text = source && source !== "-" ? readFileSync(source, "utf8") : readFileSync(0, "utf8");
   const classification = classifyFailure(text);
+  const label =
+    classification.category === "cancelled" ? "CANCELLED" : classification.retryable ? "TRANSIENT" : "FATAL";
   process.stdout.write(
-    `${classification.retryable ? "TRANSIENT" : "FATAL"} rule=${classification.matchedRule ?? "(none)"} ` +
-      `category=${classification.category}\n`,
+    `${label} rule=${classification.matchedRule ?? "(none)"} category=${classification.category}\n`,
   );
-  /* Exit 0 for a retryable classification so shell wrappers can branch on it. */
-  process.exitCode = classification.retryable ? 0 : 1;
+  if (classification.category === "cancelled") {
+    process.stdout.write(
+      "This job was cancelled, which carries no cause of its own. Check whether a sibling job failed first;\n" +
+        "if this job was killed by its own timeout, compare the last log progress against the cancellation\n" +
+        "time. A long silent gap means a wedged runner: retry once before diagnosing the source.\n",
+    );
+  }
+  /*
+   * Exit 0 for a retryable classification so shell wrappers can branch on it.
+   * A cancellation exits 2: not auto-retryable, but distinguishable from real
+   * deterministic breakage so a wrapper never silently reruns it.
+   */
+  process.exitCode = classification.retryable ? 0 : classification.category === "cancelled" ? 2 : 1;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
