@@ -14,6 +14,7 @@ export type AppModalKind =
   | "configureAgents"
   | "daemonSessions"
   | "discoverGhostex"
+  | "exportTranscriptResult"
   | "watchGhostexVideo"
   | "gitCommit"
   | "gitFileDiff"
@@ -47,6 +48,7 @@ export type OpenAppModalMessage =
         | "commandPalette"
         | "delayedSend"
         | "discoverGhostex"
+        | "exportTranscriptResult"
         | "firstUserMessage"
         | "gitCommit"
         | "gitFileDiff"
@@ -74,6 +76,20 @@ export type OpenAppModalMessage =
       modal: "stashedPrompts";
       projectId?: string;
       sessionId?: string;
+      type: "open";
+    }
+  | {
+      /**
+       * CDXC:ExportTranscript 2026-08-20:
+       * Shown after Export Transcript wrote the markdown file. `path` is
+       * absolute on the machine that owns the transcript, so `canReveal` is
+       * false for a remote session's export: the host running this dialog has
+       * no such file and must not offer to reveal one.
+       */
+      agentId?: string;
+      canReveal: boolean;
+      modal: "exportTranscriptResult";
+      path: string;
       type: "open";
     }
   | {

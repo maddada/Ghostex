@@ -434,6 +434,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/answerSessionChatPrompt"
         | "/api/interruptSessionChat"
         | "/api/handoffSessionChatDraft"
+        /*
+        CDXC:ExportTranscript 2026-08-20:
+        Exporting a transcript is remote-allowed for the same reason reading a
+        chat is: the transcript file only exists on the machine that runs the
+        agent, so a client looking at a remote session has to ask that machine.
+        It carries only projectId/sessionId, reads a transcript the daemon
+        resolved itself, and writes into the daemon's own exports directory —
+        the caller never names a path.
+        */
+        | "/api/exportSessionTranscript"
         | "/api/sendSessionText"
         | "/api/sendSessionMessage"
         | "/api/sendSessionEnter"

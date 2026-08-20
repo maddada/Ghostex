@@ -15,6 +15,7 @@
 import {
   IconClockCheck,
   IconDots,
+  IconFileExport,
   IconGitBranch,
   IconMessage,
   IconMessageCode,
@@ -66,6 +67,7 @@ export interface SessionChatHostActions {
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
   attachPath: IconPaperclip,
   delayedActions: IconClockCheck,
+  exportTranscript: IconFileExport,
   fork: IconGitBranch,
   fullReload: IconRefresh,
   promptEditor: IconMessageCode,

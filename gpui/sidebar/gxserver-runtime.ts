@@ -7,6 +7,7 @@ import {
   type GxserverCreateWorktreeSessionResult,
   type GxserverDeleteWorktreeProjectResult,
   type GxserverEndpointPath,
+  type GxserverExportSessionTranscriptResult,
   type GxserverFirstPromptTitleGenerationAgent,
   type GxserverForkSessionResult,
   type GxserverGenerateCommitMessageResult,
@@ -248,6 +249,7 @@ export type GpuiWorkspaceSessionDelayedSendSummary = {
 type GpuiFirstPromptTitleRuntimeSettings = {
   firstPromptTitleGenerationAgent: GxserverFirstPromptTitleGenerationAgent;
   firstPromptTitleGenerationCommand?: string;
+  firstUserInputDraft?: string;
   firstUserMessage?: string;
 };
 
@@ -266,6 +268,14 @@ type GpuiSidebarRuntimeSettingsSnapshot = {
 export type GhostexGpuiSidebarBridge = {
   browserTabs?: readonly GpuiBrowserTabSummary[];
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
+  /**
+   * CDXC:AutoSleepDisplayedSessions 2026-08-20:
+   * The local gxserver sessions the shell is rendering right now, terminal body
+   * or chat surface alike. Auto Sleep protects these instead of guessing
+   * visibility from the rows this runtime last saw selected.
+   */
+  displayedWorkspaceSessionIds?: readonly string[];
+  onDisplayedWorkspaceSessionIdsChanged?: (sessionIds: readonly string[]) => void;
   workspaceSessionDelayedSends?: readonly GpuiWorkspaceSessionDelayedSendSummary[];
   onBrowserTabsChanged?: (tabs: readonly GpuiBrowserTabSummary[]) => void;
   /**
@@ -284,6 +294,7 @@ export type GhostexGpuiSidebarBridge = {
     sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[],
   ) => void;
   onGxserverBootstrapChanged?: (bootstrap: GpuiGxserverBootstrap) => void;
+  onExportTranscriptModalCommand?: (payload: unknown) => void;
   onGitCommitModalCommand?: (payload: unknown) => void;
   onMenuBarProjectActivation?: (payload: unknown) => void;
   onMenuBarSessionActivation?: (payload: unknown) => void;
@@ -314,6 +325,7 @@ export type GhostexGpuiSidebarBridge = {
   onWorkspaceTerminalRuntimeAction?: (payload: unknown) => void;
   pendingCommandPaletteRunSidebarCommands?: unknown[];
   pendingCommandPaletteSessionFocusRequests?: unknown[];
+  pendingExportTranscriptModalCommands?: unknown[];
   pendingGitCommitModalCommands?: unknown[];
   pendingMenuBarProjectActivations?: unknown[];
   pendingMenuBarSessionActivations?: unknown[];
@@ -884,6 +896,16 @@ type GpuiRemoteProjectReference = {
   projectId: string;
 };
 
+type GpuiExportedTranscriptResult = {
+  /** The exported session's agent, so the dialog can preselect the same one. */
+  agentId?: string;
+  /** Absolute path of the markdown file, on `machineId`'s disk. */
+  path: string;
+  projectId: string;
+  /** Absent for the local daemon; set for a remote machine's own daemon. */
+  machineId?: string;
+};
+
 type GpuiProjectDiffStatsRefreshTarget =
   | { key: string; kind: "local"; project: GxserverProjectDomainState }
   | { key: string; kind: "remote"; reference: GpuiRemoteProjectReference };
@@ -1130,6 +1152,7 @@ class GpuiSidebarRuntime {
   private closeAfterDoneCountdownTickerId: number | undefined;
   private closeAfterDoneTimersBySessionId = new Map<string, GpuiCloseAfterDoneTimer>();
   private commandPaneSessions: GpuiCommandPaneSessionSummary[] = [];
+  private displayedWorkspaceSessionIds: string[] = [];
   private workspaceSessionDelayedSends = new Map<string, GpuiWorkspaceSessionDelayedSendSummary>();
   private workspaceTerminalTitleObservations = new Map<
     string,
@@ -1183,6 +1206,15 @@ class GpuiSidebarRuntime {
   private pendingNativeAppShotPromptInsertions: GpuiPendingNativeAppShotPromptInsertion[] = [];
   private pendingGitCommitRequests = new Map<string, GpuiPendingGitCommitRequest>();
   private pendingRemoteGxserverRequests = new Map<string, GpuiPendingRemoteGxserverRequest>();
+  /*
+  CDXC:ExportTranscript 2026-08-20:
+  What the open Export Transcript result dialog is describing. The dialog is a
+  separate child window with no gxserver client, so it sends back only the agent
+  the user picked; the exported path and the project the export came from stay
+  here, where "Start new conversation" can create the follow-up session in the
+  same project without trusting a path posted back by a page.
+  */
+  private pendingExportedTranscript: GpuiExportedTranscriptResult | undefined;
   private presentation: GxserverPresentationSnapshot | undefined;
   private previousSessionsByHistoryId = new Map<string, SidebarPreviousSessionItem>();
   private projectBoardRestorableLinkChecks = new Map<
@@ -1391,6 +1423,23 @@ class GpuiSidebarRuntime {
     };
     gpuiBridge.onCommandPaneSessionsChanged = applyCommandPaneSessions;
     applyCommandPaneSessions(gpuiBridge.commandPaneSessions);
+    const applyDisplayedWorkspaceSessionIds = (sessionIds: readonly string[] | undefined) => {
+      /*
+      CDXC:AutoSleepDisplayedSessions 2026-08-20:
+      Rust owns what is actually on screen. This runtime's own visible/focused
+      sets are a click-history projection: they cannot see that a session's
+      terminal is parked behind its chat surface, and they are dropped whenever
+      gxserver goes away, so a session the user was sitting in front of could be
+      retired by the "Sleep idle agent sessions" sweep. Cache the ids the same
+      way the command-pane bridge does so a restored tab hydrates before React
+      installs listeners.
+      */
+      const next = normalizeGpuiDisplayedWorkspaceSessionIds(sessionIds);
+      gpuiBridge.displayedWorkspaceSessionIds = next;
+      this.displayedWorkspaceSessionIds = next;
+    };
+    gpuiBridge.onDisplayedWorkspaceSessionIdsChanged = applyDisplayedWorkspaceSessionIds;
+    applyDisplayedWorkspaceSessionIds(gpuiBridge.displayedWorkspaceSessionIds);
     const applyWorkspaceSessionDelayedSends = (
       sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[] | undefined,
     ) => {
@@ -1465,6 +1514,9 @@ class GpuiSidebarRuntime {
     };
     gpuiBridge.onGitCommitModalCommand = (payload) => {
       void this.handleGpuiGitCommitModalCommand(payload);
+    };
+    gpuiBridge.onExportTranscriptModalCommand = (payload) => {
+      void this.handleGpuiExportTranscriptModalCommand(payload);
     };
     gpuiBridge.onWorktreeModalCommand = (payload) => {
       this.handleGpuiWorktreeModalCommand(payload);
@@ -1630,6 +1682,14 @@ class GpuiSidebarRuntime {
       : [];
     for (const payload of pendingGitCommitModalCommands) {
       void this.handleGpuiGitCommitModalCommand(payload);
+    }
+    const pendingExportTranscriptModalCommands = Array.isArray(
+      gpuiBridge.pendingExportTranscriptModalCommands,
+    )
+      ? gpuiBridge.pendingExportTranscriptModalCommands.splice(0)
+      : [];
+    for (const payload of pendingExportTranscriptModalCommands) {
+      void this.handleGpuiExportTranscriptModalCommand(payload);
     }
     const pendingWorktreeModalCommands = Array.isArray(gpuiBridge.pendingWorktreeModalCommands)
       ? gpuiBridge.pendingWorktreeModalCommands.splice(0)
@@ -2029,6 +2089,8 @@ class GpuiSidebarRuntime {
     const sessionIdsToSleep = createGpuiAutoSleepAgentSessionIds({
       activeProjectId: this.activeProjectId,
       commandPaneSessions: this.commandPaneSessions,
+      delayedSendSessionIds: [...this.workspaceSessionDelayedSends.keys()],
+      displayedWorkspaceSessionIds: this.displayedWorkspaceSessionIds,
       focusedSessionId: this.focusedSessionId,
       groups: this.latestGroups,
       nowMs: Date.now(),
@@ -3452,6 +3514,10 @@ class GpuiSidebarRuntime {
     );
     if (request.action === "forkSession") {
       await this.forkSession(sessionId);
+      return;
+    }
+    if (request.action === "exportTranscript") {
+      await this.exportSessionTranscript(sessionId);
       return;
     }
     await this.fullReloadSession(sessionId);
@@ -7141,6 +7207,7 @@ class GpuiSidebarRuntime {
 
   private createFirstPromptTitleRuntimeSettings(
     firstUserMessage?: string,
+    firstUserInputDraft?: string,
   ): GpuiFirstPromptTitleRuntimeSettings {
     /*
     CDXC:GPUIFirstPromptTitle 2026-07-04-21:52:
@@ -7161,6 +7228,17 @@ class GpuiSidebarRuntime {
     const prompt = firstUserMessage?.trim();
     if (prompt) {
       runtimeSettings.firstUserMessage = prompt;
+    }
+    /*
+    CDXC:ExportTranscript 2026-08-20:
+    A draft is the opposite of `firstUserMessage`: gxserver types it into the
+    new agent's composer once and never submits it. It travels to the daemon
+    byte for byte — the trailing space of `@<path> ` is what closes the file
+    mention and separates it from the prompt the user writes next — so it is
+    deliberately not trimmed here or anywhere else on the way out.
+    */
+    if (firstUserInputDraft) {
+      runtimeSettings.firstUserInputDraft = firstUserInputDraft;
     }
     return runtimeSettings;
   }
@@ -9654,6 +9732,188 @@ class GpuiSidebarRuntime {
         description: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /*
+  CDXC:ExportTranscript 2026-08-20:
+  Export Transcript is a daemon operation, not a local file read: the agent's
+  raw transcript only exists on the machine that runs it, so the export lands
+  next to the transcript and the returned path is absolute on THAT machine.
+  Local sessions go through the local gxserver client and remote sessions
+  through the machine-scoped tunnel, exactly like Fork. Failures surface the
+  daemon's own message (including `unsupportedAgent`) instead of degrading into
+  a partial export.
+  */
+  private async exportSessionTranscript(sessionId: string): Promise<void> {
+    const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
+    if (remoteSession) {
+      let exported: GpuiExportedTranscriptResult;
+      try {
+        const result = await this.requestRemoteGxserver<GxserverExportSessionTranscriptResult>(
+          remoteSession.machineId,
+          "/api/exportSessionTranscript",
+          {
+            projectId: remoteSession.projectId,
+            sessionId: remoteSession.sessionId,
+          },
+          { timeoutMs: 60_000 },
+        );
+        const path = normalizeNonEmptyString(result?.path);
+        if (!path) {
+          throw new Error("The remote gxserver did not return the exported file.");
+        }
+        exported = {
+          agentId: this.resolveExportTranscriptAgentId(result?.agent),
+          machineId: remoteSession.machineId,
+          path,
+          projectId: remoteSession.projectId,
+        };
+      } catch (error) {
+        this.postRemoteToast("error", "Could not export transcript", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      // Outside the catch: the file is already written, so a failure to present
+      // the result dialog must not be reported as a failed export.
+      this.openExportedTranscriptResultModal(exported);
+      return;
+    }
+    const reference = parseGxserverPresentationProjectSessionId(sessionId);
+    if (!reference || !this.client) {
+      return;
+    }
+    const sourceSession = this.presentation?.sessions.find(
+      (session) =>
+        session.projectId === reference.projectId && session.sessionId === reference.sessionId,
+    );
+    if (!sourceSession) {
+      return;
+    }
+    let exported: GpuiExportedTranscriptResult;
+    try {
+      const result = await this.client.rpc<GxserverExportSessionTranscriptResult>(
+        "/api/exportSessionTranscript",
+        {
+          projectId: reference.projectId,
+          sessionId: reference.sessionId,
+        },
+      );
+      const path = normalizeNonEmptyString(result?.path);
+      if (!path) {
+        throw new Error("gxserver did not return the exported file.");
+      }
+      exported = {
+        agentId:
+          normalizeNonEmptyString(sourceSession.agentId) ??
+          this.resolveExportTranscriptAgentId(result?.agent),
+        path,
+        projectId: reference.projectId,
+      };
+    } catch (error) {
+      this.postSidebarActionToast("error", "Could not export transcript", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    this.openExportedTranscriptResultModal(exported);
+  }
+
+  /**
+   * Maps the daemon's transcript-format name (`claude`, `codex`, `grok`, `pi`)
+   * onto one of the user's configured agents so the result dialog can preselect
+   * the same agent the exported session used.
+   */
+  private resolveExportTranscriptAgentId(agent: string | undefined): string | undefined {
+    const normalizedAgent = normalizeNonEmptyString(agent)?.toLowerCase();
+    if (!normalizedAgent) {
+      return undefined;
+    }
+    const agents = (this.sidebarHud?.agents ?? []) as readonly SidebarAgentButton[];
+    return (
+      agents.find((candidate) => candidate.agentId.toLowerCase() === normalizedAgent)?.agentId ??
+      agents.find((candidate) => candidate.icon?.toLowerCase() === normalizedAgent)?.agentId
+    );
+  }
+
+  private openExportedTranscriptResultModal(result: GpuiExportedTranscriptResult): void {
+    this.pendingExportedTranscript = result;
+    openAppModal({
+      ...(result.agentId ? { agentId: result.agentId } : {}),
+      // A remote export lives on the remote machine's disk, so this host has
+      // nothing to reveal and the dialog hides the button instead of offering
+      // a path the local file manager cannot open.
+      canReveal: result.machineId === undefined,
+      modal: "exportTranscriptResult",
+      path: result.path,
+      type: "open",
+    });
+  }
+
+  /**
+   * "Start new conversation" in the export result dialog. The dialog owns only
+   * the agent choice; the exported path and its project stay in this runtime.
+   */
+  private async handleGpuiExportTranscriptModalCommand(payload: unknown): Promise<void> {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return;
+    }
+    const record = payload as Record<string, unknown>;
+    if (record.type !== "startExportedTranscriptConversation") {
+      return;
+    }
+    const exported = this.pendingExportedTranscript;
+    this.pendingExportedTranscript = undefined;
+    if (!exported) {
+      return;
+    }
+    const agentId = normalizeNonEmptyString(record.agentId) ?? exported.agentId;
+    const agent = agentId ? this.resolveSidebarAgent(agentId) : undefined;
+    if (!agent) {
+      this.postSidebarActionToast("warning", "Could not start the conversation", {
+        description: "Choose a configured agent for the new session.",
+      });
+      return;
+    }
+    /*
+    CDXC:ExportTranscript 2026-08-20:
+    The new session is created with a staged input draft, never a first user
+    message: gxserver types the mention into the agent's composer after the
+    provider starts and stops there. Nothing on this side sends a prompt or an
+    Enter, so the conversation only begins when the user writes their own
+    prompt around the mention and submits it themselves.
+    */
+    const draft = createExportedTranscriptMentionDraft(exported.path);
+    const title = createAgentSessionDefaultTitle(agent.name);
+    if (exported.machineId) {
+      await this.createRemoteAgentSessionForProject(
+        { machineId: exported.machineId, projectId: exported.projectId },
+        agent.agentId,
+        "",
+        title,
+        { firstUserInputDraft: draft },
+      ).catch((error: unknown) => {
+        this.postRemoteToast("error", "Could not start the conversation", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      });
+      return;
+    }
+    const project = this.domainProjects.find(
+      (candidate) => candidate.projectId === exported.projectId,
+    );
+    if (!project) {
+      return;
+    }
+    await this.createAgentSessionRecordForProject(project, agent, "", {
+      errorMessage: "Could not create the new agent session.",
+      firstUserInputDraft: draft,
+      title,
+    }).catch((error: unknown) => {
+      this.postSidebarActionToast("error", "Could not start the conversation", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private async renameSession(
@@ -14552,7 +14812,12 @@ class GpuiSidebarRuntime {
     project: GxserverProjectDomainState,
     agent: SidebarAgentButton,
     prompt: string,
-    options: { errorMessage?: string; renameTitleAfterStart?: string; title?: string } = {},
+    options: {
+      errorMessage?: string;
+      firstUserInputDraft?: string;
+      renameTitleAfterStart?: string;
+      title?: string;
+    } = {},
   ): Promise<GpuiCreatedProjectAgentSessionRecord> {
     if (!this.client) {
       throw new Error("gxserver is unavailable.");
@@ -14574,6 +14839,7 @@ class GpuiSidebarRuntime {
       projectId: project.projectId,
       runtimeSettings: this.createFirstPromptTitleRuntimeSettings(
         options.renameTitleAfterStart ? undefined : prompt,
+        options.firstUserInputDraft,
       ),
       surface: "workspace",
       title: options.title ?? createAgentSessionDefaultTitle(agent.name),
@@ -14614,6 +14880,7 @@ class GpuiSidebarRuntime {
     agentId: string,
     prompt: string,
     title: string,
+    options: { firstUserInputDraft?: string } = {},
   ): Promise<void> {
     const response = await this.requestRemoteGxserver<GpuiGxserverCreatedSessionResult>(
       remoteScope.machineId,
@@ -14622,7 +14889,10 @@ class GpuiSidebarRuntime {
         agentId,
         projectId: remoteScope.projectId,
         requireLaunchCommand: true,
-        runtimeSettings: this.createFirstPromptTitleRuntimeSettings(prompt),
+        runtimeSettings: this.createFirstPromptTitleRuntimeSettings(
+          prompt,
+          options.firstUserInputDraft,
+        ),
         surface: "workspace",
         title,
       },
@@ -16709,6 +16979,20 @@ function normalizeGpuiWorkspaceDelayedSendRemainingLabel(value: unknown): string
   return normalizeGpuiCommandPaneTimerRemainingLabel(value);
 }
 
+function normalizeGpuiDisplayedWorkspaceSessionIds(sessionIds: unknown): string[] {
+  if (!Array.isArray(sessionIds)) {
+    return [];
+  }
+  const normalized: string[] = [];
+  for (const sessionId of sessionIds.slice(0, GPUI_COMMAND_PANE_SESSION_SUMMARY_LIMIT)) {
+    const normalizedSessionId = normalizeNonEmptyString(sessionId)?.trim();
+    if (normalizedSessionId && !normalized.includes(normalizedSessionId)) {
+      normalized.push(normalizedSessionId);
+    }
+  }
+  return normalized;
+}
+
 function normalizeGpuiCommandPaneSessions(
   sessions: readonly GpuiCommandPaneSessionSummary[] | unknown,
 ): GpuiCommandPaneSessionSummary[] {
@@ -17584,6 +17868,8 @@ function gxserverSleepWasDeclined(result: GxserverSleepSessionResult | undefined
 export function createGpuiAutoSleepAgentSessionIds({
   activeProjectId,
   commandPaneSessions = [],
+  delayedSendSessionIds = [],
+  displayedWorkspaceSessionIds = [],
   focusedSessionId,
   groups = [],
   nowMs,
@@ -17592,6 +17878,8 @@ export function createGpuiAutoSleepAgentSessionIds({
 }: {
   activeProjectId?: string;
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
+  delayedSendSessionIds?: readonly string[];
+  displayedWorkspaceSessionIds?: readonly string[];
   focusedSessionId?: string;
   groups?: readonly SidebarSessionGroup[];
   nowMs: number;
@@ -17614,6 +17902,8 @@ export function createGpuiAutoSleepAgentSessionIds({
   const protectedProjectSessionKeys = collectGpuiAutoSleepProtectedProjectSessionKeys({
     activeProjectId,
     commandPaneSessions,
+    delayedSendSessionIds,
+    displayedWorkspaceSessionIds,
     focusedSessionId,
     groups,
     presentation,
@@ -17633,17 +17923,52 @@ export function createGpuiAutoSleepAgentSessionIds({
 export function collectGpuiAutoSleepProtectedProjectSessionKeys({
   activeProjectId,
   commandPaneSessions = [],
+  delayedSendSessionIds = [],
+  displayedWorkspaceSessionIds = [],
   focusedSessionId,
   groups = [],
   presentation,
 }: {
   activeProjectId?: string;
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
+  delayedSendSessionIds?: readonly string[];
+  displayedWorkspaceSessionIds?: readonly string[];
   focusedSessionId?: string;
   groups?: readonly SidebarSessionGroup[];
   presentation: GxserverPresentationSnapshot;
 }): Set<string> {
   const protectedProjectSessionKeys = new Set<string>();
+  /*
+  CDXC:AutoSleepDisplayedSessions 2026-08-20:
+  The shell's rendered sessions come first, because they are the only input here
+  that reports what the user is actually looking at. Sidebar rows carry
+  `isVisible`/`isFocused` from this runtime's own focus bookkeeping, which does
+  not survive a gxserver reconnect and never learns that a session switched to
+  Chat view, where the terminal is parked behind the chat surface but the
+  session is very much on screen.
+  */
+  for (const displayedSessionId of displayedWorkspaceSessionIds) {
+    addGpuiAutoSleepProtectedSessionId(
+      protectedProjectSessionKeys,
+      presentation,
+      displayedSessionId,
+    );
+  }
+  /*
+  CDXC:AutoSleepDelayedSend 2026-08-20:
+  A session with Delayed Send armed has work waiting on its own timer. Sleeping
+  it kills the provider the send would have been typed into, so the prompt the
+  user scheduled simply never happens. Shell-owned timers (the gpui countdown
+  and the send-when-stopped watchers) live only in the Rust bridge, so they are
+  protected here; a daemon-owned send is caught by the eligibility check.
+  */
+  for (const delayedSendSessionId of delayedSendSessionIds) {
+    addGpuiAutoSleepProtectedSessionId(
+      protectedProjectSessionKeys,
+      presentation,
+      delayedSendSessionId,
+    );
+  }
   for (const group of groups) {
     if (group.remoteMachineContext) {
       continue;
@@ -17729,6 +18054,9 @@ function shouldAutoSleepGpuiPresentationAgentSession({
   ) {
     return false;
   }
+  if (gpuiAutoSleepSessionHasArmedDelayedSend(session)) {
+    return false;
+  }
   if (session.isFavorite === true && settings.autoSleepFavoriteAgentSessions !== true) {
     return false;
   }
@@ -17743,6 +18071,22 @@ function shouldAutoSleepGpuiPresentationAgentSession({
     return false;
   }
   return nowMs - lastActivityMs >= settings.autoSleepAgentIdleMinutes * GPUI_AUTO_SLEEP_MINUTE_MS;
+}
+
+function gpuiAutoSleepSessionHasArmedDelayedSend(session: GxserverPresentationSession): boolean {
+  /*
+  CDXC:AutoSleepDelayedSend 2026-08-20:
+  Daemon-owned Delayed Send state: a deadline/countdown for a timed send, or a
+  send-when-stopped watcher waiting on this agent or the whole project. Any of
+  them means a prompt is queued for this terminal, so it is not idle in the
+  sense Auto Sleep means.
+  */
+  return (
+    Boolean(session.delayedSendDeadlineAt) ||
+    session.delayedSendRemainingMs !== undefined ||
+    session.sendWhenAgentStopsActive === true ||
+    session.sendWhenAllProjectSessionsStopActive === true
+  );
 }
 
 function gpuiAutoSleepSessionHasAgentResumeReference(
@@ -18484,7 +18828,7 @@ type GpuiSessionAttentionTarget =
 
 type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {
-      action: "forkSession" | "fullReloadSession";
+      action: "exportTranscript" | "forkSession" | "fullReloadSession";
       projectId: string;
       sessionId: string;
     }
@@ -18524,6 +18868,18 @@ function normalizeGpuiWorkspaceTerminalTitleChanged(
   return { projectId, rawTitle, sessionId };
 }
 
+/*
+CDXC:ExportTranscript 2026-08-20:
+The follow-up conversation's staged input, not a prompt. gxserver types this
+into the new agent's composer and never submits it, so the user writes their
+own prompt around the mention: sending anything on their behalf was rejected.
+The trailing space completes the `@` file mention and separates it from what
+they type next, so it must survive untrimmed all the way to the daemon.
+*/
+function createExportedTranscriptMentionDraft(path: string): string {
+  return `@${path} `;
+}
+
 function normalizeGpuiWorkspaceTerminalRuntimeAction(
   value: unknown,
 ): GpuiWorkspaceTerminalRuntimeActionPayload | undefined {
@@ -18551,7 +18907,9 @@ function normalizeGpuiWorkspaceTerminalRuntimeAction(
     return { action: record.action };
   }
   const action =
-    record.action === "forkSession" || record.action === "fullReloadSession"
+    record.action === "exportTranscript" ||
+    record.action === "forkSession" ||
+    record.action === "fullReloadSession"
       ? record.action
       : undefined;
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();

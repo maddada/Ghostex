@@ -638,6 +638,11 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         label: "Attach File or Folder",
         shortcut: shortcut("attachFileOrFolder"),
       },
+      {
+        id: "exportTranscript",
+        label: "Export Transcript",
+        shortcut: shortcut("exportTranscript"),
+      },
     ],
     onAction: (id) => postSessionChatHostAction(id),
   };

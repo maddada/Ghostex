@@ -6,6 +6,7 @@ export type ghostexHotkeyActionId =
   | "closeFocusedSession"
   | "createSession"
   | "delayedSend"
+  | "exportTranscript"
   | "forkSession"
   | "mergeAllTabs"
   | "openCommandPalette"
@@ -69,6 +70,7 @@ export type ghostexFocusedPaneAction =
 
 export type ghostexTerminalToolbarAction =
   | "attachFileOrFolder"
+  | "exportTranscript"
   | "promptEditor"
   | "scrollTerminalToBottom"
   | "scrollTerminalToTop"
@@ -365,6 +367,25 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     description: "Open stashed prompts for the focused agent session.",
     id: "stashedPrompts",
     title: "Stashed Prompts",
+  },
+  {
+    action: {
+      id: "exportTranscript",
+      kind: "terminalToolbarAction",
+      terminalToolbarAction: "exportTranscript",
+    },
+    /**
+     * CDXC:ExportTranscript 2026-08-20:
+     * Export transcript writes the focused agent session's conversation to a
+     * markdown file on the machine that owns the transcript, then offers to
+     * seed a new conversation from it. It ships unassigned by default, like
+     * the other Agent Actions menu rows (Stash Prompt, Attach File or Folder),
+     * so it cannot claim a chord users already rely on.
+     */
+    defaultKey: "",
+    description: "Export the focused agent session's transcript to a markdown file.",
+    id: "exportTranscript",
+    title: "Export Transcript",
   },
   {
     action: {

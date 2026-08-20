@@ -1413,6 +1413,8 @@ function describeGxserverOperation(path: GxserverEndpointPath): string {
       return "interrupt the agent";
     case "/api/handoffSessionChatDraft":
       return "move the terminal draft into chat";
+    case "/api/exportSessionTranscript":
+      return "export the session transcript";
     case "/api/sendSessionText":
     case "/api/sendSessionMessage":
     case "/api/sendSessionEnter":

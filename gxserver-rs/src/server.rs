@@ -46,10 +46,11 @@ use crate::{
         apply_created_session_identity, apply_live_process_session_identity,
         agent_metadata_title_revision, create_agent_session_params_for_project,
         default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
-        normalize_agent_hook_activity, read_agent_settings, read_text_from_map,
-        reconcile_agent_metadata_title_for_session, resolve_project_agent_config,
-        terminal_title_indicates_agent_identity, AgentEndpointError,
-        FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY,
+        normalize_agent_hook_activity, read_agent_settings, read_first_user_input_draft,
+        read_text_from_map, reconcile_agent_metadata_title_for_session,
+        resolve_project_agent_config, terminal_title_indicates_agent_identity, AgentEndpointError,
+        FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,
+        FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
     },
     auth::{
         ensure_gxserver_auth_token, is_authorized_headers, is_expected_gxserver_auth_token,
@@ -215,6 +216,7 @@ struct SessionChatFollowerEntry {
 
 const GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS: u64 = 3_000;
 const GXSERVER_FORK_INITIAL_RENAME_READY_DELAY_MS: u64 = 4_000;
+const GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS: u64 = 4_000;
 const GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS: u64 = 300;
 const GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH: usize = 250;
 const GXSERVER_GENERATED_SESSION_TITLE_MAX_LENGTH: usize = 39;
@@ -2873,6 +2875,10 @@ async fn route_http(
             handle_handoff_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
+        "/api/exportSessionTranscript" => {
+            handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
+                .await
+        }
         "/api/createPullRequest" => {
             handle_create_pull_request_http(&state, endpoint.path, request_id, &body_json).await
         }
@@ -3846,6 +3852,125 @@ fn schedule_fork_initial_rename(state: AppState, target: ForkInitialRenameTarget
             Value::Object(runtime_settings),
         );
         let _ = repository.update_session(&update);
+        schedule_delta_for_ids(&state, &target.project_id, &target.session_id);
+    });
+}
+
+#[derive(Clone)]
+struct FirstUserInputDraftTarget {
+    draft: String,
+    project_id: String,
+    session_id: String,
+}
+
+/*
+CDXC:GxserverFirstUserInputDraft 2026-08-20:
+A session created with `runtimeSettings.firstUserInputDraft` gets that text
+typed into its agent CLI composer once, and never sent. The claim happens
+synchronously while the provider start is still being answered — the marker
+flips from `pending` to `typing` before the readiness delay — so a second
+provider start (wake, re-attach, restart, a concurrent attach) finds a
+non-pending marker and types nothing.
+*/
+fn claim_first_user_input_draft(
+    repository: &DomainRepository<'_>,
+    endpoint_path: &str,
+    result: &Value,
+    project_id: &str,
+    session_id: &str,
+) -> Option<FirstUserInputDraftTarget> {
+    if endpoint_path != "/api/startSessionProvider"
+        || result.get("started").and_then(Value::as_bool) != Some(true)
+    {
+        return None;
+    }
+    let session = repository.get_session(project_id, session_id).ok()??;
+    if read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref() != Some("pending") {
+        return None;
+    }
+    let draft = read_first_user_input_draft(&session)?;
+    update_first_user_input_draft_status(repository, project_id, session_id, "typing").ok()?;
+    Some(FirstUserInputDraftTarget {
+        draft,
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+    })
+}
+
+fn update_first_user_input_draft_status(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    status: &str,
+) -> Result<(), DomainStateError> {
+    let Some(session) = repository.get_session(project_id, session_id)? else {
+        return Ok(());
+    };
+    let mut runtime_settings = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    runtime_settings.insert(FIRST_USER_INPUT_DRAFT_STATUS_KEY.to_string(), json!(status));
+    runtime_settings.insert(
+        FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY.to_string(),
+        json!(now_iso()),
+    );
+    let mut update = Map::new();
+    update.insert("projectId".to_string(), json!(project_id));
+    update.insert("sessionId".to_string(), json!(session_id));
+    update.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(runtime_settings),
+    );
+    repository.update_session(&update)?;
+    Ok(())
+}
+
+fn schedule_first_user_input_draft(state: AppState, target: FirstUserInputDraftTarget) {
+    /*
+    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    Same readiness window the fork's initial rename uses: the provider start
+    owns a freshly launched CLI whose composer is not accepting input yet. The
+    draft then goes through zmx's text path with `submit: false`, so no Enter
+    and no trailing carriage return is ever produced — the composer keeps the
+    text staged for the user to write around.
+    */
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(
+            GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS,
+        ))
+        .await;
+        let Ok(db) = open_gxserver_database(&state.paths) else {
+            return;
+        };
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(target.project_id.clone()));
+        params.insert("sessionId".to_string(), json!(target.session_id.clone()));
+        params.insert(
+            "diagnosticInputSource".to_string(),
+            json!("first-user-input-draft"),
+        );
+        params.insert("submit".to_string(), Value::Bool(false));
+        params.insert("text".to_string(), Value::String(target.draft));
+        let status = if dispatch_zmx_session_interaction_endpoint(
+            &repository,
+            "/api/sendSessionMessage",
+            &params,
+        )
+        .is_ok()
+        {
+            "applied"
+        } else {
+            "failed"
+        };
+        let _ = update_first_user_input_draft_status(
+            &repository,
+            &target.project_id,
+            &target.session_id,
+            status,
+        );
         schedule_delta_for_ids(&state, &target.project_id, &target.session_id);
     });
 }
@@ -10085,6 +10210,15 @@ async fn handle_zmx_lifecycle_http(
                 ) {
                     return domain_error_response(endpoint_path, request_id, error);
                 }
+                if let Some(target) = claim_first_user_input_draft(
+                    &repository,
+                    &endpoint_path,
+                    &output.result,
+                    project_id,
+                    session_id,
+                ) {
+                    schedule_first_user_input_draft(state.clone(), target);
+                }
             }
             routed_json(
                 Some(endpoint_path),
@@ -12684,6 +12818,145 @@ fn handle_save_session_chat_attachment_http(
             request_id,
             json!({ "path": path.to_string_lossy(), "bytes": bytes.len() }),
         ),
+    )
+}
+
+/*
+CDXC:ExportTranscript 2026-08-20:
+exportSessionTranscript renders a session's agent transcript into a markdown
+file under `<app data dir>/exports` and answers with its absolute path on THIS
+machine. The transcript only exists where the agent runs, so every client
+(gpui, web, mobile, the CLI) calls this over its per-machine RPC and a remote
+session's export lands on the remote machine next to the transcript it came
+from.
+
+Failures stay structured and never degrade into a partial file: an unsupported
+agent, a session that has not reported an agent session id yet, and a
+transcript with nothing to render each surface their own error code, because a
+half transcript handed to the next agent is worse than a clear refusal.
+*/
+async fn handle_export_session_transcript_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    if project_id.is_empty() || session_id.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "exportSessionTranscript requires projectId and sessionId.".to_string(),
+            },
+        );
+    }
+
+    let resolved = (|| {
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let session = repository
+            .get_session(&project_id, &session_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        Ok::<_, DomainStateError>((
+            session_chat_agent_for_session(&session),
+            read_runtime_text(&session, "agentSessionId"),
+            read_runtime_text(&session, "agentSessionPath"),
+            read_session_text(&session, "title"),
+        ))
+    })();
+    let (agent, agent_session_id, agent_session_path, title) = match resolved {
+        Ok(resolved) => resolved,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+
+    // Parsing a long transcript and writing the export are both blocking file
+    // work, exactly like the readSessionChat tail read.
+    let response_agent = agent.clone();
+    let exports_dir = state.paths.app_data_dir.join("exports");
+    let export_session_id = session_id.clone();
+    let exported = match tokio::task::spawn_blocking(move || {
+        crate::session_transcript_export::export_session_transcript(
+            &crate::session_transcript_export::SessionTranscriptExportRequest {
+                agent: agent.as_deref(),
+                agent_session_id: agent_session_id.as_deref(),
+                agent_session_path: agent_session_path.as_deref(),
+                session_id: &export_session_id,
+                session_title: title.as_deref(),
+                exports_dir: &exports_dir,
+                selection: None,
+            },
+        )
+    })
+    .await
+    {
+        Ok(exported) => exported,
+        Err(_) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "The transcript export did not finish.".to_string(),
+                },
+            )
+        }
+    };
+    let outcome = match exported {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: error.code(),
+                    message: error.to_string(),
+                },
+            )
+        }
+    };
+
+    let mut result = Map::new();
+    result.insert("path".to_string(), json!(outcome.path.to_string_lossy()));
+    result.insert("bytes".to_string(), json!(outcome.bytes));
+    result.insert(
+        "sourcePath".to_string(),
+        json!(outcome.source_path.to_string_lossy()),
+    );
+    result.insert(
+        "renderedEntries".to_string(),
+        json!(outcome.rendered_entries),
+    );
+    result.insert("parsedEntries".to_string(), json!(outcome.parsed_entries));
+    if let Some(agent) = response_agent.as_deref() {
+        result.insert("agent".to_string(), json!(agent));
+    }
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, Value::Object(result)),
     )
 }
 

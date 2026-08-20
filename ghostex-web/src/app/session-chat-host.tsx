@@ -7,13 +7,16 @@
 // The top-right Agent Actions row mirrors the gpui terminal overlay, limited
 // to the actions the web app can actually execute against gxserver: Rename
 // (/api/requestSessionRename via an inline input), Sleep, Fork (focuses the
-// created session like the sidebar fork), and Full Reload (sleep→wake, the
-// same composition gpui uses). Delayed Actions, Prompt Editor, Stash Prompt,
+// created session like the sidebar fork), Full Reload (sleep→wake, the same
+// composition gpui uses), and Export Transcript (the daemon writes the
+// markdown and ExportTranscriptModalHost shows the result). Delayed Actions,
+// Prompt Editor, Stash Prompt,
 // the Prompts modal, and Attach File or Folder need native pickers, terminal
 // buffer access, or modal hosts the web app does not have.
 
 import { useEffect, useMemo, useState } from "react";
 import type {
+  GxserverExportSessionTranscriptResult,
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
 } from "@/shared/gxserver-protocol";
@@ -27,6 +30,8 @@ import { rpcForMachine } from "../connections/connection-registry";
 import type { GhostexWebFocusSessionDetail } from "../sidebar-runtime/sidebar-runtime";
 import type { WorkspaceSession } from "../workspace/workspace-model";
 import { createSessionChatTransport } from "../chat/session-chat-transport";
+import type { ExportTranscriptSessionRef } from "./action-events";
+import { publishExportTranscriptStatus } from "./export-transcript-modal-host";
 import {
   readWebSettings,
   WEB_SETTINGS_CHANGED_EVENT,
@@ -103,6 +108,36 @@ async function runChatAgentAction(
       await rpcForMachine(session.machineId, "/api/sleepSession", lifecycleParams);
       await rpcForMachine(session.machineId, "/api/wakeSession", lifecycleParams);
       return;
+    case "exportTranscript": {
+      const target: ExportTranscriptSessionRef = {
+        ...(session.agentId ? { agentId: session.agentId } : {}),
+        machineId: session.machineId,
+        projectId: session.projectId,
+        sessionId: session.sessionId,
+        sessionTitle: session.title,
+      };
+      publishExportTranscriptStatus({ ...target, status: "exporting" });
+      /*
+      The export can fail for reasons the user has to read (unsupported agent,
+      transcript not found yet), so the structured gxserver message goes to the
+      result dialog instead of the console-only path the other actions take.
+      */
+      try {
+        const result = await rpcForMachine<GxserverExportSessionTranscriptResult>(
+          session.machineId,
+          "/api/exportSessionTranscript",
+          { projectId: session.projectId, sessionId: session.sessionId },
+        );
+        publishExportTranscriptStatus({ ...target, result, status: "exported" });
+      } catch (error: unknown) {
+        publishExportTranscriptStatus({
+          ...target,
+          message: error instanceof Error ? error.message : String(error),
+          status: "failed",
+        });
+      }
+      return;
+    }
     default:
       return;
   }
@@ -129,6 +164,7 @@ export function createWebSessionHostActions(
       { id: "sleep", label: "Sleep" },
       { id: "fork", label: "Fork" },
       { id: "fullReload", label: "Full Reload" },
+      { id: "exportTranscript", label: "Export Transcript" },
     ],
     onAction: (id, value) => {
       runChatAgentAction(session, id, value).catch((error: unknown) => {

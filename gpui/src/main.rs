@@ -837,6 +837,16 @@ const TITLEBAR_PROJECT_LEFT: f32 = 88.0;
 #[cfg(not(target_os = "macos"))]
 const TITLEBAR_PROJECT_LEFT: f32 = 9.0;
 const TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON: &str = "Switch to a project to access this view";
+/*
+CDXC:GPUTitlebarAvailability 2026-08-20:
+Source (Code) has no working remote runtime yet: code-server is launched on this
+machine against a local path, so a machine-scoped remote project would open the
+wrong tree. Disable the tab for remote projects through the same availability
+contract the Quick/projectless reasons use, so the tab click, the compact mode
+menu, hotkeys, and restored-mode coercion all refuse it in one place.
+*/
+const TITLEBAR_REMOTE_SOURCE_DISABLED_REASON: &str =
+    "Code is currently disabled for remote projects";
 #[cfg(target_os = "macos")]
 const TITLEBAR_COMPACT_MODE_WIDTH_THRESHOLD: f32 = 1050.0;
 #[cfg(not(target_os = "macos"))]
@@ -1170,6 +1180,14 @@ const APP_MODAL_HOST_DELAYED_SEND_WINDOW_HEIGHT: f32 = 565.0;
 const APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH: f32 = 570.0;
 const APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH: f32 = 560.0;
 const APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT: f32 = 360.0;
+/*
+ * CDXC:ExportTranscript 2026-08-20:
+ * The export result dialog is a compact confirmation: a path, an agent select,
+ * and three buttons. It opens on the Rename Session width and lets the one-shot
+ * `contentHeightMeasured` fit shrink the frame to whatever it actually rendered.
+ */
+const APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_WIDTH: f32 = 570.0;
+const APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_HEIGHT: f32 = 420.0;
 /*
  * CDXC:GPUIAppModalSizes 2026-07-26-07:20:
  * The measured Rename Session dialog is 431px tall, so the historic 428px frame
@@ -1851,6 +1869,7 @@ const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("attachFileOrFolder", ""),
     ("stashPrompt", ""),
     ("stashedPrompts", "alt+shift+s"),
+    ("exportTranscript", ""),
     ("toggleAgentActions", ""),
     ("toggleChatView", "alt+g"),
     ("scrollTerminalToTop", ""),
@@ -3075,6 +3094,7 @@ enum GpuiAppModalKind {
     AgentsHub,
     DelayedSend,
     RenameSession,
+    ExportTranscriptResult,
     ConfigureAgents,
     ConfigureActions,
     OpenTargets,
@@ -3110,6 +3130,7 @@ impl GpuiAppModalKind {
             "agentsHub" => Some(Self::AgentsHub),
             "delayedSend" => Some(Self::DelayedSend),
             "renameSession" => Some(Self::RenameSession),
+            "exportTranscriptResult" => Some(Self::ExportTranscriptResult),
             "configureAgents" => Some(Self::ConfigureAgents),
             "configureActions" => Some(Self::ConfigureActions),
             "openTargets" => Some(Self::OpenTargets),
@@ -3146,6 +3167,7 @@ impl GpuiAppModalKind {
             Self::AgentsHub => "agentsHub",
             Self::DelayedSend => "delayedSend",
             Self::RenameSession => "renameSession",
+            Self::ExportTranscriptResult => "exportTranscriptResult",
             Self::ConfigureAgents => "configureAgents",
             Self::ConfigureActions => "configureActions",
             Self::OpenTargets => "openTargets",
@@ -3181,6 +3203,7 @@ impl GpuiAppModalKind {
             Self::AgentsHub => "Ghostex Agents Hub",
             Self::DelayedSend => "Ghostex Session Automations",
             Self::RenameSession => "Ghostex Rename Session",
+            Self::ExportTranscriptResult => "Ghostex Export Transcript",
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
             Self::OpenTargets => "Ghostex Open Targets",
@@ -3216,6 +3239,10 @@ impl GpuiAppModalKind {
             Self::RenameSession => size(
                 px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_HEIGHT),
+            ),
+            Self::ExportTranscriptResult => size(
+                px(APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_WIDTH),
+                px(APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_HEIGHT),
             ),
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
@@ -3344,6 +3371,10 @@ impl GpuiAppModalKind {
                 | Self::ScratchPad
                 | Self::DelayedSend
                 | Self::RenameSession
+                // The export result dialog's agent picker renders the user's
+                // configured agents, which only reach the modal host through
+                // the sidebar-state snapshot.
+                | Self::ExportTranscriptResult
                 | Self::Worktree
                 | Self::DeleteWorktree
                 | Self::RenameWorktree
@@ -3431,6 +3462,7 @@ impl GpuiAppModalKind {
             | Self::GitFileDiff
             | Self::PortlessSetup
             | Self::DiscoverGhostex
+            | Self::ExportTranscriptResult
             | Self::MissingProjectFolder => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
@@ -4424,6 +4456,7 @@ enum GpuiProjectSnapshotStoreResult {
 struct ProjectScopedWorkareaAvailability {
     project_context: GpuiProjectContext,
     project_features: GpuiProjectScopedFeatureAvailability,
+    active_project_is_remote: bool,
 }
 
 impl ProjectScopedWorkareaAvailability {
@@ -4437,6 +4470,7 @@ impl ProjectScopedWorkareaAvailability {
             project_features: GpuiProjectScopedFeatureAvailability::for_project_context(
                 project_context,
             ),
+            active_project_is_remote: false,
         }
     }
 
@@ -4445,6 +4479,11 @@ impl ProjectScopedWorkareaAvailability {
         Self {
             project_context: snapshot.project_context(),
             project_features: snapshot.feature_availability,
+            active_project_is_remote: snapshot.active_project_id.as_ref().is_some_and(
+                |project_id| {
+                    gpui_remote_project_reference_from_project_id(project_id.0.as_str()).is_some()
+                },
+            ),
         }
     }
 
@@ -4452,10 +4491,14 @@ impl ProjectScopedWorkareaAvailability {
         /*
         CDXC:GPUIProjectRouting 2026-07-04-01:00:
         Titlebar availability mirrors macOS: Agents and Source are always selectable; Browser, Kanban, Automate, and Docs are visible for all contexts but selectable only for real project-scoped contexts. The old Docs/Manage debuggingMode plus showBetaFeatures visibility gate must not participate in switcher visibility, activation guards, restored active-mode coercion, or persisted active-mode fallback.
+
+        CDXC:GPUTitlebarAvailability 2026-08-20:
+        Source is the one exception: a machine-scoped remote project has no
+        working Source runtime, so it is unavailable there.
         */
         match mode {
             TitlebarMode::Agents => true,
-            TitlebarMode::Source => self.project_features.source,
+            TitlebarMode::Source => self.project_features.source && !self.active_project_is_remote,
             TitlebarMode::Browser | TitlebarMode::Kanban | TitlebarMode::Automate => {
                 self.project_context.has_project_scoped_workareas()
                     && match mode {
@@ -4491,8 +4534,11 @@ impl ProjectScopedWorkareaAvailability {
             .into_iter()
             .map(|mode| {
                 let is_available = self.titlebar_mode_available(mode);
-                let disabled_reason = if !is_available
-                    && matches!(self.project_context, GpuiProjectContext::QuickProjectless)
+                let disabled_reason = if is_available {
+                    None
+                } else if mode == TitlebarMode::Source && self.active_project_is_remote {
+                    Some(TITLEBAR_REMOTE_SOURCE_DISABLED_REASON)
+                } else if matches!(self.project_context, GpuiProjectContext::QuickProjectless)
                     && matches!(
                         mode,
                         TitlebarMode::Browser
@@ -24901,6 +24947,14 @@ pub struct GhostexGpuiApp {
     browser_tabs_project_epoch: u64,
     sidebar_browser_tabs_snapshot: String,
     /*
+    CDXC:AutoSleepDisplayedSessions 2026-08-20:
+    Last published set of local gxserver sessions this shell is actually showing
+    (terminal body or chat surface). The sidebar runtime's Auto Sleep sweep
+    otherwise decides visibility from its own click history, which cannot see a
+    parked terminal behind a chat surface and is wiped on a daemon reconnect.
+    */
+    sidebar_displayed_sessions_snapshot: String,
+    /*
     CDXC:SidebarBrowserTabReveal 2026-08-18:
     A Browser tab the user just opened, waiting to be revealed in the sidebar.
     The reveal is deferred to the tab-snapshot publish instead of being sent at
@@ -24909,6 +24963,15 @@ pub struct GhostexGpuiApp {
     */
     pending_sidebar_browser_tab_reveal: Option<PendingSidebarBrowserTabReveal>,
     sidebar_browser_tab_reveal_request_id: u64,
+    /*
+    CDXC:ExportTranscript 2026-08-20:
+    The path of the markdown file the open Export Transcript result dialog is
+    describing, captured from the dialog's own open message. Reveal in Finder
+    reads this instead of trusting a path posted back by the modal page, and it
+    stays `None` for remote sessions because their export lives on the remote
+    machine's disk, not this one.
+    */
+    pending_export_transcript_reveal_path: Option<String>,
     latest_sidebar_project_snapshot: Option<GpuiProjectSnapshot>,
     /*
     CDXC:NavigationHistory 2026-08-19:
@@ -25733,7 +25796,9 @@ impl GhostexGpuiApp {
                 parked_browser_tabs_by_project: shell_layout_state.parked_browser_tabs_by_project,
                 browser_tabs_project_epoch: 0,
                 sidebar_browser_tabs_snapshot: String::new(),
+                sidebar_displayed_sessions_snapshot: String::new(),
                 pending_sidebar_browser_tab_reveal: None,
+                pending_export_transcript_reveal_path: None,
                 sidebar_browser_tab_reveal_request_id: 0,
                 latest_sidebar_project_snapshot: None,
                 navigation_history_state:
@@ -28089,6 +28154,56 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
+    /// "Start new conversation" in the Export Transcript result dialog. The
+    /// dialog only knows which configured agent the user picked; the sidebar
+    /// runtime owns the exported path, the source project, and the gxserver
+    /// create-session path, so forward the chosen agent id and nothing else.
+    fn forward_gpui_export_transcript_modal_command_to_sidebar(
+        &mut self,
+        command: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let mut message = serde_json::Map::new();
+        message.insert(
+            "type".to_string(),
+            serde_json::json!("startExportedTranscriptConversation"),
+        );
+        if let Some(agent_id) = command.get("agentId").and_then(serde_json::Value::as_str) {
+            message.insert("agentId".to_string(), serde_json::json!(agent_id));
+        }
+        let Some(sidebar) = self.sidebar.clone() else {
+            return false;
+        };
+        let script = gpui_export_transcript_modal_command_script(&serde_json::Value::Object(message));
+        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+    }
+
+    /// Reveal the exported markdown file in the OS file manager. The path comes
+    /// from the Rust-held open payload of the dialog that is asking, never from
+    /// the modal page's own message, and remote exports hold no local path.
+    fn reveal_gpui_exported_transcript(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(path) = self.pending_export_transcript_reveal_path.clone() else {
+            return;
+        };
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move { gpui_reveal_path_in_finder(Path::new(&path)) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if let Err(message) = result {
+                    this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Could not reveal the exported transcript",
+                        &message,
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
+    }
+
     fn dispatch_gpui_sidebar_host_message(
         &mut self,
         message: serde_json::Value,
@@ -28961,6 +29076,54 @@ impl GhostexGpuiApp {
         } else {
             self.pending_sidebar_browser_tab_reveal = None;
         }
+        true
+    }
+
+    fn refresh_gpui_sidebar_displayed_sessions_if_changed(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        /*
+        CDXC:AutoSleepDisplayedSessions 2026-08-20:
+        Auto Sleep ("Sleep idle agent sessions") runs in the sidebar runtime,
+        which only knows which rows it last saw selected. That is not the same
+        thing as what this shell is rendering: a session switched to Chat view
+        parks its terminal behind the chat surface, and a gxserver reconnect
+        drops the runtime's local focus/visible sets entirely. Either way an
+        idle agent the user is sitting in front of looked retirable.
+
+        Rust is the only party that knows what is on screen, so it publishes
+        that set (Agents rendered leaves in Agents mode, companion terminal
+        mount slots in the project-editor modes — chat-mode sessions included,
+        because the tab still owns its pane) and the sweep protects it. The
+        bridge carries bounded local gxserver session ids only: no titles,
+        paths, commands, terminal output, or project bodies.
+        */
+        let session_ids = self
+            .gpui_sidebar_visible_local_session_ids()
+            .into_iter()
+            .filter(|session_id| {
+                gpui_sidebar_local_gxserver_session_id_allowed(session_id.as_str())
+            })
+            .collect::<Vec<_>>();
+        let snapshot = serde_json::Value::Array(
+            session_ids
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect(),
+        )
+        .to_string();
+        if self.sidebar_displayed_sessions_snapshot == snapshot {
+            return false;
+        }
+        let Some(sidebar) = self.sidebar.clone() else {
+            return false;
+        };
+        let script = gpui_sidebar_displayed_sessions_script(&snapshot);
+        if !sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script)) {
+            return false;
+        }
+        self.sidebar_displayed_sessions_snapshot = snapshot;
         true
     }
 
@@ -30422,6 +30585,7 @@ impl GhostexGpuiApp {
             "delayedActions" => TerminalAgentActionRequest::DelayedActions,
             "fork" => TerminalAgentActionRequest::Fork,
             "fullReload" => TerminalAgentActionRequest::FullReload,
+            "exportTranscript" => TerminalAgentActionRequest::ExportTranscript,
             "stashPrompt" => TerminalAgentActionRequest::StashPrompt,
             "stashedPrompts" => TerminalAgentActionRequest::StashedPrompts,
             _ => return,
@@ -30802,7 +30966,16 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source) {
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
+            || !self.titlebar_mode_available(TitlebarMode::Source)
+        {
+            /*
+            CDXC:GPUTitlebarAvailability 2026-08-20:
+            Source is also unavailable for remote projects, where switching
+            would be refused by set_active_mode and leave this route silently
+            dead. Fall back to the same copy-the-path affordance the hidden-tab
+            case uses instead of parking on an unreachable workarea.
+            */
             self.copy_path_for_disabled_project_workarea(trimmed, "Code", cx);
             return;
         }
@@ -32327,6 +32500,9 @@ impl GhostexGpuiApp {
         if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
             self.complete_first_launch_setup();
         }
+        if closed_modal == Some(GpuiAppModalKind::ExportTranscriptResult) {
+            self.pending_export_transcript_reveal_path = None;
+        }
     }
 
     fn complete_first_launch_setup(&self) {
@@ -32451,6 +32627,22 @@ impl GhostexGpuiApp {
                 retitled and replaced the commit window with the standalone
                 File Diff modal. Deliver it into the live window instead.
                 */
+                /*
+                CDXC:ExportTranscript 2026-08-20:
+                Capture the exported file's path from the dialog's own open
+                message so Reveal in Finder runs against Rust-held state. A
+                remote export never lands on this machine, so the sidebar
+                marks it `canReveal: false` and Rust holds nothing to reveal.
+                */
+                if modal == GpuiAppModalKind::ExportTranscriptResult {
+                    self.pending_export_transcript_reveal_path = message
+                        .get("canReveal")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
+                        .then(|| message.get("path").and_then(serde_json::Value::as_str))
+                        .flatten()
+                        .map(str::to_string);
+                }
                 if modal == GpuiAppModalKind::GitFileDiff
                     && self.gpui_app_modal_current_modal(cx) == Some(GpuiAppModalKind::GitCommit)
                 {
@@ -32563,6 +32755,11 @@ impl GhostexGpuiApp {
             "reconnectRemoteMachine" => {
                 if let Some(command) = message.as_object() {
                     self.handle_gpui_reconnect_remote_machine_message(command, cx);
+                }
+            }
+            "probeRemoteGxserverInstall" => {
+                if let Some(command) = message.as_object() {
+                    self.handle_gpui_probe_remote_gxserver_install_message(command, cx);
                 }
             }
             "remoteGxserverSubscribePresentation" => {
@@ -33469,6 +33666,70 @@ impl GhostexGpuiApp {
         );
     }
 
+    fn handle_gpui_probe_remote_gxserver_install_message(
+        &mut self,
+        command: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:RemoteMachines 2026-08-19:
+        Settings asks whether a saved remote machine already runs gxserver so
+        its action can read Install or Update and show the installed version.
+        The command carries only the bounded machine id; SSH details come from
+        the shared Settings snapshot exactly like reconnect.
+        */
+        let Some(remote_machine_id) = command
+            .get("remoteMachineId")
+            .and_then(serde_json::Value::as_str)
+            .and_then(gpui_normalize_remote_machine_id)
+        else {
+            return;
+        };
+        self.probe_gpui_remote_gxserver_install(remote_machine_id, cx);
+    }
+
+    fn probe_gpui_remote_gxserver_install(
+        &mut self,
+        remote_machine_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.app_modal_window.is_none() {
+            /*
+            Nothing can render the answer while no app modal is open, so skip
+            the SSH round trip instead of probing every saved machine on the
+            automatic startup connect pass.
+            */
+            return;
+        }
+        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) = gpui_remote_machine_config_from_settings(
+            settings_snapshot.object(),
+            &remote_machine_id,
+        ) else {
+            return;
+        };
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let probe = background
+                .spawn(async move { gpui_probe_remote_gxserver_install(config) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let mut message = serde_json::json!({
+                    "installed": probe.installed,
+                    "remoteMachineId": remote_machine_id,
+                    "type": "remoteGxserverInstallState",
+                });
+                if let Some(version) = probe.version
+                    && let Some(object) = message.as_object_mut()
+                {
+                    object.insert("version".to_string(), serde_json::Value::String(version));
+                }
+                this.dispatch_open_gpui_app_modal_message(message, cx);
+            });
+        })
+        .detach();
+    }
+
     fn handle_gpui_reconnect_remote_machine_message(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -33687,6 +33948,12 @@ impl GhostexGpuiApp {
                     "connected",
                     cx,
                 );
+                /*
+                A connect may have installed or upgraded the remote package, so
+                refresh the version Settings shows next to its Install/Update
+                action instead of leaving the pre-connect answer on screen.
+                */
+                self.probe_gpui_remote_gxserver_install(remote_machine_id.clone(), cx);
                 if !automatic {
                     self.dispatch_gpui_app_modal_toast(
                         "success",
@@ -41827,6 +42094,9 @@ impl GhostexGpuiApp {
             "reconnectRemoteMachine" => {
                 self.handle_gpui_reconnect_remote_machine_message(command, cx);
             }
+            "probeRemoteGxserverInstall" => {
+                self.handle_gpui_probe_remote_gxserver_install_message(command, cx);
+            }
             "remoteGxserverSubscribePresentation" => {
                 self.handle_gpui_remote_gxserver_subscribe_presentation_message(command, cx);
             }
@@ -41894,6 +42164,12 @@ impl GhostexGpuiApp {
             | "openSidebarGitChangedFileDiff"
             | "cancelSidebarGitCommit" => {
                 self.forward_gpui_git_commit_modal_command_to_sidebar(command_type, command, cx);
+            }
+            "revealExportedTranscript" => {
+                self.reveal_gpui_exported_transcript(cx);
+            }
+            "startExportedTranscriptConversation" => {
+                self.forward_gpui_export_transcript_modal_command_to_sidebar(command, cx);
             }
             "openBrowserPane" => {
                 let Some(url) = command
@@ -52023,6 +52299,7 @@ impl GhostexGpuiApp {
             action_id,
             "promptEditor"
                 | "attachFileOrFolder"
+                | "exportTranscript"
                 | "stashPrompt"
                 | "stashedPrompts"
                 | "toggleAgentActions"
@@ -52068,6 +52345,17 @@ impl GhostexGpuiApp {
             "stashedPrompts" => {
                 if matches!(target, GpuiEngineTerminalEventTarget::Agents(_)) {
                     let _ = self.open_gpui_stashed_prompts_modal_for_focused_agents_session(cx);
+                }
+            }
+            "exportTranscript" => {
+                if let GpuiEngineTerminalEventTarget::Agents(session_id) = target
+                    && self.focused_agents_or_companion_shell_session_id() == Some(session_id)
+                {
+                    let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
+                        "exportTranscript",
+                        session_id,
+                        cx,
+                    );
                 }
             }
             "toggleAgentActions" => {
@@ -57961,6 +58249,22 @@ impl GhostexGpuiApp {
             TerminalAgentActionRequest::FullReload => {
                 let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
                     "fullReloadSession",
+                    session_id,
+                    cx,
+                );
+            }
+            /*
+            CDXC:ExportTranscript 2026-08-20:
+            The transcript file only exists on the machine that runs the agent,
+            so the export is a daemon call, not a local read. Route it through
+            the same sidebar-runtime lifecycle path Fork uses: the runtime owns
+            the gxserver client for the local daemon and the authenticated
+            tunnel for remote machines, and it opens the result dialog once the
+            daemon answers with the written path.
+            */
+            TerminalAgentActionRequest::ExportTranscript => {
+                let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
+                    "exportTranscript",
                     session_id,
                     cx,
                 );
@@ -78491,6 +78795,7 @@ impl Render for GhostexGpuiApp {
         self.sidebar_width =
             clamp_sidebar_width(self.sidebar_width, current_sidebar_max_width(window));
         self.refresh_gpui_sidebar_browser_tabs_if_changed(cx);
+        self.refresh_gpui_sidebar_displayed_sessions_if_changed(cx);
         self.prepare_focus_bounds_for_render(window.scale_factor(), cx);
         #[cfg(target_os = "macos")]
         self.sync_terminal_close_confirm_dialog(window, cx);
@@ -88238,6 +88543,14 @@ const GPUI_REMOTE_GXSERVER_BUILD_IDENTITY_START_MARKER: &str =
     "__GHOSTEX_REMOTE_BUILD_IDENTITY_START__";
 const GPUI_REMOTE_GXSERVER_BUILD_IDENTITY_END_MARKER: &str =
     "__GHOSTEX_REMOTE_BUILD_IDENTITY_END__";
+const GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_START_MARKER: &str =
+    "__GHOSTEX_REMOTE_GXSERVER_VERSION_START__";
+const GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_END_MARKER: &str =
+    "__GHOSTEX_REMOTE_GXSERVER_VERSION_END__";
+const GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_MAX_LENGTH: usize = 40;
+// The install-state probe's own "no gxserver here" exit code. Any other
+// non-zero code means the remote login shell never ran the probe script.
+const GPUI_REMOTE_GXSERVER_NOT_INSTALLED_EXIT_CODE: i32 = 3;
 const GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(18);
 const GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
 const GPUI_REMOTE_GXSERVER_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -92183,6 +92496,15 @@ fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/updateSession"
             | "/api/requestSessionRename"
             /*
+            CDXC:ExportTranscript 2026-08-20:
+            A remote session's transcript only exists on the machine that runs
+            the agent, so Export Transcript is an id-scoped read-and-write on
+            that machine's own daemon, exactly like sleep/wake. Params are
+            reshaped to the two ids below and the answer is reduced to the
+            written path plus its size.
+            */
+            | "/api/exportSessionTranscript"
+            /*
             CDXC:SidebarV2Lifecycle 2026-07-29:
             Sidebar V2's settle/snooze commands are id-scoped session mutations
             on a remote machine's own daemon, exactly like sleep/wake/kill.
@@ -92253,7 +92575,10 @@ fn gpui_remote_sidebar_request_params(
         "/api/cancelDelayedSend" => gpui_remote_sidebar_delayed_send_params(params, true),
         "/api/startSessionProvider" => gpui_remote_sidebar_session_lifecycle_params(params, None),
         "/api/sendSessionMessage" => gpui_remote_sidebar_send_session_message_params(params),
-        "/api/settleSession" | "/api/unsettleSession" | "/api/unsnoozeSession" => {
+        "/api/settleSession"
+        | "/api/unsettleSession"
+        | "/api/unsnoozeSession"
+        | "/api/exportSessionTranscript" => {
             gpui_remote_sidebar_session_lifecycle_params(params, None)
         }
         "/api/snoozeSession" => {
@@ -92972,8 +93297,53 @@ fn gpui_remote_sidebar_response_payload(
         "/api/deleteWorktreeProject" => {
             gpui_remote_sidebar_delete_worktree_response_payload(result)
         }
+        "/api/exportSessionTranscript" => {
+            gpui_remote_sidebar_export_session_transcript_response_payload(result)
+        }
         _ => serde_json::Value::Null,
     }
+}
+
+/*
+CDXC:ExportTranscript 2026-08-20:
+The export answer the sidebar actually consumes: where the markdown landed on
+the remote machine (so the dialog can show and copy it, and the seeded prompt
+can reference it) and how big it is. The remote daemon also reports its source
+transcript path and parse counters; those are diagnostics, so they stop here.
+*/
+fn gpui_remote_sidebar_export_session_transcript_response_payload(
+    result: serde_json::Value,
+) -> serde_json::Value {
+    let Some(path) = result
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| gpui_remote_sidebar_worktree_path_allowed(value))
+    else {
+        return serde_json::Value::Null;
+    };
+    let mut response = serde_json::Map::new();
+    response.insert("path".to_string(), serde_json::json!(path));
+    if let Some(bytes) = result.get("bytes").and_then(serde_json::Value::as_u64) {
+        response.insert("bytes".to_string(), serde_json::json!(bytes));
+    }
+    // The agent name only picks the dialog's preselected agent, so it stays a
+    // short lowercase token (`claude`, `codex`, `grok`, `pi`).
+    if let Some(agent) = result
+        .get("agent")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 40
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+    {
+        response.insert("agent".to_string(), serde_json::json!(agent));
+    }
+    serde_json::Value::Object(response)
 }
 
 fn gpui_remote_sidebar_created_session_response_payload(
@@ -94168,6 +94538,204 @@ fn gpui_bundled_remote_gxserver_build_identity(package_dir: &Path) -> Option<Str
     .map(str::trim)
     .filter(|identity| !identity.is_empty())
     .map(str::to_string)
+}
+
+fn gpui_remote_installed_gxserver_version_command() -> &'static str {
+    /*
+    CDXC:RemoteMachines 2026-08-19:
+    Settings only needs to know whether the saved machine already carries a
+    gxserver package and which version that package is, so this probe reads the
+    installed package identity (or asks an already installed binary for its
+    version) and never starts, installs, or upgrades anything.
+
+    Resolve the same binaries the token command owns, including the copy inside
+    an installed macOS Ghostex.app, or a macOS remote that runs gxserver from
+    its own app bundle reads as "not installed". The package identity is taken
+    from the resolved binary's own package root (following a ~/.local/bin
+    symlink) so the reported version always describes the gxserver that would
+    actually serve this machine.
+    */
+    concat!(
+        "case \"${GHOSTEX_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"$GHOSTEX_HOME\";; ",
+        "*) case \"${XDG_DATA_HOME:-}\" in /*) GHOSTEX_REMOTE_DATA_DIR=\"${XDG_DATA_HOME%/}/ghostex\";; *) GHOSTEX_REMOTE_DATA_DIR=\"$HOME/.local/share/ghostex\";; esac;; esac; ",
+        "GHOSTEX_REMOTE_LEGACY_ROOT=\"$HOME/.ghostex/gxserver\"; ",
+        "GHOSTEX_REMOTE_APP_ROOT=\"/Applications/Ghostex.app/Contents/Resources/Web/gxserver\"; ",
+        "GXSERVER_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/gxserver\"; ",
+        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\"; fi; ",
+        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$HOME/.local/bin/gxserver\" ]; then GXSERVER_BIN=\"$HOME/.local/bin/gxserver\"; fi; ",
+        "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_APP_ROOT/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_APP_ROOT/bin/gxserver\"; fi; ",
+        "GHOSTEX_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/ghostex\"; ",
+        "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
+        "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
+        "if [ ! -x \"$GXSERVER_BIN\" ] && [ ! -x \"$GHOSTEX_BIN\" ]; then exit 3; fi; ",
+        "GHOSTEX_REMOTE_RESOLVED_BIN=\"$GXSERVER_BIN\"; ",
+        "if [ ! -x \"$GHOSTEX_REMOTE_RESOLVED_BIN\" ]; then GHOSTEX_REMOTE_RESOLVED_BIN=\"$GHOSTEX_BIN\"; fi; ",
+        "GHOSTEX_REMOTE_BIN_LINK=\"$(readlink \"$GHOSTEX_REMOTE_RESOLVED_BIN\" 2>/dev/null || true)\"; ",
+        "case \"$GHOSTEX_REMOTE_BIN_LINK\" in /*) GHOSTEX_REMOTE_RESOLVED_BIN=\"$GHOSTEX_REMOTE_BIN_LINK\";; ?*) GHOSTEX_REMOTE_RESOLVED_BIN=\"$(dirname \"$GHOSTEX_REMOTE_RESOLVED_BIN\")/$GHOSTEX_REMOTE_BIN_LINK\";; esac; ",
+        "GHOSTEX_REMOTE_IDENTITY_FILE=\"$(dirname \"$(dirname \"$GHOSTEX_REMOTE_RESOLVED_BIN\")\")/build-identity.json\"; ",
+        "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ] && [ -r \"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\" ]; then GHOSTEX_REMOTE_IDENTITY_FILE=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\"; fi; ",
+        "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ] && [ -r \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\" ]; then GHOSTEX_REMOTE_IDENTITY_FILE=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\"; fi; ",
+        "printf '__GHOSTEX_REMOTE_GXSERVER_VERSION_START__\\n'; ",
+        "if [ -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then cat \"$GHOSTEX_REMOTE_IDENTITY_FILE\"; elif [ -x \"$GXSERVER_BIN\" ]; then \"$GXSERVER_BIN\" --version 2>/dev/null || true; fi; ",
+        "printf '\\n__GHOSTEX_REMOTE_GXSERVER_VERSION_END__\\n'"
+    )
+}
+
+fn gpui_extract_remote_installed_gxserver_version(stdout: &str) -> Option<String> {
+    let start = stdout.find(GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_START_MARKER)?
+        + GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_START_MARKER.len();
+    let payload = &stdout[start..];
+    let end = payload.find(GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_END_MARKER)?;
+    let payload = payload[..end].trim();
+    if payload.is_empty() {
+        return None;
+    }
+    if let Ok(identity) = serde_json::from_str::<serde_json::Value>(payload) {
+        /*
+        Ghostex-managed packages ship build-identity.json, where the version is
+        either its own field or the middle segment of `gxserver:<version>:<fingerprint>`.
+        */
+        if let Some(version) = identity
+            .get("packageVersion")
+            .and_then(serde_json::Value::as_str)
+            .and_then(gpui_sanitized_remote_gxserver_version)
+        {
+            return Some(version);
+        }
+        return identity
+            .get("buildIdentity")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|identity| identity.split(':').nth(1))
+            .and_then(gpui_sanitized_remote_gxserver_version);
+    }
+    gpui_sanitized_remote_gxserver_version(payload.lines().next().unwrap_or_default())
+}
+
+fn gpui_sanitized_remote_gxserver_version(raw: &str) -> Option<String> {
+    let version = raw
+        .trim()
+        .strip_prefix("gxserver")
+        .unwrap_or(raw)
+        .trim()
+        .to_string();
+    if version.is_empty() || version.len() > GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_MAX_LENGTH {
+        return None;
+    }
+    version
+        .chars()
+        .all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | '+')
+        })
+        .then_some(version)
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct GpuiRemoteGxserverInstallProbe {
+    installed: bool,
+    version: Option<String>,
+}
+
+#[cfg(not(target_os = "macos"))]
+fn gpui_probe_remote_gxserver_install(
+    _config: GpuiRemoteMachineConfig,
+) -> GpuiRemoteGxserverInstallProbe {
+    GpuiRemoteGxserverInstallProbe::default()
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_probe_remote_gxserver_install(
+    config: GpuiRemoteMachineConfig,
+) -> GpuiRemoteGxserverInstallProbe {
+    /*
+    CDXC:RemoteMachines 2026-08-19:
+    The Remote settings action must say Install for a machine with no gxserver
+    and Update for one that already has it. Read that state over the saved SSH
+    configuration only.
+
+    The probe's own exit code decides which login environment answered: the
+    marked payload and the "nothing installed" code can only come from a shell
+    that actually ran the script, so any other outcome means this endpoint is
+    not a POSIX host. Native Windows OpenSSH is exactly that case and keeps
+    gxserver inside WSL2, so the same script is re-run in the saved (or
+    default) distribution instead of reporting the machine as missing gxserver.
+    */
+    if config.ssh_host.trim().is_empty() {
+        return GpuiRemoteGxserverInstallProbe::default();
+    }
+    let posix_result = gpui_run_remote_ssh(
+        &config,
+        gpui_remote_installed_gxserver_version_command(),
+        GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
+    );
+    gpui_log_remote_gxserver_install_probe(&config, "posix", &posix_result);
+    if let Some(probe) = gpui_remote_gxserver_install_probe_from_result(&posix_result) {
+        return probe;
+    }
+    if !posix_result.stderr.trim().is_empty()
+        && gpui_remote_process_failure_is_ssh_transport(&posix_result)
+    {
+        /*
+        SSH itself reported why it could not reach the machine, so there is no
+        second login environment to try. A bare non-zero exit with no SSH
+        diagnosis is what a native Windows shell produces for POSIX script
+        text, and that case must still reach the WSL attempt below.
+        */
+        return GpuiRemoteGxserverInstallProbe::default();
+    }
+    /*
+    A WSL2 distribution that no command has entered yet has to boot before it
+    can answer, so give this attempt the longer connect budget instead of the
+    short probe budget used for an already-running POSIX login shell.
+    */
+    let wsl_result = gpui_run_remote_ssh_in_windows_wsl(
+        &config,
+        config.wsl_distribution.as_deref(),
+        gpui_remote_installed_gxserver_version_command(),
+        GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
+    );
+    gpui_log_remote_gxserver_install_probe(&config, "windowsWsl", &wsl_result);
+    gpui_remote_gxserver_install_probe_from_result(&wsl_result).unwrap_or_default()
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_remote_gxserver_install_probe_from_result(
+    result: &GpuiRemoteProcessResult,
+) -> Option<GpuiRemoteGxserverInstallProbe> {
+    if result
+        .stdout
+        .contains(GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_START_MARKER)
+    {
+        return Some(GpuiRemoteGxserverInstallProbe {
+            installed: true,
+            version: gpui_extract_remote_installed_gxserver_version(result.stdout.as_str()),
+        });
+    }
+    (result.exit_code == GPUI_REMOTE_GXSERVER_NOT_INSTALLED_EXIT_CODE)
+        .then(GpuiRemoteGxserverInstallProbe::default)
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_log_remote_gxserver_install_probe(
+    config: &GpuiRemoteMachineConfig,
+    phase: &str,
+    result: &GpuiRemoteProcessResult,
+) {
+    // Bounded machine id, phase, and process outcome only: no hosts, users,
+    // ports, paths, tokens, or process output.
+    support_logs::append(
+        support_logs::GpuiSupportLog::RemoteGxserverInstall,
+        "gpui.remoteGxserver.installStateProbe",
+        serde_json::json!({
+            "exitCode": result.exit_code,
+            "machineId": config.remote_machine_id,
+            "markedOutput": result
+                .stdout
+                .contains(GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_START_MARKER),
+            "phase": phase,
+            "stderrCategory": gpui_remote_process_stderr_category(result),
+            "stderrPresent": !result.stderr.trim().is_empty(),
+        }),
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -95619,6 +96187,12 @@ fn gpui_sidebar_command_pane_sessions_script(sessions: &serde_json::Value) -> St
 fn gpui_sidebar_agents_delayed_sends_script(sessions: &serde_json::Value) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.workspaceSessionDelayedSends={sessions};if(typeof bridge.onWorkspaceSessionDelayedSendsChanged==='function'){{bridge.onWorkspaceSessionDelayedSendsChanged(bridge.workspaceSessionDelayedSends);}}}})(); undefined;"
+    )
+}
+
+fn gpui_sidebar_displayed_sessions_script(session_ids_json: &str) -> String {
+    format!(
+        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.displayedWorkspaceSessionIds={session_ids_json};if(typeof bridge.onDisplayedWorkspaceSessionIdsChanged==='function'){{bridge.onDisplayedWorkspaceSessionIdsChanged(bridge.displayedWorkspaceSessionIds);}}}})(); undefined;"
     )
 }
 
@@ -100726,8 +101300,9 @@ fn gpui_cua_driver_permission_status_from_output(
     output: &str,
     command_success: bool,
 ) -> GpuiCuaDriverPermissionStatus {
-    let accessibility_granted = gpui_parse_cua_permission(output, "Accessibility");
-    let screen_recording_granted = gpui_parse_cua_permission(output, "Screen Recording");
+    let payload = gpui_parse_cua_permission_payload(output);
+    let accessibility_granted = gpui_parse_cua_permission(payload.as_ref(), "accessibility");
+    let screen_recording_granted = gpui_parse_cua_permission(payload.as_ref(), "screen_recording");
     GpuiCuaDriverPermissionStatus {
         accessibility_granted,
         detail: gpui_cua_driver_permission_detail(
@@ -100739,31 +101314,27 @@ fn gpui_cua_driver_permission_status_from_output(
     }
 }
 
-fn gpui_parse_cua_permission(output: &str, label: &str) -> Option<bool> {
-    let label_lower = label.to_ascii_lowercase();
-    for line in output.lines() {
-        let line_lower = line.to_ascii_lowercase();
-        let Some(label_index) = line_lower.find(&label_lower) else {
-            continue;
-        };
-        let after_label = line.get(label_index + label.len()..)?.trim_start();
-        let Some(value) = after_label.strip_prefix(':') else {
-            continue;
-        };
-        let value = value
-            .split('.')
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_ascii_lowercase();
-        if value.contains("granted") && !value.contains("not granted") {
-            return Some(true);
-        }
-        if value.contains("not granted") || value.contains("denied") || value.contains("missing") {
-            return Some(false);
-        }
+/*
+CDXC:GPUIDesktopControlSettings 2026-08-20-11:05:
+`cua-driver check_permissions` answers with a JSON object whose `accessibility`
+and `screen_recording` members are booleans, so read those members instead of
+scanning for prose lines that the CLI never prints.
+*/
+fn gpui_parse_cua_permission_payload(output: &str) -> Option<serde_json::Value> {
+    let trimmed = output.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        return Some(value);
     }
-    None
+    let start = trimmed.find('{')?;
+    let end = trimmed.rfind('}')?;
+    if end < start {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(&trimmed[start..=end]).ok()
+}
+
+fn gpui_parse_cua_permission(payload: Option<&serde_json::Value>, key: &str) -> Option<bool> {
+    payload?.get(key)?.as_bool()
 }
 
 fn gpui_cua_driver_permission_detail(
@@ -116097,6 +116668,12 @@ fn gpui_worktree_modal_command_script(message: &serde_json::Value) -> String {
 fn gpui_git_commit_modal_command_script(message: &serde_json::Value) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onGitCommitModalCommand==='function'){{bridge.onGitCommitModalCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingGitCommitModalCommands)?bridge.pendingGitCommitModalCommands:[];pending.push(payload);bridge.pendingGitCommitModalCommands=pending;}}}})(); undefined;"
+    )
+}
+
+fn gpui_export_transcript_modal_command_script(message: &serde_json::Value) -> String {
+    format!(
+        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onExportTranscriptModalCommand==='function'){{bridge.onExportTranscriptModalCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingExportTranscriptModalCommands)?bridge.pendingExportTranscriptModalCommands:[];pending.push(payload);bridge.pendingExportTranscriptModalCommands=pending;}}}})(); undefined;"
     )
 }
 

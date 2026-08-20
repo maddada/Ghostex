@@ -183,6 +183,7 @@ export type GxserverEndpointPath =
   | "/api/answerSessionChatPrompt"
   | "/api/interruptSessionChat"
   | "/api/handoffSessionChatDraft"
+  | "/api/exportSessionTranscript"
   | "/api/sendSessionText"
   | "/api/sendSessionMessage"
   | "/api/sendSessionEnter"
@@ -1815,6 +1816,39 @@ export interface GxserverForkSessionResult {
   provider?: GxserverStartSessionProviderResult;
   session: GxserverSessionDomainState;
   sourceSession: GxserverSessionDomainState;
+}
+
+/*
+CDXC:ExportTranscript 2026-08-20:
+exportSessionTranscript renders the session's agent transcript into a markdown
+file so a NEW agent conversation can be started with that file mentioned. The
+transcript only exists on the machine that runs the agent, so clients call this
+over their per-machine RPC and the returned path is absolute ON THAT MACHINE —
+a remote session's export never lands on the client's disk. The daemon owns the
+destination (`<app data dir>/exports`); the caller cannot name a path.
+
+Failures are structured errors, not a degraded export: `unsupportedAgent` (the
+session's agent has no transcript format Ghostex parses), `invalidParams` (the
+session has not reported an agent session id yet), `transcriptNotFound`,
+`transcriptUnreadable` and `transcriptEmpty`.
+*/
+export interface GxserverExportSessionTranscriptParams {
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+}
+
+export interface GxserverExportSessionTranscriptResult {
+  /** Absolute path of the written markdown file, on the daemon's machine. */
+  path: string;
+  bytes: number;
+  /** The transcript the export was parsed from, on the daemon's machine. */
+  sourcePath: string;
+  /** Records the export actually rendered, after the section selection. */
+  renderedEntries: number;
+  /** Records parsed out of the transcript, whether rendered or not. */
+  parsedEntries: number;
+  /** The session's agent (`claude`, `codex`, `grok`, `pi`, …). */
+  agent?: string;
 }
 
 export interface GxserverUpdateSessionOrderParams {

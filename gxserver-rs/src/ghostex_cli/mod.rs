@@ -223,6 +223,7 @@ fn is_known_command(name: &str) -> bool {
         "answer-session-chat-prompt",
         "interrupt-session-chat",
         "handoff-session-chat-draft",
+        "export-transcript",
         "wait-for-text",
         "rename-command",
         "set-visible-count",
@@ -507,6 +508,18 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "handoff-session-chat-draft" => run_bridge_action(
             "handoffSessionChatDraft",
+            Parser::SessionSelector,
+            fail_on_not_ok,
+            args,
+        ),
+        /*
+        CDXC:ExportTranscript 2026-08-20:
+        The transcript lives on the machine the agent runs on, so the CLI only
+        ships the selector and prints the daemon's absolute export path; mobile
+        and external orchestrators reuse this verb over SSH.
+        */
+        "export-transcript" => run_bridge_action(
+            "exportSessionTranscript",
             Parser::SessionSelector,
             fail_on_not_ok,
             args,

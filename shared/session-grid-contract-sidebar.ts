@@ -1608,6 +1608,18 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
+       * CDXC:ExportTranscript 2026-08-20:
+       * The Export Transcript result dialog's two host side effects. Neither
+       * carries the exported path: the host already holds it from the dialog's
+       * own open message, so a modal page can only ever ask it to act on the
+       * export it is currently describing. `agentId` picks which configured
+       * agent the seeded follow-up conversation runs.
+       */
+      agentId?: string;
+      type: "revealExportedTranscript" | "startExportedTranscriptConversation";
+    }
+  | {
+      /**
        * CDXC:SessionAttentionNotifications 2026-05-11-01:14
        * Settings' test button should exercise the same native attention
        * completion flow as a real agent task without mutating any session.
@@ -1906,6 +1918,19 @@ export type SidebarToExtensionMessage =
       installApproved?: boolean;
       remoteMachineId: string;
       type: "reconnectRemoteMachine";
+    }
+  | {
+      /**
+       * CDXC:RemoteMachines 2026-08-19:
+       * The Remote settings install action reads as Install for a machine that
+       * has no gxserver yet and as Update for one that already runs it, so
+       * React asks native whether the saved machine already has a gxserver
+       * package and which version it is. The request carries only the bounded
+       * machine id; native owns the SSH probe and answers with a
+       * `remoteGxserverInstallState` host message.
+       */
+      remoteMachineId: string;
+      type: "probeRemoteGxserverInstall";
     }
   | {
       /**

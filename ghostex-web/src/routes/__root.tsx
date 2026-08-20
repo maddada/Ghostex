@@ -18,6 +18,7 @@ import {
 } from "../sidebar-runtime/active-project-store";
 import { AddProjectModalHost } from "../app/add-project-modal-host";
 import { DelayedActionsModalHost } from "../app/delayed-actions-modal-host";
+import { ExportTranscriptModalHost } from "../app/export-transcript-modal-host";
 import { RecentProjectsModalHost } from "../app/recent-projects-modal-host";
 import { SettingsModalHost } from "../app/settings-modal-host";
 import { TitlebarActions } from "../app/titlebar-actions";
@@ -218,6 +219,7 @@ function GhostexWebShell() {
         <RecentProjectsModalHost runtime={runtime} />
         <AddProjectModalHost />
         <DelayedActionsModalHost />
+        <ExportTranscriptModalHost />
         <SettingsModalHost runtime={runtime} />
       </div>
     </TooltipProvider>

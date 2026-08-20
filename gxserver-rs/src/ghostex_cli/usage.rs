@@ -127,8 +127,8 @@ pub fn usage() -> String {
             "Create a Quick chat workspace with its first terminal session",
         ),
         format_help_command(
-            "create-agent <agentId> --project-id id [--group-id id]",
-            "Create and start a configured agent session",
+            "create-agent <agentId> --project-id id [--group-id id] [--first-input-draft text]",
+            "Create and start a configured agent session; --first-input-draft stages text in its input without sending",
         ),
         format_help_command(
             "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
@@ -252,6 +252,7 @@ pub fn usage() -> String {
         format_help_command("answer-session-chat-prompt <selector> --answer-json '<json>'", "Answer a pending question/approval prompt"),
         format_help_command("interrupt-session-chat <selector>", "Interrupt the session's running agent turn"),
         format_help_command("handoff-session-chat-draft <selector>", "Move the agent CLI's composer draft out of the terminal and print it"),
+        format_help_command("export-transcript <selector> [--project-id id] [--json]", "Export the session's agent transcript to a markdown file and print its path"),
         format_help_command("wait-for-text <selector> <regex> [--timeout-seconds n] [--interval-seconds n] [--lines n] [--json]", "Poll a session until a scrollback line matches the regex; exits 1 on timeout or dead session"),
         format_help_command("rename-session <sessionId> <title> [--json]", "Rename a session"),
         format_help_command("rename-session --session-id <id> --title <title> [--json]", "Flag form used by Android SSH actions"),

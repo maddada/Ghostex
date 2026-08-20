@@ -1,4 +1,7 @@
-import type { GxserverSidebarHudCommandButton } from "@/shared/gxserver-protocol";
+import type {
+  GxserverExportSessionTranscriptResult,
+  GxserverSidebarHudCommandButton,
+} from "@/shared/gxserver-protocol";
 import type { OpenAppModalMessage } from "@/sidebar/app-modal-host-bridge";
 
 export type OpenRecentProjectsModalDetail = Pick<
@@ -24,6 +27,32 @@ export interface OpenAddProjectModalDetail {
   machineId?: string;
 }
 
+/*
+ * CDXC:ExportTranscript 2026-08-20:
+ * The Export Transcript action runs from two mounts of the same host-action
+ * cluster (the chat surface and the terminal surface's floating overlay), so
+ * its result dialog cannot live inside either one. The action reports every
+ * phase on one window event and the single modal host mounted in the app shell
+ * renders it — the same split the other web modal hosts use.
+ *
+ * `path` in the result is absolute ON THE DAEMON'S MACHINE, never the
+ * browser's, which is why the dialog offers Copy path instead of a reveal.
+ */
+export interface ExportTranscriptSessionRef {
+  machineId: string;
+  projectId: string;
+  sessionId: string;
+  sessionTitle: string;
+  /** gxserver agent id, used to seed the follow-up conversation. */
+  agentId?: string;
+}
+
+export type ExportTranscriptStatusDetail = ExportTranscriptSessionRef & (
+  | { status: "exporting" }
+  | { status: "exported"; result: GxserverExportSessionTranscriptResult }
+  | { status: "failed"; message: string }
+);
+
 export interface RunTitlebarActionDetail {
   action: GxserverSidebarHudCommandButton;
   machineId: string;
@@ -33,6 +62,7 @@ export interface RunTitlebarActionDetail {
 declare global {
   interface WindowEventMap {
     "ghostex-web:closeAppModal": CustomEvent;
+    "ghostex-web:exportTranscriptStatus": CustomEvent<ExportTranscriptStatusDetail>;
     "ghostex-web:openSettingsModal": CustomEvent;
     "ghostex-web:openAddProjectModal": CustomEvent<OpenAddProjectModalDetail>;
     "ghostex-web:openCommandPane": CustomEvent;

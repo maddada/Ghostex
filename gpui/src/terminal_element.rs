@@ -243,6 +243,7 @@ const TERMINAL_FULL_RELOAD_ICON: &str = "titlebar/refresh.svg";
 const TERMINAL_STASHED_PROMPTS_ICON: &str = "titlebar/stack.svg";
 const TERMINAL_STASH_PROMPT_ICON: &str = "titlebar/stack-push.svg";
 const TERMINAL_CHAT_VIEW_ICON: &str = "titlebar/message-circle.svg";
+const TERMINAL_EXPORT_TRANSCRIPT_ICON: &str = "titlebar/file-export.svg";
 // #101010 blended 15% toward white.
 const TERMINAL_SCROLL_BUTTON_HOVER_BACKGROUND_RGB: u32 = 0x343434;
 
@@ -441,6 +442,7 @@ pub enum TerminalAgentActionRequest {
     DelayedActions,
     Fork,
     FullReload,
+    ExportTranscript,
     StashPrompt,
     StashedPrompts,
     ToggleChatView,
@@ -2357,6 +2359,7 @@ impl Render for TerminalView {
                     TerminalAgentAction::AttachPath,
                     TerminalAgentAction::StashPrompt,
                     TerminalAgentAction::PromptEditor,
+                    TerminalAgentAction::ExportTranscript,
                     TerminalAgentAction::FullReload,
                     TerminalAgentAction::Fork,
                     TerminalAgentAction::DelayedActions,
@@ -2396,6 +2399,7 @@ enum TerminalAgentAction {
     DelayedActions,
     Fork,
     FullReload,
+    ExportTranscript,
     PromptEditor,
     StashPrompt,
     StashedPrompts,
@@ -2427,6 +2431,11 @@ fn terminal_agent_action_button(
             "ghostex-terminal-full-reload",
             "Full Reload",
             "reloadSession",
+        ),
+        TerminalAgentAction::ExportTranscript => (
+            "ghostex-terminal-export-transcript",
+            "Export Transcript",
+            "exportTranscript",
         ),
         TerminalAgentAction::PromptEditor => (
             "ghostex-terminal-prompt-editor",
@@ -2484,6 +2493,7 @@ fn terminal_agent_action_button(
                     | TerminalAgentAction::DelayedActions
                     | TerminalAgentAction::Fork
                     | TerminalAgentAction::FullReload
+                    | TerminalAgentAction::ExportTranscript
                     | TerminalAgentAction::StashPrompt
                     | TerminalAgentAction::StashedPrompts => {
                         view.agent_actions_expanded = false;
@@ -2499,6 +2509,9 @@ fn terminal_agent_action_button(
                             TerminalAgentAction::Fork => TerminalAgentActionRequest::Fork,
                             TerminalAgentAction::FullReload => {
                                 TerminalAgentActionRequest::FullReload
+                            }
+                            TerminalAgentAction::ExportTranscript => {
+                                TerminalAgentActionRequest::ExportTranscript
                             }
                             TerminalAgentAction::StashPrompt => {
                                 TerminalAgentActionRequest::StashPrompt
@@ -2547,6 +2560,9 @@ fn terminal_agent_action_icon(action: TerminalAgentAction) -> AnyElement {
         }
         TerminalAgentAction::Fork => terminal_agent_action_svg(TERMINAL_FORK_ICON),
         TerminalAgentAction::FullReload => terminal_agent_action_svg(TERMINAL_FULL_RELOAD_ICON),
+        TerminalAgentAction::ExportTranscript => {
+            terminal_agent_action_svg(TERMINAL_EXPORT_TRANSCRIPT_ICON)
+        }
         TerminalAgentAction::StashPrompt => terminal_agent_action_svg(TERMINAL_STASH_PROMPT_ICON),
         TerminalAgentAction::StashedPrompts => {
             terminal_agent_action_svg(TERMINAL_STASHED_PROMPTS_ICON)
@@ -2702,6 +2718,7 @@ fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         "promptEditor" => "ctrl+g",
         "toggleChatView" => "alt+g",
         "attachFileOrFolder"
+        | "exportTranscript"
         | "stashPrompt"
         | "stashedPrompts"
         | "toggleAgentActions"

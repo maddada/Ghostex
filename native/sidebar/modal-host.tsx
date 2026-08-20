@@ -37,6 +37,7 @@ import {
   type MainSettingsInitialSectionId,
   type SettingsModalTab,
 } from "../../sidebar/settings-modal";
+import { ExportTranscriptResultModal } from "../../sidebar/export-transcript-result-modal";
 import { SessionRenameModal } from "../../sidebar/session-rename-modal";
 import { WatchGhostexVideoModal } from "../../sidebar/watch-ghostex-video-modal";
 import {
@@ -91,6 +92,7 @@ import { useSidebarStore } from "../../sidebar/sidebar-store";
 import {
   DEFAULT_ghostex_SETTINGS,
   isDiagnosticLoggingScenarioEnabled,
+  SETTINGS_MODAL_NAVIGATION_TABS,
   type DiagnosticLoggingScenarioId,
 } from "../../shared/ghostex-settings";
 import type { WebviewApi } from "../../sidebar/webview-api";
@@ -107,6 +109,7 @@ type AppModalKind =
   | "daemonSessions"
   | "delayedSend"
   | "discoverGhostex"
+  | "exportTranscriptResult"
   | "watchGhostexVideo"
   | "hotkeys"
   | "missingProjectFolder"
@@ -154,6 +157,7 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
   agentConfig: ".agent-config-modal-shadcn",
   delayedSend: ".delayed-send-modal-shadcn",
   deleteWorktree: ".worktree-delete-modal-shadcn",
+  exportTranscriptResult: ".export-transcript-result-modal-shadcn",
   firstUserMessage: ".first-user-message-modal",
   missingProjectFolder: ".missing-project-folder-modal",
   portlessSetup: ".portless-setup-modal-shadcn",
@@ -219,6 +223,10 @@ type AppModalHostMessage =
   | {
       agentDraft?: AgentConfigDraft;
       agentIcon?: SidebarAgentIcon;
+      agentId?: string;
+      /** CDXC:ExportTranscript 2026-08-20: see ExportTranscriptResultModalState. */
+      canReveal?: boolean;
+      path?: string;
       closeAfterDoneActive?: boolean;
       delayedSendDeadlineAt?: string;
       delayedSendRemainingLabel?: string;
@@ -322,6 +330,19 @@ type AppModalHostMessage =
   | { paths: string[]; type: "worktreeImageFilesPicked" }
   | { path: string; type: "terminalBackgroundImageFilePicked" }
   | {
+      /*
+       * CDXC:RemoteMachines 2026-08-19:
+       * Native's answer to `probeRemoteGxserverInstall`: whether the saved
+       * remote machine already has a gxserver package and, when native could
+       * read it, that package's version. Settings uses it to label the action
+       * Install or Update and to show the installed version beside it.
+       */
+      installed: boolean;
+      remoteMachineId: string;
+      type: "remoteGxserverInstallState";
+      version?: string;
+    }
+  | {
       branches?: unknown;
       error?: string;
       ok: boolean;
@@ -382,6 +403,18 @@ type RecentProjectsModalState = {
 type StashedPromptsModalState = {
   projectId?: string;
   sessionId?: string;
+};
+
+/*
+ * CDXC:ExportTranscript 2026-08-20:
+ * The Export Transcript result dialog. `path` is absolute on the machine that
+ * owns the transcript, so `canReveal` is false for a remote session's export:
+ * the host running this dialog has no such file.
+ */
+type ExportTranscriptResultModalState = {
+  agentId?: string;
+  canReveal: boolean;
+  path: string;
 };
 
 type RemoteGxserverInstallState = {
@@ -619,19 +652,17 @@ function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTa
   return "settings";
 }
 
+/**
+ * CDXC:SettingsNavigation 2026-08-19-00:00:
+ * Settings deep links carry a tab id over the app-modal host message. Validate
+ * it against the single canonical tab list instead of a hand-maintained copy,
+ * which silently dropped newer pages such as Customize (`plugins`) and made
+ * their entry points open the remembered tab instead.
+ */
+const SETTINGS_MODAL_TAB_SET = new Set<string>(SETTINGS_MODAL_NAVIGATION_TABS);
+
 function isSettingsModalTab(value: unknown): value is SettingsModalTab {
-  return (
-    value === "settings" ||
-    value === "ghostty" ||
-    value === "integrations" ||
-    value === "osIntegration" ||
-    value === "remote" ||
-    value === "projects" ||
-    value === "agents" ||
-    value === "actions" ||
-    value === "openTargets" ||
-    value === "hotkeys"
-  );
+  return typeof value === "string" && SETTINGS_MODAL_TAB_SET.has(value);
 }
 
 function readPromptAgentModalOverride(modal: PromptAgentModalKey): string | undefined {
@@ -976,6 +1007,7 @@ function AppModalHost() {
     remoteProjectPicker,
     renameSession,
     stashedPrompts,
+    exportTranscriptResult,
     updateAvailable,
     worktree,
     agentHookStatus,
@@ -1084,6 +1116,7 @@ function AppModalHost() {
     recentProjects,
     renameSession,
     stashedPrompts,
+    exportTranscriptResult,
     updateAvailable,
     settings,
     worktree,
@@ -2168,9 +2201,9 @@ function AppModalHost() {
           setAgentHookStatusLoading(true);
           vscode.postMessage({ type: "installAgentHooks" });
         }}
-        onUninstallAgentHooks={() => {
+        onUninstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ type: "uninstallAgentHooks" });
+          vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });
         }}
         onUninstallBundledAgentSkill={(skillId) => {
           setGhostexCliStatusLoading(true);
@@ -2322,6 +2355,32 @@ function AppModalHost() {
         onPromptAgentIdChange={updateRenamePromptAgentId}
         promptAgentId={resolvedRenamePromptAgentId}
       />
+      {/*
+      CDXC:ExportTranscript 2026-08-20:
+      Copy Path is settled inside the dialog; Reveal and Start New Conversation
+      are host side effects, so they leave through the same sidebarCommand
+      boundary every other modal action uses. Neither carries the exported path
+      back out — the host still holds it from this dialog's own open message.
+      */}
+      <ExportTranscriptResultModal
+        agents={agents}
+        defaultAgentId={exportTranscriptResult?.agentId}
+        isOpen={activeModal === "exportTranscriptResult" && exportTranscriptResult !== undefined}
+        onClose={closeModal}
+        onRevealInFinder={
+          exportTranscriptResult?.canReveal
+            ? () => {
+                vscode.postMessage({ type: "revealExportedTranscript" });
+                closeModal();
+              }
+            : undefined
+        }
+        onStartNewConversation={(agentId) => {
+          vscode.postMessage({ agentId, type: "startExportedTranscriptConversation" });
+          closeModal();
+        }}
+        path={exportTranscriptResult?.path ?? ""}
+      />
       <AddRepositoryModal
         isOpen={activeModal === "addRepository"}
         remoteMachineId={addRepository.remoteMachineId}
@@ -2459,6 +2518,8 @@ function useModalStateFromNative() {
   const [recentProjects, setRecentProjects] = useState<RecentProjectsModalState>();
   const [renameSession, setRenameSession] = useState<RenameSessionModalState>();
   const [stashedPrompts, setStashedPrompts] = useState<StashedPromptsModalState>();
+  const [exportTranscriptResult, setExportTranscriptResult] =
+    useState<ExportTranscriptResultModalState>();
   const [worktree, setWorktree] = useState<WorktreeModalState>();
   const [portlessSetup, setPortlessSetup] = useState<PortlessSetupModalState>();
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
@@ -2501,6 +2562,7 @@ function useModalStateFromNative() {
     setRecentProjects(undefined);
     setRenameSession(undefined);
     setStashedPrompts(undefined);
+    setExportTranscriptResult(undefined);
     setWorktree(undefined);
     setPortlessSetup(undefined);
     setUpdateAvailable(undefined);
@@ -2660,6 +2722,20 @@ function useModalStateFromNative() {
                     typeof message.sessionId === "string" && message.sessionId.trim()
                       ? message.sessionId
                       : undefined,
+                }
+              : undefined,
+          );
+          setExportTranscriptResult(
+            message.modal === "exportTranscriptResult" &&
+              typeof message.path === "string" &&
+              message.path.trim()
+              ? {
+                  agentId:
+                    typeof message.agentId === "string" && message.agentId.trim()
+                      ? message.agentId
+                      : undefined,
+                  canReveal: message.canReveal === true,
+                  path: message.path,
                 }
               : undefined,
           );
@@ -3228,6 +3304,7 @@ function useModalStateFromNative() {
     remoteProjectPicker,
     renameSession,
     stashedPrompts,
+    exportTranscriptResult,
     updateAvailable,
     remoteGxserverInstall,
     worktree,
@@ -3391,6 +3468,7 @@ function isModalRenderable({
   remoteGxserverInstall,
   renameSession,
   stashedPrompts,
+  exportTranscriptResult,
   updateAvailable,
   settings,
   worktree,
@@ -3411,6 +3489,7 @@ function isModalRenderable({
   remoteGxserverInstall: RemoteGxserverInstallState | undefined;
   renameSession: RenameSessionModalState | undefined;
   stashedPrompts: StashedPromptsModalState | undefined;
+  exportTranscriptResult: ExportTranscriptResultModalState | undefined;
   updateAvailable: UpdateAvailableModalState | undefined;
   settings: unknown;
   worktree: WorktreeModalState | undefined;
@@ -3452,6 +3531,8 @@ function isModalRenderable({
       return renameSession !== undefined;
     case "stashedPrompts":
       return stashedPrompts !== undefined;
+    case "exportTranscriptResult":
+      return exportTranscriptResult !== undefined;
     case "updateAvailable":
       return updateAvailable !== undefined;
     case "settings":

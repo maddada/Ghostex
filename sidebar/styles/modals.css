@@ -3147,6 +3147,39 @@ html:has(body.app-modal-host-native-window-body) {
   gap: 16px;
 }
 
+/*
+ * CDXC:ExportTranscript 2026-08-20:
+ * The Export Transcript result dialog shares the compact Rename Session frame:
+ * a read-only path, one select, and an action row. The path is the one piece of
+ * content that can be arbitrarily long, so it wraps at path separators instead
+ * of widening the dialog or scrolling sideways.
+ */
+.export-transcript-result-modal-shadcn {
+  max-width: min(540px, calc(100vw - 2rem));
+  padding-bottom: 8px;
+  padding-left: 9px;
+  padding-right: 9px;
+  padding-top: 8px;
+}
+
+.export-transcript-result-modal-shadcn .export-transcript-result-field-group {
+  gap: 16px;
+}
+
+.export-transcript-result-path {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .session-rename-modal-shadcn [data-slot="dialog-close"] {
   /*
    * CDXC:SidebarRename 2026-06-13-12:45:
@@ -4305,6 +4338,24 @@ html:has(body.app-modal-host-native-window-body) {
   while reusing the existing right-aligned settings action row.
   */
   margin-top: 8px;
+  align-items: center;
+}
+
+.settings-remote-machine-installed-version {
+  /*
+  CDXC:RemoteMachines 2026-08-19:
+  The installed gxserver version sits on the opposite edge of the same action
+  row as Update, so it stays left-aligned and vertically centered against the
+  button while the action itself keeps the shared right-aligned placement.
+  */
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .settings-project-command-textarea {
