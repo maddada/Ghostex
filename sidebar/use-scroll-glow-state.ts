@@ -83,11 +83,51 @@ export function useScrollGlowState(
     const resizeObserver = new ResizeObserver(() => {
       scheduleScrollGlowUpdate();
     });
+
+    /*
+     * CDXC:SidebarScroll 2026-08-20:
+     * The overflow measurement depends on the scroller's *content* height, but
+     * the scroller's own box is `height: 100%` and never resizes when content
+     * grows, so observing only `element` measured the wrong box. That was
+     * survivable while project/collection bodies snapped open, because the DOM
+     * mutation that expanded them and the height change landed in the same
+     * frame the MutationObserver measured. Now that those bodies animate open
+     * over `--sidebar-collapse-duration` (500ms), the attribute mutation fires
+     * first and the single scheduled measurement runs on the first transition
+     * frame, while the body is still ~0px tall: `hasOverflow` latched false,
+     * `data-scrollable-y="false"` put `overflow-y: hidden` on the sidebar, and
+     * no further mutation ever arrived to re-measure, so the sidebar stayed
+     * unscrollable until an unrelated click mutated the subtree again.
+     *
+     * Observing the content children instead makes every frame of the
+     * expand/collapse transition a resize notification, so the measurement
+     * tracks the real content height for the whole animation and settles on
+     * its final value.
+     */
+    const observedContentChildren = new Set<Element>();
+    const syncObservedContentChildren = () => {
+      for (const child of Array.from(element.children)) {
+        if (!observedContentChildren.has(child)) {
+          observedContentChildren.add(child);
+          resizeObserver.observe(child);
+        }
+      }
+
+      for (const child of Array.from(observedContentChildren)) {
+        if (child.parentElement !== element) {
+          observedContentChildren.delete(child);
+          resizeObserver.unobserve(child);
+        }
+      }
+    };
+
     const mutationObserver = new MutationObserver(() => {
+      syncObservedContentChildren();
       scheduleScrollGlowUpdate();
     });
 
     resizeObserver.observe(element);
+    syncObservedContentChildren();
     mutationObserver.observe(element, {
       attributes: true,
       childList: true,
@@ -102,6 +142,7 @@ export function useScrollGlowState(
         window.cancelAnimationFrame(animationFrameId);
       }
 
+      observedContentChildren.clear();
       resizeObserver.disconnect();
       mutationObserver.disconnect();
       window.removeEventListener("resize", scheduleScrollGlowUpdate);
