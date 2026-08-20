@@ -46,6 +46,7 @@ type BundledAgentSkillsPanelProps = {
   onInstallSkill?: BundledAgentSkillInstallHandlers;
   onOpenExternalUrl?: (url: string) => void;
   onRefreshStatus?: () => void;
+  onUninstallAllSkills?: () => void;
   onUninstallSkill?: BundledAgentSkillUninstallHandler;
   showHeader?: boolean;
 };
@@ -103,11 +104,15 @@ export function BundledAgentSkillsPanel({
   onInstallSkill,
   onOpenExternalUrl,
   onRefreshStatus,
+  onUninstallAllSkills,
   onUninstallSkill,
   showHeader = true,
 }: BundledAgentSkillsPanelProps) {
   const cliReady = ghostexCliStatus?.installed === true;
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
+  const anySkillInstalled = BUNDLED_GHOSTEX_AGENT_SKILLS.some((skill) =>
+    isBundledGhostexAgentSkillInstalled(skill.id, ghostexCliStatus),
+  );
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -148,22 +153,51 @@ export function BundledAgentSkillsPanel({
           )}
         </div>
       ))}
-      {onRefreshStatus ? (
-        <div className="flex justify-end">
-          <DisabledSettingControlTooltip
-            disabled={ghostexCliStatusLoading}
-            reason="Skill status is being checked."
-          >
-            <Button
-              disabled={ghostexCliStatusLoading}
-              onClick={onRefreshStatus}
-              type="button"
-              variant="ghost"
+      {onRefreshStatus || onUninstallAllSkills ? (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {/*
+           * CDXC:AgentSkills 2026-08-19-11:20:
+           * Skill removal lives beside the install controls it undoes: an icon-only
+           * remove on each installed row, plus one Uninstall All for the whole set.
+           * Uninstall All stays disabled when no bundled skill is present so the
+           * footer cannot fire a no-op removal.
+           */}
+          {onUninstallAllSkills ? (
+            <DisabledSettingControlTooltip
+              disabled={ghostexCliStatusLoading || !anySkillInstalled}
+              reason={
+                ghostexCliStatusLoading
+                  ? "Skill status is being checked."
+                  : "No bundled Ghostex skills are installed."
+              }
             >
-              <IconRefresh aria-hidden="true" data-icon="inline-start" />
-              Refresh Skill Status
-            </Button>
-          </DisabledSettingControlTooltip>
+              <Button
+                disabled={ghostexCliStatusLoading || !anySkillInstalled}
+                onClick={onUninstallAllSkills}
+                type="button"
+                variant="outline"
+              >
+                <IconTrash aria-hidden="true" data-icon="inline-start" />
+                Uninstall All
+              </Button>
+            </DisabledSettingControlTooltip>
+          ) : null}
+          {onRefreshStatus ? (
+            <DisabledSettingControlTooltip
+              disabled={ghostexCliStatusLoading}
+              reason="Skill status is being checked."
+            >
+              <Button
+                disabled={ghostexCliStatusLoading}
+                onClick={onRefreshStatus}
+                type="button"
+                variant="ghost"
+              >
+                <IconRefresh aria-hidden="true" data-icon="inline-start" />
+                Refresh Skill Status
+              </Button>
+            </DisabledSettingControlTooltip>
+          ) : null}
         </div>
       ) : null}
     </div>
