@@ -32,6 +32,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DEFAULT_ghostex_SETTINGS,
@@ -104,6 +105,7 @@ import {
   normalizeProjectBoardViewPreferences,
   parseProjectBoardCommentText,
   parseBeadsJson,
+  parseBeadsRejection,
   priorityLabel,
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
@@ -1515,9 +1517,181 @@ function ProjectBoardApp() {
       }
       pendingStatusMovesRef.current.delete(ticketId);
       setLocalTicketStatus(ticketId, ticket.boardStatus, ticket.status);
+      if (reportBeadsRejection(error, ticketId, statusKey)) {
+        return;
+      }
       setErrorMessage(error instanceof Error ? error.message : "Could not move the ticket.");
     }
   };
+
+  /*
+   * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+   * Beads refuses some board operations for domain reasons rather than failing:
+   * a guarded close, an impossible dependency edge, an id that names no issue.
+   * None of those is a board-wide failure, so none belongs in the inline notice
+   * — the board's own background refresh clears that notice within a second, and
+   * its copy tells the operator to reinstall Beads, which can never resolve any
+   * of them. Raise them as persistent board toasts that state what was refused
+   * and, where one exists, carry the actual remedy as an action.
+   */
+  function reportBeadsRejection(error: unknown, ticketId: string, statusKey: BoardStatusKey): boolean {
+    const rejection = parseBeadsRejection(error instanceof Error ? error.message : "");
+    if (!rejection) {
+      return false;
+    }
+    const toastId = beadsRejectionToastId(ticketId);
+    switch (rejection.kind) {
+      case "close-blocked": {
+        const blockerList = formatIssueIdList(rejection.blockerIds);
+        const isSingle = rejection.blockerIds.length === 1;
+        toast.error(`${rejection.issueId} is blocked`, {
+          action: {
+            label: isSingle ? `Move ${rejection.blockerIds[0]} to Done` : "Move blockers to Done",
+            onClick: () => {
+              void closeIssuesThenRetry(rejection.blockerIds, rejection.issueId, ticketId, statusKey);
+            },
+          },
+          description: isSingle
+            ? `Beads will not close it while ${blockerList} is still open. Move ${blockerList} to Done first, or remove the dependency if it no longer applies.`
+            : `Beads will not close it while ${blockerList} are still open. Move them to Done first, or remove the dependencies if they no longer apply.`,
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "close-open-children": {
+        /*
+         * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+         * Beads reports only the open-child COUNT, so resolve the ids from the
+         * board's own graph. Offer the action only when that lookup actually
+         * finds them: a button that closes an unknown set would be guessing.
+         */
+        const childIds = openChildIdsOf(rejection.issueId);
+        const isSingle = rejection.openChildren === 1;
+        toast.error(`${rejection.issueId} has open children`, {
+          ...(childIds.length > 0
+            ? {
+                action: {
+                  label: childIds.length === 1 ? `Move ${childIds[0]} to Done` : "Move children to Done",
+                  onClick: () => {
+                    void closeIssuesThenRetry(childIds, rejection.issueId, ticketId, statusKey);
+                  },
+                },
+              }
+            : {}),
+          description: `Beads will not close it while ${rejection.openChildren} child issue${isSingle ? "" : "s"} ${isSingle ? "is" : "are"} still open${childIds.length > 0 ? `: ${formatIssueIdList(childIds)}` : ""}. Move ${isSingle ? "it" : "them"} to Done first.`,
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "dependency-cycle": {
+        toast.error("That dependency would create a cycle", {
+          description:
+            "The two tickets would end up waiting on each other, so neither could ever close. Remove the opposite dependency first if this is the direction you want.",
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "dependency-hierarchy": {
+        toast.error(`${rejection.issueId} cannot be blocked by ${rejection.blockerId}`, {
+          description:
+            rejection.relation === "ancestor"
+              ? `${rejection.blockerId} is its parent, and a parent cannot close until its children finish, so the block would never clear.`
+              : `${rejection.blockerId} is its child, and a block cascades down to children, so ${rejection.blockerId} would inherit it and never close.`,
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "dependency-self": {
+        toast.error("A ticket cannot depend on itself", {
+          description: rejection.issueId
+            ? `${rejection.issueId} was listed as its own blocker. Remove it from that field and save again.`
+            : "Remove the ticket from its own blocked-by or blocking field and save again.",
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "dependency-type-conflict": {
+        toast.error(`${rejection.issueId} already depends on ${rejection.dependsOnId}`, {
+          description: `That link is a "${rejection.existingType}" dependency, not "${rejection.requestedType}". Remove the existing one before adding it as a blocker: bd dep remove ${rejection.issueId} ${rejection.dependsOnId}`,
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+      case "issue-missing": {
+        toast.error(rejection.issueId ? `${rejection.issueId} no longer exists` : "That ticket no longer exists", {
+          action: {
+            label: "Refresh board",
+            onClick: () => {
+              toast.dismiss(toastId);
+              void loadTickets({ mode: "manual" });
+            },
+          },
+          description: "It was deleted or renamed outside this board. Refresh to pick up the current tickets.",
+          duration: Infinity,
+          id: toastId,
+        });
+        return true;
+      }
+    }
+  }
+
+  async function closeIssuesThenRetry(
+    issueIds: string[],
+    refusedIssueId: string,
+    ticketId: string,
+    statusKey: BoardStatusKey,
+  ) {
+    const toastId = beadsRejectionToastId(ticketId);
+    toast.loading(`Moving ${formatIssueIdList(issueIds)} to Done…`, {
+      duration: Infinity,
+      id: toastId,
+    });
+    for (const issueId of issueIds) {
+      try {
+        await runBeads({ action: "updateStatus", issueId, status: "closed" });
+      } catch (error) {
+        toast.dismiss(toastId);
+        /*
+         * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+         * A blocker or child can be guarded in turn. Re-report that refusal
+         * against the issue that raised it so the operator walks the chain one
+         * toast at a time instead of hitting a dead end.
+         */
+        if (!reportBeadsRejection(error, issueId, "done")) {
+          toast.error(`Could not move ${issueId} to Done`, {
+            description: error instanceof Error ? error.message : "The Beads command failed.",
+            id: beadsRejectionToastId(issueId),
+          });
+        }
+        void loadTickets({ mode: "background" });
+        return;
+      }
+    }
+    toast.success(`Moved ${formatIssueIdList(issueIds)} to Done`, {
+      description: `Retrying the move for ${refusedIssueId}.`,
+      id: toastId,
+    });
+    await loadTickets({ mode: "background" });
+    await moveTicket(ticketId, statusKey);
+  }
+
+  function openChildIdsOf(parentId: string): string[] {
+    return allIssues
+      .filter((issue) =>
+        (issue.dependencies ?? []).some(
+          (dependency) =>
+            dependency.depends_on_id === parentId && dependency.type === "parent-child",
+        ),
+      )
+      .filter((issue) => beadsStatusToBoardStatus(issue.status) !== "done")
+      .map((issue) => issue.id);
+  }
 
   const handleDragEnd: ComponentProps<typeof DragDropProvider>["onDragEnd"] = (event) => {
     if (event.canceled) {
@@ -1635,8 +1809,10 @@ function ProjectBoardApp() {
     setKnownLabels((current) => mergeKnownLabels(current, draft.labels));
     void persistTicketDetail(draft).catch((error) => {
       const message = error instanceof Error ? error.message : "Could not save the ticket.";
-      setErrorMessage(message);
-      showProjectBoardToast("error", "Ticket save failed", message);
+      if (!reportBeadsRejection(error, draft.ticket.id, draft.status)) {
+        setErrorMessage(message);
+        showProjectBoardToast("error", "Ticket save failed", message);
+      }
       if (detailSaveSerialRef.current === saveToken) {
         setDetail({
           ...draft,
@@ -3752,6 +3928,26 @@ function ProjectBoardApp() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/*
+       * CDXC:ProjectBoardBlockedMove 2026-08-20:
+       * The board's own toaster lives in this surface rather than the native
+       * app-modal host because board rejections need an inline action button,
+       * which the native showToast bridge carries no room for. Match the modal
+       * host's dark toast chrome using the board's surface tokens.
+       */}
+      <Toaster
+        closeButton
+        position="bottom-center"
+        richColors
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: "var(--project-board-panel)",
+            border: "1px solid var(--project-board-border-strong)",
+            color: "#f4f4f5",
+          },
+        }}
+      />
     </main>
   );
 }
@@ -5405,6 +5601,17 @@ function parseRemoteMigrateGate(message: string): RemoteMigrateGate | undefined 
   } catch {
     return undefined;
   }
+}
+
+function beadsRejectionToastId(ticketId: string): string {
+  return `project-board-beads-rejection:${ticketId}`;
+}
+
+function formatIssueIdList(issueIds: string[]): string {
+  if (issueIds.length <= 2) {
+    return issueIds.join(" and ");
+  }
+  return `${issueIds.slice(0, -1).join(", ")}, and ${issueIds[issueIds.length - 1]}`;
 }
 
 function currentBeadsMigrationDocsUrl(url: string | undefined): string | undefined {

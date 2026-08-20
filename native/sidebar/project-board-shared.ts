@@ -401,32 +401,185 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function beadsJsonEnvelope(line: string): Record<string, unknown> | undefined {
+  if (!line.startsWith("{")) {
+    return undefined;
+  }
+  try {
+    const payload: unknown = JSON.parse(line);
+    return isRecord(payload) ? payload : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function beadsEnvelopeError(payload: Record<string, unknown>): string {
+  const body = isRecord(payload.data) ? payload.data : payload;
+  const firstFailure = (Array.isArray(body.failed) ? body.failed : []).find(isRecord);
+  if (firstFailure && typeof firstFailure.error === "string" && firstFailure.error) {
+    return firstFailure.error.replace(/^updating issue:\s*/iu, "");
+  }
+  if (typeof body.error === "string" && body.error) {
+    return body.error;
+  }
+  if (typeof payload.error === "string" && payload.error) {
+    return payload.error;
+  }
+  return "";
+}
+
+function beadsReportableLines(trimmed: string): string[] {
+  /*
+   * CDXC:ProjectBoardBeadsEnvelope 2026-08-20:
+   * Beads writes advisory `warning:` lines to the same stderr as the failure
+   * (unconfigured beads.role, auto-import notes, ungated workspace), each
+   * optionally followed by indented "Fix:"/"Or:" continuations. They describe
+   * the environment, not the refusal, so folding them into the message buries
+   * the sentence the operator has to act on.
+   */
+  const lines: string[] = [];
+  let inWarning = false;
+  for (const rawLine of trimmed.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    if (/^warning:/iu.test(line)) {
+      inWarning = true;
+      continue;
+    }
+    if (inWarning && rawLine.startsWith(" ")) {
+      continue;
+    }
+    inWarning = false;
+    lines.push(line);
+  }
+  return lines;
+}
+
 export function beadsErrorMessage(message: string): string {
   const trimmed = message.trim();
   if (!trimmed) {
     return "The Beads command failed.";
   }
-  try {
-    const payload = JSON.parse(trimmed);
-    /*
-     * CDXC:ProjectBoardBeadsMigration 2026-08-12:
-     * Preserve Beads' structured remote-migration gate for the Project Board
-     * notice to render as an operator decision. Other JSON-envelope failures
-     * should expose their nested human error instead of dumping the envelope.
-     */
-    if (isRecord(payload) && isRecord(payload.remote_migrate_gate)) {
-      return trimmed;
-    }
-    if (payload?.error) {
-      return String(payload.error);
-    }
-    if (isRecord(payload?.data) && payload.data.error) {
-      return String(payload.data.error);
-    }
-  } catch {
-    // Human stderr is the normal Beads failure path.
+  const lines = beadsReportableLines(trimmed);
+  if (lines.length === 0) {
+    return trimmed;
   }
-  return trimmed;
+  /*
+   * CDXC:ProjectBoardBeadsEnvelope 2026-08-20:
+   * A failing `bd` writes its human sentence first and its JSON result envelope
+   * after it, so the combined payload never parses as JSON and the raw envelope
+   * used to be pasted into the notice behind the sentence. Split at the start of
+   * the envelope instead: keep the prose when there is any, and read the
+   * envelope's nested per-issue error only when Beads printed none. The envelope
+   * is parsed as one block because `--json` pretty-prints it across lines.
+   */
+  const envelopeStart = lines.findIndex((line) => line.startsWith("{"));
+  const proseLines = envelopeStart === -1 ? lines : lines.slice(0, envelopeStart);
+  const envelopeText = envelopeStart === -1 ? "" : lines.slice(envelopeStart).join("\n");
+  const envelope = envelopeText ? beadsJsonEnvelope(envelopeText) : undefined;
+  /*
+   * CDXC:ProjectBoardBeadsMigration 2026-08-12:
+   * Preserve Beads' structured remote-migration gate for the Project Board
+   * notice to render as an operator decision. Other JSON-envelope failures
+   * should expose their nested human error instead of dumping the envelope.
+   */
+  if (envelope && isRecord(envelope.remote_migrate_gate)) {
+    return envelopeText;
+  }
+  if (proseLines.length > 0) {
+    return proseLines.join(" ");
+  }
+  return (envelope ? beadsEnvelopeError(envelope) : "") || lines.join(" ");
+}
+
+/*
+ * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+ * Beads refuses some board operations for domain reasons: a close guarded by
+ * open blockers or open children, a dependency edge that cannot exist, an id
+ * that names no issue. Every one of those used to reach the generic
+ * "Project board unavailable" notice, which tells the operator to reinstall
+ * Beads — advice that can never resolve any of them. Classify the refusals
+ * here so the board can state what was refused and offer the real remedy, and
+ * so the generic notice is left to genuine environment failures.
+ */
+export type BeadsRejection =
+  | { blockerIds: string[]; issueId: string; kind: "close-blocked" }
+  | { issueId: string; kind: "close-open-children"; openChildren: number }
+  | { kind: "dependency-cycle" }
+  | { blockerId: string; issueId: string; kind: "dependency-hierarchy"; relation: "ancestor" | "descendant" }
+  | { issueId: string; kind: "dependency-self" }
+  | {
+      dependsOnId: string;
+      existingType: string;
+      issueId: string;
+      kind: "dependency-type-conflict";
+      requestedType: string;
+    }
+  | { issueId: string; kind: "issue-missing" };
+
+export function parseBeadsRejection(message: string): BeadsRejection | undefined {
+  const closeBlocked =
+    /cannot close blocked issue:\s*(?<issueId>[^\s:]+)\s+is blocked by\s*\[(?<blockers>[^\]]*)\]/iu.exec(message);
+  if (closeBlocked?.groups?.issueId) {
+    const blockerIds = (closeBlocked.groups.blockers ?? "")
+      .split(/[,\s]+/u)
+      .map((blockerId) => blockerId.trim())
+      .filter(Boolean);
+    if (blockerIds.length > 0) {
+      return { blockerIds, issueId: closeBlocked.groups.issueId, kind: "close-blocked" };
+    }
+  }
+  const openChildren =
+    /cannot close\s+(?<issueId>[^\s:]+):\s*(?<count>\d+)\s+open child issue/iu.exec(message);
+  if (openChildren?.groups?.issueId) {
+    return {
+      issueId: openChildren.groups.issueId,
+      kind: "close-open-children",
+      openChildren: Number.parseInt(openChildren.groups.count ?? "0", 10) || 0,
+    };
+  }
+  const typeConflict =
+    /dependency\s+(?<issueId>\S+)\s+->\s+(?<dependsOnId>\S+)\s+already exists with type\s+"(?<existingType>[^"]*)"\s+\(requested\s+"(?<requestedType>[^"]*)"\)/iu.exec(
+      message,
+    );
+  if (typeConflict?.groups?.issueId && typeConflict.groups.dependsOnId) {
+    return {
+      dependsOnId: typeConflict.groups.dependsOnId,
+      existingType: typeConflict.groups.existingType ?? "",
+      issueId: typeConflict.groups.issueId,
+      kind: "dependency-type-conflict",
+      requestedType: typeConflict.groups.requestedType ?? "",
+    };
+  }
+  const hierarchy =
+    /(?<issueId>\S+)\s+cannot be blocked by its\s+(?<relation>ancestor|descendant)\s+(?<blockerId>[^\s:]+)/iu.exec(
+      message,
+    );
+  if (hierarchy?.groups?.issueId && hierarchy.groups.blockerId) {
+    return {
+      blockerId: hierarchy.groups.blockerId,
+      issueId: hierarchy.groups.issueId,
+      kind: "dependency-hierarchy",
+      relation: hierarchy.groups.relation?.toLowerCase() === "ancestor" ? "ancestor" : "descendant",
+    };
+  }
+  const selfDependency = /cannot add self-dependency(?::\s*(?<issueId>\S+))?/iu.exec(message);
+  if (selfDependency) {
+    return { issueId: selfDependency.groups?.issueId ?? "", kind: "dependency-self" };
+  }
+  if (/adding dependency would create a cycle/iu.test(message)) {
+    return { kind: "dependency-cycle" };
+  }
+  const missingIssue = /no issue found matching\s+"(?<issueId>[^"]*)"/iu.exec(message);
+  if (missingIssue) {
+    return { issueId: missingIssue.groups?.issueId ?? "", kind: "issue-missing" };
+  }
+  if (/no issues found matching the provided IDs/iu.test(message)) {
+    return { issueId: "", kind: "issue-missing" };
+  }
+  return undefined;
 }
 
 export function projectBoardRawProjectIdFromUrlParam(projectId: string): string {
