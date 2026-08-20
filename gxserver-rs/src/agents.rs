@@ -27,6 +27,20 @@ const GROK_PERMISSION_MODE_FLAG: &str = "--permission-mode";
 const GROK_BYPASS_PERMISSIONS_VALUE: &str = "bypassPermissions";
 pub(crate) const FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY: &str =
     "gxserverFirstPromptAutoTitleAttemptId";
+/*
+CDXC:GxserverFirstUserInputDraft 2026-08-20:
+`firstUserMessage` is a prompt gxserver submits for the user. A draft is the
+opposite contract: text staged into the new agent's composer and never sent, so
+the user writes their own prompt around it (the "Export transcript" result
+dialog stages `@<exported markdown> ` this way). The status key is the
+consume-once marker, mirroring `gxserverForkInitialRenameStatus`: created
+`pending`, claimed by the first provider start, then `applied`/`failed`, so a
+wake, re-attach, or daemon restart never retypes it.
+*/
+pub(crate) const FIRST_USER_INPUT_DRAFT_KEY: &str = "firstUserInputDraft";
+pub(crate) const FIRST_USER_INPUT_DRAFT_STATUS_KEY: &str = "gxserverFirstUserInputDraftStatus";
+pub(crate) const FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY: &str =
+    "gxserverFirstUserInputDraftUpdatedAt";
 
 #[derive(Debug)]
 pub enum AgentEndpointError {
@@ -395,6 +409,30 @@ pub(crate) fn create_agent_session_params_for_project(
             "firstUserMessage".to_string(),
             Value::String(first_user_message.to_string()),
         );
+    }
+    /*
+    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    Arm the draft here, at creation, so only sessions that were created with one
+    can ever consume it. A draft that is missing or blank leaves no marker and
+    no key behind.
+    */
+    match runtime_settings
+        .get(FIRST_USER_INPUT_DRAFT_KEY)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+    {
+        Some(draft) => {
+            runtime_settings.insert(FIRST_USER_INPUT_DRAFT_KEY.to_string(), Value::String(draft));
+            runtime_settings.insert(
+                FIRST_USER_INPUT_DRAFT_STATUS_KEY.to_string(),
+                json!("pending"),
+            );
+        }
+        None => {
+            runtime_settings.remove(FIRST_USER_INPUT_DRAFT_KEY);
+            runtime_settings.remove(FIRST_USER_INPUT_DRAFT_STATUS_KEY);
+        }
     }
 
     let mut runtime_relevant = Map::new();
@@ -5576,6 +5614,19 @@ pub(crate) fn read_text_from_map(map: &Map<String, Value>, key: &str) -> Option<
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+/// The staged first input draft, kept exactly as written. Every other runtime
+/// text is trimmed, but the draft's trailing space (`@/path/export.md `) is
+/// what separates the mention from the prompt the user types after it.
+pub(crate) fn read_first_user_input_draft(session: &Value) -> Option<String> {
+    session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get(FIRST_USER_INPUT_DRAFT_KEY))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
 }
 

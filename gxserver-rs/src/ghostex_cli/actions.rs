@@ -301,6 +301,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             }
             rpc::call_gxserver_rpc("/api/handoffSessionChatDraft", &params, &flags)
         }
+        "exportSessionTranscript" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/exportSessionTranscript", &params, flags)
+        }
         "sendText" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/sendSessionText", &params, flags)
@@ -775,6 +779,24 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
     let mut params = Map::new();
     params.insert("agentId".to_string(), json!(agent_id));
     params.insert("projectId".to_string(), json!(project_id));
+    /*
+    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    `--first-input-draft` is the opposite of a first user message: gxserver
+    types the text into the new agent's composer once the provider starts and
+    never submits it, so SSH-only clients can hand the user a mention such as
+    `@/path/export.md ` to write their own prompt around. The value is passed
+    verbatim — a trailing space separates the mention from what the user types.
+    */
+    if let Some(draft) = payload
+        .get("firstInputDraft")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
+        params.insert(
+            "runtimeSettings".to_string(),
+            json!({ "firstUserInputDraft": draft }),
+        );
+    }
     let title = flags
         .0
         .get("title")
@@ -1116,6 +1138,11 @@ fn parse_agent(rest: &[String], flags: &Flags) -> Value {
         &mut map,
         "agentId",
         flag_json(flags, "agentId").or_else(|| rest_string(rest, 0)),
+    );
+    set_or_remove(
+        &mut map,
+        "firstInputDraft",
+        flag_json(flags, "firstInputDraft"),
     );
     set_or_remove(&mut map, "groupId", flag_json(flags, "groupId"));
     Value::Object(map)
