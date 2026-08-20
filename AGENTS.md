@@ -20,7 +20,7 @@ Deprecated, kept in-tree but **not** development targets. Never route new featur
 
 Important: "deprecated app" does not mean "dead directory". Some files under the deprecated trees are still compiled into active apps and are fair game when the task is about an active app:
 
-- `native/sidebar/modal-host.tsx` and `native/sidebar/titlebar-host.tsx` are built by `gpui/vite.config.ts` into gpui's CEF `modal-host.html` / `titlebar-host.html` surfaces.
+- `native/sidebar/modal-host.tsx` and `native/sidebar/titlebar-host.tsx` are built by `gpui/vite.config.ts` into gpui's CEF `modal-host.html` / `titlebar-host.html` surfaces. Note that gpui only loads `titlebar-host.html` for the Tips/info dropdown panel: the gpui titlebar itself (project name, Agents/Code/Browser/Kanban/Automate/Docs mode tabs, buttons, tooltips) is drawn natively in Rust by `render_titlebar` / `render_mode_tab` in `gpui/src/main.rs`. Titlebar work for the desktop app belongs there, not in the React mode switcher inside `titlebar-host.tsx`.
 - `native/sidebar/manage.tsx` and `native/sidebar/tasks-placeholder.tsx` are loaded by `gpui/sidebar/manage-main.tsx` and `gpui/sidebar/kanban-main.tsx`.
 - Many `native/sidebar/*.ts` modules (for example `gxserver-client.ts`, `project-board-shared.ts`) are shared logic consumed by active surfaces.
 - `shared/` is shared contract/logic code used by gpui, web, mobile, and gxserver. It is active.
