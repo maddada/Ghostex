@@ -3,6 +3,10 @@ import { describe, expect, test } from "vitest";
 
 const settingsModalSource = readFileSync(new URL("./settings-modal.tsx", import.meta.url), "utf8");
 const agentsHubModalSource = readFileSync(new URL("./agents-hub-modal.tsx", import.meta.url), "utf8");
+const skillsPanelSource = readFileSync(
+  new URL("./bundled-agent-skills-panel.tsx", import.meta.url),
+  "utf8",
+);
 const settingsModalStylesSource = readFileSync(
   new URL("./styles/modals.css", import.meta.url),
   "utf8",
@@ -287,16 +291,20 @@ describe("settings modal source", () => {
     expect(textField).toContain("value={inputValue}");
   });
 
-  test("keeps hook and skill uninstall controls at the bottom of integrations", () => {
+  test("keeps hook and skill uninstall controls beside their install controls", () => {
     /*
      * CDXC:IntegrationsSetup 2026-06-21-02:54:
-     * Hooks & Skills uninstall controls belong at the bottom of Settings >
-     * Integrations, and their no-op states must be disabled when hooks or
-     * bundled skills are already absent.
+     * Hooks & Skills uninstall controls must disable their no-op states when
+     * hooks or bundled skills are already absent.
      *
      * CDXC:AgentHookSettings 2026-06-29-01:26:
-     * Agent hook setup belongs in Settings > Agents, so Integrations must keep
-     * only the hook recovery control instead of duplicating the Agent Hooks row.
+     * Agent hook setup belongs in Settings > Agents, so Integrations must not
+     * duplicate the Agent Hooks row.
+     *
+     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * Removal lives next to the install control it undoes — an icon-only remove
+     * on each installed hook row plus one Uninstall All in the Agent Hooks
+     * section — instead of a separate Hooks & Skills recovery card.
      */
     const navigation = sourceBetween(
       settingsModalSource,
@@ -313,28 +321,32 @@ describe("settings modal source", () => {
       "function AgentsSettingsTab",
       "function AgentHookStatusRow",
     );
+    const hookStatusRow = sourceBetween(
+      settingsModalSource,
+      "function AgentHookStatusRow",
+      "function AgentHookStatusIcon",
+    );
 
     expect(navigation).not.toContain('title: "Hooks & Skills"');
     expect(settingsModalSource).not.toContain("hooksSkills");
+    expect(settingsModalSource).not.toContain('title="Hooks & Skills"');
+    expect(settingsModalSource).not.toContain("search.sections.recovery");
     expect(integrationsTab).not.toContain('title="Agent Hooks"');
     expect(integrationsTab).not.toContain("Install Hooks");
+    expect(integrationsTab).not.toContain("Uninstall Hooks");
     expect(agentsTab).toContain('<SettingsSection title="Agent Hooks">');
-    const cuaPermissionsIndex = integrationsTab.indexOf('title="Cua Permissions"');
-    const hooksSkillsIndex = integrationsTab.indexOf('title="Hooks & Skills"');
-    expect(cuaPermissionsIndex).toBeGreaterThanOrEqual(0);
-    expect(hooksSkillsIndex).toBeGreaterThanOrEqual(0);
-    expect(cuaPermissionsIndex).toBeLessThan(hooksSkillsIndex);
-    expect(integrationsTab).toContain("agentHooksAvailableForUninstall");
-    expect(integrationsTab).toContain("bundledAgentSkillsAvailableForUninstall");
-    expect(integrationsTab).toContain(
-      "disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}",
+    expect(agentsTab).toContain("agentHooksAvailableForUninstall");
+    expect(agentsTab).toContain("Uninstall All");
+    expect(agentsTab).toContain("onClick={() => onUninstallAgentHooks?.()}");
+    expect(agentsTab).toContain("() => onUninstallAgentHooks([agent.agentId])");
+    expect(hookStatusRow).toContain("hasRemovableAgentHookStatus(status)");
+    expect(hookStatusRow).toContain('aria-label={`Uninstall ${agent.name} hook`}');
+    expect(integrationsTab).toContain("onUninstallAllSkills={onUninstallBundledAgentSkills}");
+    expect(skillsPanelSource).toContain("onUninstallAllSkills");
+    expect(skillsPanelSource).toContain("Uninstall All");
+    expect(skillsPanelSource).toContain(
+      "disabled={ghostexCliStatusLoading || !anySkillInstalled}",
     );
-    expect(integrationsTab).toContain(
-      "disabled={ghostexCliStatusLoading || !bundledAgentSkillsAvailableForUninstall || !onUninstallBundledAgentSkills}",
-    );
-    expect(integrationsTab).toContain('title="Hooks & Skills"');
-    expect(integrationsTab).toContain("Uninstall Hooks");
-    expect(integrationsTab).toContain("Uninstall Skills");
   });
 
   test("gates Keep Awake settings behind Enable Experimental Features", () => {

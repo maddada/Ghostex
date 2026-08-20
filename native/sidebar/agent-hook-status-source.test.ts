@@ -65,12 +65,19 @@ describe("agent hook status source", () => {
      * Advanced Settings should expose explicit uninstall actions for Ghostex
      * hooks and bundled Ghostex skills, with hook cleanup routed through
      * gxserver and skill cleanup handled by the native bundled-skill catalog.
+     *
+     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * Hook removal is per-agent from each hook row and all-at-once from the
+     * Agent Hooks section, so the host must forward the selected agentIds
+     * instead of always uninstalling every provider.
      */
     expect(contractSource).toContain('"requestAgentHookStatus"');
     expect(contractSource).toContain('"installAgentHooks"');
     expect(contractSource).toContain('"uninstallAgentHooks"');
     expect(contractSource).toContain('"uninstallBundledAgentSkills"');
-    expect(modalHostSource).toContain('vscode.postMessage({ type: "uninstallAgentHooks" });');
+    expect(modalHostSource).toContain(
+      'vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });',
+    );
     expect(modalHostSource).toContain('vscode.postMessage({ type: "uninstallBundledAgentSkills" });');
     expect(nativeSidebarSource).toContain("async function uninstallNativeAgentHooksFromSettings");
     expect(nativeSidebarSource).toContain("gxserverClient.uninstallAgentHooks(agentIds)");

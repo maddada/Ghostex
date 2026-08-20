@@ -1270,7 +1270,7 @@ export type SettingsModalProps = {
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
   onInstallAgentHooks?: () => void;
-  onUninstallAgentHooks?: () => void;
+  onUninstallAgentHooks?: (agentIds?: readonly string[]) => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
   onRequestAgentHookStatus?: () => void;
@@ -1696,28 +1696,16 @@ export function SettingsModal({
      * the same native-owned payload for Cua Driver version/update state. Probe
      * only while one of those pages is active.
      *
-     * CDXC:AgentHookSettings 2026-06-29-01:26:
-     * Integrations still requests hook status for the bottom hook-removal recovery card, but hook installation and per-agent hook status now belong in Settings -> Agents.
+     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * Hook install, per-agent status, and hook removal all live in Settings -> Agents, so Integrations no longer probes hook status at all.
      *
      * CDXC:ComputerAgentControl 2026-05-27-06:58:
      * Settings should present the public skill names Ghostex Browser Use and Ghostex Computer Use.
      */
-    if (activeTab === "integrations" && !agentHookStatus && !agentHookStatusLoading) {
-      onRequestAgentHookStatus?.();
-    }
     if (!ghostexCliStatus && !ghostexCliStatusLoading) {
       onRequestGhostexCliStatus?.();
     }
-  }, [
-    activeTab,
-    agentHookStatus,
-    agentHookStatusLoading,
-    ghostexCliStatus,
-    ghostexCliStatusLoading,
-    isOpen,
-    onRequestAgentHookStatus,
-    onRequestGhostexCliStatus,
-  ]);
+  }, [activeTab, ghostexCliStatus, ghostexCliStatusLoading, isOpen, onRequestGhostexCliStatus]);
 
   /**
    * CDXC:SettingsSearch 2026-05-04-02:30
@@ -2873,6 +2861,7 @@ export function SettingsModal({
       })),
       title: "General",
     },
+    { icon: IconCodeDots, id: "agents", title: "Agents" },
     { icon: IconTools, id: "integrations", title: "Integrations" },
     { icon: IconCashEdit, id: "plugins", title: "Customize" },
     { icon: IconCloud, id: "remote", title: "Remote" },
@@ -2892,7 +2881,6 @@ export function SettingsModal({
       })),
       title: "Hotkeys",
     },
-    { icon: IconCodeDots, id: "agents", title: "Agents" },
     { icon: IconPlayerPlay, id: "actions", title: "Actions" },
     { icon: IconExternalLink, id: "openTargets", title: "Open In" },
     ...(showOSIntegrationSettingsTab
@@ -5360,8 +5348,6 @@ export function SettingsModal({
           {!isFirstLaunchSetup ? (
           <TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="integrations">
             <IntegrationsSettingsTab
-              agentHookStatus={agentHookStatus}
-              agentHookStatusLoading={agentHookStatusLoading}
               ghostexCliStatus={ghostexCliStatus}
               ghostexCliStatusLoading={ghostexCliStatusLoading}
               appShotsEnabled={draft.appShotsEnabled}
@@ -5383,7 +5369,6 @@ export function SettingsModal({
               onInstallGhostexCli={onInstallGhostexCli}
               onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
               onOpenExternalUrl={(url) => vscode?.postMessage({ type: "openExternalUrl", url })}
-              onUninstallAgentHooks={onUninstallAgentHooks}
               onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
               onUninstallBundledAgentSkills={onUninstallBundledAgentSkills}
               onOpenAccessibilityPreferences={onOpenAccessibilityPreferences}
@@ -5480,6 +5465,7 @@ export function SettingsModal({
               onSessionTitleGenerationAgentChange={(agent) =>
                 updateDraft("sessionTitleGenerationAgent", agent)
               }
+              onUninstallAgentHooks={onUninstallAgentHooks}
               search={extraSettingsTabSearches.agents}
               searchEmptyState={settingsSearchEmptyState}
               vscode={vscode}
@@ -5876,6 +5862,8 @@ type RemoteMachineDraft = {
   wslDistribution: string;
 };
 
+const REMOTE_GXSERVER_INSTALL_PROBE_DEBOUNCE_MS = 600;
+
 function createRemoteMachineDraft(): RemoteMachineDraft {
   return {
     id: `remote-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -5952,6 +5940,18 @@ function RemoteSettingsTab({
   >({});
   const [sshPasswordDrafts, setSshPasswordDrafts] = useState<Record<string, string>>({});
   const lastTargetedRemoteMachineIdRef = useRef<string | undefined>(undefined);
+  /*
+   * CDXC:RemoteMachines 2026-08-19:
+   * The saved-machine action reads as Install for a machine without gxserver
+   * and as Update for one that already runs it, with the installed version
+   * shown on the opposite edge of the same action row. React never inspects the
+   * remote machine itself: it asks native for the state of the saved machine id
+   * and renders the version string native reports back.
+   */
+  const [remoteGxserverInstallsById, setRemoteGxserverInstallsById] = useState<
+    Record<string, { installed: boolean; version?: string }>
+  >({});
+  const probedRemoteGxserverKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const remoteMachineIds = new Set(remoteMachines.map((machine) => machine.id));
@@ -5966,6 +5966,84 @@ function RemoteSettingsTab({
       return next ?? drafts;
     });
   }, [remoteMachines]);
+
+  useEffect(() => {
+    const handleHostMessage = (event: Event) => {
+      const message = (event as CustomEvent<unknown>).detail;
+      if (
+        !message ||
+        typeof message !== "object" ||
+        !("type" in message) ||
+        message.type !== "remoteGxserverInstallState"
+      ) {
+        return;
+      }
+      const machineId =
+        "remoteMachineId" in message && typeof message.remoteMachineId === "string"
+          ? message.remoteMachineId.trim()
+          : "";
+      if (!machineId) {
+        return;
+      }
+      const installed = "installed" in message && message.installed === true;
+      const version =
+        "version" in message && typeof message.version === "string" ? message.version.trim() : "";
+      setRemoteGxserverInstallsById((current) => ({
+        ...current,
+        [machineId]: { installed, version: version || undefined },
+      }));
+    };
+    window.addEventListener("ghostex-app-modal-host-message", handleHostMessage);
+    return () => {
+      window.removeEventListener("ghostex-app-modal-host-message", handleHostMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isActive || !vscode) {
+      return;
+    }
+    /*
+     * Every accepted keystroke in an SSH field rewrites the saved machine, so
+     * wait for typing to settle before asking native to open an SSH connection
+     * for the probe.
+     */
+    const timeout = setTimeout(() => {
+      for (const machine of remoteMachines) {
+        const sshHost = machine.sshHost.trim();
+        if (!sshHost) {
+          continue;
+        }
+        /*
+         * Probe once per saved SSH target. Editing the host, user, port, or WSL
+         * distribution points the action at a different remote, so that target
+         * is probed again and the previous answer is dropped instead of
+         * labelling a new host with the old machine's version.
+         */
+        const probeKey = [
+          machine.id,
+          sshHost,
+          machine.sshUser?.trim() ?? "",
+          machine.sshPort ?? "",
+          machine.wslDistribution?.trim() ?? "",
+        ].join("|");
+        if (probedRemoteGxserverKeysRef.current.has(probeKey)) {
+          continue;
+        }
+        probedRemoteGxserverKeysRef.current.add(probeKey);
+        setRemoteGxserverInstallsById((current) => {
+          if (!(machine.id in current)) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[machine.id];
+          return next;
+        });
+        vscode.postMessage({ remoteMachineId: machine.id, type: "probeRemoteGxserverInstall" });
+      }
+    }, REMOTE_GXSERVER_INSTALL_PROBE_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [isActive, remoteMachines, vscode]);
 
   useEffect(() => {
     if (!isActive || !initialRemoteMachineId) {
@@ -6255,6 +6333,8 @@ function RemoteSettingsTab({
             remoteMachines.map((machine) => {
               const machineDraft = getRemoteMachineEditDraft(machine);
               const summaryMachine = normalizeRemoteMachineDraft(machineDraft) ?? machine;
+              const gxserverInstall = remoteGxserverInstallsById[machine.id];
+              const gxserverInstalled = gxserverInstall?.installed === true;
               return (
                 <Card
                   className="settings-remote-machine-card"
@@ -6300,6 +6380,13 @@ function RemoteSettingsTab({
                      * remote daemon without reinstalling it.
                      */}
                     <div className="settings-management-actions settings-remote-machine-install-actions">
+                      {gxserverInstalled ? (
+                        <span className="settings-remote-machine-installed-version">
+                          {gxserverInstall?.version
+                            ? `gxserver ${gxserverInstall.version}`
+                            : "gxserver installed"}
+                        </span>
+                      ) : null}
                       <SettingButton
                         disabled={!vscode || !machineDraft.sshHost.trim()}
                         disabledReason={
@@ -6316,8 +6403,12 @@ function RemoteSettingsTab({
                         type="button"
                         variant="secondary"
                       >
-                        <IconDownload aria-hidden="true" />
-                        Install / Connect gxserver
+                        {gxserverInstalled ? (
+                          <IconRefresh aria-hidden="true" />
+                        ) : (
+                          <IconDownload aria-hidden="true" />
+                        )}
+                        {gxserverInstalled ? "Update gxserver" : "Install / Connect gxserver"}
                       </SettingButton>
                     </div>
                   </CardContent>
@@ -8076,10 +8167,7 @@ function hasRemovableAgentHooks(
   if (!agentHookStatus || agentHookStatus.errorMessage) {
     return false;
   }
-  return agentHookStatus.agents.some(
-    (status) =>
-      status.hookInstalled || status.status === "installed" || status.status === "updateRequired",
-  );
+  return agentHookStatus.agents.some(hasRemovableAgentHookStatus);
 }
 
 function hasInstalledBundledAgentSkills(
@@ -8548,8 +8636,6 @@ function QuickAccessTitlebarButton({
 }
 
 function IntegrationsSettingsTab({
-  agentHookStatus,
-  agentHookStatusLoading,
   appShotsEnabled,
   appShotsHotkey,
   appShotsMetadataEnabled,
@@ -8569,7 +8655,6 @@ function IntegrationsSettingsTab({
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
   onOpenExternalUrl,
-  onUninstallAgentHooks,
   onUninstallBundledAgentSkill,
   onUninstallBundledAgentSkills,
   onOpenAccessibilityPreferences,
@@ -8578,8 +8663,6 @@ function IntegrationsSettingsTab({
   search,
   searchEmptyState,
 }: {
-  agentHookStatus?: SidebarAgentHookStatusMessage;
-  agentHookStatusLoading: boolean;
   appShotsEnabled: boolean;
   appShotsHotkey: AppShotsHotkey;
   appShotsMetadataEnabled: boolean;
@@ -8599,7 +8682,6 @@ function IntegrationsSettingsTab({
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
   onOpenExternalUrl?: (url: string) => void;
-  onUninstallAgentHooks?: () => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
   onOpenAccessibilityPreferences?: () => void;
@@ -8610,8 +8692,6 @@ function IntegrationsSettingsTab({
 }) {
   const showIntegrationRow = (settingKey: string) =>
     shouldShowSetting(search.sections.integrations, settingKey);
-  const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
-  const bundledAgentSkillsAvailableForUninstall = hasInstalledBundledAgentSkills(ghostexCliStatus);
   const cliReady = ghostexCliStatus?.installed === true;
   /**
    * CDXC:CuaPermissions 2026-05-29-06:00:
@@ -8632,7 +8712,10 @@ function IntegrationsSettingsTab({
          * lifecycle itself belongs to Plugins.
          *
          * CDXC:AgentHookSettings 2026-06-29-01:26:
-         * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row; it only keeps hook removal as a recovery action at the bottom of the page.
+         * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row.
+         *
+         * CDXC:AgentHookSettings 2026-08-19-11:20:
+         * Hook and bundled-skill removal moved next to the hook setup panel in Settings -> Agents, so Integrations no longer carries a Hooks & Skills recovery card.
          *
          * CDXC:AgentSkills 2026-05-31-09:18:
          * Bundled Ghostex skills are explicit per-skill installs in Settings,
@@ -8705,6 +8788,7 @@ function IntegrationsSettingsTab({
               moveCodexSession: onInstallMoveCodexSessionSkill,
             }}
             onRefreshStatus={onRequestGhostexCliStatus}
+            onUninstallAllSkills={onUninstallBundledAgentSkills}
             onUninstallSkill={onUninstallBundledAgentSkill}
           />
           ) : null}
@@ -8805,58 +8889,6 @@ function IntegrationsSettingsTab({
           */}
         </SettingsSection>
         ) : null}
-        {/*
-          CDXC:IntegrationsSetup 2026-06-21-02:54:
-          Hooks & Skills removal is an integration recovery action, so keep it as the final card in Settings > Integrations rather than a General Settings advanced section. Disable actions when status proves the corresponding Ghostex-owned artifacts are already absent, so users cannot click no-op recovery buttons.
-
-          CDXC:AgentHookSettings 2026-06-29-01:26:
-          Hook installation moved to Settings > Agents, so the Integrations recovery card must point users there for reinstall while bundled skills remain reinstallable from this page.
-        */}
-        {shouldShowSettingsSection(search.sections.recovery) ? (
-        <SettingsSection
-          description="Remove Ghostex-owned setup artifacts. You can install hooks again from Settings > Agents and bundled skills again from the rows above."
-          title="Hooks & Skills"
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <SettingButton
-              className="h-10 w-full px-4 text-sm"
-              disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}
-              disabledReason={
-                agentHookStatusLoading
-                  ? "Hook status is being checked."
-                  : !agentHooksAvailableForUninstall
-                    ? "No Ghostex hooks are installed."
-                    : "Hook removal isn’t available here."
-              }
-              disabledTooltipClassName="w-full"
-              onClick={onUninstallAgentHooks}
-              type="button"
-              variant="outline"
-            >
-              <IconTrash aria-hidden="true" data-icon="inline-start" />
-              Uninstall Hooks
-            </SettingButton>
-            <SettingButton
-              className="h-10 w-full px-4 text-sm"
-              disabled={ghostexCliStatusLoading || !bundledAgentSkillsAvailableForUninstall || !onUninstallBundledAgentSkills}
-              disabledReason={
-                ghostexCliStatusLoading
-                  ? "Skill status is being checked."
-                  : !bundledAgentSkillsAvailableForUninstall
-                    ? "No bundled Ghostex skills are installed."
-                    : "Skill removal isn’t available here."
-              }
-              disabledTooltipClassName="w-full"
-              onClick={onUninstallBundledAgentSkills}
-              type="button"
-              variant="outline"
-            >
-              <IconTrash aria-hidden="true" data-icon="inline-start" />
-              Uninstall Skills
-            </SettingButton>
-          </div>
-        </SettingsSection>
-        ) : null}
       </div>
     </SettingsNativeScrollArea>
   );
@@ -8939,6 +8971,7 @@ function AgentsSettingsTab({
   onInstallAgentHooks,
   onRequestAgentHookStatus,
   onSessionTitleGenerationAgentChange,
+  onUninstallAgentHooks,
   search,
   searchEmptyState,
   vscode,
@@ -8955,12 +8988,14 @@ function AgentsSettingsTab({
   onInstallAgentHooks?: () => void;
   onRequestAgentHookStatus?: () => void;
   onSessionTitleGenerationAgentChange: (agent: SessionTitleGenerationAgent) => void;
+  onUninstallAgentHooks?: (agentIds?: readonly string[]) => void;
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
   vscode?: WebviewApi;
 }) {
   const agents = useSidebarStore((state) => state.hud.agents);
   const acceptAllToggleId = useId();
+  const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
   const [draftAgentIds, setDraftAgentIds] = useState<string[]>();
 
@@ -9155,6 +9190,30 @@ function AgentsSettingsTab({
                     <IconDownload aria-hidden="true" data-icon="inline-start" />
                     {updateRequiredHookCount > 0 ? "Update Hooks" : "Install Hooks"}
                   </SettingButton>
+                  {/*
+                   * CDXC:AgentHookSettings 2026-08-19-11:20:
+                   * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus an icon-only remove on each installed agent row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
+                   */}
+                  <SettingButton
+                    disabled={
+                      agentHookStatusLoading ||
+                      !agentHooksAvailableForUninstall ||
+                      !onUninstallAgentHooks
+                    }
+                    disabledReason={
+                      agentHookStatusLoading
+                        ? "Hook status is being checked."
+                        : !agentHooksAvailableForUninstall
+                          ? "No Ghostex hooks are installed."
+                          : "Hook removal isn’t available here."
+                    }
+                    onClick={() => onUninstallAgentHooks?.()}
+                    type="button"
+                    variant="outline"
+                  >
+                    <IconTrash aria-hidden="true" data-icon="inline-start" />
+                    Uninstall All
+                  </SettingButton>
                   <SettingButton
                     disabled={!onRequestAgentHookStatus || agentHookStatusLoading}
                     disabledReason={
@@ -9186,7 +9245,13 @@ function AgentsSettingsTab({
                         name: agent.name,
                       }}
                       isLoading={agentHookStatusLoading && !agentHookStatus}
+                      isStatusLoading={agentHookStatusLoading}
                       key={agent.agentId}
+                      onUninstall={
+                        onUninstallAgentHooks
+                          ? () => onUninstallAgentHooks([agent.agentId])
+                          : undefined
+                      }
                       status={hookStatusByAgentId.get(agent.agentId)}
                     />
                   ))}
@@ -9384,13 +9449,19 @@ function resolveSettingsTitleGenerationCommand(
 function AgentHookStatusRow({
   agent,
   isLoading,
+  isStatusLoading,
+  onUninstall,
   status,
 }: {
   agent: SidebarAgentButton;
   isLoading: boolean;
+  isStatusLoading: boolean;
+  onUninstall?: () => void;
   status?: SidebarAgentHookStatusItem;
 }) {
   const statusText = getAgentHookStatusText(status, isLoading);
+  const removable = hasRemovableAgentHookStatus(status);
+  const uninstallDisabled = isStatusLoading || !onUninstall;
   return (
     <div className="flex items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -9416,8 +9487,37 @@ function AgentHookStatusRow({
         <AgentHookStatusIcon isLoading={isLoading} status={status} />
         {statusText}
       </span>
+      {removable ? (
+        <DisabledSettingControlTooltip
+          disabled={uninstallDisabled}
+          reason={
+            isStatusLoading ? "Hook status is being checked." : "Hook removal isn’t available here."
+          }
+        >
+          <AppTooltip content={`Uninstall ${agent.name} hook`}>
+            <Button
+              aria-label={`Uninstall ${agent.name} hook`}
+              className="shrink-0"
+              disabled={uninstallDisabled}
+              onClick={onUninstall}
+              size="icon"
+              type="button"
+              variant="destructive"
+            >
+              <IconTrash aria-hidden="true" />
+            </Button>
+          </AppTooltip>
+        </DisabledSettingControlTooltip>
+      ) : null}
     </div>
   );
+}
+
+function hasRemovableAgentHookStatus(status: SidebarAgentHookStatusItem | undefined): boolean {
+  if (!status) {
+    return false;
+  }
+  return status.hookInstalled || status.status === "installed" || status.status === "updateRequired";
 }
 
 function AgentHookStatusIcon({
@@ -11457,7 +11557,7 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
               value: agent.name,
             })),
             subtitle:
-              "Install hooks so Ghostex can capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart.",
+              "Install hooks so Ghostex can capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Uninstall a single agent's hook from its row, or remove every Ghostex-owned hook with Uninstall All.",
             title: "Agent resume hooks",
           },
         ],
@@ -11536,7 +11636,7 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
               value: skill.skillName,
             })),
             subtitle:
-              "Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be updated independently.",
+              "Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.",
             title: "Bundled Agent Skills",
           },
           {
@@ -11554,22 +11654,6 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
         ],
         title: "Integrations",
-      },
-      {
-        id: "recovery",
-        settings: [
-          {
-            key: "uninstallHooks",
-            subtitle: "Remove Ghostex-owned agent hook setup artifacts.",
-            title: "Uninstall Hooks",
-          },
-          {
-            key: "uninstallSkills",
-            subtitle: "Remove installed bundled Ghostex agent skills.",
-            title: "Uninstall Skills",
-          },
-        ],
-        title: "Hooks & Skills",
       },
     ],
     title: "Integrations",
@@ -11798,7 +11882,7 @@ const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
           {
             key: "installGxserver",
-            subtitle: "Install or connect gxserver on a saved remote machine.",
+            subtitle: "Install, update, or connect gxserver on a saved remote machine.",
             title: "Install / Connect gxserver",
           },
         ],
