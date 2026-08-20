@@ -72,6 +72,7 @@ function parseArgs(argv) {
     dryRun: false,
     forceAll: false,
     forceProducts: "",
+    skipLocalTests: false,
     reuseFromRunId: "",
     gxserverLinuxArm64: !amendDefaults,
     gxserverLinuxX64: !amendDefaults,
@@ -166,6 +167,7 @@ function parseArgs(argv) {
     } else if (arg === "--skip-sparkle") options.updateSparkle = false;
     else if (arg === "--prerelease") options.prerelease = true;
     else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--skip-local-tests") options.skipLocalTests = true;
     else if (arg === "--force-all") options.forceAll = true;
     else if (arg === "--force") {
       options.forceProducts = rest[index + 1] ?? "";
@@ -413,6 +415,26 @@ if ((command === "start" || command === "amend") && requiresGpuiReferenceContrac
   run("node", ["scripts/release-gpui/verify-reference-contract.mjs"], { capture: false });
   /* Costs milliseconds here; discovering it on a runner cost 7.8.0 a 14-minute round. */
   run("node", ["scripts/release-gpui/check-ghostty-zig-pin.mjs"], { capture: false });
+}
+/*
+ * CDXC:ReleaseLocalTestGate 2026-08-19:
+ * `release:test` is ~11 seconds of pure source assertions on an already
+ * installed tree, and it is the single gate most likely to trip on a normal
+ * release: it pins CSS selectors, component source, and workflow shapes that
+ * routine UI work moves underneath. 7.11.0 spent a whole dispatch plus a
+ * redispatch discovering one stale selector assertion on the runner. Run it
+ * here against the exact clean commit that is about to be dispatched.
+ *
+ * Deliberately outside the GPUI reference-contract branch above: that branch is
+ * scope-conditional, while this suite also covers the planner, fingerprint, and
+ * publisher scripts that every scope depends on.
+ *
+ * The frozen install, typecheck, and the remote `release:test` run stay
+ * remote-only on purpose: those are the expensive gates, and prepare still runs
+ * each of them exactly once.
+ */
+if ((command === "start" || command === "amend") && !options.skipLocalTests) {
+  run("bun", ["run", "release:test"], { capture: false });
 }
 const secrets = configuredSecrets();
 validateRequiredSecrets(options, secrets);
