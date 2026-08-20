@@ -3872,12 +3872,16 @@ function App() {
     /**
      * CDXC:SessionPersistence 2026-06-04-02:52:
      * The persistence-off Tips notice is an actionable warning. Clicking it
-     * should open the Ghostty/Terminal settings tab and pre-fill search with
-     * the exact setting label so users land on Session Persistence immediately.
+     * should open the Settings page that owns Session Persistence and pre-fill
+     * search with the exact setting label so users land on it immediately.
+     *
+     * CDXC:SettingsNavigation 2026-08-19-00:00:
+     * The terminal settings moved into the General page, so this must request
+     * the real `settings` tab; the retired `ghostty` id resolves to no page.
      */
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
       initialSearchQuery: "Session Persistence",
-      initialTab: "ghostty",
+      initialTab: "settings",
       modal: "settings",
       type: "open",
     });
