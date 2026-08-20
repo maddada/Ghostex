@@ -131,6 +131,11 @@ export interface SessionChatViewProps {
   verboseMode?: boolean;
   /** Show the touch-friendly search affordance used by the mobile host. */
   showSearchButton?: boolean;
+  /**
+   * Show the composer's per-session Verbose Mode pill. The mobile host hides
+   * it: there, Verbose Mode is owned by the app's Settings screen.
+   */
+  showVerbosePill?: boolean;
   /** Show the agent name beside its composer icon. */
   showComposerAgentName?: boolean;
   /** Show the prompt beneath the agent logo for a new session. */
@@ -300,6 +305,7 @@ export function SessionChatView({
   showComposerAgentName = true,
   showNewSessionWelcomeTitle = true,
   showSearchButton = false,
+  showVerbosePill = true,
   theme = "dark",
   transport,
   verboseMode = false,
@@ -747,7 +753,9 @@ export function SessionChatView({
                       }
                     : {})}
                 />
-                <SessionVerbosePill onToggle={toggleVerbose} verbose={verbose} />
+                {showVerbosePill ? (
+                  <SessionVerbosePill onToggle={toggleVerbose} verbose={verbose} />
+                ) : null}
               </>
             }
             placeholder={canSend ? undefined : "Input is held by another device."}
