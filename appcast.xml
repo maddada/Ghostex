@@ -8,6 +8,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>7.12.0</title>
+            <pubDate>Thu, 20 Aug 2026 05:01:45 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.12.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>71200</sparkle:version>
+            <sparkle:shortVersionString>7.12.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.12.0
+
+## 7.12.0 - 2026-08-20
+
+- Major
+  - A new Export Transcript agent action writes the session's conversation to a markdown file — your messages, the agent's replies, the commands it ran with their output, and the files it changed — and offers to start a fresh conversation that already mentions the export, so you can hand a session's context to another agent without copying anything by hand. Available on the desktop, web, and Android apps and from the `ghostex` command line.
+- Minor
+  - Automatic sleep no longer retires a session you are looking at, including one showing its chat surface with the terminal parked behind it, or a session with a Delayed Send still waiting to fire.
+  - Removing an installed agent hook or bundled skill now happens in Settings > Agents next to the control that installed it, with a remove action on each row and one Uninstall All for the whole set.
+  - Remote settings now labels a saved machine's action as Install or Update depending on whether it already runs gxserver, and shows the installed version on the same row.
+  - The project board now explains a refused action — closing an issue that still has open blockers or children, an impossible dependency, an issue id that does not exist — and offers the step that resolves it, instead of reporting the board as unavailable and telling you to reinstall Beads.
+  - The Code tab is now disabled for remote projects, where it would have opened this machine's files rather than the remote ones, and offers to copy the remote path instead.
+  - The session persistence warning in Tips now opens the settings page that actually holds that setting.
+  - Desktop Control settings now reads the real accessibility and screen recording permission state instead of reporting it incorrectly.
+  - The sidebar's scroll fade now settles correctly after a project or collection finishes animating open.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.12.0/ghostex-7.12.0-arm64.dmg" length="120333245" type="application/octet-stream" sparkle:edSignature="W3spGACVwYvhwbo/TaROPZc4JywZZCDf8rgBuom5DfvuGBoDiJjI/CgDv7RSnQpNQpi6ebvuK9gJUIsRF6NiAw=="/>
+        </item>
+        <item>
             <title>7.11.0</title>
             <pubDate>Wed, 19 Aug 2026 03:17:47 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.11.0</sparkle:fullReleaseNotesLink>
@@ -167,29 +193,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.7.1/ghostex-7.7.1-arm64.dmg" length="113918245" type="application/octet-stream" sparkle:edSignature="O4whdXYTIdu5zKAqE2SRzzFTH6tkq5EEFUmq6VAAh46OTX5ma9GbaLfM/JVAQTPH8QT5IXVVa6wiG2txJ+FFDA=="/>
         </item>
         <item>
-            <title>7.7.0</title>
-            <pubDate>Wed, 12 Aug 2026 23:48:44 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.7.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>70700</sparkle:version>
-            <sparkle:shortVersionString>7.7.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.7.0
-
-## 7.7.0 - 2026-08-13
-
-- Major
-  - Windows now guides first-time setup by checking WSL, helping you choose a distribution, and preparing the Ghostex runtime before opening the workspace.
-  - Remote machines reconnect more reliably after sleep, wake, tunnel interruptions, and temporary network failures, while remote session renames stay synchronized.
-  - Command panes restore their linked sessions and Action tabs more faithfully, including live working and completion status when you return to the app.
-- Minor
-  - On-demand component installs now show clearer checking, download progress, and size information instead of an indeterminate wait.
-  - Project Board uses the Beads installation from each local, Linux, or WSL environment and provides clearer installation or migration guidance when attention is needed.
-  - First-launch setup, recent-project recovery, Session Chat controls, titlebar customization, and Windows terminal startup are more dependable.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.7.0/ghostex-7.7.0-arm64.dmg" length="114651581" type="application/octet-stream" sparkle:edSignature="Ps6RpaNkj08UdBrr1bN9h9l5C+ixfBq2dxfyZJykomEdIabSG+oLv2hNxRp9Cd3+Q0CvAgCI9TWYxBI++0EkAg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -201,6 +204,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: PvFrmyBnl+xsuaxnOKOdlVv9Q0h3mn6ySUuC49J1iOZarnfQ8Vd3tSQ/pkjw87bKHtV653htg+BdBAWaj2PoBQ==
-length: 17278
+edSignature: Vmx/razWqhBGv/0IbVBxM4/u+sCt6Cgv/3Yy/UeCZ8HHZ2iBig0fH8oy2bMjQ7Iy/pPf05djexdpRLmcx1mxBA==
+length: 18202
 -->
