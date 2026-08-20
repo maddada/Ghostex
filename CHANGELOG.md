@@ -1,5 +1,19 @@
 # Changelog
 
+## 7.12.0 - 2026-08-20
+
+- Major
+  - A new Export Transcript agent action writes the session's conversation to a markdown file — your messages, the agent's replies, the commands it ran with their output, and the files it changed — and offers to start a fresh conversation that already mentions the export, so you can hand a session's context to another agent without copying anything by hand. Available on the desktop, web, and Android apps and from the `ghostex` command line.
+- Minor
+  - Automatic sleep no longer retires a session you are looking at, including one showing its chat surface with the terminal parked behind it, or a session with a Delayed Send still waiting to fire.
+  - Removing an installed agent hook or bundled skill now happens in Settings > Agents next to the control that installed it, with a remove action on each row and one Uninstall All for the whole set.
+  - Remote settings now labels a saved machine's action as Install or Update depending on whether it already runs gxserver, and shows the installed version on the same row.
+  - The project board now explains a refused action — closing an issue that still has open blockers or children, an impossible dependency, an issue id that does not exist — and offers the step that resolves it, instead of reporting the board as unavailable and telling you to reinstall Beads.
+  - The Code tab is now disabled for remote projects, where it would have opened this machine's files rather than the remote ones, and offers to copy the remote path instead.
+  - The session persistence warning in Tips now opens the settings page that actually holds that setting.
+  - Desktop Control settings now reads the real accessibility and screen recording permission state instead of reporting it incorrectly.
+  - The sidebar's scroll fade now settles correctly after a project or collection finishes animating open.
+
 ## 7.11.0 - 2026-08-19
 
 - Major
