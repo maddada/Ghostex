@@ -74,7 +74,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  BOARD_COLUMNS,
   BOARD_SORT_OPTIONS,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   PRIORITY_OPTIONS,
@@ -86,6 +85,7 @@ import {
   boardStatusBeadsValue,
   boardStatusLabel,
   buildAgentWorkPrompt,
+  buildBoardColumns,
   conversationLinkActionKind,
   conversationLinkLabel,
   conversationLinkStatusText,
@@ -119,6 +119,7 @@ import {
   estimateToTshirt,
   type BeadsBridgeRequest,
   type BeadsBridgeResponse,
+  type BoardColumn,
   type BoardEstimateFilter,
   type BoardPriorityFilter,
   type BoardSortOption,
@@ -294,10 +295,6 @@ const PROJECT_BOARD_START_LOCATION_SELECT_ITEMS: ReadonlyArray<{
   { label: "Current project", value: "currentProject" },
   { label: "New worktree", value: "newWorktree" },
 ];
-const PROJECT_BOARD_STATUS_SELECT_ITEMS = BOARD_COLUMNS.map((column) => ({
-  label: column.label,
-  value: column.key,
-}));
 const PROJECT_BOARD_PRIORITY_SELECT_ITEMS = PRIORITY_OPTIONS.map((option) => ({
   label: option.label,
   value: option.value,
@@ -543,6 +540,10 @@ function createProjectBoardDraftTitle(prompt: string): string {
     .trim() || "New ticket";
 }
 
+function boardColumnsSignature(columns: ReadonlyArray<BoardColumn>): string {
+  return columns.map((column) => column.key).join("\u001f");
+}
+
 function applyPendingBoardStatusMoves(
   issues: BeadsIssue[],
   pendingMoves: Map<string, PendingBoardStatusMove>,
@@ -617,6 +618,16 @@ function ProjectBoardApp() {
   const issuePrefix = normalizeIssuePrefix(
     projectName || projectPath.split("/").filter(Boolean).at(-1) || displayKey,
   );
+  /*
+   * CDXC:ProjectBoardCustomColumns 2026-08-21:
+   * Lanes are the board's own bd statuses, which are only known once ensureWorkflowStatuses has read
+   * the config, so the board opens on the six built-in lanes and adopts the extras on the first load.
+   * The columns are mirrored into a ref because the refresh callback maps issue statuses onto them:
+   * reading them from state instead would rebuild loadTickets, and with it restart the auto-refresh
+   * interval, every time a refresh produced a fresh columns array.
+   */
+  const boardColumnsRef = useRef<BoardColumn[]>(buildBoardColumns(""));
+  const [boardColumns, setBoardColumns] = useState<BoardColumn[]>(boardColumnsRef.current);
   const [tickets, setTickets] = useState<BoardTicket[]>([]);
   const [allIssues, setAllIssues] = useState<BeadsIssue[]>([]);
   const [knownLabels, setKnownLabels] = useState<string[]>([]);
@@ -1118,7 +1129,7 @@ function ProjectBoardApp() {
     (issue: BeadsIssue) => {
       setAllIssues((current) => upsertProjectBoardIssue(current, issue));
       setTickets((current) => {
-        const localTicket = toCreatedBoardTicket(issue, current, displayKey);
+        const localTicket = toCreatedBoardTicket(issue, current, displayKey, boardColumns);
         return localTicket ? upsertProjectBoardTicket(current, localTicket) : current;
       });
       setDetail((current) =>
@@ -1129,20 +1140,20 @@ function ProjectBoardApp() {
               labels: issue.labels ?? current.labels,
               priority:
                 issue.priority === undefined ? current.priority : prioritySelectValue(issue.priority),
-              status: beadsStatusToBoardStatus(issue.status),
+              status: beadsStatusToBoardStatus(issue.status, boardColumns),
               title: issue.title,
               tshirt: estimateToTshirt(issue.estimate),
               ticket: {
                 ...current.ticket,
                 ...issue,
-                boardStatus: beadsStatusToBoardStatus(issue.status),
+                boardStatus: beadsStatusToBoardStatus(issue.status, boardColumns),
                 displayId: current.ticket.displayId,
               },
             }
           : current,
       );
     },
-    [displayKey],
+    [boardColumns, displayKey],
   );
 
   const setLocalTicketTitle = useCallback((ticketId: string, title: string) => {
@@ -1175,16 +1186,27 @@ function ProjectBoardApp() {
     try {
       if (mode === "initial" || mode === "manual") {
         await ensureIssuePrefix(runBeads, issuePrefix);
-        await ensureWorkflowStatuses(runBeads);
+        const nextColumns = buildBoardColumns(await ensureWorkflowStatuses(runBeads));
+        if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
+          boardColumnsRef.current = nextColumns;
+          setBoardColumns(nextColumns);
+        }
       }
       const payload = await runBeads({ action: "listIssues" });
       const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
       const issues = applyPendingBoardStatusMoves(rawIssues, pendingStatusMovesRef.current);
-      const issuesSignature = `${displayKey}:${createIssuesSignature(issues)}`;
+      /*
+       * CDXC:ProjectBoardCustomColumns 2026-08-21:
+       * The lane a bead belongs to is resolved against the column list, so the signature carries the
+       * columns too. A status added to the board config while beads already sit in it changes no
+       * issue, and remapping only on an issue change would leave the new lane empty and those beads
+       * drawn in Todo until something unrelated moved.
+       */
+      const issuesSignature = `${displayKey}:${boardColumnsSignature(boardColumnsRef.current)}:${createIssuesSignature(issues)}`;
       if (issuesSignature !== issuesSignatureRef.current) {
         issuesSignatureRef.current = issuesSignature;
         setAllIssues(issues);
-        setTickets(toBoardTickets(issues, displayKey));
+        setTickets(toBoardTickets(issues, displayKey, boardColumnsRef.current));
       }
       const labels = deriveKnownLabelsFromIssues(issues);
       const labelsSignature = labels.join("\u001f");
@@ -1406,7 +1428,7 @@ function ProjectBoardApp() {
   );
 
   const ticketsByColumn = useMemo(() => {
-    return BOARD_COLUMNS.reduce<Record<BoardStatusKey, BoardTicket[]>>(
+    return boardColumns.reduce<Record<string, BoardTicket[]>>(
       (result, column) => {
         result[column.key] = sortBoardTickets(
           filteredTickets.filter((ticket) => ticket.boardStatus === column.key),
@@ -1415,9 +1437,9 @@ function ProjectBoardApp() {
         );
         return result;
       },
-      { backlog: [], done: [], in_progress: [], review: [], test: [], todo: [] },
+      {},
     );
-  }, [filteredTickets, sortOption]);
+  }, [boardColumns, filteredTickets, sortOption]);
   const showInitialBoardLoadingOverlay =
     activeSurfaceTab === "board" && loadState === "loading" && !hasCompletedInitialBoardLoad;
 
@@ -1464,7 +1486,7 @@ function ProjectBoardApp() {
         ...ticket,
         ...issue,
         ...mergedIssue,
-        boardStatus: beadsStatusToBoardStatus(issue.status ?? ticket.status),
+        boardStatus: beadsStatusToBoardStatus(issue.status ?? ticket.status, boardColumns),
         displayId: ticket.displayId,
       };
       setDetail({
@@ -1487,7 +1509,7 @@ function ProjectBoardApp() {
   };
 
   const moveTicket = async (ticketId: string, statusKey: BoardStatusKey) => {
-    const column = BOARD_COLUMNS.find((candidate) => candidate.key === statusKey);
+    const column = boardColumns.find((candidate) => candidate.key === statusKey);
     const ticket = tickets.find((candidate) => candidate.id === ticketId);
     if (!column || !ticket || ticket.boardStatus === statusKey) {
       return;
@@ -1689,7 +1711,7 @@ function ProjectBoardApp() {
             dependency.depends_on_id === parentId && dependency.type === "parent-child",
         ),
       )
-      .filter((issue) => beadsStatusToBoardStatus(issue.status) !== "done")
+      .filter((issue) => beadsStatusToBoardStatus(issue.status, boardColumns) !== "done")
       .map((issue) => issue.id);
   }
 
@@ -1759,7 +1781,7 @@ function ProjectBoardApp() {
       await runBeads({
         action: "updateStatus",
         issueId: draft.ticket.id,
-        status: boardStatusBeadsValue(draft.status),
+        status: boardStatusBeadsValue(draft.status, boardColumns),
       });
     }
     if (trimmedComment) {
@@ -1799,7 +1821,7 @@ function ProjectBoardApp() {
       ...(estimate !== undefined ? { estimate } : {}),
       labels: draft.labels.length > 0 ? draft.labels : draft.ticket.labels,
       priority: Number.isFinite(parsedPriority) ? parsedPriority : draft.ticket.priority,
-      status: boardStatusBeadsValue(draft.status),
+      status: boardStatusBeadsValue(draft.status, boardColumns),
       title: draft.title.trim(),
     };
     setDeleteConfirmingTicketId("");
@@ -1971,7 +1993,7 @@ function ProjectBoardApp() {
         throw new Error("Created ticket was not found after create.");
       }
 
-      const targetBeadsStatus = boardStatusBeadsValue(draft.status);
+      const targetBeadsStatus = boardStatusBeadsValue(draft.status, boardColumns);
       const parsedPriority = Number.parseInt(draft.priority, 10);
       let pendingCreateStatusToken: number | undefined;
       if (!startAfterCreate && draft.status !== "todo") {
@@ -1996,7 +2018,7 @@ function ProjectBoardApp() {
       setKnownLabels((current) => mergeKnownLabels(current, createdIssue?.labels ?? draft.labels));
 
       if (startAfterCreate) {
-        const createdTicket = toCreatedBoardTicket(createdIssue, allIssues, displayKey);
+        const createdTicket = toCreatedBoardTicket(createdIssue, allIssues, displayKey, boardColumns);
         if (!createdTicket) {
           throw new Error("Created ticket was not available for start.");
         }
@@ -3065,7 +3087,7 @@ function ProjectBoardApp() {
                 staying crisp.
               */}
               <section className="project-board-lanes horizontal-scroll-fade-mask" aria-label="Project issue board">
-                {BOARD_COLUMNS.map((column) => (
+                {boardColumns.map((column) => (
                   <BoardLane
                     column={column}
                     conversationAction={conversationAction}
@@ -3543,6 +3565,7 @@ function ProjectBoardApp() {
               assignee={detail.ticket?.assignee}
               blockedByIds={detail.blockedByIds}
               blockingIds={detail.blockingIds}
+              boardColumns={boardColumns}
               createdBy={detail.ticket?.created_by}
               knownLabels={knownLabels}
               labels={detail.labels}
@@ -3762,7 +3785,7 @@ function ProjectBoardApp() {
             <DialogTitle>New Ticket</DialogTitle>
             <DialogDescription>
               Leave the title empty to auto-generate it from the prompt. Creates in{" "}
-              {boardStatusLabel(newTicket.status)}.
+              {boardStatusLabel(newTicket.status, boardColumns)}.
             </DialogDescription>
           </DialogHeader>
           <div
@@ -3772,6 +3795,7 @@ function ProjectBoardApp() {
             <TicketMetaFields
               blockedByIds={newTicket.blockedByIds}
               blockingIds={newTicket.blockingIds}
+              boardColumns={boardColumns}
               knownLabels={knownLabels}
               labels={newTicket.labels}
               onBlockedByChange={(blockedByIds) =>
@@ -3956,6 +3980,7 @@ function TicketMetaFields({
   assignee,
   blockedByIds,
   blockingIds,
+  boardColumns,
   createdBy,
   knownLabels,
   labels,
@@ -3974,6 +3999,7 @@ function TicketMetaFields({
   assignee?: string;
   blockedByIds: string[];
   blockingIds: string[];
+  boardColumns: ReadonlyArray<BoardColumn>;
   createdBy?: string;
   knownLabels: string[];
   labels: string[];
@@ -3992,6 +4018,10 @@ function TicketMetaFields({
   const [labelDraft, setLabelDraft] = useState("");
   const labelSuggestions = knownLabels.filter((label) => !labels.includes(label));
   const creator = ticketCreatorName(createdBy, assignee);
+  const statusSelectItems = useMemo(
+    () => boardColumns.map((column) => ({ label: column.label, value: column.key })),
+    [boardColumns],
+  );
 
   return (
     <div className="project-ticket-meta-grid">
@@ -3999,7 +4029,7 @@ function TicketMetaFields({
         <label className="project-ticket-field project-ticket-field-inline">
           <span>Status</span>
           <Select
-            items={PROJECT_BOARD_STATUS_SELECT_ITEMS}
+            items={statusSelectItems}
             onValueChange={(value) => onStatusChange(value as BoardStatusKey)}
             value={status}
           >
@@ -4007,7 +4037,7 @@ function TicketMetaFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {BOARD_COLUMNS.map((column) => (
+              {boardColumns.map((column) => (
                 <SelectItem key={column.key} value={column.key}>
                   {column.label}
                 </SelectItem>
@@ -4561,7 +4591,7 @@ function BoardLane({
   onOpenTicket,
   tickets,
 }: {
-  column: (typeof BOARD_COLUMNS)[number];
+  column: BoardColumn;
   conversationAction: ConversationActionState;
   linksByBeadKey: Map<string, ProjectBoardConversationLinkView[]>;
   onAddTicket: (status: BoardStatusKey) => void;
@@ -6328,9 +6358,10 @@ function toCreatedBoardTicket(
   issue: BeadsIssue,
   knownIssues: BeadsIssue[],
   displayKey: string,
+  columns: ReadonlyArray<BoardColumn>,
 ): BoardTicket | undefined {
   const issues = [...knownIssues.filter((candidate) => candidate.id !== issue.id), issue];
-  return toBoardTickets(issues, displayKey).find((ticket) => ticket.id === issue.id);
+  return toBoardTickets(issues, displayKey, columns).find((ticket) => ticket.id === issue.id);
 }
 
 function resolveCreatedIssueFromRefresh(
@@ -7836,10 +7867,19 @@ styleElement.textContent = `
      * The lane bar is the scroller's own scrollbar now, so it lives inside the
      * mask and fades at the very ends of its travel like the ticket dialog's
      * scrollbar already does.
+     *
+     * CDXC:ProjectBoardCustomColumns 2026-08-21:
+     * The board renders one lane per configured Beads status, so the track count
+     * cannot be a fixed six: an explicit six-track template auto-places a
+     * seventh lane into an implicit second row, which overflow-y: hidden then
+     * clips out of sight. Flowing into implicit columns keeps every rendered
+     * lane on the one horizontally scrolling row whatever the board's status
+     * list holds, at the same minimum lane width as before.
      */
     --edge-fade-distance: 18px;
     gap: 0;
-    grid-template-columns: repeat(6, minmax(218px, 1fr));
+    grid-auto-columns: minmax(218px, 1fr);
+    grid-auto-flow: column;
     min-height: 0;
     overflow-x: auto;
     overflow-y: hidden;
