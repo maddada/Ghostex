@@ -121,6 +121,21 @@ pub struct SessionChatSendProbe {
     /// Hook activity at send time. A turn that was already running when the
     /// message was typed explains a silent transcript without any failure.
     working_at_send: bool,
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-20:
+    What the CLI itself swallows instead of sending to the model, if anything.
+    This watchdog reasons about transcript writes, and an intercepted message
+    either lands there in a different shape or never lands at all:
+      - Claude logs `/rename` as a `system` / `local_command` row and `!ls` as a
+        `<bash-input>` row, in both cases WITHOUT a user turn;
+      - Codex records nothing whatsoever — verified against both its source
+        (`SlashCommand` is dispatched entirely inside the TUI, `!cmd` runs
+        through `submit_shell_command_with_history` which only touches the
+        message history file) and every rollout on this machine.
+    Both facts are handled where they matter: extra delivery proof below, and a
+    suppression for the guess-based verdicts in `escalate_undelivered_send`.
+    */
+    intercepted: Option<InterceptedInput>,
     text: String,
 }
 
@@ -182,6 +197,7 @@ impl SessionChatSendProbe {
             transcript_path,
             transcript_offset,
             working_at_send,
+            intercepted: InterceptedInput::detect(text),
             text: text.to_string(),
         })
     }
@@ -326,7 +342,19 @@ async fn run_session_chat_send_watchdog(
 
     let decoder = session_chat_line_decoder(probe.transcript_agent);
     let needle = normalize_watchdog_text(&probe.text);
-    let raw_needle = json_escaped_needle(&probe.text);
+    /*
+    Everything the raw scan may look for: what the user typed, plus whatever
+    record the CLI writes when it intercepts the input instead of sending it.
+    */
+    let raw_needles: Vec<String> = json_escaped_needle(&probe.text)
+        .into_iter()
+        .chain(
+            probe
+                .intercepted
+                .iter()
+                .flat_map(InterceptedInput::delivery_needles),
+        )
+        .collect();
     let mut cursor = WatchdogCursor {
         path: probe.transcript_path.clone(),
         base_offset: probe.transcript_offset,
@@ -342,7 +370,7 @@ async fn run_session_chat_send_watchdog(
         }
         let poll_probe = probe.clone();
         let poll_needle = needle.clone();
-        let poll_raw_needle = raw_needle.clone();
+        let poll_raw_needles = raw_needles.clone();
         let Ok((delivered, returned)) = tokio::task::spawn_blocking(move || {
             let mut cursor = cursor;
             let delivered = poll_transcript_for_send(
@@ -350,7 +378,7 @@ async fn run_session_chat_send_watchdog(
                 &mut cursor,
                 decoder,
                 &poll_needle,
-                poll_raw_needle.as_deref(),
+                &poll_raw_needles,
             );
             (delivered, cursor)
         })
@@ -416,6 +444,11 @@ worse than a missed one:
      turn ends) — say so, at severity info. (Silence only.)
   2. The screen explains itself (login expired, trust dialog, ...) — publish THAT
      notice so the client renders the specific card, re-sourced to the watchdog.
+     Skipped for input the CLI intercepted: the screen then belongs to the
+     command that just ran (`/model`'s picker, `/usage`'s quota view), and
+     narrating it as "what the terminal is showing INSTEAD of your message" is
+     wrong twice over. A genuinely blocking screen is still published by the
+     screen detector on the next read, which does not need the watchdog.
   3. Clean screen: consult Claude's own session registry before blaming the
      process.
   4. A turn was already running when the message was typed and is still running
@@ -465,7 +498,9 @@ async fn escalate_undelivered_send(
     mid-turn nothing ever clears it, and that stuck "working" is exactly the
     state this feature exists to explain.
     */
-    if let Some(screen) = screen.as_deref() {
+    let screen_explains_the_send =
+        !(reasoning_from_silence && probe.intercepted.is_some());
+    if let Some(screen) = screen.as_deref().filter(|_| screen_explains_the_send) {
         if let Some(mut notice) =
             classify_session_chat_terminal_notice(probe.agent.as_deref(), screen)
         {
@@ -526,6 +561,19 @@ async fn escalate_undelivered_send(
         message provably never left Ghostex.
         */
         if !transcript_watched {
+            return;
+        }
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-20:
+        The CLI executes this input itself rather than sending it to the model,
+        so a silent transcript is its NORMAL outcome — `/usage`, `/model`,
+        `!ls` and the rest write nothing a watcher can see, and the records that
+        do exist are matched as delivery above. Reasoning from silence here only
+        ever produced a false "your message did not reach the agent" for a
+        command that plainly ran. Hard evidence above — an exited CLI — still
+        alarms, and a send that FAILED never reaches this suppression.
+        */
+        if probe.intercepted.is_some() {
             return;
         }
     }
@@ -592,7 +640,7 @@ fn poll_transcript_for_send(
     cursor: &mut WatchdogCursor,
     decoder: SessionChatLineDecoder,
     needle: &str,
-    raw_needle: Option<&str>,
+    raw_needles: &[String],
 ) -> bool {
     if cursor.path.is_none() {
         // Codex creates the rollout lazily, so a brand-new session has no file
@@ -655,13 +703,21 @@ fn poll_transcript_for_send(
     Second tier: the decoders skip rows that still prove delivery — Claude's
     `queue-operation` enqueue record (typed while a turn ran) and Codex's
     `response_item` message lane. Both carry the text verbatim inside a JSON
-    string, so the needle is escaped the same way before the scan.
+    string, so the needle is escaped the same way before the scan. Input the CLI
+    intercepted adds its own shapes to look for: it is never a user turn, but
+    Claude does record `<command-name>` / `<bash-input>` rows naming it.
     */
-    let Some(raw_needle) = raw_needle else {
+    if raw_needles.is_empty() {
+        return false;
+    }
+    let Some(appended) =
+        read_appended_text(&path, cursor.base_offset, WATCHDOG_RAW_SCAN_LIMIT_BYTES)
+    else {
         return false;
     };
-    read_appended_text(&path, cursor.base_offset, WATCHDOG_RAW_SCAN_LIMIT_BYTES)
-        .is_some_and(|appended| appended.contains(raw_needle))
+    raw_needles
+        .iter()
+        .any(|raw_needle| appended.contains(raw_needle))
 }
 
 fn user_message_matches(message: &SessionChatMessage, needle: &str) -> bool {
@@ -709,6 +765,78 @@ fn json_escaped_needle(text: &str) -> Option<String> {
     let encoded = serde_json::to_string(trimmed).ok()?;
     let inner = encoded.strip_prefix('"')?.strip_suffix('"')?;
     (!inner.is_empty()).then(|| inner.to_string())
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-20:
+A message the CLI executes itself instead of sending to the model. Both agents
+have exactly two of these, and both use the same two prefixes:
+  - `/command` — Claude's local commands and Codex's `SlashCommand` popup, from
+    `/usage` and `/model` (pure UI, nothing recorded anywhere) through `/init`
+    and `/compact` (a turn is recorded, but its text is the command's expanded
+    prompt, never what the user typed);
+  - `!command` — a shell escape in both CLIs, run locally and never sent.
+Recognition is deliberately strict, because everything downstream of it either
+adds evidence or REMOVES an alarm: a single line, an alphabetic first character
+after the prefix, and no other punctuation inside the name, so a pasted path
+(`/Users/...`) or a prose message that opens with a slash stays an ordinary
+message. Namespaced plugin commands (`/plugin-dev:agent-creator`) keep their
+colon — the CLI logs the full name and the needle below has to match it.
+*/
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum InterceptedInput {
+    /// The `/command` token, prefix included.
+    SlashCommand(String),
+    /// The command body with the `!` stripped, which is how both CLIs echo and
+    /// (for Claude) record it.
+    ShellEscape(String),
+}
+
+impl InterceptedInput {
+    fn detect(text: &str) -> Option<Self> {
+        let trimmed = text.trim();
+        if trimmed.lines().count() != 1 {
+            return None;
+        }
+        if let Some(rest) = trimmed.strip_prefix('/') {
+            let mut name = String::new();
+            for ch in rest.chars() {
+                if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | ':') {
+                    name.push(ch);
+                    continue;
+                }
+                if ch.is_whitespace() {
+                    break;
+                }
+                return None;
+            }
+            if !name.starts_with(|ch: char| ch.is_ascii_alphabetic()) {
+                return None;
+            }
+            return Some(Self::SlashCommand(format!("/{name}")));
+        }
+        let command = trimmed.strip_prefix('!')?.trim();
+        if !command.starts_with(|ch: char| ch.is_ascii_alphabetic()) {
+            return None;
+        }
+        Some(Self::ShellEscape(command.to_string()))
+    }
+
+    /// Extra raw-scan needles that PROVE the CLI took the input. Claude names
+    /// the command in a record of its own; Codex contributes nothing here,
+    /// which is what the suppression exists for.
+    fn delivery_needles(&self) -> Vec<String> {
+        match self {
+            // Both the tag and the command name are JSON-escape-free, so this
+            // matches the raw transcript bytes exactly as written.
+            Self::SlashCommand(command) => {
+                vec![format!("<command-name>{command}</command-name>")]
+            }
+            // `<bash-input>` carries the command without its `!`, so the typed
+            // text never matches it; the stripped body does.
+            Self::ShellEscape(command) => json_escaped_needle(command).into_iter().collect(),
+        }
+    }
 }
 
 fn read_appended_text(path: &Path, offset: u64, limit: u64) -> Option<String> {
