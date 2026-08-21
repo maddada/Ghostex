@@ -1277,6 +1277,50 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 20;
     "#,
     },
+    Migration {
+        id: "0021_session_chat_queue",
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-21:
+        The Ghostex-owned chat prompt queue and the synced composer draft. Both
+        are daemon-owned so the queue drains with every client closed and the
+        same session opened on another device shows what was already typed.
+        Deliberately no foreign key onto `sessions`: a queued prompt and a draft
+        are text the USER typed, and losing it because a session row was pruned
+        or re-created is exactly the failure this feature exists to prevent —
+        the session is validated per request instead. `position` is dense and
+        rewritten on reorder; `state` mirrors the wire contract in
+        shared/session-chat-queue.ts.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS session_chat_queued_prompts (
+        promptId     TEXT PRIMARY KEY,
+        projectId    TEXT NOT NULL,
+        sessionId    TEXT NOT NULL,
+        position     INTEGER NOT NULL,
+        text         TEXT NOT NULL,
+        state        TEXT NOT NULL DEFAULT 'queued' CHECK (
+          state IN ('queued', 'sending', 'failed')
+        ),
+        errorMessage TEXT,
+        createdAt    TEXT NOT NULL,
+        updatedAt    TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_session_chat_queued_prompts_session
+        ON session_chat_queued_prompts(projectId, sessionId, position);
+
+      CREATE TABLE IF NOT EXISTS session_chat_drafts (
+        projectId      TEXT NOT NULL,
+        sessionId      TEXT NOT NULL,
+        content        TEXT NOT NULL,
+        originClientId TEXT NOT NULL,
+        updatedAt      TEXT NOT NULL,
+        PRIMARY KEY (projectId, sessionId)
+      );
+
+      PRAGMA user_version = 21;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1325,10 +1369,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 20);
+        assert_eq!(user_version, 21);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 20);
+        assert_eq!(schema_migration_count(&db), 21);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1346,6 +1390,7 @@ mod tests {
                 "idx_portless_domain_worktree_slug".to_string(),
                 "idx_projects_recent_closed".to_string(),
                 "idx_projects_visibility".to_string(),
+                "idx_session_chat_queued_prompts_session".to_string(),
                 "idx_sessions_project_sidebar_order".to_string(),
                 "idx_sessions_project_updated".to_string(),
                 "idx_stashed_prompts_updated".to_string(),

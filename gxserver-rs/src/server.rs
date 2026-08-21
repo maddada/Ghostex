@@ -159,7 +159,7 @@ enum ExistingGxserverState {
 }
 
 #[derive(Clone)]
-struct AppState {
+pub(crate) struct AppState {
     auth_token: String,
     automation_runtime: AutomationRuntime,
     delayed_send_runtime: DelayedSendRuntime,
@@ -425,6 +425,30 @@ pub async fn run_gxserver_foreground(
     }));
     state.automation_runtime.start(shutdown_tx.subscribe());
     state.delayed_send_runtime.start(shutdown_tx.subscribe());
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    A queued prompt left in `sending` is ambiguous after a restart — the bytes
+    may already have reached the agent — so it is retired as `failed` with an
+    explicit reason and waits for the user. Never silently re-sent.
+    */
+    let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    The queue scheduler is built HERE rather than beside the other runtimes
+    because its three handles all close over the finished `Arc<AppState>`: the
+    internal chat send (so a queued prompt inherits the per-session send mutex),
+    the state-frame publisher, and the cached terminal notice. It must be
+    started after restart recovery, so a row left `sending` by the previous
+    process is already retired before the first tick can look at it.
+    */
+    crate::session_chat_queue_runtime::SessionChatQueueRuntime::new(
+        paths.clone(),
+        metadata.server_id.clone(),
+        session_chat_queue_sender_factory(&state),
+        session_chat_queue_publisher_factory(&state),
+        session_chat_queue_notice_reader(&state),
+    )
+    .start(shutdown_tx.subscribe());
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
@@ -2879,6 +2903,7 @@ async fn route_http(
         }
         "/api/answerSessionChatPrompt" => {
             handle_answer_session_chat_prompt_http(&state, endpoint.path, request_id, &body_json)
+                .await
         }
         "/api/interruptSessionChat" => {
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json)
@@ -2886,6 +2911,15 @@ async fn route_http(
         "/api/handoffSessionChatDraft" => {
             handle_handoff_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
                 .await
+        }
+        "/api/readSessionChatQueue"
+        | "/api/queueSessionChatPrompt"
+        | "/api/updateSessionChatQueuedPrompt"
+        | "/api/removeSessionChatQueuedPrompt"
+        | "/api/reorderSessionChatQueue"
+        | "/api/sendSessionChatQueuedPrompt"
+        | "/api/setSessionChatDraft" => {
+            handle_session_chat_queue_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
@@ -11114,6 +11148,19 @@ impl SessionChatOptionDetector {
                         .and_then(|entry| entry.value.notice.as_ref()),
                 );
             }
+            /*
+            CDXC:SessionChatTerminalActivity 2026-08-22: same instance-not-sample
+            rule, and load-bearing here — the client anchors its elapsed clock to
+            `detectedAt`, so re-minting it on every probe would peg the timer at
+            zero for the whole run.
+            */
+            if let Some(activity) = detected.activity.as_mut() {
+                activity.carry_forward_detected_at(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.value.activity.as_ref()),
+                );
+            }
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -11152,6 +11199,53 @@ the last classification the shared 5s cache holds, overridden by a watchdog
 notice when one is pending. Every path that must stay spawn-free — the 500ms
 long-poll fingerprint, prompt-driven state frames — reads it through here.
 */
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+The whole screen-derived half of a session's state, owned, from the shared 5s
+cache and the watchdog store. Every spawn-free publisher reads it through here
+so the notice and the progress row are always taken from the SAME cache read
+and can never be published one frame apart.
+*/
+#[derive(Default)]
+struct CachedSessionChatScreenState {
+    notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
+    activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+}
+
+impl CachedSessionChatScreenState {
+    fn borrow(&self) -> crate::session_chat::SessionChatScreenState<'_> {
+        crate::session_chat::SessionChatScreenState {
+            notice: self.notice.as_ref(),
+            activity: self.activity.as_ref(),
+        }
+    }
+}
+
+fn cached_session_chat_screen_state(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> CachedSessionChatScreenState {
+    let (screen_notice, activity) = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| {
+            cache
+                .get(&session_observer_key(project_id, session_id))
+                .map(|entry| (entry.value.notice.clone(), entry.value.activity.clone()))
+        })
+        .unwrap_or_default();
+    CachedSessionChatScreenState {
+        notice: crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            project_id,
+            session_id,
+            screen_notice,
+        ),
+        activity,
+    }
+}
+
 fn cached_session_chat_terminal_notice(
     state: &AppState,
     project_id: &str,
@@ -11190,13 +11284,17 @@ fn session_chat_terminal_notice_publisher(
     let session_id = session_id.to_string();
     Arc::new(move || {
         let key = session_observer_key(&project_id, &session_id);
-        let (options, screen_notice) = option_cache
+        let (options, screen_notice, activity) = option_cache
             .lock()
             .ok()
             .and_then(|cache| {
-                cache
-                    .get(&key)
-                    .map(|entry| (entry.value.options.clone(), entry.value.notice.clone()))
+                cache.get(&key).map(|entry| {
+                    (
+                        entry.value.options.clone(),
+                        entry.value.notice.clone(),
+                        entry.value.activity.clone(),
+                    )
+                })
             })
             .unwrap_or_default();
         let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
@@ -11212,7 +11310,10 @@ fn session_chat_terminal_notice_publisher(
             &project_id,
             &session_id,
             options.as_ref(),
-            notice.as_ref(),
+            crate::session_chat::SessionChatScreenState {
+                notice: notice.as_ref(),
+                activity: activity.as_ref(),
+            },
         );
     })
 }
@@ -11467,6 +11568,25 @@ fn sync_session_chat_follower_for_session(state: &AppState, session: &Value, _re
             }),
         }
     };
+    /*
+    CDXC:SessionChatQueueCarriage 2026-08-21:
+    Snapshot / replaced / state frames carry the session's prompt queue and
+    synced draft, so a client that subscribes mid-session sees the same rows the
+    device that queued them sees. Read lazily inside the frame builders, never
+    on the reconcile tick.
+    */
+    let queue_reader: crate::session_chat::SessionChatQueueReader = {
+        let paths = state.paths.clone();
+        let project_id = project_id.clone();
+        let session_id = session_id.clone();
+        Arc::new(move || {
+            crate::session_chat_queue::read_session_chat_queue_snapshot(
+                &paths,
+                &project_id,
+                &session_id,
+            )
+        })
+    };
     let config = crate::session_chat::SessionChatFollowerConfig {
         project_id,
         session_id,
@@ -11478,6 +11598,7 @@ fn sync_session_chat_follower_for_session(state: &AppState, session: &Value, _re
         server_id: state.metadata.server_id.clone(),
         state_reader: Some(state_reader),
         options_reader: Some(options_reader),
+        queue_reader: Some(queue_reader),
         successor_hooks: Some(successor_hooks),
         tuning: crate::session_chat::SessionChatFollowerTuning::default(),
     };
@@ -11661,6 +11782,14 @@ struct SessionChatReadResolution {
     working: bool,
     stored_prompt: Option<String>,
     transcript_path: Option<std::path::PathBuf>,
+    /*
+    CDXC:SessionChatQueueCarriage 2026-08-21: the Ghostex prompt queue and the
+    synced composer draft, resolved on the SAME connection the rest of this
+    state comes from. Folded into the fingerprint below, without which a mobile
+    client — which synthesizes its frames from long-polled reads — would never
+    learn that the queue or the draft changed at all.
+    */
+    queue: crate::session_chat_queue::SessionChatQueueSnapshot,
     fingerprint: String,
 }
 
@@ -11996,6 +12125,9 @@ fn resolve_session_chat_read_state(
     let lifecycle_running = is_session_chat_followable_session(&session);
     let working = session_chat_hook_working(&session);
     let stored_prompt = crate::agents::session_chat_prompt_setting(&session);
+    let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+        &db, project_id, session_id,
+    );
     drop(session);
     drop(repository);
     drop(db);
@@ -12061,6 +12193,31 @@ fn resolve_session_chat_read_state(
         Some(notice) => notice.identity().hash(&mut hasher),
         None => 0u8.hash(&mut hasher),
     }
+    /*
+    CDXC:SessionChatTerminalActivity 2026-08-22:
+    The progress row DOES hash its numbers, unlike the notice above. A notice
+    that says the same thing must not churn the fingerprint; a progress bar that
+    moved is the only reason to re-read at all, and an SSH-only client with no
+    event socket would otherwise watch a frozen bar for the whole compaction.
+    Still cache-only: no detection, no spawn, on this 500ms loop.
+    */
+    match cached_session_chat_screen_state(state, project_id, session_id).activity {
+        Some(activity) => {
+            activity.kind.hash(&mut hasher);
+            activity.percent.hash(&mut hasher);
+            activity.elapsed_seconds.hash(&mut hasher);
+        }
+        None => 0u8.hash(&mut hasher),
+    }
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    Queue revision + draft updatedAt. This is load-bearing for Ghostex mobile:
+    it has no /api/events socket and rebuilds its frames from long-polled
+    readSessionChat results, so a queue or draft change that does not move the
+    fingerprint is a change the phone never sees. Already-materialised rows —
+    no extra query, no extra connection.
+    */
+    queue.revision().hash(&mut hasher);
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -12071,6 +12228,7 @@ fn resolve_session_chat_read_state(
         working,
         stored_prompt,
         transcript_path,
+        queue,
         fingerprint,
     })
 }
@@ -12165,6 +12323,7 @@ async fn handle_read_session_chat_http(
         working,
         stored_prompt,
         transcript_path,
+        queue,
         fingerprint,
     } = resolution;
 
@@ -12184,6 +12343,15 @@ async fn handle_read_session_chat_http(
     let mut result = Map::new();
     result.insert("fingerprint".to_string(), json!(fingerprint));
     result.insert("working".to_string(), json!(working));
+    /*
+    CDXC:SessionChatQueueCarriage 2026-08-21:
+    `queue` is written on EVERY readSessionChat answer, including the early
+    "unsupported"/"starting" returns below, because its presence — even as an
+    empty array — is the capability probe a client uses to decide whether to
+    show queue controls at all. `draft` rides along only when the server holds
+    one: an omitted draft means unchanged, never cleared.
+    */
+    queue.insert_into(&mut result);
     if let Some(agent) = agent.as_deref() {
         result.insert("agent".to_string(), json!(agent));
     }
@@ -12217,6 +12385,13 @@ async fn handle_read_session_chat_http(
             detection.notice,
         ) {
             result.insert("terminalNotice".to_string(), notice.to_value());
+        }
+        /*
+        CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache,
+        same running-only gate. Omitted means the client clears its progress row.
+        */
+        if let Some(activity) = detection.activity.as_ref() {
+            result.insert("terminalActivity".to_string(), activity.to_value());
         }
     }
     let stored_prompt = stored_prompt
@@ -12526,6 +12701,46 @@ async fn handle_send_session_chat_message_http(
             },
         );
     }
+    match send_session_chat_message_internal(
+        state,
+        &target.project_id,
+        &target.session_id,
+        &text,
+        &image_paths,
+    )
+    .await
+    {
+        Ok(text_bytes) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "queued": true, "textBytes": text_bytes })),
+        ),
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+THE internal chat-message send. `/api/sendSessionChatMessage` is one caller;
+the prompt queue ("Send now" and the scheduler) is the other, which is why it
+lives here instead of inside the HTTP handler. Everything a chat send needs
+travels with it — the per-session send mutex in session_chat_send.rs, the
+answerable-picker refusal, the Ctrl+G draft-preservation handshake, the delivery
+watchdog and the option re-detect — so a queued prompt is indistinguishable from
+one the user typed and can never interleave with a Delayed Send.
+Returns the number of text bytes handed to zmx.
+*/
+pub(crate) async fn send_session_chat_message_internal(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    image_paths: &[String],
+) -> std::result::Result<usize, DomainStateError> {
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
     let agent = session_chat_agent_for_session(&target.session);
     /*
     CDXC:SessionChatTerminalNotices 2026-08-19:
@@ -12536,6 +12751,35 @@ async fn handle_send_session_chat_message_http(
     on a blocking thread — and it is skipped entirely for agents the watchdog
     does not cover.
     */
+    /*
+    CDXC:SessionChatTerminalPicker 2026-08-21:
+    Claude Code's resume-usage picker owns the input line when a large session
+    is resumed. This send used to answer it automatically ("Resume full session
+    as-is") before typing, which was wrong twice over: the summary-vs-full
+    trade-off is the user's to make, and whenever the walk missed, the message's
+    own trailing Enter confirmed the HIGHLIGHTED row instead — silently
+    compacting the conversation the user was continuing, with nothing to show
+    for it but a delivery-failed banner.
+
+    So the send refuses instead. The same capture that proves the picker is up
+    caches the notice carrying its rows, and publishing it puts the answer
+    picker in front of the user on every subscribed client. Only an ANSWERABLE
+    state stops a send here: the catalog's other blocking dialogs still go
+    through to the delivery watchdog, which is the only thing that can explain
+    them.
+    */
+    if let Some(blocking) = SessionChatOptionDetector::new(state)
+        .detect(&target.project_id, &target.session_id, agent.as_deref(), true)
+        .await
+        .notice
+        .filter(crate::session_chat_notice::SessionChatTerminalNotice::is_answerable)
+    {
+        session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id)();
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: format!("{}. Answer it in chat before sending.", blocking.title),
+        });
+    }
     let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
         &target.project_id,
         &target.session_id,
@@ -12544,10 +12788,10 @@ async fn handle_send_session_chat_message_http(
         read_runtime_text(&target.session, "agentSessionId").as_deref(),
         read_runtime_text(&target.session, "agentSessionPath").as_deref(),
         session_chat_hook_working(&target.session),
-        &text,
+        text,
     )
     .await;
-    let mut steps = crate::session_chat_send::build_session_chat_message_steps(&text, &image_paths);
+    let mut steps = crate::session_chat_send::build_session_chat_message_steps(text, image_paths);
     /*
     Grok Build fullscreen maps Ctrl+G to its Tasks pane rather than its
     external editor. Its terminal-to-chat transition therefore leaves any
@@ -12563,16 +12807,6 @@ async fn handle_send_session_chat_message_http(
             },
         );
     }
-    /*
-    Claude Code's resume-usage picker owns the input line when a large session
-    is resumed, so it has to be answered before anything else is typed —
-    including the Ctrl+G draft-preservation handshake, which the picker would
-    otherwise swallow. The step is a no-op when no picker is on screen.
-    */
-    steps.insert(
-        0,
-        crate::session_chat_send::SessionChatSendStep::ResolveResumePrompt,
-    );
     if let Err(error) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
@@ -12611,14 +12845,10 @@ async fn handle_send_session_chat_message_http(
                 );
             }
         }
-        return domain_error_response(
-            endpoint_path,
-            request_id,
-            DomainStateError {
-                code: "dependencyUnavailable",
-                message: error.message,
-            },
-        );
+        return Err(DomainStateError {
+            code: "dependencyUnavailable",
+            message: error.message,
+        });
     }
     /*
     CDXC:SessionChatTerminalNotices 2026-08-19:
@@ -12636,7 +12866,12 @@ async fn handle_send_session_chat_message_http(
         );
     }
     // An option command changes what the statusline reports: read it back.
-    if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), &text) {
+    if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), text)
+        || crate::session_chat_options::is_session_chat_activity_command_text(
+            agent.as_deref(),
+            text,
+        )
+    {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
@@ -12644,14 +12879,249 @@ async fn handle_send_session_chat_message_http(
             agent.as_deref(),
         );
     }
-    routed_json(
-        Some(endpoint_path),
-        StatusCode::OK,
-        rpc_success(
+    Ok(text.len())
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+Dispatch-only glue for the Ghostex chat prompt queue. Storage, validation and
+the endpoint bodies live in session_chat_queue.rs; server.rs supplies only the
+three things that module deliberately does not know about — the state-database
+path, the delivery path, and the live follower stream a state frame rides.
+*/
+async fn handle_session_chat_queue_http(
+    state: &Arc<AppState>,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if endpoint_path == "/api/sendSessionChatQueuedPrompt" {
+        return handle_send_session_chat_queued_prompt_http(
+            state,
+            endpoint_path,
             request_id,
-            json!({ "queued": true, "textBytes": text.len() }),
-        ),
+            &params,
+        )
+        .await;
+    }
+    match crate::session_chat_queue::handle_session_chat_queue_endpoint(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        &endpoint_path,
+        &params,
+    ) {
+        Ok(result) => {
+            /*
+            Every mutation restates the queue to the session's other followers,
+            so a row queued on the phone appears in the desktop composer without
+            anyone re-reading.
+            */
+            if result.broadcast {
+                broadcast_session_chat_queue_state(state, &result.project_id, &result.session_id);
+            }
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result.value),
+            )
+        }
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+/*
+"Send now" delivers immediately regardless of agent state, exactly like pressing
+Enter. `sent: false` therefore means the send itself FAILED and the row is now
+`failed` with an errorMessage — it never means "deferred".
+*/
+async fn handle_send_session_chat_queued_prompt_http(
+    state: &Arc<AppState>,
+    endpoint_path: String,
+    request_id: String,
+    params: &Map<String, Value>,
+) -> RoutedResponse {
+    let (project_id, session_id, prompt_id) = match session_chat_queue_prompt_target(params) {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let sender = session_chat_queue_sender(state, &project_id, &session_id);
+    match crate::session_chat_queue::deliver_session_chat_queued_prompt(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        &project_id,
+        &session_id,
+        &prompt_id,
+        &sender,
     )
+    .await
+    {
+        Ok(delivery) => {
+            broadcast_session_chat_queue_state(state, &project_id, &session_id);
+            let mut result = Map::new();
+            delivery.snapshot.insert_into(&mut result);
+            result.insert("sent".to_string(), json!(delivery.sent));
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, Value::Object(result)),
+            )
+        }
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+fn session_chat_queue_prompt_target(
+    params: &Map<String, Value>,
+) -> std::result::Result<(String, String, String), DomainStateError> {
+    let read = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    match (read("projectId"), read("sessionId"), read("promptId")) {
+        (Some(project_id), Some(session_id), Some(prompt_id)) => {
+            Ok((project_id, session_id, prompt_id))
+        }
+        _ => Err(DomainStateError {
+            code: "invalidParams",
+            message: "sendSessionChatQueuedPrompt requires projectId, sessionId and promptId."
+                .to_string(),
+        }),
+    }
+}
+
+/*
+Publishes the session's current queue + draft on a `sessionChatState` frame.
+Same restating discipline as the terminal-notice publisher: a state frame
+REPLACES the client's prompt card, notice, pills and queue, so it must carry all
+of them, which is exactly what emit_session_chat_options_state_frame builds.
+No live follower ⇒ nothing is emitted and clients pick the change up from their
+next readSessionChat (or, on mobile, from the long-poll fingerprint).
+*/
+fn broadcast_session_chat_queue_state(state: &AppState, project_id: &str, session_id: &str) {
+    let key = session_observer_key(project_id, session_id);
+    let options = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(&key).map(|entry| entry.value.options.clone()))
+        .unwrap_or_default();
+    let screen = cached_session_chat_screen_state(state, project_id, session_id);
+    emit_session_chat_options_state_frame(
+        &state.session_chat_followers,
+        &state.event_hub,
+        &state.paths,
+        &state.metadata.server_id,
+        project_id,
+        session_id,
+        options.as_ref(),
+        screen.borrow(),
+    );
+    publish_session_chat_queue_presentation_delta(state, project_id, session_id);
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The sidebar's queued-prompt badge reads `queuedPromptCount` off the presentation
+projection, NOT off the chat frame — the sidebar renders every session from that
+snapshot and holds no per-session chat subscription. A queue change on an
+otherwise idle session produces no other delta, so without this publish the badge
+would only appear whenever some unrelated event happened to fire.
+
+Every queue mutation and every scheduler delivery already funnels through
+`broadcast_session_chat_queue_state`, so the delta is published there rather than
+at each call site. Same shape as `delayed_sends::publish_session_change`: one
+short sequencer-locked section that projects, allocates the revision and
+broadcasts, so revision order and broadcast order stay identical.
+*/
+fn publish_session_chat_queue_presentation_delta(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let _ = schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The delivery handle the queue module (and the scheduler in
+session_chat_queue_runtime.rs) holds. It closes over the daemon state so those
+modules never learn about AppState, zmx names, or the send watchdog, and every
+queued prompt still travels the same internals /api/sendSessionChatMessage uses.
+*/
+pub(crate) fn session_chat_queue_sender(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_queue::SessionChatQueueSender {
+    let state = state.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move |text: String| {
+        let state = state.clone();
+        let project_id = project_id.clone();
+        let session_id = session_id.clone();
+        Box::pin(async move {
+            send_session_chat_message_internal(&state, &project_id, &session_id, &text, &[])
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message)
+        })
+    })
+}
+
+/// Per-session sender factory for the scheduler, which delivers for whichever
+/// session becomes ready rather than one it was built for.
+pub(crate) fn session_chat_queue_sender_factory(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue::SessionChatQueueSenderFactory {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        session_chat_queue_sender(&state, project_id, session_id)
+    })
+}
+
+/// Per-session state-frame publisher for the scheduler, so a row it delivers or
+/// fails reaches the same clients an endpoint mutation would.
+pub(crate) fn session_chat_queue_publisher_factory(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue::SessionChatQueuePublisherFactory {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        let state = state.clone();
+        let project_id = project_id.to_string();
+        let session_id = session_id.to_string();
+        let publisher: crate::session_chat_queue::SessionChatQueuePublisher =
+            Arc::new(move || broadcast_session_chat_queue_state(&state, &project_id, &session_id));
+        publisher
+    })
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The scheduler's view of "is this terminal able to take a prompt at all". It
+reads the SAME resolved notice the chat card shows — the cached screen
+classification merged with the send watchdog's verdict — and never triggers a
+detection itself, so a tick can never spawn a `zmx history` capture.
+*/
+pub(crate) fn session_chat_queue_notice_reader(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueNoticeReader {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        cached_session_chat_terminal_notice(&state, project_id, session_id)
+    })
 }
 
 /*
@@ -13274,7 +13744,7 @@ fn transcript_pending_question_prompt(
         .cloned()
 }
 
-fn handle_answer_session_chat_prompt_http(
+async fn handle_answer_session_chat_prompt_http(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
@@ -13373,14 +13843,68 @@ fn handle_answer_session_chat_prompt_http(
                 }
             }
         }
+        /*
+        CDXC:SessionChatTerminalPicker 2026-08-21:
+        A row of an on-screen picker (Claude Code's resume-usage chooser), which
+        the chat surface renders from the `choices` its terminal notice carries.
+
+        The keystrokes are derived from a capture taken RIGHT NOW rather than
+        from the detection that painted the card: the notice can be seconds old,
+        and the user may have arrowed the highlight around in the terminal — or
+        answered it there — in between. A picker that is no longer on screen is
+        an error, never a blind Enter into whatever replaced it.
+        */
+        "terminalChoice" => {
+            let Some(choice_index) = params
+                .get("choiceIndex")
+                .and_then(Value::as_u64)
+                .map(|index| index as usize)
+            else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidParams",
+                        message: "answerSessionChatPrompt kind \"terminalChoice\" requires choiceIndex."
+                            .to_string(),
+                    },
+                );
+            };
+            let picker = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
+                .await
+                .as_deref()
+                .and_then(crate::session_chat_resume_prompt::detect_session_chat_terminal_picker);
+            let Some(picker) = picker else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidState",
+                        message: "That picker is no longer on the session's screen.".to_string(),
+                    },
+                );
+            };
+            let Some(row_moves) = picker.row_moves_to(choice_index) else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidState",
+                        message: "The picker on screen no longer offers that option.".to_string(),
+                    },
+                );
+            };
+            crate::session_chat_send::build_terminal_picker_answer_steps(row_moves)
+        }
         _ => {
             return domain_error_response(
                 endpoint_path,
                 request_id,
                 DomainStateError {
                     code: "invalidParams",
-                    message: "answerSessionChatPrompt kind must be \"question\" or \"approval\"."
-                        .to_string(),
+                    message:
+                        "answerSessionChatPrompt kind must be \"question\", \"approval\" or \"terminalChoice\"."
+                            .to_string(),
                 },
             );
         }
@@ -13393,6 +13917,24 @@ fn handle_answer_session_chat_prompt_http(
             &target.zmx_name,
             "session-chat-answer",
             steps,
+        );
+    }
+    /*
+    CDXC:SessionChatTerminalPicker 2026-08-21:
+    The card the user just answered is a TERMINAL NOTICE, and notices only
+    retire when a fresh capture proves the screen is clean. Left to the
+    follower's ~30s probe the answered picker would stay on screen in chat for
+    half a minute, so borrow the post-dispatch redetect: it re-reads the screen
+    at +2s and +6s and republishes, which is exactly the window the picker
+    needs to tear down.
+    */
+    if kind == "terminalChoice" {
+        let agent = session_chat_agent_for_session(&target.session);
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
         );
     }
     routed_json(
@@ -13606,7 +14148,17 @@ fn emit_session_chat_prompt_state_frame(state: &AppState, session: &Value) {
     session is currently showing or the card would blink away on every hook
     event. Cached read only — this runs on the hook-ingest thread.
     */
-    let terminal_notice = cached_session_chat_terminal_notice(state, &project_id, &session_id);
+    let screen = cached_session_chat_screen_state(state, &project_id, &session_id);
+    /*
+    CDXC:SessionChatQueueCarriage 2026-08-21: a state frame REPLACES the
+    client's queue, so every producer of one restates the current rows rather
+    than leaving them out.
+    */
+    let queue = crate::session_chat_queue::read_session_chat_queue_snapshot(
+        &state.paths,
+        &project_id,
+        &session_id,
+    );
     /*
     The seq must be taken and the frame published as one step: this runs on a
     hook-ingest thread while the follower task publishes into the SAME counter,
@@ -13627,7 +14179,8 @@ fn emit_session_chat_prompt_state_frame(state: &AppState, session: &Value) {
                 &state.metadata.server_id,
                 working,
                 None,
-                terminal_notice.as_ref(),
+                screen.borrow(),
+                Some(&queue),
             )
         },
         |frame| state.event_hub.broadcast(frame),
@@ -13672,6 +14225,7 @@ fn schedule_session_chat_option_redetect(
             &session_id,
             cached.notice,
         );
+        let mut published_activity = cached.activity;
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             let detection = detector
@@ -13691,7 +14245,12 @@ fn schedule_session_chat_option_redetect(
                 .options
                 .as_ref()
                 .is_some_and(|detected| !detected.same_selection(published.as_ref()));
-            if !options_changed && !notice_changed {
+            let activity_changed = detection.captured
+                && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                    detection.activity.as_ref(),
+                    published_activity.as_ref(),
+                );
+            if !options_changed && !notice_changed && !activity_changed {
                 continue;
             }
             if options_changed {
@@ -13699,6 +14258,9 @@ fn schedule_session_chat_option_redetect(
             }
             if notice_changed {
                 published_notice = notice;
+            }
+            if activity_changed {
+                published_activity = detection.activity;
             }
             emit_session_chat_options_state_frame(
                 &followers,
@@ -13708,7 +14270,10 @@ fn schedule_session_chat_option_redetect(
                 &project_id,
                 &session_id,
                 published.as_ref(),
-                published_notice.as_ref(),
+                crate::session_chat::SessionChatScreenState {
+                    notice: published_notice.as_ref(),
+                    activity: published_activity.as_ref(),
+                },
             );
         }
     });
@@ -13723,7 +14288,7 @@ fn emit_session_chat_options_state_frame(
     project_id: &str,
     session_id: &str,
     detected: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
-    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+    screen: crate::session_chat::SessionChatScreenState<'_>,
 ) {
     let stream = {
         let Ok(followers) = followers.lock() else {
@@ -13756,6 +14321,8 @@ fn emit_session_chat_options_state_frame(
         crate::session_chat::SessionChatStatus::Ready
     };
     let agent_session_id = read_runtime_text(&session, "agentSessionId");
+    let queue =
+        crate::session_chat_queue::read_session_chat_queue_snapshot(paths, project_id, session_id);
     let (epoch, _) = stream.current();
     // Same seq discipline as the prompt frame: take the seq and publish as one
     // step, because the follower task publishes into the SAME counter.
@@ -13773,7 +14340,8 @@ fn emit_session_chat_options_state_frame(
                 server_id,
                 working,
                 detected,
-                terminal_notice,
+                screen,
+                Some(&queue),
             )
         },
         |frame| event_hub.broadcast(frame),

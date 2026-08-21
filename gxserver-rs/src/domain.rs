@@ -150,6 +150,14 @@ impl<'a> DomainRepository<'a> {
         }
     }
 
+    /// The connection this repository reads and writes. Narrow accessor for the
+    /// few callers that must run a query the repository does not model against
+    /// the SAME connection instead of opening a second one — the chat prompt
+    /// queue's Auto Sleep decline is one.
+    pub fn connection(&self) -> &'a Connection {
+        self.db
+    }
+
     pub fn create_project(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let project_id = self.create_unique_project_id()?;
         let timestamp = now_iso();

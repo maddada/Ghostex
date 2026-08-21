@@ -1,0 +1,237 @@
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Long-running work the agent CLI reports ONLY as a progress line on its terminal
+screen, with nothing in the transcript until it finishes. Claude Code's
+compaction is the first (and today the only) one:
+
+    ❯ /compact
+
+    ✶ Compacting conversation… (1m 1s)
+      ████████████████████░░░░░░░░░░░░░░░░░░░░ 49%
+    Tip: Use /btw to ask a quick side question without interrupting Claude's…
+
+For a minute or more the chat surface could say nothing better than "the agent
+is working", because a transcript projection cannot see a progress bar. Worse,
+compaction is the one operation whose whole point is that the conversation the
+user is reading is about to be REPLACED — so a bare typing indicator is not
+just uninformative, it hides the single most consequential thing happening.
+
+This is deliberately NOT a terminal notice: nothing is wrong, nothing is
+blocked, and there is nothing to answer. It is progress, so it renders in the
+transcript where the work is, next to the messages it is about to compact.
+
+Parsing is narrow and evidence-only. The percentage and the elapsed clock are
+read off the screen or omitted; neither is ever estimated, because a progress
+bar that invents its own numbers is worse than no progress bar. An activity
+with no percentage still carries its label, which is the part that matters.
+*/
+
+use crate::session_chat_options::{
+    normalize_spaces, session_chat_option_agent, strip_ansi_sgr, SessionChatOptionAgent,
+};
+
+use serde_json::{json, Map, Value};
+
+/// Tail window scanned for a progress line. The spinner row and its bar sit at
+/// the very bottom of a working screen, above at most a tip line and the
+/// statusline; 15 matches the notice banner scope.
+const ACTIVITY_SCAN_LINES: usize = 15;
+
+/// Rows after the label that may carry the bar. Claude paints it on the very
+/// next line; two leaves room for a wrap.
+const ACTIVITY_PERCENT_LOOKAHEAD: usize = 2;
+
+/// Activity kind for Claude Code's `/compact` (manual and automatic).
+pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
+
+/// The phrase Claude paints while compacting. Matched case-sensitively on the
+/// space-collapsed line, so prose that merely mentions compaction cannot hit
+/// it — the label only counts when it OWNS a line (see `activity_from_line`).
+const COMPACTING_LABEL: &str = "Compacting conversation";
+
+/// What the client shows. `kind` is an open set, so a client that has never
+/// heard of one still renders `label` plus whatever progress came with it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChatTerminalActivity {
+    pub kind: &'static str,
+    /// Agent-facing wording, without the spinner glyph or the clock.
+    pub label: String,
+    /// 0-100, only when the screen actually painted a percentage.
+    pub percent: Option<u8>,
+    /// Seconds the CLI reports it has been running, only when it painted them.
+    pub elapsed_seconds: Option<u64>,
+    /// RFC3339 millis. The client interpolates its own clock from this, so a
+    /// 3s probe cadence still reads as a smoothly ticking timer.
+    pub detected_at: String,
+}
+
+impl SessionChatTerminalActivity {
+    fn new(kind: &'static str, label: impl Into<String>) -> Self {
+        Self {
+            kind,
+            label: label.into(),
+            percent: None,
+            elapsed_seconds: None,
+            detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        }
+    }
+
+    /*
+    Two samples of the SAME run, ignoring the numbers. Progress changing is not
+    a new activity — if it were, the client's `detectedAt`-anchored clock would
+    restart from zero on every probe and the timer would never advance past the
+    poll interval.
+    */
+    pub fn same_activity(&self, other: Option<&SessionChatTerminalActivity>) -> bool {
+        other.is_some_and(|other| self.kind == other.kind && self.label == other.label)
+    }
+
+    /// True when a re-detect says the same thing INCLUDING its numbers, i.e.
+    /// there is nothing new to publish.
+    pub fn unchanged(&self, other: Option<&SessionChatTerminalActivity>) -> bool {
+        other.is_some_and(|other| {
+            self.same_activity(Some(other))
+                && self.percent == other.percent
+                && self.elapsed_seconds == other.elapsed_seconds
+        })
+    }
+
+    /*
+    An ongoing run keeps its original `detectedAt`: it anchors the client's
+    elapsed clock, so re-minting it every 3s would peg the timer at ~0s
+    forever. Same instance-not-sample rule as a terminal notice's timestamp.
+    */
+    pub fn carry_forward_detected_at(&mut self, previous: Option<&SessionChatTerminalActivity>) {
+        if let Some(previous) = previous.filter(|previous| self.same_activity(Some(previous))) {
+            self.detected_at = previous.detected_at.clone();
+        }
+    }
+
+    pub fn to_value(&self) -> Value {
+        let mut map = Map::new();
+        map.insert("kind".to_string(), json!(self.kind));
+        map.insert("label".to_string(), json!(self.label));
+        if let Some(percent) = self.percent {
+            map.insert("percent".to_string(), json!(percent));
+        }
+        if let Some(elapsed_seconds) = self.elapsed_seconds {
+            map.insert("elapsedSeconds".to_string(), json!(elapsed_seconds));
+        }
+        map.insert("detectedAt".to_string(), json!(self.detected_at));
+        Value::Object(map)
+    }
+}
+
+/// Change test for a value that can also disappear; an omitted field on a frame
+/// means CLEARED, so present→absent is a change clients must be told about.
+pub fn same_session_chat_terminal_activity(
+    current: Option<&SessionChatTerminalActivity>,
+    published: Option<&SessionChatTerminalActivity>,
+) -> bool {
+    match (current, published) {
+        (None, None) => true,
+        (Some(current), published) => current.unchanged(published),
+        (None, Some(_)) => false,
+    }
+}
+
+/// `1h 2m 3s` / `1m 1s` / `45s` → seconds. `None` unless EVERY token parsed,
+/// so a half-read clock is dropped rather than shown wrong.
+fn parse_elapsed_seconds(text: &str) -> Option<u64> {
+    let mut total: u64 = 0;
+    let mut matched = false;
+    for token in text.split_whitespace() {
+        let (digits, unit) = token.split_at(token.find(|ch: char| !ch.is_ascii_digit())?);
+        let value: u64 = digits.parse().ok()?;
+        total += match unit {
+            "h" => value * 3_600,
+            "m" => value * 60,
+            "s" => value,
+            _ => return None,
+        };
+        matched = true;
+    }
+    matched.then_some(total)
+}
+
+/// The `(1m 1s)` a spinner line trails, if it has one.
+fn trailing_parenthetical(line: &str) -> Option<&str> {
+    let close = line.rfind(')')?;
+    let open = line[..close].rfind('(')?;
+    Some(line[open + 1..close].trim())
+}
+
+/// `49%` anywhere on the line (the bar glyphs around it are ignored).
+fn parse_percent(line: &str) -> Option<u8> {
+    for token in line.split_whitespace() {
+        let Some(digits) = token.strip_suffix('%') else {
+            continue;
+        };
+        if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        if let Ok(percent) = digits.parse::<u8>() {
+            if percent <= 100 {
+                return Some(percent);
+            }
+        }
+    }
+    None
+}
+
+/*
+A label only counts when the line is the CLI's own status row rather than prose
+that mentions it. The test is positional: everything before the phrase must be
+spinner decoration (no letters and no digits), which an assistant sentence or a
+tip line can never satisfy.
+*/
+fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
+    let at = line.find(COMPACTING_LABEL)?;
+    if line[..at]
+        .chars()
+        .any(|ch| ch.is_alphabetic() || ch.is_ascii_digit())
+    {
+        return None;
+    }
+    let mut activity =
+        SessionChatTerminalActivity::new(SESSION_CHAT_ACTIVITY_COMPACTING, "Compacting conversation");
+    activity.elapsed_seconds = trailing_parenthetical(line).and_then(parse_elapsed_seconds);
+    Some(activity)
+}
+
+/// `Some` while the agent is painting a progress line this build understands.
+pub fn detect_session_chat_terminal_activity(
+    agent: Option<&str>,
+    screen_text: &str,
+) -> Option<SessionChatTerminalActivity> {
+    // Claude Code is the only CLI whose compaction paints this row; codex
+    // compacts without a progress screen, so it would only ever false-match.
+    if session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Claude) {
+        return None;
+    }
+    let mut window: Vec<String> = Vec::new();
+    for raw in screen_text.lines().rev() {
+        let line = normalize_spaces(&strip_ansi_sgr(raw)).trim().to_string();
+        if line.is_empty() {
+            continue;
+        }
+        window.push(line);
+        if window.len() >= ACTIVITY_SCAN_LINES {
+            break;
+        }
+    }
+    window.reverse();
+    // Newest match wins: a screen can still hold the tail of a previous run.
+    for (index, line) in window.iter().enumerate().rev() {
+        let Some(mut activity) = activity_from_line(line) else {
+            continue;
+        };
+        activity.percent = window
+            .iter()
+            .skip(index + 1)
+            .take(ACTIVITY_PERCENT_LOOKAHEAD)
+            .find_map(|candidate| parse_percent(candidate));
+        return Some(activity);
+    }
+    None
+}

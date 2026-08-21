@@ -3459,6 +3459,16 @@ pub struct SessionChatLiveState {
 /// domain repository.
 pub type SessionChatStateReader = Arc<dyn Fn() -> SessionChatLiveState + Send + Sync>;
 
+/*
+CDXC:SessionChatQueueCarriage 2026-08-21:
+Reads the session's Ghostex-owned prompt queue and synced composer draft so
+snapshot / replaced / state frames carry them. Deliberately NOT read once per
+reconcile tick: it opens the state database, so it is called only when a frame
+is actually being emitted. `appended` frames never carry either field.
+*/
+pub type SessionChatQueueReader =
+    Arc<dyn Fn() -> crate::session_chat_queue::SessionChatQueueSnapshot + Send + Sync>;
+
 /// A proven successor transcript the follower wants to bind the session to.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SessionChatIdentityAdoption {
@@ -3529,6 +3539,10 @@ pub struct SessionChatFollowerConfig {
     /// replaced frames carry the cached value; a periodic probe re-detects and
     /// emits a state frame only when it CHANGED.
     pub options_reader: Option<crate::session_chat_options::SessionChatOptionsReader>,
+    /// Queue + draft source for snapshot / replaced / state frames. Absent ⇒
+    /// the fields are omitted, which clients read as "this daemon has no queue"
+    /// and answer by hiding every queue control.
+    pub queue_reader: Option<SessionChatQueueReader>,
     /// Registry access for successor-transcript adoption (claude only). Absent
     /// ⇒ the follower still re-resolves by the stored identity but never
     /// re-binds the session.
@@ -3847,6 +3861,45 @@ fn insert_optional_terminal_notice(
     }
 }
 
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Everything one terminal capture tells a client, travelling as ONE value. The
+notice card and the transcript's activity row are read from the same screen and
+are always restated together — carrying them as two parallel parameters through
+four frame builders is how they would eventually drift out of step, with a
+stale progress row surviving a frame that cleared its notice (or the reverse).
+Both halves keep `prompt` semantics: absent ⇒ the field is omitted ⇒ the client
+CLEARS it, so every producer restates the CURRENT value.
+*/
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SessionChatScreenState<'a> {
+    pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
+    pub activity:
+        Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+}
+
+fn insert_screen_state(frame: &mut Map<String, Value>, screen: SessionChatScreenState<'_>) {
+    insert_optional_terminal_notice(frame, screen.notice);
+    if let Some(activity) = screen.activity {
+        frame.insert("terminalActivity".to_string(), activity.to_value());
+    }
+}
+
+/*
+CDXC:SessionChatQueueCarriage 2026-08-21:
+Queue + draft ride snapshot / replaced / state frames only. `queue` is written
+even when empty — present is the daemon capability probe — while `draft` is
+written only when the server actually holds one, because an omitted draft means
+UNCHANGED and never "cleared". Reads the state database, so this runs inside the
+frame builders and never on the reconcile tick.
+*/
+fn insert_optional_queue(frame: &mut Map<String, Value>, config: &SessionChatFollowerConfig) {
+    let Some(reader) = config.queue_reader.as_ref() else {
+        return;
+    };
+    reader().insert_into(frame);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_state_frame(
     emit: &SessionChatFrameEmitter,
@@ -3857,7 +3910,7 @@ fn emit_state_frame(
     prompt: Option<&SessionChatInteractivePrompt>,
     working: Option<bool>,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
-    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+    screen: SessionChatScreenState<'_>,
 ) {
     stream.emit_sequenced(
         |seq| {
@@ -3868,7 +3921,8 @@ fn emit_state_frame(
                 frame.insert("working".to_string(), json!(working));
             }
             insert_optional_selected_options(&mut frame, selected_options);
-            insert_optional_terminal_notice(&mut frame, terminal_notice);
+            insert_screen_state(&mut frame, screen);
+            insert_optional_queue(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -3887,7 +3941,7 @@ fn emit_snapshot_frame(
     prompt: Option<&SessionChatInteractivePrompt>,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
-    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+    screen: SessionChatScreenState<'_>,
 ) {
     stream.emit_sequenced(
         |seq| {
@@ -3908,7 +3962,8 @@ fn emit_snapshot_frame(
             frame.insert("working".to_string(), json!(working));
             insert_optional_prompt(&mut frame, prompt);
             insert_optional_selected_options(&mut frame, selected_options);
-            insert_optional_terminal_notice(&mut frame, terminal_notice);
+            insert_screen_state(&mut frame, screen);
+            insert_optional_queue(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -4116,7 +4171,7 @@ pub async fn run_session_chat_follower(
                 None,
                 None,
                 None,
-                None,
+                SessionChatScreenState::default(),
             );
             resnapshot.notified().await;
         }
@@ -4153,6 +4208,15 @@ pub async fn run_session_chat_follower(
     // because it can legitimately go back to `None` (the screen cleared), which
     // MUST be published as an omitted field.
     let mut published_notice: Option<crate::session_chat_notice::SessionChatTerminalNotice> = None;
+    /*
+    CDXC:SessionChatTerminalActivity 2026-08-22: the progress row the follower
+    has published. Tracked like the notice (it can legitimately go back to
+    `None` when the work finishes) but compared on its NUMBERS too, because a
+    moving percentage is the whole point of publishing it again.
+    */
+    let mut published_activity: Option<
+        crate::session_chat_terminal_activity::SessionChatTerminalActivity,
+    > = None;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
 
@@ -4183,9 +4247,13 @@ pub async fn run_session_chat_follower(
                         live.prompt.as_ref(),
                         Some(live.working),
                         detection.options.as_ref(),
-                        detection.notice.as_ref(),
+                        SessionChatScreenState {
+                            notice: detection.notice.as_ref(),
+                            activity: detection.activity.as_ref(),
+                        },
                     );
                     published_notice = detection.notice;
+                    published_activity = detection.activity;
                     emitted_starting = true;
                 }
                 tokio::select! {
@@ -4277,12 +4345,16 @@ pub async fn run_session_chat_follower(
                     prompt.as_ref(),
                     live.working,
                     snapshot_detection.options.as_ref(),
-                    snapshot_detection.notice.as_ref(),
+                    SessionChatScreenState {
+                        notice: snapshot_detection.notice.as_ref(),
+                        activity: snapshot_detection.activity.as_ref(),
+                    },
                 );
                 if snapshot_detection.options.is_some() {
                     published_options = snapshot_detection.options;
                 }
                 published_notice = snapshot_detection.notice;
+                published_activity = snapshot_detection.activity;
                 published_prompt = prompt;
                 published_working = live.working;
                 published_state_valid = true;
@@ -4374,7 +4446,10 @@ pub async fn run_session_chat_follower(
                     effective_prompt.as_ref(),
                     Some(live.working),
                     published_options.as_ref(),
-                    published_notice.as_ref(),
+                    SessionChatScreenState {
+                        notice: published_notice.as_ref(),
+                        activity: published_activity.as_ref(),
+                    },
                 );
             }
             published_prompt = effective_prompt;
@@ -4410,9 +4485,32 @@ pub async fn run_session_chat_follower(
         if startup_probe_due {
             startup_option_reconcile_ticks += 1;
         }
-        let periodic_probe_due = reconcile_ticks
-            % crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
-            == 0;
+        /*
+        CDXC:SessionChatTerminalActivity 2026-08-22:
+        The steady 30s cadence is right for state that either holds or does not
+        (a login screen, a model pill), and useless for a progress bar: a
+        compaction can be over before the second sample lands. So the interval
+        is chosen by what the LAST probe found —
+
+          - a live activity ⇒ every few ticks, because its numbers are the
+            reason to publish again at all;
+          - the agent working with no activity known ⇒ a middle cadence, which
+            is what discovers an AUTOMATIC compaction (nothing announces it,
+            and the user never typed a command we could hang a re-detect on);
+          - idle ⇒ the original 30s.
+
+        Only followed sessions probe at all, and only while a client is
+        subscribed, so the faster tiers are bounded by what is actually on
+        screen in front of someone.
+        */
+        let probe_interval_ticks = if published_activity.is_some() {
+            crate::session_chat_options::SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS
+        } else if published_working {
+            crate::session_chat_options::SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS
+        } else {
+            crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
+        };
+        let periodic_probe_due = reconcile_ticks % probe_interval_ticks == 0;
         if published_state_valid
             && config.options_reader.is_some()
             && (startup_probe_due || periodic_probe_due)
@@ -4436,12 +4534,22 @@ pub async fn run_session_chat_follower(
                     detection.notice.as_ref(),
                     published_notice.as_ref(),
                 );
-            if options_changed || notice_changed {
+            // Same capture rule as the notice: only a WHOLE capture proves the
+            // progress line is gone, so a capped read leaves the row standing.
+            let activity_changed = detection.captured
+                && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                    detection.activity.as_ref(),
+                    published_activity.as_ref(),
+                );
+            if options_changed || notice_changed || activity_changed {
                 if options_changed {
                     published_options = detection.options;
                 }
                 if notice_changed {
                     published_notice = detection.notice;
+                }
+                if activity_changed {
+                    published_activity = detection.activity;
                 }
                 emit_state_frame(
                     &emit,
@@ -4456,7 +4564,10 @@ pub async fn run_session_chat_follower(
                     published_prompt.as_ref(),
                     Some(published_working),
                     published_options.as_ref(),
-                    published_notice.as_ref(),
+                    SessionChatScreenState {
+                        notice: published_notice.as_ref(),
+                        activity: published_activity.as_ref(),
+                    },
                 );
             }
         }
@@ -4951,7 +5062,12 @@ pub fn build_session_chat_prompt_state_frame(
     server_id: &str,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
-    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+    screen: SessionChatScreenState<'_>,
+    // CDXC:SessionChatQueueCarriage 2026-08-21: the session's queue + draft.
+    // Every producer of a state frame restates them, because a client replaces
+    // its list with whatever a state frame carries; omitting them here is how a
+    // pre-queue daemon is recognised, not how "unchanged" is expressed.
+    queue: Option<&crate::session_chat_queue::SessionChatQueueSnapshot>,
 ) -> Value {
     let mut frame = Map::new();
     frame.insert("type".to_string(), json!("sessionChatState"));
@@ -4969,7 +5085,10 @@ pub fn build_session_chat_prompt_state_frame(
         }
     }
     insert_optional_selected_options(&mut frame, selected_options);
-    insert_optional_terminal_notice(&mut frame, terminal_notice);
+    insert_screen_state(&mut frame, screen);
+    if let Some(queue) = queue {
+        queue.insert_into(&mut frame);
+    }
     if let Some(agent_session_id) = agent_session_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -5980,6 +6099,7 @@ mod tests {
             server_id: "test-server".to_string(),
             state_reader: Some(state_reader),
             options_reader: None,
+            queue_reader: None,
             successor_hooks: Some(hooks),
             tuning: SessionChatFollowerTuning {
                 reconcile_interval: Duration::from_millis(20),

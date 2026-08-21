@@ -53,6 +53,29 @@ pub const SESSION_CHAT_OPTION_REDETECT_DELAYS_MS: [u64; 2] = [2_000, 6_000];
 /// Follower reconciles (1s each) between periodic re-detects.
 pub const SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS: u64 = 30;
 
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Faster tiers for the same probe, picked by what the LAST one found. A capture is
+a zsh + `zmx history` spawn, so these are priced, not chosen for feel:
+
+  - a live activity ⇒ 3s. Bounded by the work itself (a compaction is a minute
+    or two), and it is the only cadence at which a percentage is worth
+    publishing at all — at 30s a whole compaction gets two or three samples.
+  - working, nothing found yet ⇒ 15s. This is what discovers an AUTOMATIC
+    compaction, which announces itself to nobody: no command to hang a
+    re-detect on, no transcript record until it finishes. 15s doubles the
+    capture rate for followed-AND-working sessions only (a follower exists just
+    while a chat client is subscribed), and still puts the row on screen for
+    most of a run. 10s was tempting and not worth twice the spawns for five
+    seconds of a two-minute operation.
+  - idle ⇒ the original 30s, unchanged.
+
+A user-typed `/compact` does not wait for any of this: it rides the +2s/+6s
+post-dispatch redetect (see `is_session_chat_activity_command_text`).
+*/
+pub const SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS: u64 = 3;
+pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 15;
+
 /// A newly followed agent may paint its model/effort footer just after the
 /// chat's seed read. Re-detect on each of the first ten 1s reconciles until
 /// both values are present instead of leaving a cached startup miss visible.
@@ -158,6 +181,13 @@ second process spawn.
 pub struct SessionChatTerminalDetection {
     pub options: Option<SessionChatDetectedOptions>,
     pub notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
+    /*
+    CDXC:SessionChatTerminalActivity 2026-08-22: long-running work the CLI only
+    reports on screen (compaction). Third reading of the same capture, for the
+    same reason the notice is the second one: it must never cost a spawn.
+    */
+    pub activity:
+        Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /// True when a usable (non-truncated) screen backed this detection. It is
     /// the ONLY case where `notice: None` means "the screen is clean" — a failed
     /// or capped capture must never retire a notice.
@@ -209,6 +239,28 @@ pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> b
         return false;
     };
     matches!(first, "/model" | "/effort" | "/fast")
+}
+
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Commands that START long on-screen work. The follower would find a compaction
+on its own within a probe tier, but the user who just typed `/compact` is
+watching for a response RIGHT NOW, and a transcript that sits silent for ten
+seconds before admitting anything is happening reads as a dropped message. This
+reuses the post-dispatch redetect (+2s/+6s), which is already the mechanism for
+"read the screen back after we typed something at it".
+
+Automatic compaction announces itself to nobody, so it is still discovered by
+the working-tier probe; that is the case this cannot help with.
+*/
+pub fn is_session_chat_activity_command_text(agent: Option<&str>, text: &str) -> bool {
+    if session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Claude) {
+        return false;
+    }
+    let Some(first) = text.trim_start().split_whitespace().next() else {
+        return false;
+    };
+    first == "/compact"
 }
 
 // ---------------------------------------------------------------------------
@@ -681,6 +733,12 @@ pub fn detect_session_chat_terminal_state(
             .map(SessionChatDetectedOptions::new),
         notice: screen.and_then(|capture| {
             crate::session_chat_notice::classify_session_chat_terminal_notice(
+                agent_id,
+                &capture.text,
+            )
+        }),
+        activity: screen.and_then(|capture| {
+            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
                 agent_id,
                 &capture.text,
             )

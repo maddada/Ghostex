@@ -448,6 +448,22 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/interruptSessionChat"
         | "/api/handoffSessionChatDraft"
         /*
+        CDXC:SessionChatPromptQueue 2026-08-21:
+        The chat prompt queue and the synced composer draft are remote-allowed
+        for the same reason chat itself is: the queue is owned by the daemon
+        that runs the session, so a client looking at a remote machine (or a
+        phone over SSH) has to ask that machine. They carry only projectId /
+        sessionId, a row id the daemon itself handed out, and prompt text the
+        user typed into that session's composer.
+        */
+        | "/api/readSessionChatQueue"
+        | "/api/queueSessionChatPrompt"
+        | "/api/updateSessionChatQueuedPrompt"
+        | "/api/removeSessionChatQueuedPrompt"
+        | "/api/reorderSessionChatQueue"
+        | "/api/sendSessionChatQueuedPrompt"
+        | "/api/setSessionChatDraft"
+        /*
         CDXC:ExportTranscript 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a
         chat is: the transcript file only exists on the machine that runs the

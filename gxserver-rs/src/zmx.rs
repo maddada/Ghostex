@@ -586,15 +586,27 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             sweep gets the same answer without learning a new presentation field.
 
             A user-triggered Sleep is never declined — the caller asked for it.
+
+            CDXC:SessionChatPromptQueue 2026-08-21: a session holding queued chat
+            prompts declines the same way. The scheduler can only deliver into a
+            RUNNING session, so letting an inactivity sweep retire one would park
+            the user's queued text until they happened to wake the session again.
+            The queue is emptied by delivering it, not by sleeping through it.
+            Rows that already failed do not count: they are waiting on the user,
+            not on the agent.
             */
             if endpoint_path == "/api/sleepSession"
                 && crate::session_keep_awake::sleep_trigger_is_automatic(
                     params.get("sleepTrigger").and_then(Value::as_str),
                 )
-                && crate::session_keep_awake::is_held_awake(
+                && (crate::session_keep_awake::is_held_awake(
                     &lifecycle.project_id,
                     &lifecycle.session_id,
-                )
+                ) || crate::session_chat_queue::session_has_pending_session_chat_queue(
+                    repository.connection(),
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                ))
             {
                 let session = require_session(repository, &lifecycle)?;
                 return Ok(ZmxEndpointOutput {
