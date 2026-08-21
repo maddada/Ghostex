@@ -42,6 +42,8 @@
     "history:list": "cargo run --quiet --manifest-path ghostex-history/Cargo.toml -- --list",
     "build:sidebar-css": "tailwindcss -i sidebar/styles/shadcn.css -o sidebar/styles/shadcn.generated.css --minify",
     "build:mobile-chat": "node scripts/build-mobile-chat.mjs",
+    "build:mobile-find": "node scripts/build-mobile-find.mjs",
+    "generate:mobile-tabler-icons": "node scripts/generate-mobile-tabler-icons.mjs",
     "cli": "cargo run --quiet --manifest-path gxserver-rs/Cargo.toml --bin ghostex --",
     "storybook": "bun run build:sidebar-css && storybook dev -p 6006 --no-open -c sidebar/.storybook",
     "build:storybook": "bun run build:sidebar-css && storybook build -c sidebar/.storybook",

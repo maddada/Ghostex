@@ -26,7 +26,8 @@
     "shared/**/*",
     "sidebar/**/*",
     "native/sidebar/**/*",
-    "mobile-chat/**/*"
+    "mobile-chat/**/*",
+    "mobile-find/**/*"
   ],
   "exclude": [
     "node_modules",
