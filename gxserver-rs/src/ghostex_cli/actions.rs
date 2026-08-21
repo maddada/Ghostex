@@ -79,6 +79,15 @@ pub enum Parser {
     SidebarProjectCollectionsState,
     /// session selector plus readSessionChat paging/long-poll flags.
     SessionChatRead,
+    /*
+    CDXC:AgentHistorySearch 2026-08-20:
+    Find over SSH for Ghostex mobile. `AgentPromptSearch` carries the query and
+    filters; `AgentPromptRef` carries the stable prompt key that every follow-up
+    call addresses a result by.
+    */
+    AgentPromptSearch,
+    AgentPromptRef,
+    AgentPromptLaunch,
     /// session selector plus `--answer-json` for answerSessionChatPrompt.
     SessionChatAnswer,
     /*
@@ -263,6 +272,16 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "readSessionText" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/readSessionText", &params, flags)
+        }
+        "searchAgentPrompts" => rpc::call_gxserver_rpc("/api/searchAgentPrompts", payload, flags),
+        "readAgentPromptText" => {
+            rpc::call_gxserver_rpc("/api/readAgentPromptText", payload, flags)
+        }
+        "toggleAgentPromptFavorite" => {
+            rpc::call_gxserver_rpc("/api/toggleAgentPromptFavorite", payload, flags)
+        }
+        "resolveAgentPromptLaunch" => {
+            rpc::call_gxserver_rpc("/api/resolveAgentPromptLaunch", payload, flags)
         }
         "readSessionChat" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -1025,6 +1044,9 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
             parse_sidebar_project_collections_state(rest, flags)?
         }
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
+        Parser::AgentPromptSearch => parse_agent_prompt_search(flags)?,
+        Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
+        Parser::AgentPromptLaunch => parse_agent_prompt_launch(flags)?,
         Parser::SessionChatAnswer => parse_session_chat_answer(rest, flags)?,
         Parser::KeepSessionsAwake => parse_keep_sessions_awake(flags)?,
     })
@@ -1038,6 +1060,94 @@ exposed as CLI verbs the phone SSH-execs, exactly like the Add Project flow.
 daemon holds the request until the chat fingerprint changes, which is how the
 phone tails a conversation without an /api/events socket.
 */
+/*
+CDXC:AgentHistorySearch 2026-08-20:
+Prompt history lives on the machine that ran the agent, so Ghostex mobile
+reaches Find the same way it reaches chat: these verbs SSH-exec on that machine
+and forward to the daemon's own endpoints. Every follow-up verb addresses a
+result by its stable `--key`, never by a list position, so a phone acting on a
+result minutes later still lands on the prompt it displayed.
+*/
+fn parse_agent_prompt_search(flags: &Flags) -> CliResult<Value> {
+    let mut map = Map::new();
+    if let Some(query) = flags.text("query") {
+        map.insert("query".to_string(), Value::String(query));
+    }
+    if let Some(project) = flags.text("project") {
+        map.insert("project".to_string(), Value::String(project));
+    }
+    if let Some(agents) = flags.text("agents") {
+        let list = agents
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| Value::String(value.to_string()))
+            .collect::<Vec<_>>();
+        if !list.is_empty() {
+            map.insert("agents".to_string(), Value::Array(list));
+        }
+    }
+    if flags.contains("groupByDay") {
+        map.insert("groupByDay".to_string(), Value::Bool(flags.truthy("groupByDay")));
+    }
+    if flags.contains("includeFacets") {
+        map.insert(
+            "includeFacets".to_string(),
+            Value::Bool(flags.truthy("includeFacets")),
+        );
+    }
+    if flags.contains("refresh") {
+        map.insert("refresh".to_string(), Value::Bool(flags.truthy("refresh")));
+    }
+    for key in ["limit", "offset", "textLimit"] {
+        if flags.contains(key) {
+            map.insert(key.to_string(), flag_number_value(flags, key));
+        }
+    }
+    Ok(Value::Object(map))
+}
+
+fn agent_prompt_key(flags: &Flags) -> CliResult<String> {
+    flags
+        .text("key")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            CliError::Other(
+                "--key is required; it is the `key` field of a searchAgentPrompts row.".to_string(),
+            )
+        })
+}
+
+fn parse_agent_prompt_ref(flags: &Flags) -> CliResult<Value> {
+    let mut map = Map::new();
+    map.insert("key".to_string(), Value::String(agent_prompt_key(flags)?));
+    if flags.contains("favorite") {
+        map.insert("favorite".to_string(), Value::Bool(flags.truthy("favorite")));
+    }
+    Ok(Value::Object(map))
+}
+
+fn parse_agent_prompt_launch(flags: &Flags) -> CliResult<Value> {
+    let mut map = Map::new();
+    map.insert("key".to_string(), Value::String(agent_prompt_key(flags)?));
+    let action = flags.text("action").unwrap_or_else(|| "resume".to_string());
+    if action != "resume" && action != "fork" {
+        return Err(CliError::Other(
+            "--action must be \"resume\" or \"fork\".".to_string(),
+        ));
+    }
+    map.insert("action".to_string(), Value::String(action));
+    if let Some(agent) = flags.text("forkAgent") {
+        map.insert("forkAgent".to_string(), Value::String(agent));
+    }
+    // Omitted means "use the daemon's Accept All setting", the same policy
+    // `gx f` reads; passing it is an explicit override.
+    if flags.contains("acceptAll") {
+        map.insert("acceptAll".to_string(), Value::Bool(flags.truthy("acceptAll")));
+    }
+    Ok(Value::Object(map))
+}
+
 fn parse_session_chat_read(rest: &[String], flags: &Flags) -> Value {
     let mut map = parse_session_selector(rest, flags);
     if flags.contains("limit") {

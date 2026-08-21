@@ -41,7 +41,10 @@ import type { FindPromptsTransport } from "./find-prompts-transport";
 import { useFindPrompts } from "./use-find-prompts";
 
 export interface FindPromptsViewProps {
-  /** Adds the agents' permission-bypass flags when resuming or forking. */
+  /**
+   * Overrides the daemon's Accept All policy. Hosts normally omit it and let
+   * gxserver apply the same setting `gx f` reads.
+   */
   acceptAll?: boolean;
   /** Rendered at the top-right, for host chrome such as a close button. */
   hostActions?: React.ReactNode;

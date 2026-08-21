@@ -80,7 +80,12 @@ export interface FindPromptsController extends FindPromptsState {
 }
 
 export interface UseFindPromptsOptions {
-  /** Adds the agents' permission-bypass flags when resuming or forking. */
+  /**
+   * Overrides the daemon's Accept All policy for resumes and forks. Leave it
+   * undefined — which is the normal case — and gxserver applies the same
+   * setting `gx f` reads, so the two surfaces cannot disagree about whether a
+   * resumed agent bypasses permissions.
+   */
   acceptAll?: boolean;
   transport: FindPromptsTransport;
 }
@@ -93,7 +98,7 @@ function errorMessage(error: unknown): string {
 }
 
 export function useFindPrompts({
-  acceptAll = false,
+  acceptAll,
   transport,
 }: UseFindPromptsOptions): FindPromptsController {
   const [query, setQueryState] = useState("");
@@ -381,9 +386,9 @@ export function useFindPrompts({
     }
     try {
       const plan = await transport.resolveLaunch({
-        acceptAll,
         action: "resume",
         key: selectedRow.key,
+        ...(acceptAll === undefined ? {} : { acceptAll }),
       });
       await applyLaunchPlan(plan);
     } catch (error) {
@@ -399,10 +404,10 @@ export function useFindPrompts({
       setOverlay(null);
       try {
         const plan = await transport.resolveLaunch({
-          acceptAll,
           action: "fork",
           forkAgent: agent,
           key: selectedRow.key,
+          ...(acceptAll === undefined ? {} : { acceptAll }),
         });
         await applyLaunchPlan(plan);
       } catch (error) {

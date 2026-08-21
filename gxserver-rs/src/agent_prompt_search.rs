@@ -390,9 +390,20 @@ pub fn resolve_agent_prompt_launch(
     paths: &crate::paths::GxserverPaths,
     params: &Map<String, Value>,
     live_sessions: &[Value],
+    accept_all_default: bool,
 ) -> Result<Value, PromptSearchError> {
     let action = params.get("action").and_then(Value::as_str).unwrap_or("resume");
-    let accept_all = params.get("acceptAll").and_then(Value::as_bool).unwrap_or(false);
+    /*
+    CDXC:AgentHistorySearch 2026-08-20:
+    Accept All is a daemon-owned setting, exactly as it is for `gx f` (which
+    reads it and prepends `--accept-all`). Clients therefore do not have to know
+    it, and a client that does pass it explicitly still wins — that is the
+    override, not a guess.
+    */
+    let accept_all = params
+        .get("acceptAll")
+        .and_then(Value::as_bool)
+        .unwrap_or(accept_all_default);
     let fork_agent = match params.get("forkAgent").and_then(Value::as_str) {
         Some(name) => Some(
             Agent::parse(name.trim())

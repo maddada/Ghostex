@@ -11746,9 +11746,32 @@ fn handle_resolve_agent_prompt_launch_http(
 ) -> RoutedResponse {
     let outcome = agent_prompt_search_params(body).and_then(|params| {
         let sessions = read_all_sessions_for_prompt_launch(state)?;
-        crate::agent_prompt_search::resolve_agent_prompt_launch(&state.paths, &params, &sessions)
+        let accept_all_default = read_agent_accept_all_enabled_for_prompt_launch(state);
+        crate::agent_prompt_search::resolve_agent_prompt_launch(
+            &state.paths,
+            &params,
+            &sessions,
+            accept_all_default,
+        )
     });
     agent_prompt_search_response(endpoint_path, request_id, outcome)
+}
+
+/// The daemon's Accept All policy, the same value `gx f` reads before handing
+/// zehn `--accept-all`. A read failure means the policy is unknown, and an
+/// unknown permission policy must not silently become "bypass permissions".
+fn read_agent_accept_all_enabled_for_prompt_launch(state: &AppState) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    crate::agents::read_agent_settings(&db)
+        .ok()
+        .and_then(|settings| {
+            settings
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(false)
 }
 
 /// Every stored session row, so the launch resolver can decide whether a live

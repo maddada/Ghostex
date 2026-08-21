@@ -216,6 +216,10 @@ fn is_known_command(name: &str) -> bool {
         "read-text",
         "read-messages",
         "read-thread",
+        "search-agent-prompts",
+        "read-agent-prompt-text",
+        "toggle-agent-prompt-favorite",
+        "resolve-agent-prompt-launch",
         "read-session-chat",
         "read-session-chat-skills",
         "read-session-chat-files",
@@ -479,6 +483,36 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         the --wait-ms/--fingerprint long-poll pair for transcript tailing
         without an /api/events socket.
         */
+        /*
+        CDXC:AgentHistorySearch 2026-08-20:
+        Find over SSH for Ghostex mobile: the four Find endpoints as CLI verbs,
+        mirroring the Session Chat pattern above. Rows are addressed by their
+        stable `--key`, so a phone can act on a result it listed minutes ago.
+        */
+        "search-agent-prompts" => run_bridge_action(
+            "searchAgentPrompts",
+            Parser::AgentPromptSearch,
+            plain,
+            args,
+        ),
+        "read-agent-prompt-text" => run_bridge_action(
+            "readAgentPromptText",
+            Parser::AgentPromptRef,
+            fail_on_not_ok,
+            args,
+        ),
+        "toggle-agent-prompt-favorite" => run_bridge_action(
+            "toggleAgentPromptFavorite",
+            Parser::AgentPromptRef,
+            fail_on_not_ok,
+            args,
+        ),
+        "resolve-agent-prompt-launch" => run_bridge_action(
+            "resolveAgentPromptLaunch",
+            Parser::AgentPromptLaunch,
+            fail_on_not_ok,
+            args,
+        ),
         "read-session-chat" => {
             run_bridge_action("readSessionChat", Parser::SessionChatRead, plain, args)
         }
