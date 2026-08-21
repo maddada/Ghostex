@@ -56,6 +56,7 @@ interface MonacoEditorInstanceLike {
   onDidChangeModelContent(listener: () => void): MonacoDisposableLike;
   onDidContentSizeChange(listener: () => void): MonacoDisposableLike;
   onKeyDown(listener: (event: MonacoKeyboardEventLike) => void): MonacoDisposableLike;
+  setSelection(selection: unknown): void;
   setPosition(position: MonacoPositionLike): void;
   trigger(source: string, handlerId: string, payload: unknown): void;
   updateOptions(options: Record<string, unknown>): void;
@@ -472,6 +473,15 @@ export function SessionChatMonacoInput({
             editor.focus();
             editor.trigger("keyboard", "type", { text });
             return true;
+          },
+          selectAll: () => {
+            const model = editor.getModel();
+            if (!model) {
+              return;
+            }
+            editor.focus();
+            editor.setSelection(model.getFullModelRange());
+            callbacksRef.current.onCaretChange(editor.getValue().length);
           },
         });
       })

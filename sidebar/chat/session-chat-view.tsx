@@ -628,6 +628,7 @@ export function SessionChatView({
           className,
         )}
         data-chat-theme={theme}
+        onContextMenu={(event) => event.preventDefault()}
       />
     );
   }
@@ -656,6 +657,7 @@ export function SessionChatView({
         className,
       )}
         data-chat-theme={theme}
+        onContextMenu={(event) => event.preventDefault()}
         onKeyDownCapture={handleKeyDownCapture}
         onPasteCapture={handlePasteCapture}
         ref={chatRootRef}

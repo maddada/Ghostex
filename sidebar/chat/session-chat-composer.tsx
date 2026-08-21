@@ -24,6 +24,9 @@
 
 import {
   IconArrowUp,
+  IconClipboard,
+  IconCopy,
+  IconCut,
   IconFile,
   IconLoader2,
   IconMaximize,
@@ -31,6 +34,7 @@ import {
   IconPaperclip,
   IconPlayerStopFilled,
   IconRobot,
+  IconSelectAll,
   IconStackPush,
   IconX,
 } from "@tabler/icons-react";
@@ -47,6 +51,14 @@ import {
 } from "react";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "../../components/ui/context-menu";
 import { Field, FieldError } from "../../components/ui/field";
 import { AppTooltip } from "../app-tooltip";
 import {
@@ -118,6 +130,7 @@ export interface SessionChatComposerInputApi {
   getSelection: () => { end: number; start: number };
   getValue: () => string;
   insertText: (text: string) => boolean;
+  selectAll: () => void;
 }
 
 export interface SessionChatComposerProps {
@@ -302,6 +315,56 @@ function clipboardImageFiles(data: DataTransfer): File[] {
   return files;
 }
 
+const CLIPBOARD_IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/avif": "avif",
+  "image/bmp": "bmp",
+  "image/gif": "gif",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/svg+xml": "svg",
+  "image/tiff": "tiff",
+  "image/webp": "webp",
+};
+
+/**
+ * A custom browser menu does not receive the native paste event payload, so
+ * read the system clipboard during the menu item's user gesture and rebuild
+ * the same DataTransfer shape that keyboard paste already sends through the
+ * composer. Text and images therefore keep one insertion/attachment path.
+ */
+async function readSessionChatSystemClipboard(): Promise<DataTransfer> {
+  if (!navigator.clipboard?.read) {
+    throw new Error("Clipboard reading is not available in this browser.");
+  }
+
+  const transfer = new DataTransfer();
+  const items = await navigator.clipboard.read();
+  for (const [index, item] of items.entries()) {
+    const textType = item.types.find((type) => type === "text/plain");
+    if (textType && transfer.getData("text/plain") === "") {
+      transfer.setData("text/plain", await (await item.getType(textType)).text());
+    }
+
+    const imageType = item.types.find((type) => type.startsWith("image/"));
+    if (!imageType) {
+      continue;
+    }
+    const blob = await item.getType(imageType);
+    const extension = CLIPBOARD_IMAGE_EXTENSIONS[imageType];
+    const fileName = extension
+      ? `clipboard-image-${index + 1}.${extension}`
+      : `clipboard-image-${index + 1}`;
+    transfer.items.add(
+      new File([blob], fileName, {
+        type: imageType,
+      }),
+    );
+  }
+  return transfer;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -375,6 +438,7 @@ export const SessionChatComposer = forwardRef<
   const [monacoFailed, setMonacoFailed] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [contextSelection, setContextSelection] = useState({ end: 0, start: 0 });
   const imageViewer = useSessionChatImageViewer();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -536,6 +600,15 @@ export const SessionChatComposer = forwardRef<
       });
       return true;
     },
+    selectAll: () => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(0, textarea.value.length);
+      setCaret(textarea.value.length);
+    },
   };
 
   // Resolved lazily: the Monaco backend registers its api into a ref after
@@ -603,25 +676,7 @@ export const SessionChatComposer = forwardRef<
       return input.insertText(text);
     },
     pasteClipboard: (data: DataTransfer): boolean => {
-      if (disabled) {
-        return false;
-      }
-      if (processClipboardData(data)) {
-        // Images were consumed as attachments; put the caret back in the
-        // input so the redirected paste ends with a ready composer.
-        getInputApi()?.focus();
-        return true;
-      }
-      const text = data.getData("text/plain");
-      if (text === "") {
-        return false;
-      }
-      const input = getInputApi();
-      if (!input) {
-        pendingInsertTextRef.current += text;
-        return true;
-      }
-      return input.insertText(text);
+      return pasteClipboardData(data);
     },
   }));
 
@@ -874,6 +929,65 @@ export const SessionChatComposer = forwardRef<
     }
     consumeImageFiles(files);
     return true;
+  };
+
+  const pasteClipboardData = (data: DataTransfer): boolean => {
+    if (disabled) {
+      return false;
+    }
+    if (processClipboardData(data)) {
+      // Images were consumed as attachments; put the caret back in the input
+      // so either keyboard paste or the custom menu ends with a ready composer.
+      getInputApi()?.focus();
+      return true;
+    }
+    const text = data.getData("text/plain");
+    if (text === "") {
+      return false;
+    }
+    const input = getInputApi();
+    if (!input) {
+      pendingInsertTextRef.current += text;
+      return true;
+    }
+    return input.insertText(text);
+  };
+
+  const copyContextSelection = (cut: boolean): void => {
+    const input = getInputApi();
+    if (!input || contextSelection.start === contextSelection.end) {
+      return;
+    }
+    const current = input.getValue();
+    const start = Math.min(contextSelection.start, current.length);
+    const end = Math.min(contextSelection.end, current.length);
+    const selectedText = current.slice(start, end);
+    void navigator.clipboard
+      .writeText(selectedText)
+      .then(() => {
+        if (!cut || input.getValue() !== current) {
+          return;
+        }
+        const next = `${current.slice(0, start)}${current.slice(end)}`;
+        updateDraft(next, start);
+        input.applyValue(next, start);
+        input.focus();
+      })
+      .catch((error: unknown) => {
+        console.error("[session-chat] clipboard write failed", error);
+        setSendError("The clipboard could not be written.");
+      });
+  };
+
+  const pasteFromContextMenu = (): void => {
+    void readSessionChatSystemClipboard()
+      .then((data) => {
+        pasteClipboardData(data);
+      })
+      .catch((error: unknown) => {
+        console.error("[session-chat] clipboard read failed", error);
+        setSendError("The clipboard could not be read.");
+      });
   };
 
   const completeSlashCommand = (command: SessionChatSlashCommand): void => {
@@ -1311,77 +1425,119 @@ export const SessionChatComposer = forwardRef<
               ) : null}
             </div>
           ) : null}
-          <div className="ghostex-chat-composer-row flex min-w-0 items-end gap-2 pb-1.5">
-          {useMonaco ? (
-            <SessionChatMonacoInput
-              disabled={disabled}
-              fillHeight={maximized}
-              initialValue={draft}
-              onCaretChange={setCaret}
-              onChange={updateDraft}
-              onKeyDown={handleKeyDown}
-              onLoadFailed={(error) => {
-                console.error(
-                  "[session-chat] Monaco failed to load; using the plain input.",
-                  error,
+          <ContextMenu
+            onOpenChange={(open) => {
+              if (open) {
+                setContextSelection(
+                  getInputApi()?.getSelection() ?? { end: 0, start: 0 },
                 );
-                setMonacoFailed(true);
-              }}
-              onPasteData={processClipboardData}
-              placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
-              registerApi={(api) => {
-                monacoApiRef.current = api;
-                if (api && pendingInsertTextRef.current) {
-                  const pending = pendingInsertTextRef.current;
-                  pendingInsertTextRef.current = "";
-                  api.insertText(pending);
-                }
-                if (api && pendingFocusRef.current) {
-                  pendingFocusRef.current = false;
-                  api.focus();
-                }
-              }}
-              theme={theme}
-              vsBaseUrl={monacoVsBaseUrl ?? ""}
-            />
-          ) : (
-            <textarea
-              className="ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
-              disabled={disabled}
-              aria-invalid={sendError !== null}
-              onChange={(event) => {
-                updateDraft(
-                  event.target.value,
-                  event.target.selectionStart ?? event.target.value.length,
-                );
-              }}
-              onSelect={(event) => {
-                // Caret moves (click, arrows, Home/End) decide which token the
-                // pickers read, so they have to reach state too.
-                setCaret(event.currentTarget.selectionStart ?? null);
-              }}
-              onKeyDown={(event) => {
-                const adapted = reactKeyEventAdapter(event);
-                if (adapted.isComposing) {
-                  if (adapted.key === "Enter") {
-                    event.preventDefault();
-                  }
-                  return;
-                }
-                handleKeyDown(adapted);
-              }}
-              onPaste={(event) => {
-                if (processClipboardData(event.clipboardData)) {
-                  event.preventDefault();
-                }
-              }}
-              placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
-              ref={textareaRef}
-              rows={1}
-              value={draft}
-            />
-          )}
-          </div>
+              }
+            }}
+          >
+            <ContextMenuTrigger className="ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5">
+              {useMonaco ? (
+                <SessionChatMonacoInput
+                  disabled={disabled}
+                  fillHeight={maximized}
+                  initialValue={draft}
+                  onCaretChange={setCaret}
+                  onChange={updateDraft}
+                  onKeyDown={handleKeyDown}
+                  onLoadFailed={(error) => {
+                    console.error(
+                      "[session-chat] Monaco failed to load; using the plain input.",
+                      error,
+                    );
+                    setMonacoFailed(true);
+                  }}
+                  onPasteData={processClipboardData}
+                  placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+                  registerApi={(api) => {
+                    monacoApiRef.current = api;
+                    if (api && pendingInsertTextRef.current) {
+                      const pending = pendingInsertTextRef.current;
+                      pendingInsertTextRef.current = "";
+                      api.insertText(pending);
+                    }
+                    if (api && pendingFocusRef.current) {
+                      pendingFocusRef.current = false;
+                      api.focus();
+                    }
+                  }}
+                  theme={theme}
+                  vsBaseUrl={monacoVsBaseUrl ?? ""}
+                />
+              ) : (
+                <textarea
+                  aria-invalid={sendError !== null}
+                  className="ghostex-chat-composer-input max-h-40 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
+                  disabled={disabled}
+                  onChange={(event) => {
+                    updateDraft(
+                      event.target.value,
+                      event.target.selectionStart ?? event.target.value.length,
+                    );
+                  }}
+                  onKeyDown={(event) => {
+                    const adapted = reactKeyEventAdapter(event);
+                    if (adapted.isComposing) {
+                      if (adapted.key === "Enter") {
+                        event.preventDefault();
+                      }
+                      return;
+                    }
+                    handleKeyDown(adapted);
+                  }}
+                  onPaste={(event) => {
+                    if (processClipboardData(event.clipboardData)) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onSelect={(event) => {
+                    // Caret moves (click, arrows, Home/End) decide which token
+                    // the pickers read, so they have to reach state too.
+                    setCaret(event.currentTarget.selectionStart ?? null);
+                  }}
+                  placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+                  ref={textareaRef}
+                  rows={1}
+                  value={draft}
+                />
+              )}
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuGroup>
+                <ContextMenuItem
+                  disabled={disabled || contextSelection.start === contextSelection.end}
+                  onClick={() => copyContextSelection(true)}
+                >
+                  <IconCut aria-hidden="true" />
+                  Cut
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={contextSelection.start === contextSelection.end}
+                  onClick={() => copyContextSelection(false)}
+                >
+                  <IconCopy aria-hidden="true" />
+                  Copy
+                </ContextMenuItem>
+                <ContextMenuItem disabled={disabled} onClick={pasteFromContextMenu}>
+                  <IconClipboard aria-hidden="true" />
+                  Paste
+                </ContextMenuItem>
+              </ContextMenuGroup>
+              <ContextMenuSeparator />
+              <ContextMenuGroup>
+                <ContextMenuItem
+                  disabled={draft.length === 0}
+                  onClick={() => getInputApi()?.selectAll()}
+                >
+                  <IconSelectAll aria-hidden="true" />
+                  Select all
+                </ContextMenuItem>
+              </ContextMenuGroup>
+            </ContextMenuContent>
+          </ContextMenu>
           <div className="ghostex-chat-composer-footer flex w-full items-center justify-between gap-2">
             <div className="ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5">
               {optionPills}
