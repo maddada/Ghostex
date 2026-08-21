@@ -2524,7 +2524,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     /**
      * CDXC:BetaFeatures 2026-06-16-13:08:
      * Normalize the beta gate as a strict boolean so stale or malformed settings
-     * cannot expose beta-only OS Integration or browser address-bar controls.
+     * cannot expose beta-only OS Integration or other experimental surfaces.
      */
     showBetaFeatures: readBoolean(
       source,

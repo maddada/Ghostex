@@ -2462,7 +2462,7 @@ export function SettingsModal({
       {
         key: "showBetaFeatures",
         subtitle:
-          "Show experimental surfaces: OS Integration settings, Browser Profiles, Browser color scheme, and Keep Awake.",
+          "Show experimental surfaces: OS Integration settings, Browser color scheme, and Keep Awake.",
         title: "Enable Experimental Features",
       },
     ]),
@@ -5199,8 +5199,8 @@ export function SettingsModal({
                       checked={draft.showBetaFeatures}
                       description={
                         automateIsExperimental
-                          ? "Show experimental settings, Automations and Automate pages, browser address-bar controls, and the Keep Awake title-bar button."
-                          : "Show experimental settings, Automations Overview, browser address-bar controls, and the Keep Awake title-bar button."
+                          ? "Show experimental settings, Automations and Automate pages, and the Keep Awake title-bar button."
+                          : "Show experimental settings, Automations Overview, and the Keep Awake title-bar button."
                       }
                       label="Enable Experimental Features"
                       {...getSettingModificationProps("showBetaFeatures")}
@@ -5215,7 +5215,6 @@ export function SettingsModal({
                             ? "Automations Overview and project Automate pages"
                             : "Automations Overview"}
                         </li>
-                        <li>Browser address bar: Profiles</li>
                         <li>Title bar and Power settings: Keep Awake</li>
                       </ul>
                     </div>
