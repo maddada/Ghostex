@@ -53,7 +53,14 @@ export type WindowsTerminalBackend = "wsl";
 export type BrowserOpenMode = "browser-pane";
 export type BrowserFeedbackTool = "agentation";
 export type PortlessProtocol = "https" | "http";
-export type TerminalDevServerOpenTarget = "internal-browser" | "system-default-browser";
+/**
+ * CDXC:WebLinkOpenTarget 2026-08-19:
+ * One answer to "where does a web link Ghostex opens land". Command-clicked
+ * terminal links, session chat links, and detected dev-server rows all read
+ * this single target instead of the old split between a Browser toggle and a
+ * Dev Servers dropdown, which could disagree with each other.
+ */
+export type WebLinkOpenTarget = "internal-browser" | "system-default-browser";
 export type DefaultEditorCommand =
   | "code"
   | "code-insiders"
@@ -456,18 +463,17 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: ReadonlyMap<string, string>
   ["#854f7a", "#100611"],
   ["#8a4f5f", "#100409"],
 ]);
-export const TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS: ReadonlyArray<{
+export const WEB_LINK_OPEN_TARGET_OPTIONS: ReadonlyArray<{
   label: string;
-  value: TerminalDevServerOpenTarget;
+  value: WebLinkOpenTarget;
 }> = [
-  { label: "System Default Browser", value: "system-default-browser" },
   { label: "Internal Browser", value: "internal-browser" },
+  { label: "System Default Browser", value: "system-default-browser" },
 ];
-const DEFAULT_TERMINAL_DEV_SERVER_OPEN_TARGET: TerminalDevServerOpenTarget =
-  "system-default-browser";
+const DEFAULT_WEB_LINK_OPEN_TARGET: WebLinkOpenTarget = "internal-browser";
 const DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES: readonly string[] = [];
-const TERMINAL_DEV_SERVER_OPEN_TARGET_SET = new Set(
-  TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS.map((option) => option.value),
+const WEB_LINK_OPEN_TARGET_SET = new Set(
+  WEB_LINK_OPEN_TARGET_OPTIONS.map((option) => option.value),
 );
 const SETTINGS_MODAL_NAVIGATION_TAB_SET = new Set<string>(SETTINGS_MODAL_NAVIGATION_TABS);
 const MAX_SETTINGS_MODAL_SCROLL_TOP = 1_000_000;
@@ -838,11 +844,23 @@ export type ghostexSettings = {
   /**
    * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
    * Command-clicked http/https terminal links open as tabs in the project
-   * Browser view by default. Turning this off restores handing web links to
-   * the system default browser. File paths and non-web schemes always keep
-   * the external NSWorkspace route regardless of this setting.
+   * Browser view by default. Pointing this at the system default browser
+   * restores handing web links to it. File paths and non-web schemes always
+   * keep the external NSWorkspace route regardless of this setting.
+   *
+   * CDXC:GPUISessionChatLinks 2026-08-18:
+   * Web links clicked in session chat follow the same switch, so this is the
+   * single answer to "where do agent-sent web links open". Chat file links
+   * still open in Docs or Code, and Shift+click still forces the system
+   * default browser while the target is the internal browser.
+   *
+   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * Detected dev-server rows read this too, replacing the separate Dev Servers
+   * open-target dropdown. Migrated from the legacy openTerminalLinksInApp
+   * boolean, which wins over the legacy dev-server target when both persist,
+   * because it is the switch users actually flipped.
    */
-  openTerminalLinksInApp: boolean;
+  webLinkOpenTarget: WebLinkOpenTarget;
   /**
    * CDXC:SettingsAdvanced 2026-06-28-08:01:
    * Show Advanced is a persisted Settings browsing preference. When users enable
@@ -1239,7 +1257,6 @@ export type ghostexSettings = {
    * Dev-server discovery is app-owned terminal behavior, not a terminal emulator config key. Persist detection, a single open-target choice, and ignored ports with the main settings contract so Terminal settings stay focused on opening in the user's system browser or the internal browser instead of exposing per-browser checkboxes.
    */
   terminalDevServerDetectionEnabled: boolean;
-  terminalDevServerOpenTarget: TerminalDevServerOpenTarget;
   terminalDevServerIgnoredPortRules: readonly string[];
   /**
    * CDXC:PortlessSettings 2026-06-22-22:35:
@@ -1476,11 +1493,19 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   browserOpenMode: "browser-pane",
   /**
    * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
-   * In-app terminal link routing is the default so cmd-clicked web links land
-   * in the project Browser view unless the user opts back into the system
-   * browser in Settings.
+   * In-app link routing is the default so cmd-clicked web links land in the
+   * project Browser view unless the user opts back into the system browser in
+   * Settings.
+   *
+   * CDXC:GPUISessionChatLinks 2026-08-18:
+   * Session chat web links share this default for the same reason.
+   *
+   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * Detected dev-server rows now share it as well, so a fresh install answers
+   * every web link the same way instead of splitting chat and terminal links
+   * from dev-server links.
    */
-  openTerminalLinksInApp: true,
+  webLinkOpenTarget: DEFAULT_WEB_LINK_OPEN_TARGET,
   /**
    * CDXC:SettingsAdvanced 2026-06-28-08:01:
    * New installs should start with ordinary Settings density, but an explicit
@@ -1973,10 +1998,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalScrollbar: "system",
   /**
    * CDXC:TerminalDevServers 2026-06-23-19:22:
-   * New installs should discover local dev servers from terminal output, open detected URLs with the user's system default browser unless changed to the internal browser, and start with no ignored ports.
+   * New installs should discover local dev servers from terminal output and start with no ignored ports.
+   *
+   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * Where a detected URL opens is no longer a Dev Servers choice; it follows webLinkOpenTarget with every other web link.
    */
   terminalDevServerDetectionEnabled: true,
-  terminalDevServerOpenTarget: DEFAULT_TERMINAL_DEV_SERVER_OPEN_TARGET,
   terminalDevServerIgnoredPortRules: DEFAULT_TERMINAL_DEV_SERVER_IGNORED_PORT_RULES,
   /**
    * CDXC:PortlessSettingsDisabled 2026-07-25:
@@ -2383,10 +2410,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       : DEFAULT_ghostex_SETTINGS.sessionPersistenceProvider,
     ),
   );
-  const terminalDevServerOpenTarget = normalizeTerminalDevServerOpenTarget(
-    source.terminalDevServerOpenTarget,
-    source.terminalDevServerDefaultBrowserId,
-  );
+  const webLinkOpenTarget = normalizeWebLinkOpenTarget(source);
   const rawLegacyCustomSidebarTitlebarBackgroundColor =
     source.customSidebarTitlebarBackgroundColor;
   const hasValidLegacyCustomSidebarTitlebarBackgroundColor =
@@ -2485,11 +2509,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         DEFAULT_ghostex_SETTINGS.customSessionTitleGenerationCommand,
       ),
     ),
-    openTerminalLinksInApp: readBoolean(
-      source,
-      "openTerminalLinksInApp",
-      DEFAULT_ghostex_SETTINGS.openTerminalLinksInApp,
-    ),
+    webLinkOpenTarget,
     /** Normalize legacy feedback-tool settings to the sole supported tool. */
     browserFeedbackTool: normalizeBrowserFeedbackTool(
       readString(source, "browserFeedbackTool", DEFAULT_ghostex_SETTINGS.browserFeedbackTool),
@@ -3318,14 +3338,16 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     /**
      * CDXC:TerminalDevServers 2026-06-23-19:22:
-     * Dev-server settings normalize in the app layer because they are not Ghostty keys. Keep the launch choice to system default versus internal browser, migrate legacy per-browser defaults to system default, and canonicalize ignored port rules to sorted, merged strings.
+     * Dev-server settings normalize in the app layer because they are not Ghostty keys. Canonicalize ignored port rules to sorted, merged strings.
+     *
+     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * The launch choice moved to webLinkOpenTarget, which absorbs both the legacy dev-server target and its older per-browser default.
      */
     terminalDevServerDetectionEnabled: readBoolean(
       source,
       "terminalDevServerDetectionEnabled",
       DEFAULT_ghostex_SETTINGS.terminalDevServerDetectionEnabled,
     ),
-    terminalDevServerOpenTarget,
     terminalDevServerIgnoredPortRules: normalizeTerminalDevServerIgnoredPortRules(
       source.terminalDevServerIgnoredPortRules,
     ),
@@ -3713,21 +3735,44 @@ function normalizeCustomPromptEditorCommand(value: string | undefined): string {
   return ((value ?? "").trim() || DEFAULT_ghostex_SETTINGS.customPromptEditorCommand).slice(0, 240);
 }
 
-function normalizeTerminalDevServerOpenTarget(
-  candidate: unknown,
-  legacyDefaultBrowserId: unknown,
-): TerminalDevServerOpenTarget {
-  const value = readLooseString(candidate);
-  if (TERMINAL_DEV_SERVER_OPEN_TARGET_SET.has(value as TerminalDevServerOpenTarget)) {
-    return value as TerminalDevServerOpenTarget;
+/*
+ * CDXC:WebLinkOpenTarget 2026-08-19:
+ * Two settings answered "where does this web link open" and could disagree:
+ * the Browser toggle openTerminalLinksInApp (default on) and the Dev Servers
+ * dropdown terminalDevServerOpenTarget (default system browser). They merge
+ * into one target, so migration has to pick a winner for existing installs.
+ * The toggle wins: it is the switch users actually flipped and the one the
+ * in-app toast points at, while nearly every install carries the dev-server
+ * default it never chose. Reading that field first would silently move
+ * everyone off the embedded browser.
+ */
+function normalizeWebLinkOpenTarget(source: Record<string, unknown>): WebLinkOpenTarget {
+  const value = readLooseString(source.webLinkOpenTarget);
+  if (WEB_LINK_OPEN_TARGET_SET.has(value as WebLinkOpenTarget)) {
+    return value as WebLinkOpenTarget;
   }
 
-  const legacyValue = readLooseString(legacyDefaultBrowserId);
-  if (legacyValue !== undefined) {
+  const legacyOpenLinksInApp = source.openTerminalLinksInApp;
+  if (typeof legacyOpenLinksInApp === "boolean") {
+    return legacyOpenLinksInApp ? "internal-browser" : "system-default-browser";
+  }
+
+  const legacyDevServerTarget = readLooseString(source.terminalDevServerOpenTarget);
+  if (WEB_LINK_OPEN_TARGET_SET.has(legacyDevServerTarget as WebLinkOpenTarget)) {
+    return legacyDevServerTarget as WebLinkOpenTarget;
+  }
+
+  /*
+   * readLooseString returns "" for a missing key, not undefined, so this has to
+   * test for content. The predecessor compared against undefined and therefore
+   * matched every install; it went unnoticed only because it returned the value
+   * that was already the default.
+   */
+  if (readLooseString(source.terminalDevServerDefaultBrowserId).length > 0) {
     return "system-default-browser";
   }
 
-  return DEFAULT_TERMINAL_DEV_SERVER_OPEN_TARGET;
+  return DEFAULT_WEB_LINK_OPEN_TARGET;
 }
 
 type TerminalDevServerPortRule = {

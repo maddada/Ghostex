@@ -761,7 +761,7 @@ type NativeHostCommand =
       agentHookStatus?: SidebarAgentHookStatusMessage;
       ghostexCliStatus?: SidebarGhostexCliStatusMessage;
       sessionPersistenceProvider?: ghostexSettings["sessionPersistenceProvider"];
-      terminalDevServerOpenTarget?: ghostexSettings["terminalDevServerOpenTarget"];
+      webLinkOpenTarget?: ghostexSettings["webLinkOpenTarget"];
       titlebarCodeEditorProjectIds?: string[];
       titlebarPortless?: SidebarPortlessState;
       titlebarResourceGroups?: TitlebarResourceGroup[];
@@ -6869,9 +6869,9 @@ function handleTerminalOpenUrlRequested(
    * opt back into the system browser in Settings, so honor that choice here
    * with the existing native external-open command.
    */
-  if (!settings.openTerminalLinksInApp) {
+  if (settings.webLinkOpenTarget === "system-default-browser") {
     appendTerminalLinkDebugLog("sidebar.terminalOpenUrl.external", {
-      openTerminalLinksInApp: false,
+      webLinkOpenTarget: settings.webLinkOpenTarget,
       sourceSessionId: hostEvent.sourceSessionId,
     });
     postNative({ type: "openExternalUrl", url: hostEvent.url });
@@ -47963,7 +47963,7 @@ function syncNativeLayout(
      * undefined here; undefined means the titlebar should keep prior state.
      */
     sessionPersistenceProvider: settings.sessionPersistenceProvider,
-    terminalDevServerOpenTarget: settings.terminalDevServerOpenTarget,
+    webLinkOpenTarget: settings.webLinkOpenTarget,
     sessionTitleBarActions,
     sessionTitles,
     petOverlayEnabled: settings.petOverlayEnabled,
