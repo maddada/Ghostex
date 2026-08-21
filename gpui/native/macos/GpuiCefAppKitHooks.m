@@ -138,6 +138,8 @@ static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view);
 static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event);
 static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
 static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event);
+static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside);
+static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
 
 /*
  CDXC:GPUISidebarPointerTracking 2026-08-02:
@@ -154,7 +156,35 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event);
  data-native-pointer-inside CSS contract and context-menu dismissal).
 */
 static __weak NSView* g_ghostexGpuiSidebarPointerTrackingView = nil;
-static BOOL g_ghostexGpuiSidebarPointerInside = NO;
+
+/*
+ CDXC:GPUISidebarPointerTracking 2026-08-20:
+ This is "what the sidebar page was last told", and it exists to keep the
+ high-frequency mouse-moved path from running a script per event. It must
+ therefore have an honest `Unknown` value: any moment the page's copy can no
+ longer be derived from it (the tracking view was re-registered for a new CEF
+ surface, the window went inactive so crossings stop being observable) has to
+ be representable, or the next observed event compares against a stale value,
+ suppresses the write as redundant, and the page keeps a flag that contradicts
+ the real pointer position for as long as the pointer stays on that side of
+ the boundary.
+
+ That is exactly what used to happen: window deactivation reported "outside"
+ straight into the page while this cache still said "inside", so moving back
+ over a session row reported nothing, `data-native-pointer-inside` stayed
+ "false", and every hover suppressor in the sidebar stylesheet stayed armed —
+ no row background, no hover-only Close button — even though Chromium's own
+ :hover was tracking the pointer correctly. Every writer now goes through
+ GhostexGpuiSidebarPointerTrackingReport so the cache cannot drift.
+*/
+typedef NS_ENUM(NSInteger, GhostexGpuiSidebarPointerTrackingState) {
+  GhostexGpuiSidebarPointerTrackingStateUnknown = 0,
+  GhostexGpuiSidebarPointerTrackingStateOutside,
+  GhostexGpuiSidebarPointerTrackingStateInside,
+};
+
+static GhostexGpuiSidebarPointerTrackingState g_ghostexGpuiSidebarPointerState =
+  GhostexGpuiSidebarPointerTrackingStateUnknown;
 
 extern void GhostexGpuiSidebarPointerInsideChanged(bool inside);
 extern void GhostexGpuiSidebarOutsideMouseDown(void);
@@ -163,9 +193,56 @@ void GhostexGpuiCEFSetSidebarPointerTrackingView(void* view) {
   NSView* sidebarView = (__bridge NSView*)view;
   g_ghostexGpuiSidebarPointerTrackingView = sidebarView;
   // Unknown until the next mouse event recomputes it against the new view.
-  g_ghostexGpuiSidebarPointerInside = NO;
+  g_ghostexGpuiSidebarPointerState = GhostexGpuiSidebarPointerTrackingStateUnknown;
   // Pointer-moved events are only generated for a window that asks for them.
   sidebarView.window.acceptsMouseMovedEvents = YES;
+}
+
+static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside) {
+  GhostexGpuiSidebarPointerTrackingState next =
+    inside ? GhostexGpuiSidebarPointerTrackingStateInside
+           : GhostexGpuiSidebarPointerTrackingStateOutside;
+  if (next == g_ghostexGpuiSidebarPointerState) {
+    return;
+  }
+  g_ghostexGpuiSidebarPointerState = next;
+  GhostexGpuiSidebarPointerInsideChanged(inside);
+}
+
+static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint) {
+  NSView* sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
+  NSWindow* window = sidebarView.window;
+  if (!sidebarView || !window || !window.isVisible ||
+      sidebarView.isHiddenOrHasHiddenAncestor) {
+    return NO;
+  }
+  NSPoint locationInWindow = [window convertPointFromScreen:screenPoint];
+  NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds toView:nil];
+  return NSPointInRect(locationInWindow, frameInWindow);
+}
+
+/*
+ CDXC:GPUISidebarPointerTracking 2026-08-20:
+ The workspace window stopped being active, so mouse-moved events stop
+ arriving and a crossing out of the sidebar can no longer be observed. Report
+ the pointer as outside — the same thing leaving for another app does to a
+ native menu — through the shared reporter so the cache records that the page
+ now holds "false".
+*/
+void GhostexGpuiCEFReportSidebarPointerOutside(void) {
+  GhostexGpuiSidebarPointerTrackingReport(NO);
+}
+
+/*
+ CDXC:GPUISidebarPointerTracking 2026-08-20:
+ The workspace window became active again. The pointer may already be parked
+ over a session row, and a pointer that never moves produces no event to
+ recompute from, so resolve the crossing from the real pointer location rather
+ than waiting for the user to jiggle the mouse.
+*/
+void GhostexGpuiCEFRefreshSidebarPointerInside(void) {
+  GhostexGpuiSidebarPointerTrackingReport(
+    GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSEvent.mouseLocation));
 }
 
 static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
@@ -192,10 +269,7 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event) {
     NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds toView:nil];
     inside = NSPointInRect(event.locationInWindow, frameInWindow);
   }
-  if (inside != g_ghostexGpuiSidebarPointerInside) {
-    g_ghostexGpuiSidebarPointerInside = inside;
-    GhostexGpuiSidebarPointerInsideChanged(inside);
-  }
+  GhostexGpuiSidebarPointerTrackingReport(inside);
   if (isDown && !inside) {
     GhostexGpuiSidebarOutsideMouseDown();
   }

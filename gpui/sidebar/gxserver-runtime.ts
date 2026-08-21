@@ -314,6 +314,7 @@ export type GhostexGpuiSidebarBridge = {
    * by Rust's AppKit pointer observer.
    */
   dismissSidebarContextMenus?: () => void;
+  dismissSidebarTooltips?: () => void;
   onWorkspaceFirstPromptTitleGenerationCancel?: (payload: unknown) => void;
   onWorkspaceFolderPicked?: (payload: unknown) => void;
   onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;

@@ -57,6 +57,8 @@ unsafe extern "C" {
     ) -> bool;
     fn GhostexGpuiCEFNativeViewOwnsFirstResponder(native_view: *mut c_void) -> bool;
     fn GhostexGpuiCEFSetSidebarPointerTrackingView(native_view: *mut c_void);
+    fn GhostexGpuiCEFReportSidebarPointerOutside();
+    fn GhostexGpuiCEFRefreshSidebarPointerInside();
 }
 
 /// Keeps the CEF framework loaded for the lifetime of the CEF runtime.
@@ -307,6 +309,14 @@ pub(super) fn focus_gpui_root_view(native_view: *mut c_void) {
 
 pub(super) fn set_sidebar_pointer_tracking_view(native_view: *mut c_void) {
     unsafe { GhostexGpuiCEFSetSidebarPointerTrackingView(native_view) }
+}
+
+pub(super) fn report_sidebar_pointer_outside() {
+    unsafe { GhostexGpuiCEFReportSidebarPointerOutside() }
+}
+
+pub(super) fn refresh_sidebar_pointer_inside() {
+    unsafe { GhostexGpuiCEFRefreshSidebarPointerInside() }
 }
 
 pub(super) fn native_view_owns_first_responder(native_view: *mut c_void) -> bool {

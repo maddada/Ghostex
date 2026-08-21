@@ -427,6 +427,24 @@ pub fn set_sidebar_pointer_tracking_view(native_view: *mut c_void) {
     platform::set_sidebar_pointer_tracking_view(native_view);
 }
 
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-20:
+`data-native-pointer-inside` is only cheap because the AppKit observer keeps a
+cache of what the page was last told and skips redundant writes on the
+mouse-moved path. Window activation changes have to move through that same
+cache instead of writing the page directly, or the cache and the page disagree
+and the next real crossing is dropped as redundant.
+*/
+#[cfg(target_os = "macos")]
+pub fn report_sidebar_pointer_outside() {
+    platform::report_sidebar_pointer_outside();
+}
+
+#[cfg(target_os = "macos")]
+pub fn refresh_sidebar_pointer_inside() {
+    platform::refresh_sidebar_pointer_inside();
+}
+
 #[cfg(target_os = "macos")]
 pub fn native_view_contains_responder(
     root_native_view: *mut c_void,

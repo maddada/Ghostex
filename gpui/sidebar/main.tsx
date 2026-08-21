@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import "../../sidebar/styles.css";
 import { SidebarApp } from "../../sidebar/sidebar-app";
+import { dismissSidebarTooltips } from "../../sidebar/app-tooltip";
 import { dismissAllSidebarContextMenus } from "../../sidebar/sidebar-context-menu-portal";
 import { createGpuiSidebarRuntime } from "./gxserver-runtime";
 import "./sidebar.css";
@@ -47,6 +48,24 @@ dismissal contract the deprecated macOS host had.
 window.ghostexGpui = window.ghostexGpui ?? {};
 window.ghostexGpui.dismissSidebarContextMenus = () => {
   dismissAllSidebarContextMenus();
+};
+
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-20:
+A tooltip opens on pointer-enter and closes on pointer-leave, and the sidebar
+CEF surface never receives that leave when the pointer crosses into a native
+sibling: the tooltip for a session row stayed on screen with the pointer over a
+terminal pane. The same AppKit observer that owns `data-native-pointer-inside`
+reports the crossing here.
+
+This is a dismissal, not a suppression: `data-sidebar-tooltips-suppressed` is
+deliberately drag-only (see CDXC:TooltipLifecycle 2026-06-13-02:30 in
+app-tooltip.tsx), because a persistent CSS flag would also keep the *next*
+hover from opening a tooltip until something cleared it. Closing the open
+tooltips leaves the next pointer-enter free to open a new one.
+*/
+window.ghostexGpui.dismissSidebarTooltips = () => {
+  dismissSidebarTooltips();
 };
 
 const gpuiSidebarRuntime = createGpuiSidebarRuntime();
