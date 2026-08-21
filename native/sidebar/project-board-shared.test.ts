@@ -117,7 +117,7 @@ describe("project board filters", () => {
       displayId: "ZMX-1",
       estimate: 15,
       id: "urgent-xs",
-      labels: ["vault", "needs:sven"],
+      labels: ["docs", "needs:review"],
       priority: 0,
       status: "open",
       title: "Urgent XS task",
@@ -127,7 +127,7 @@ describe("project board filters", () => {
       displayId: "ZMX-2",
       estimate: null,
       id: "medium-none",
-      labels: ["ghostex", "vault"],
+      labels: ["backend", "docs"],
       priority: 2,
       status: "in_progress",
       title: "Medium unestimated task",
@@ -163,17 +163,17 @@ describe("project board filters", () => {
      * labels are simply not in that set rather than being treated as a selectable state of their
      * own, because an untagged bead is untriaged rather than a kind of work.
      */
-    expect(filterBoardTickets(tickets, "", "all", "all", "vault").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "all", "all", "docs").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
       "medium-none",
     ]);
-    expect(filterBoardTickets(tickets, "", "all", "all", "ghostex").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "all", "all", "backend").map((ticket) => ticket.id)).toEqual([
       "medium-none",
     ]);
-    expect(filterBoardTickets(tickets, "", "0", "all", "vault").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "0", "all", "docs").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
     ]);
-    expect(filterBoardTickets(tickets, "", "0", "all", "ghostex")).toEqual([]);
+    expect(filterBoardTickets(tickets, "", "0", "all", "backend")).toEqual([]);
     expect(filterBoardTickets(tickets, "", "all", "all", "all").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
       "medium-none",
@@ -182,7 +182,7 @@ describe("project board filters", () => {
   });
 
   test("offers the loaded tickets' own labels, sorted, with all first", () => {
-    expect(boardTagFilterOptions(tickets)).toEqual(["all", "ghostex", "needs:sven", "vault"]);
+    expect(boardTagFilterOptions(tickets)).toEqual(["all", "backend", "docs", "needs:review"]);
     expect(boardTagFilterOptions([])).toEqual(["all"]);
   });
 
@@ -192,9 +192,9 @@ describe("project board filters", () => {
      * A stored tag outlives the board that produced it, so opening a project that never used it
      * must show the whole board rather than an empty one under a tag nothing carries.
      */
-    expect(resolveBoardTagFilter("hermes", boardTagFilterOptions(tickets))).toBe("all");
-    expect(resolveBoardTagFilter("vault", boardTagFilterOptions(tickets))).toBe("vault");
-    expect(resolveBoardTagFilter("vault", boardTagFilterOptions([]))).toBe("all");
+    expect(resolveBoardTagFilter("frontend", boardTagFilterOptions(tickets))).toBe("all");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions(tickets))).toBe("docs");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions([]))).toBe("all");
   });
 });
 
@@ -504,13 +504,13 @@ describe("project board view preferences", () => {
         estimateFilter: "M",
         priorityFilter: "1",
         sortOption: "created-asc",
-        tagFilter: "vault",
+        tagFilter: "docs",
       }),
     ).toEqual({
       estimateFilter: "M",
       priorityFilter: "1",
       sortOption: "created-asc",
-      tagFilter: "vault",
+      tagFilter: "docs",
     });
     expect(normalizeProjectBoardViewPreferences({ estimateFilter: "none" }).estimateFilter).toBe(
       "none",
@@ -546,12 +546,12 @@ describe("project board view preferences", () => {
      * selection instead of the first tagless project erasing it. resolveBoardTagFilter is what
      * lands an unavailable tag on "all" once a board has actually loaded.
      */
-    expect(normalizeProjectBoardViewPreferences({ tagFilter: "vault" }).tagFilter).toBe("vault");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "docs" }).tagFilter).toBe("docs");
     expect(normalizeProjectBoardViewPreferences({ tagFilter: "retired-lane-tag" }).tagFilter).toBe(
       "retired-lane-tag",
     );
     expect(normalizeProjectBoardViewPreferences({ tagFilter: "   " }).tagFilter).toBe("all");
-    expect(normalizeProjectBoardViewPreferences({ tagFilter: ["vault"] }).tagFilter).toBe("all");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: ["docs"] }).tagFilter).toBe("all");
   });
 
   test("keeps every offered toolbar option restorable", () => {
