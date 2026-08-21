@@ -61,6 +61,16 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     string keeps /api/health/server's inventory in step for diagnostics.
     */
     "worktreeSessions",
+    /*
+    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    A remote machine runs the gxserver package its client installed, so it can
+    be older than the client that talks to it. `promptEditor: "code-server"` is
+    rejected outright by daemons built before that mode existed, which turned a
+    New Terminal click on a remote project into a bare 400. Advertise the mode
+    explicitly, exactly like `atomicWorkspaceTerminalCreate`, so clients choose
+    the prompt-editor selector this daemon accepts before sending the create.
+    */
+    "codeServerPromptEditor",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[

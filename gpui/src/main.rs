@@ -2568,10 +2568,6 @@ struct ResetBrowserZoom;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
-struct BrowserProfileMenuLabel;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
 struct OpenGpuiWorkspaceInTarget {
     target_index: u64,
 }
@@ -2955,15 +2951,11 @@ impl BrowserProfileId {
     }
 
     fn display_label(self) -> String {
-        if self == Self::default_profile() {
-            "Default".to_string()
-        } else {
-            format!("Profile {}", self.display_number().unwrap_or_default())
-        }
+        format!("Profile {}", self.0)
     }
 
     fn display_number(self) -> Option<u64> {
-        (self != Self::default_profile()).then_some(self.0 - BROWSER_PROFILE_DEFAULT_ID)
+        (self != Self::default_profile()).then_some(self.0)
     }
 
     fn cef_profile_string(self) -> String {
@@ -3527,8 +3519,24 @@ struct GpuiKeepAwakeRuntime {
     lid_sleep_prevention_last_refresh_at: Option<Instant>,
 }
 
+/*
+CDXC:GPUIRemoteNewTerminal 2026-08-20:
+A remote machine runs the gxserver package this app installed for it, so it can
+implement fewer operations than the app that is driving it. The authenticated
+`/api/health/server` probe this connection already performs carries the daemon's
+own capability inventory, so record the bounded selectors remote requests have to
+choose between instead of sending a newer selector and losing the whole action to
+a 400. Keep this to fixed capability names: no daemon paths, ports, tokens, or
+response text may be retained here.
+*/
+#[derive(Clone, Copy, Debug, Default)]
+struct GpuiRemoteGxserverCapabilities {
+    code_server_prompt_editor: bool,
+}
+
 struct GpuiRemoteGxserverConnection {
     _base_url: String,
+    capabilities: GpuiRemoteGxserverCapabilities,
     code_server_component_platform: Option<String>,
     execution_target: GpuiRemoteExecutionTarget,
     local_port: u16,
@@ -3542,6 +3550,7 @@ struct GpuiRemoteGxserverConnection {
 impl GpuiRemoteGxserverConnection {
     fn request_target(&self) -> GpuiRemoteGxserverRequestTarget {
         GpuiRemoteGxserverRequestTarget {
+            capabilities: self.capabilities,
             code_server_component_platform: self.code_server_component_platform.clone(),
             execution_target: self.execution_target.clone(),
             local_port: self.local_port,
@@ -3559,6 +3568,7 @@ impl GpuiRemoteGxserverConnection {
 
 #[derive(Clone)]
 struct GpuiRemoteGxserverRequestTarget {
+    capabilities: GpuiRemoteGxserverCapabilities,
     code_server_component_platform: Option<String>,
     execution_target: GpuiRemoteExecutionTarget,
     local_port: u16,
@@ -35760,7 +35770,7 @@ impl GhostexGpuiApp {
         let Some(reference) =
             gpui_remote_project_reference_from_project_id(message.project_id.as_str())
         else {
-            self.dispatch_gpui_app_modal_toast(
+            self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Remote action unavailable",
                 "GPUI could not identify the remote project.",
@@ -35770,7 +35780,7 @@ impl GhostexGpuiApp {
         };
         let Some(target) = self.gpui_remote_gxserver_request_target(&reference.remote_machine_id)
         else {
-            self.dispatch_gpui_app_modal_toast(
+            self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Remote action unavailable",
                 "Reconnect the remote machine before using that project.",
@@ -35794,14 +35804,14 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, cx| match result {
                         Ok(path) => {
                             cx.write_to_clipboard(ClipboardItem::new_string(path));
-                            this.dispatch_gpui_app_modal_toast(
+                            this.dispatch_gpui_workspace_action_toast(
                                 "info",
                                 "Remote project path copied",
                                 "Remote path copied to the clipboard.",
                                 cx,
                             );
                         }
-                        Err(message) => this.dispatch_gpui_app_modal_toast(
+                        Err(message) => this.dispatch_gpui_workspace_action_toast(
                             "warning",
                             "Remote path unavailable",
                             message.as_str(),
@@ -35817,7 +35827,7 @@ impl GhostexGpuiApp {
                     settings_snapshot.object(),
                     reference.remote_machine_id.as_str(),
                 ) else {
-                    self.dispatch_gpui_app_modal_toast(
+                    self.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Remote terminal unavailable",
                         "The saved remote machine is missing required SSH settings.",
@@ -35859,7 +35869,7 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        Err(message) => this.dispatch_gpui_app_modal_toast(
+                        Err(message) => this.dispatch_gpui_workspace_action_toast(
                             "warning",
                             "Remote terminal unavailable",
                             message.as_str(),
@@ -35877,7 +35887,7 @@ impl GhostexGpuiApp {
                     settings_snapshot.object(),
                     reference.remote_machine_id.as_str(),
                 ) else {
-                    self.dispatch_gpui_app_modal_toast(
+                    self.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Remote IDE open unavailable",
                         "The saved remote machine is missing required SSH settings.",
@@ -35900,7 +35910,7 @@ impl GhostexGpuiApp {
                         .await;
                     let _ = this.update(cx, |this, cx| {
                         if let Err(message) = result {
-                            this.dispatch_gpui_app_modal_toast(
+                            this.dispatch_gpui_workspace_action_toast(
                                 "warning",
                                 "Remote IDE open unavailable",
                                 message.as_str(),
@@ -35924,7 +35934,7 @@ impl GhostexGpuiApp {
                         .await;
                     let _ = this.update(cx, |this, cx| {
                         if let Err(message) = result {
-                            this.dispatch_gpui_app_modal_toast(
+                            this.dispatch_gpui_workspace_action_toast(
                                 "warning",
                                 "Remote pull request unavailable",
                                 message.as_str(),
@@ -35937,7 +35947,7 @@ impl GhostexGpuiApp {
             }
             GpuiSidebarNativeProjectPathAction::OpenRemoteSidebarGitChangedFileInIde => {
                 let Some(file_path) = message.file_path else {
-                    self.dispatch_gpui_app_modal_toast(
+                    self.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Remote file open unavailable",
                         "Choose a changed file from the current remote Git review.",
@@ -35950,7 +35960,7 @@ impl GhostexGpuiApp {
                     settings_snapshot.object(),
                     reference.remote_machine_id.as_str(),
                 ) else {
-                    self.dispatch_gpui_app_modal_toast(
+                    self.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Remote file open unavailable",
                         "The saved remote machine is missing required SSH settings.",
@@ -35972,7 +35982,7 @@ impl GhostexGpuiApp {
                         .await;
                     let _ = this.update(cx, |this, cx| {
                         if let Err(message) = result {
-                            this.dispatch_gpui_app_modal_toast(
+                            this.dispatch_gpui_workspace_action_toast(
                                 "warning",
                                 "Remote file open unavailable",
                                 message.as_str(),
@@ -35999,7 +36009,7 @@ impl GhostexGpuiApp {
                     settings_snapshot.object(),
                     reference.remote_machine_id.as_str(),
                 ) else {
-                    self.dispatch_gpui_app_modal_toast(
+                    self.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Remote browser unavailable",
                         "The saved remote machine is missing required SSH settings.",
@@ -36032,7 +36042,7 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        Err(message) => this.dispatch_gpui_app_modal_toast(
+                        Err(message) => this.dispatch_gpui_workspace_action_toast(
                             "warning",
                             "Remote ports unavailable",
                             message.as_str(),
@@ -36990,7 +37000,8 @@ impl GhostexGpuiApp {
                             let healthy = gpui_remote_authenticated_health(
                                 target.local_port,
                                 target.token.as_str(),
-                            );
+                            )
+                            .is_some();
                             (machine_id, generation, target.local_port, healthy)
                         })
                         .collect::<Vec<_>>()
@@ -37533,6 +37544,39 @@ impl GhostexGpuiApp {
                 "title": title,
                 "type": "toast",
             }),
+            cx,
+        );
+    }
+
+    /*
+    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    Toasts sent to the app-modal host only render while a modal window is open,
+    because that host IS the modal window. Sidebar and tab-strip actions run with
+    no modal up, so their failures were dropped on the floor and the click looked
+    like it did nothing at all. Report those outcomes through the dedicated
+    bottom-center app-toast window, which is the same modal-independent surface
+    the sidebar bridge and daemon bootstrap already use.
+    */
+    fn dispatch_gpui_workspace_action_toast(
+        &mut self,
+        level: &str,
+        title: &str,
+        description: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+        let id = format!("gpui-app-toast-{}", self.app_toast_id_counter);
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id,
+                level: GpuiAppToastLevel::from_raw(Some(level)),
+                title: title.to_string(),
+                description: (!description.is_empty()).then(|| description.to_string()),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
             cx,
         );
     }
@@ -48737,11 +48781,8 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
-        Browser Profiles remain beta-only in the GPUI Browser toolbar, but the menu reflects real shell profile state. Use an OS-owned NativeMenu with checked generated profile rows, then the disabled Beta Features label and New Profile; do not use GPUI overlays, hidden hit regions, hit-test routing, or user-entered profile names.
+        Browser Profiles are a normal GPUI Browser toolbar feature. The menu reflects real shell profile state through an OS-owned NativeMenu with checked generated profile rows and New Profile; do not use GPUI overlays, hidden hit regions, hit-test routing, or user-entered profile names.
         */
-        if !show_beta_features_from_settings() {
-            return;
-        }
         if !self.prepare_browser_toolbar_right_action(pane_id, cx) {
             return;
         }
@@ -48764,7 +48805,6 @@ impl GhostexGpuiApp {
         }
 
         menu.separator()
-            .menu_with_disabled("Beta Features:", true, Box::new(BrowserProfileMenuLabel))
             .menu(
                 "New Profile...",
                 Box::new(CreateBrowserProfile { pane_id: pane_id.0 }),
@@ -48840,9 +48880,9 @@ impl GhostexGpuiApp {
     fn browser_profile_actions_available(&self) -> bool {
         /*
         CDXC:GPUIBrowserProfiles 2026-06-23-11:28:
-        Profile menu actions are registered globally like other NativeMenu commands, so the handler boundary must repeat the beta/Browser availability gate. Hidden Profile UI cannot be bypassed by stale or direct action dispatch to create, select, persist, or touch CEF profile state.
+        Profile menu actions are registered globally like other NativeMenu commands, so the handler boundary must repeat the Browser availability gate. Stale or direct action dispatch cannot create, select, persist, or touch CEF profile state outside the Browser workspace.
         */
-        show_beta_features_from_settings() && self.titlebar_mode_available(TitlebarMode::Browser)
+        self.titlebar_mode_available(TitlebarMode::Browser)
     }
 
     fn show_browser_recent_history_menu(
@@ -54362,7 +54402,7 @@ impl GhostexGpuiApp {
         not recover an attach payload after being moved between panes.
         */
         let Some(project_id) = self.gpui_app_modal_active_project_id() else {
-            self.dispatch_gpui_app_modal_toast(
+            self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Terminal unavailable",
                 "Select a project before creating a terminal.",
@@ -54381,7 +54421,7 @@ impl GhostexGpuiApp {
             let Some(target) =
                 self.gpui_remote_gxserver_request_target(remote_project.remote_machine_id.as_str())
             else {
-                self.dispatch_gpui_app_modal_toast(
+                self.dispatch_gpui_workspace_action_toast(
                     "warning",
                     "Terminal unavailable",
                     "Reconnect the remote machine before creating a terminal.",
@@ -54394,7 +54434,7 @@ impl GhostexGpuiApp {
                 settings_snapshot.object(),
                 remote_project.remote_machine_id.as_str(),
             ) else {
-                self.dispatch_gpui_app_modal_toast(
+                self.dispatch_gpui_workspace_action_toast(
                     "warning",
                     "Terminal unavailable",
                     "The saved remote machine is missing required SSH settings.",
@@ -54438,7 +54478,7 @@ impl GhostexGpuiApp {
                             cx,
                         );
                     }
-                    Err(message) => this.dispatch_gpui_app_modal_toast(
+                    Err(message) => this.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Terminal unavailable",
                         message.as_str(),
@@ -54532,7 +54572,7 @@ impl GhostexGpuiApp {
                         }
                     }
                 }
-                Err(message) => this.dispatch_gpui_app_modal_toast(
+                Err(message) => this.dispatch_gpui_workspace_action_toast(
                     "warning",
                     "Terminal unavailable",
                     message.as_str(),
@@ -73704,7 +73744,24 @@ impl GhostexGpuiApp {
             return false;
         };
         let script = gpui_sidebar_native_pointer_inside_script(inside);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        let wrote_flag = sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
+        /*
+        CDXC:GPUISidebarPointerTracking 2026-08-20:
+        The CSS flag can only neutralize hover-derived *styling*. A tooltip is
+        page state opened on pointer-enter and closed on pointer-leave, and the
+        leave never reaches the renderer when the pointer crosses into a native
+        sibling, so a session row's tooltip stayed on screen over a terminal
+        pane. Dismissing it needs page code, so it goes through the sidebar
+        bridge like context-menu dismissal does; if the bridge is not installed
+        the page cannot have an open tooltip either.
+        */
+        if !inside {
+            let dismissed = sidebar.update(cx, |surface, _| {
+                surface.execute_app_owned_script(GPUI_SIDEBAR_DISMISS_TOOLTIPS_SCRIPT)
+            });
+            return wrote_flag || dismissed;
+        }
+        wrote_flag
     }
 
     /*
@@ -77104,7 +77161,7 @@ impl GhostexGpuiApp {
         Browser Back and Forward controls must read their enabled state from the selected loaded tab's existing CEF surface and must no-op when that surface cannot navigate. Reload must call CEF `reload()` on the selected loaded surface instead of loading the shell URL again, so Chromium keeps ownership of history, POST/cache behavior, and address-only placeholder tabs remain unloaded.
 
         CDXC:GPUIBrowserToolbar 2026-06-22-11:50:
-        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History remains an OS NativeMenu, Profile is omitted entirely unless Show Beta features is true, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
+        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History and Profile remain OS NativeMenus, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
 
         CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
@@ -77114,7 +77171,6 @@ impl GhostexGpuiApp {
         let feedback_tooltip = feedback_tool_unavailable
             .then_some(BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP)
             .unwrap_or(BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL);
-        let show_profile_button = show_beta_features_from_settings();
         let (is_loading, runtime_can_go_back, runtime_can_go_forward) = self
             .browser_tabs
             .active_tab_for_pane(pane_id)
@@ -77269,17 +77325,15 @@ impl GhostexGpuiApp {
                         pane_id,
                         cx,
                     ))
-                    .when(show_profile_button, |this| {
-                        this.child(self.render_browser_toolbar_button(
-                            "profile",
-                            BROWSER_ICON_USER_CIRCLE,
-                            true,
-                            Some("Browser Profile".into()),
-                            BrowserToolbarAction::ProfileMenu,
-                            pane_id,
-                            cx,
-                        ))
-                    })
+                    .child(self.render_browser_toolbar_button(
+                        "profile",
+                        BROWSER_ICON_USER_CIRCLE,
+                        true,
+                        Some("Browser Profile".into()),
+                        BrowserToolbarAction::ProfileMenu,
+                        pane_id,
+                        cx,
+                    ))
                     .child(self.render_browser_toolbar_button(
                         "devtools",
                         BROWSER_ICON_TOOLS,
@@ -77448,6 +77502,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let tooltip_placement = ManagedTooltipPlacement::Left;
+        let profile_number = if matches!(action, BrowserToolbarAction::ProfileMenu) {
+            self.browser_tabs
+                .active_tab_for_pane(pane_id)
+                .and_then(|tab| tab.profile_id.display_number())
+        } else {
+            None
+        };
         div()
             .id(format!(
                 "ghostex-gpui-browser-toolbar-button-{}-{id}",
@@ -77519,15 +77580,33 @@ impl GhostexGpuiApp {
                     }),
                 )
             })
-            .child(titlebar_svg_icon(
-                icon_path,
-                BROWSER_TOOLBAR_BUTTON_ICON_SIZE,
-                if enabled {
-                    titlebar_icon_color()
-                } else {
-                    browser_toolbar_disabled_icon_color()
-                },
-            ))
+            .when(profile_number.is_none(), |this| {
+                this.child(titlebar_svg_icon(
+                    icon_path,
+                    BROWSER_TOOLBAR_BUTTON_ICON_SIZE,
+                    if enabled {
+                        titlebar_icon_color()
+                    } else {
+                        browser_toolbar_disabled_icon_color()
+                    },
+                ))
+            })
+            .when_some(profile_number, |this, profile_number| {
+                this.child(
+                    div()
+                        .flex()
+                        .size(px(BROWSER_TOOLBAR_BUTTON_ICON_SIZE))
+                        .items_center()
+                        .justify_center()
+                        .rounded_full()
+                        .border_1()
+                        .border_color(rgb(0xffffff).opacity(0.5))
+                        .bg(rgb(0xffffff).opacity(0.12))
+                        .text_size(px(if profile_number < 10 { 10.0 } else { 8.0 }))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(profile_number.to_string()),
+                )
+            })
             .when_some(tooltip, |this, tooltip| {
                 this.managed_tooltip_with_placement(tooltip_placement, move |window, cx| {
                     titlebar_tooltip(tooltip.clone(), window, cx)
@@ -83768,12 +83847,36 @@ fn main() {
                             may have been an enter. Report the pointer as outside
                             and close any open sidebar context menu, the same way
                             leaving for another app closes a native menu.
+
+                            CDXC:GPUISidebarPointerTracking 2026-08-20:
+                            Route the "outside" report through the AppKit observer
+                            instead of writing the page flag here. This used to
+                            call `dispatch_gpui_sidebar_pointer_inside(false)`
+                            directly, which left the observer's cache saying
+                            "inside" while the page said "false"; the next real
+                            crossing back into the sidebar then matched the cache
+                            and was dropped as redundant, so hovering a session row
+                            showed neither the row background nor the hover-only
+                            Close button until the pointer left the sidebar and
+                            came back. Clicking a tab in the tab strip churns window
+                            activation, which is why that click was the reliable way
+                            to get into the broken state.
                             */
                             #[cfg(target_os = "macos")]
                             {
-                                app.dispatch_gpui_sidebar_pointer_inside(false, cx);
+                                cef::report_sidebar_pointer_outside();
                                 app.dispatch_gpui_sidebar_dismiss_context_menus(cx);
                             }
+                        } else {
+                            /*
+                            CDXC:GPUISidebarPointerTracking 2026-08-20:
+                            Coming back active is the other half: the pointer can
+                            already be sitting on a session row, and a pointer that
+                            does not move produces no event to recompute from, so
+                            resolve the crossing from the real pointer location.
+                            */
+                            #[cfg(target_os = "macos")]
+                            cef::refresh_sidebar_pointer_inside();
                         }
                     })
                     .detach();
@@ -88556,6 +88659,9 @@ const GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT: Duration = Duration::from_secs
 const GPUI_REMOTE_GXSERVER_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(60);
 const GPUI_REMOTE_GXSERVER_UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
 const GPUI_REMOTE_GXSERVER_INSTALL_TIMEOUT: Duration = Duration::from_secs(45);
+// gxserver advertises this in /api/health/server once it accepts the
+// `code-server` prompt-editor selector on session create and attach operations.
+const GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY: &str = "codeServerPromptEditor";
 const GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
 const GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE: Duration = Duration::from_secs(7);
 const GPUI_REMOTE_GXSERVER_WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
@@ -88893,7 +88999,7 @@ fn gpui_titlebar_gxserver_daemon_status() -> serde_json::Value {
             });
             if !tools_available {
                 status["message"] =
-                    serde_json::json!("gxserver is running, but zmx/zehn/bd are unavailable.");
+                    serde_json::json!("gxserver is running, but zmx/bd are unavailable.");
             }
             status
         }
@@ -94942,7 +95048,7 @@ fn gpui_bundled_remote_gxserver_package_is_compatible(
     package_dir: &Path,
     target: &GpuiRemoteInstallTarget,
 ) -> bool {
-    for relative_path in ["bin/gxserver", "bin/zmx", "bin/zehn", "bin/bd"] {
+    for relative_path in ["bin/gxserver", "bin/zmx", "bin/bd"] {
         if !gpui_is_file(&package_dir.join(relative_path)) {
             return false;
         }
@@ -94955,13 +95061,7 @@ fn gpui_bundled_remote_gxserver_package_is_compatible(
     // Node entrypoint are stale. Linux remote packages no longer ship a Node
     // runtime at all.
     let arch = target.normalized_arch();
-    for relative_path in [
-        "bin/gxserver",
-        "bin/ghostex",
-        "bin/zmx",
-        "bin/zehn",
-        "bin/bd",
-    ] {
+    for relative_path in ["bin/gxserver", "bin/ghostex", "bin/zmx", "bin/bd"] {
         let path = package_dir.join(relative_path);
         if gpui_is_macho_binary(&path) || !gpui_is_elf_binary(&path, Some(arch.as_str())) {
             return false;
@@ -96159,6 +96259,15 @@ nothing to queue.
 #[cfg(target_os = "macos")]
 const GPUI_SIDEBAR_DISMISS_CONTEXT_MENUS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarContextMenus==='function'){bridge.dismissSidebarContextMenus();}})(); undefined;";
 
+/*
+CDXC:GPUISidebarPointerTracking 2026-08-20:
+Pointer-leave tooltip dismissal, the event-driven half of the same contract.
+The sidebar deliberately has no `data-native-pointer-inside` tooltip CSS rule:
+a persistent flag would also block the next hover from opening a tooltip.
+*/
+#[cfg(target_os = "macos")]
+const GPUI_SIDEBAR_DISMISS_TOOLTIPS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarTooltips==='function'){bridge.dismissSidebarTooltips();}})(); undefined;";
+
 fn gpui_workspace_terminal_lifecycle_request_script(message: &serde_json::Value) -> String {
     format!(
         "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalLifecycleRequest==='function'&&typeof bridge.postWorkspaceTerminalLifecycleResult==='function'){{bridge.onWorkspaceTerminalLifecycleRequest(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalLifecycleRequests)?bridge.pendingWorkspaceTerminalLifecycleRequests:[];pending.push(payload);bridge.pendingWorkspaceTerminalLifecycleRequests=pending;}}}})(); undefined;"
@@ -96923,15 +97032,47 @@ fn gpui_create_remote_project_workspace_terminal(
     String,
 > {
     let create_started = Instant::now();
-    let result = gpui_remote_gxserver_rpc_result(
+    /*
+    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    Ctrl+G in a remote pane can only reach that machine's code-server prompt
+    editor when the daemon serving the session understands the selector. The
+    remote runs the gxserver package this app installed for it, which can predate
+    the mode, and such a daemon rejects the whole create request instead of
+    ignoring an unknown editor. Ask for it only from a daemon that advertised
+    `codeServerPromptEditor`; every other machine creates the terminal with its
+    own shell editor, exactly like the remote attach and wake paths already do.
+    */
+    let mut params = serde_json::Map::new();
+    params.insert(
+        "projectId".to_string(),
+        serde_json::Value::String(project.project_id.clone()),
+    );
+    if target.capabilities.code_server_prompt_editor {
+        params.insert(
+            "promptEditor".to_string(),
+            serde_json::Value::String("code-server".to_string()),
+        );
+    }
+    let (status_code, body) = gpui_remote_gxserver_post_typed_operation(
         target,
         "/api/createWorkspaceTerminal",
-        &serde_json::json!({
-            "projectId": project.project_id.as_str(),
-            "promptEditor": "code-server",
-        }),
+        &serde_json::Value::Object(params),
         Duration::from_secs(30),
     )?;
+    if !(200..300).contains(&status_code) {
+        /*
+        The remote daemon is the gxserver package this app installed for that
+        machine, so a rejected create is a client/daemon mismatch rather than a
+        bad click. Say which side has to move, without forwarding daemon
+        response text, remote paths, or request details into the toast.
+        */
+        return Err(if (400..500).contains(&status_code) {
+            "The remote machine's Ghostex daemon refused to create the terminal. Reconnect that machine to update its gxserver, then try again.".to_string()
+        } else {
+            "Remote gxserver request failed.".to_string()
+        });
+    }
+    let result = parse_gpui_gxserver_rpc_result(&body)?;
     support_logs::append_temporary(
         support_logs::GpuiSupportLog::TerminalFocus,
         "TEMP.remoteNewTerminal.createRpcCompleted",
@@ -98665,9 +98806,10 @@ fn gpui_open_remote_gxserver_tunnel(
                 Ok(tunnel) => tunnel,
                 Err(_) => continue,
             };
-        if gpui_wait_for_remote_authenticated_health(local_port, token) {
+        if let Some(capabilities) = gpui_wait_for_remote_authenticated_health(local_port, token) {
             return Ok(GpuiRemoteGxserverConnection {
                 _base_url: format!("http://127.0.0.1:{local_port}"),
+                capabilities,
                 code_server_component_platform,
                 execution_target: execution_target.clone(),
                 local_port,
@@ -98792,47 +98934,86 @@ fn gpui_remote_gxserver_candidate_ports() -> Vec<u16> {
 }
 
 #[cfg(target_os = "macos")]
-fn gpui_wait_for_remote_authenticated_health(local_port: u16, token: &str) -> bool {
+fn gpui_wait_for_remote_authenticated_health(
+    local_port: u16,
+    token: &str,
+) -> Option<GpuiRemoteGxserverCapabilities> {
     let deadline = Instant::now() + GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE;
     while Instant::now() < deadline {
-        if gpui_remote_authenticated_health(local_port, token) {
-            return true;
+        if let Some(capabilities) = gpui_remote_authenticated_health(local_port, token) {
+            return Some(capabilities);
         }
         thread::sleep(GPUI_REMOTE_GXSERVER_TUNNEL_RETRY_DELAY);
     }
-    false
+    None
 }
 
-fn gpui_remote_authenticated_health(local_port: u16, token: &str) -> bool {
+/// Authenticated remote-daemon liveness probe. A healthy answer also carries
+/// that daemon's advertised capability inventory, which callers keep for the
+/// lifetime of the connection so remote requests can pick selectors this daemon
+/// implements. `None` means the probe did not get a healthy answer.
+fn gpui_remote_authenticated_health(
+    local_port: u16,
+    token: &str,
+) -> Option<GpuiRemoteGxserverCapabilities> {
     let address = format!("127.0.0.1:{local_port}");
-    let Ok(mut stream) = TcpStream::connect(address.as_str()) else {
-        return false;
-    };
-    if stream
+    let mut stream = TcpStream::connect(address.as_str()).ok()?;
+    stream
         .set_read_timeout(Some(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT))
-        .is_err()
-        || stream
-            .set_write_timeout(Some(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT))
-            .is_err()
-    {
-        return false;
-    }
+        .ok()?;
+    stream
+        .set_write_timeout(Some(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT))
+        .ok()?;
     let request = format!(
         "GET /api/health/server HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nAuthorization: Bearer {token}\r\n{GPUI_GXSERVER_PROTOCOL_HEADER}: {GPUI_GXSERVER_PROTOCOL_VERSION}\r\n\r\n",
     );
-    if stream.write_all(request.as_bytes()).is_err() {
-        return false;
-    }
+    stream.write_all(request.as_bytes()).ok()?;
     let mut response = String::new();
-    if stream.read_to_string(&mut response).is_err() {
-        return false;
-    }
-    response
+    stream.read_to_string(&mut response).ok()?;
+    let healthy = response
         .lines()
         .next()
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|status| status.parse::<u16>().ok())
-        .is_some_and(|status| (200..300).contains(&status))
+        .is_some_and(|status| (200..300).contains(&status));
+    if !healthy {
+        return None;
+    }
+    Some(gpui_remote_gxserver_capabilities_from_health_response(
+        response.as_str(),
+    ))
+}
+
+/// Reads the fixed capability names GPUI selects remote operations with out of a
+/// healthy `/api/health/server` body. A daemon that predates a capability simply
+/// omits it, so an unparsable or capability-less answer means "not supported"
+/// rather than a failed connection.
+fn gpui_remote_gxserver_capabilities_from_health_response(
+    response: &str,
+) -> GpuiRemoteGxserverCapabilities {
+    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
+        return GpuiRemoteGxserverCapabilities::default();
+    };
+    let Ok(body) = gxserver_http_response_body(headers, body) else {
+        return GpuiRemoteGxserverCapabilities::default();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body.as_str()) else {
+        return GpuiRemoteGxserverCapabilities::default();
+    };
+    let advertises = |capability: &str| {
+        value
+            .get("capabilities")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|capabilities| {
+                capabilities
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .any(|advertised| advertised == capability)
+            })
+    };
+    GpuiRemoteGxserverCapabilities {
+        code_server_prompt_editor: advertises(GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106091,12 +106272,12 @@ fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
     let Some(tools) = health.get("tools").and_then(serde_json::Value::as_array) else {
         return true;
     };
-    // zmx is the one mandatory GPUI daemon companion. Local contributor
-    // builds intentionally allow the optional Zehn source to be absent;
-    // require it only when this exact build can provide it. This keeps a
-    // deliberately capability-limited build from repeatedly restarting a
-    // daemon that already matches it, while still replacing a stale daemon
-    // that is missing a bundled tool the current app can serve.
+    // zmx is the one mandatory GPUI daemon companion.
+    //
+    // CDXC:AgentHistorySearch 2026-08-20: Zehn used to be gated here too,
+    // because it was a separate bundled binary a build might not carry. It is
+    // now a Rust crate compiled into gxserver, so every daemon that exists can
+    // serve prompt-history search and there is nothing left to probe for.
     //
     // Beads is deliberately excluded. gxserver resolves `bd` from the user's
     // machine-installed Beads release (see `system_bd_tool_candidates`) and
@@ -106105,7 +106286,7 @@ fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
     // machine without Beads report "gxserver toolchain unavailable" and then
     // restart a perfectly healthy daemon on every later launch. Project board
     // surfaces already carry their own install guidance for that case.
-    let mut required_tools = vec!["zmx"];
+    let required_tools = vec!["zmx"];
     #[cfg(target_os = "windows")]
     if matches!(
         windows_terminal_backend::resolve_current(),
@@ -106118,13 +106299,6 @@ fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
                         == Some("available")
             })
         });
-    }
-    if let Some(bin_dir) =
-        gpui_resolve_local_gxserver_binary().and_then(|path| path.parent().map(Path::to_path_buf))
-    {
-        if gpui_is_executable_file(&bin_dir.join("zehn")) {
-            required_tools.push("zehn");
-        }
     }
     required_tools.iter().all(|required| {
         tools.iter().any(|tool| {
@@ -114672,7 +114846,7 @@ impl GpuiRemoteGxserverPresentationLiveness {
             return Ok(());
         }
         self.next_health_check = Instant::now() + GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL;
-        if gpui_remote_authenticated_health(target.local_port, target.token.as_str()) {
+        if gpui_remote_authenticated_health(target.local_port, target.token.as_str()).is_some() {
             Ok(())
         } else {
             Err("Remote gxserver event stream failed its liveness check.".to_string())
@@ -119425,10 +119599,6 @@ fn gpui_sidebar_gxserver_presentation_session_id_allowed(value: &str) -> bool {
 fn gpui_sidebar_local_gxserver_session_id_allowed(value: &str) -> bool {
     gpui_remote_attach_session_reference_from_project_id(value).is_none()
         && gpui_sidebar_gxserver_presentation_session_id_allowed(value)
-}
-
-fn show_beta_features_from_settings() -> bool {
-    shared_settings::shared_sidebar_settings_snapshot().show_beta_features()
 }
 
 fn sidebar_runtime_settings_snapshot_from_shared_settings(
