@@ -1155,10 +1155,6 @@ stage_gxserver_protocol_exports() {
 		echo "shared gxserver protocol source is missing: $REPO_ROOT/shared/gxserver-protocol.ts" >&2
 		exit 1
 	fi
-	if [[ ! -f "$REPO_ROOT/shared/session-chat.ts" ]]; then
-		echo "shared session chat source is missing: $REPO_ROOT/shared/session-chat.ts" >&2
-		exit 1
-	fi
 	if [[ ! -f "$tsc_bin" ]]; then
 		echo "TypeScript compiler is missing at $tsc_bin. Run bun install before packaging gxserver." >&2
 		exit 1
@@ -1166,7 +1162,44 @@ stage_gxserver_protocol_exports() {
 	rm -rf "$protocol_stage_dir"
 	mkdir -p "$protocol_stage_dir/src" "$protocol_stage_dir/types" "$target_dir/dist/protocol"
 	cp "$REPO_ROOT/shared/gxserver-protocol.ts" "$protocol_stage_dir/src/index.ts"
-	cp "$REPO_ROOT/shared/session-chat.ts" "$protocol_stage_dir/src/session-chat.ts"
+	# CDXC:GxserverProtocolStaging 2026-08-21-12:10: shared/gxserver-protocol.ts pulls in
+	# sibling shared modules (session-chat.ts, which now pulls session-chat-queue.ts).
+	# Stage the whole relative-import closure instead of a hand-kept file list so adding a
+	# shared module never breaks packaging with a TS2307 "cannot find module" failure.
+	GXSERVER_PROTOCOL_SHARED_DIR="$REPO_ROOT/shared" \
+		GXSERVER_PROTOCOL_STAGE_SRC_DIR="$protocol_stage_dir/src" \
+		"$GXSERVER_NODE_BIN" <<'JS'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const sharedDir = process.env.GXSERVER_PROTOCOL_SHARED_DIR;
+const stageSrcDir = process.env.GXSERVER_PROTOCOL_STAGE_SRC_DIR;
+const relativeSpecifier = /(?:^|[\s;])(?:import|export)\s[^;]*?from\s*["'](\.[^"']*)["']/g;
+
+const pending = [path.join(stageSrcDir, "index.ts")];
+const staged = new Set(pending);
+while (pending.length > 0) {
+	const filePath = pending.pop();
+	const source = fs.readFileSync(filePath, "utf8");
+	for (const match of source.matchAll(relativeSpecifier)) {
+		const specifier = match[1].replace(/\.(?:ts|tsx|js)$/, "");
+		const moduleName = `${specifier.replace(/^\.\//, "")}.ts`;
+		const sourcePath = path.join(sharedDir, moduleName);
+		const stagedPath = path.join(stageSrcDir, moduleName);
+		if (staged.has(stagedPath)) {
+			continue;
+		}
+		if (!fs.existsSync(sourcePath)) {
+			console.error(`shared gxserver protocol dependency is missing: ${sourcePath}`);
+			process.exit(1);
+		}
+		fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
+		fs.copyFileSync(sourcePath, stagedPath);
+		staged.add(stagedPath);
+		pending.push(stagedPath);
+	}
+}
+JS
 	bun build "$protocol_stage_dir/src/index.ts" --outfile "$target_dir/dist/protocol/index.js" --format esm --target node
 	"$GXSERVER_NODE_BIN" "$tsc_bin" \
 		--declaration \
@@ -1180,7 +1213,7 @@ stage_gxserver_protocol_exports() {
 		--strict \
 		--target ES2023 \
 		"$protocol_stage_dir/src/index.ts"
-	cp "$protocol_stage_dir/types/index.d.ts" "$protocol_stage_dir/types/session-chat.d.ts" "$target_dir/dist/protocol/"
+	cp "$protocol_stage_dir"/types/*.d.ts "$target_dir/dist/protocol/"
 }
 
 write_gxserver_rust_package_manifest() {
