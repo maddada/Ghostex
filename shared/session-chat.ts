@@ -551,4 +551,10 @@ export function isSessionChatEventType(
 // View mode ("viewMode" is taken by the sidebar layout mode — do not reuse it)
 // ---------------------------------------------------------------------------
 
-export type SessionSurfaceMode = "terminal" | "chat";
+/*
+CDXC:AgentHistorySearch 2026-08-20:
+"find" is the Find surface — the GUI for `gx f` — which swaps a session's pane
+body on exactly the same terms as chat: the terminal parks rather than closing,
+and only one surface can own the pane at a time.
+*/
+export type SessionSurfaceMode = "terminal" | "chat" | "find";

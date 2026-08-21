@@ -28,6 +28,7 @@ export type ghostexHotkeyActionId =
   | "stashPrompt"
   | "stashedPrompts"
   | "toggleChatView"
+  | "openFindPrompts"
   | "toggleCompanionPane"
   | "toggleAgentActions"
   | "toggleSidebarCollapsed"
@@ -79,6 +80,7 @@ export type ghostexTerminalToolbarAction =
   | "toggleAgentActions"
   | "toggleChatView";
 
+
 export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: "createSession" }
   | { id: ghostexHotkeyActionId; kind: "focusAdjacentGroup"; direction: -1 | 1 }
@@ -93,6 +95,7 @@ export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: "openCommandsPanel" }
   | { id: ghostexHotkeyActionId; kind: "openDocsFoldersSettings" }
   | { id: ghostexHotkeyActionId; kind: "openSettings" }
+  | { id: ghostexHotkeyActionId; kind: "openFindPrompts" }
   | { id: ghostexHotkeyActionId; kind: "openHotkeys" }
   | { id: ghostexHotkeyActionId; kind: "renameActiveSession" }
   | { id: ghostexHotkeyActionId; kind: "runActionSlot"; slotNumber: number }
@@ -416,6 +419,20 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     id: "toggleChatView",
     retiredDefaultKeys: ["ctrl+shift+j", "cmd+alt+j", "ctrl+shift+g", "cmd+alt+g"],
     title: "Toggle Chat View",
+  },
+  {
+    action: { id: "openFindPrompts", kind: "openFindPrompts" },
+    /**
+     * CDXC:AgentHistorySearch 2026-08-20:
+     * Find is the GUI for `gx f`: it swaps the focused pane for a searchable
+     * list of every prompt this machine has ever sent to an agent. It is
+     * dispatched natively like Chat View, so the same id always toggles back
+     * out of Find even while the terminal is hidden behind it.
+     */
+    defaultKey: "alt+f",
+    description: "Search every prompt you have sent to an agent, then resume or fork it.",
+    id: "openFindPrompts",
+    title: "Find Prompts",
   },
   {
     action: {

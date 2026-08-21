@@ -786,7 +786,16 @@ describe("command palette source contracts", () => {
      */
     expect(commandPaletteSource).toContain("modal: 'addProject'");
     expect(commandPaletteSource).not.toContain("message: { type: 'pickWorkspaceFolder' }");
-    expect(commandPaletteSource).toContain("message: { type: 'searchPreviousSessionsByText' }");
+    /*
+     * CDXC:AgentHistorySearch 2026-08-20:
+     * Search by Text is the Find Prompts surface now, dispatched natively like
+     * the other hotkey rows, not a sidebar message that spawned a `gx f`
+     * terminal.
+     */
+    expect(commandPaletteSource).not.toContain("message: { type: 'searchPreviousSessionsByText' }");
+    expect(commandPaletteSource).toContain(
+      "message: { actionId: 'openFindPrompts', type: 'runGhostexHotkeyAction' }",
+    );
     expect(commandPaletteSource).toContain("message: { type: 'createChat' }");
     expect(commandPaletteSource).toContain("message: { type: 'openBrowserChat' }");
     expect(commandPaletteSource).toContain("message: { type: 'openAutomationsPage' }");

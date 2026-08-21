@@ -314,14 +314,6 @@ const APP_MODAL_PALETTE_COMMANDS = [
 
 const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
   {
-    commandId: 'searchByText',
-    hotkey: '',
-    kind: 'sidebarMessage',
-    message: { type: 'searchPreviousSessionsByText' },
-    searchText: 'Search by Text previous sessions gx f',
-    title: 'Search by Text',
-  },
-  {
     commandId: 'quickTerminal',
     hotkey: '',
     kind: 'sidebarMessage',
@@ -344,6 +336,20 @@ const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
     message: { type: 'openAutomationsPage' },
     searchText: 'Automations schedules agents timers dates recurring',
     title: 'Automations',
+  },
+  {
+    /*
+     * CDXC:AgentHistorySearch 2026-08-20:
+     * Search by Text used to spawn a terminal running `gx f`. It now opens the
+     * Find surface in the focused pane through the native hotkey dispatcher, so
+     * the palette row, Alt+F, and the Hotkeys screen all reach one action.
+     */
+    commandId: 'searchByText',
+    hotkey: '',
+    kind: 'sidebarMessage',
+    message: { actionId: 'openFindPrompts', type: 'runGhostexHotkeyAction' },
+    searchText: 'Search by Text Find Prompts previous sessions history gx f',
+    title: 'Find Prompts',
   },
   {
     commandId: 'plugins',
