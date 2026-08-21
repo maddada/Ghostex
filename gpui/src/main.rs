@@ -100,11 +100,22 @@ use terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 const DEFAULT_BROWSER_URL: &str = "https://www.google.com";
 const GPUI_WORKSPACE_SHELL_STATE_VERSION: u64 = 1;
 static GPUI_APP_QUIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
-static GPUI_PROMPT_HANDOFF_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 /// The daemon holds `/api/handoffSessionChatDraft` for up to 16s while the
 /// agent CLI answers the Ctrl+G handshake; leave room for the round trip (and
 /// an SSH tunnel) on top of that.
 const GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT: Duration = Duration::from_secs(30);
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The terminal view's "Queued: N" chip needs the queue size for the handful of
+sessions actually on screen in terminal mode. gxserver publishes the same count
+as `queuedPromptCount` on its presentation snapshot, which the sidebar runtime
+already receives; when that field reaches Rust through the focus-state tab
+sessions this read should be deleted rather than kept beside it. Until then the
+poll stays deliberately narrow: Agents mode only, visible panes only, the active
+tab only, chat-capable sessions only — never a per-session sweep of the project.
+*/
+const GPUI_SESSION_CHAT_QUEUE_COUNT_POLL_INTERVAL: Duration = Duration::from_secs(3);
+const GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(target_os = "linux")]
 static GPUI_LINUX_WINDOW_ICON: OnceLock<Arc<image::RgbaImage>> = OnceLock::new();
 #[cfg(target_os = "macos")]
@@ -1091,6 +1102,9 @@ const TITLEBAR_UPDATE_PROGRESS_RING_SIZE: f32 = 16.0;
 const TITLEBAR_UPDATE_PROGRESS_RING_RADIUS: f32 = 5.5;
 const TITLEBAR_UPDATE_PROGRESS_RING_STROKE: f32 = 2.0;
 const FIND_BAR_HEIGHT: f32 = 35.0;
+/// Height of the tab bar's "Queued: N" chip. Shorter than the tab bar itself so
+/// the chip reads as an inset control and never drives the bar's own height.
+const TERMINAL_QUEUED_PROMPTS_CHIP_HEIGHT: f32 = 20.0;
 const FIND_BAR_NAV_BUTTON_WIDTH: f32 = 42.0;
 const FIND_BAR_CLOSE_BUTTON_WIDTH: f32 = 41.0;
 const BROWSER_TOOLBAR_HEIGHT: f32 = 35.0;
@@ -12028,6 +12042,47 @@ fn terminal_clipboard_saved_image_markdown_text(item: &ClipboardItem) -> Option<
             let path = terminal_clipboard_absolute_path(path)?;
             fs::write(&path, bytes).ok()?;
             return Some(terminal_clipboard_markdown_image_reference(&path, 1));
+        }
+    }
+
+    None
+}
+
+/*
+CDXC:GPUITerminalRemoteImagePaste 2026-08-21:
+The remote paste route needs the clipboard image *before* it is written
+anywhere, because a remote terminal's reference has to point at a file on the
+remote machine. This extractor keeps the exact acceptance order the local
+Markdown helper uses (validated image file references first, raw clipboard
+image bytes second) so local and remote paste accept and reject the same
+clipboard shapes; only the destination differs.
+*/
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum TerminalClipboardImagePayload {
+    FilePaths(Vec<PathBuf>),
+    Bytes {
+        bytes: Vec<u8>,
+        extension: &'static str,
+    },
+}
+
+fn terminal_clipboard_image_payload(item: &ClipboardItem) -> Option<TerminalClipboardImagePayload> {
+    let file_paths = terminal_clipboard_image_file_paths(item);
+    if !file_paths.is_empty() {
+        return Some(TerminalClipboardImagePayload::FilePaths(file_paths));
+    }
+
+    for entry in item.entries() {
+        if let ClipboardEntry::Image(image) = entry {
+            let bytes = image.bytes();
+            if bytes.is_empty() || bytes.len() > PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES {
+                return None;
+            }
+
+            return Some(TerminalClipboardImagePayload::Bytes {
+                bytes: bytes.to_vec(),
+                extension: project_board_image_extension(image.format()),
+            });
         }
     }
 
@@ -25225,6 +25280,10 @@ pub struct GhostexGpuiApp {
     /// Chat-to-terminal drafts waiting for the exact terminal owner to remount.
     pending_session_terminal_composer_insert: HashMap<TerminalSessionId, String>,
     pending_session_chat_draft_handoffs: HashSet<TerminalSessionId>,
+    /// Queued Ghostex prompts per on-screen terminal-view session, the input to
+    /// the pane's "Queued: N" chrome row. Absent means zero.
+    session_chat_queued_counts: HashMap<TerminalSessionId, GpuiSessionChatQueuedCounts>,
+    session_chat_queued_count_refresh_in_flight: bool,
     local_workspace_lifecycle_requests: HashMap<u64, GpuiLocalWorkspaceLifecycleRequest>,
     next_local_workspace_lifecycle_request_id: u64,
     /*
@@ -25903,6 +25962,8 @@ impl GhostexGpuiApp {
                 pending_session_chat_composer_insert: HashMap::new(),
                 pending_session_terminal_composer_insert: HashMap::new(),
                 pending_session_chat_draft_handoffs: HashSet::new(),
+                session_chat_queued_counts: HashMap::new(),
+                session_chat_queued_count_refresh_in_flight: false,
                 local_workspace_lifecycle_requests: HashMap::new(),
                 next_local_workspace_lifecycle_request_id: 1,
                 local_app_shot_session_mappings: HashMap::new(),
@@ -26211,6 +26272,7 @@ impl GhostexGpuiApp {
             this.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
             this.start_project_editor_auto_sleep_policy_polling(cx);
             this.start_command_action_status_polling(cx);
+            this.start_session_chat_queued_count_polling(cx);
             this.start_prompt_editor_daemon_polling(cx);
             this.start_gpui_remote_gxserver_watchdog(cx);
             this.refresh_titlebar_actions_in_background(cx);
@@ -30437,9 +30499,7 @@ impl GhostexGpuiApp {
             return;
         }
         if action == "draftHandoffToTerminalComplete" {
-            if !self.pending_session_chat_draft_handoffs.remove(&session_id)
-                || !self.agents_chat_mode_sessions.contains(&session_id)
-            {
+            if !self.pending_session_chat_draft_handoffs.remove(&session_id) {
                 return;
             }
             let content = message
@@ -30448,14 +30508,15 @@ impl GhostexGpuiApp {
                 .unwrap_or_default()
                 .to_string();
             if !content.is_empty() {
-                // The terminal body is still parked while chat owns this
-                // action. Keep the cleared composer snapshot until the exact
-                // terminal owner has remounted and completed its focus
-                // handoff; inserting synchronously here races that remount.
+                // The terminal view already owns the pane while this
+                // asynchronous copy finishes. Keep the cleared composer
+                // snapshot until the exact terminal owner has remounted and
+                // completed its focus handoff; inserting synchronously here
+                // still races that remount.
                 self.pending_session_terminal_composer_insert
                     .insert(session_id, content);
             }
-            self.toggle_agents_session_chat_mode(session_id, cx);
+            self.reconcile_agents_chat_surfaces(cx);
             return;
         }
         if action == "draftHandoffToTerminalFailed" {
@@ -30466,6 +30527,7 @@ impl GhostexGpuiApp {
                     "The draft stayed in chat. Try switching again.",
                     cx,
                 );
+                self.reconcile_agents_chat_surfaces(cx);
             }
             return;
         }
@@ -30846,18 +30908,27 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        if !self.pending_session_chat_draft_handoffs.insert(session_id) {
-            return;
+        /*
+        CDXC:SessionChatViewSwitch 2026-08-21:
+        A view switch is unconditional UI state, not the success result of a
+        draft-copy handshake. Ask a ready chat composer to copy its draft in
+        the background, retain that hidden CEF surface until it answers, and
+        show the terminal immediately. If the bridge is not ready, the draft
+        remains in the chat composer's per-session storage for the return trip.
+        */
+        if self
+            .session_chat_composer_ready_sessions
+            .contains(&session_id)
+            && self.pending_session_chat_draft_handoffs.insert(session_id)
+            && let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned()
+        {
+            surface.update(cx, |surface, _| {
+                surface.execute_app_owned_script(
+                    "(function(){var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatHandoffToTerminalRequested==='function'){ns.onSessionChatHandoffToTerminalRequested();}})(); undefined;",
+                );
+            });
         }
-        let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
-            self.pending_session_chat_draft_handoffs.remove(&session_id);
-            return;
-        };
-        surface.update(cx, |surface, _| {
-            surface.execute_app_owned_script(
-                "(function(){var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatHandoffToTerminalRequested==='function'){ns.onSessionChatHandoffToTerminalRequested();}})(); undefined;",
-            );
-        });
+        self.toggle_agents_session_chat_mode(session_id, cx);
     }
 
     fn insert_prompt_into_session_chat(
@@ -41137,43 +41208,48 @@ impl GhostexGpuiApp {
             "sendWhenAgentStops": send_when_agent_stops,
             "sendWhenAllProjectSessionsStop": send_when_all_project_sessions_stop,
         });
-        if gpui_gxserver_rpc_result(
-            "/api/scheduleDelayedSend",
-            &params,
-            Duration::from_secs(5),
-        )
-        .is_ok()
-        {
-            self.agents_delayed_send_timers.remove(&session_id);
-            self.agents_send_when_stopped_watchers.remove(&session_id);
-            self.refresh_sidebar_agents_delayed_sends_if_changed(cx);
-            self.persist_shell_layout_state();
-            let description = if send_when_agent_stops {
-                "Presses Enter after the agent has finished working for 10 seconds.".to_string()
-            } else if send_when_all_project_sessions_stop {
-                "Presses Enter after all agents in the project have finished working for 10 seconds."
-                    .to_string()
-            } else {
-                let duration = Duration::from_millis(delay_ms.unwrap_or_default());
-                format!(
-                    "Presses Enter in {}.",
-                    gpui_command_delayed_send_duration_label(duration)
-                )
-            };
-            self.dispatch_gpui_app_modal_toast(
-                "info",
-                "Delayed Send scheduled",
-                &description,
-                cx,
-            );
+        let description = if send_when_agent_stops {
+            "Presses Enter after the agent has finished working for 10 seconds.".to_string()
+        } else if send_when_all_project_sessions_stop {
+            "Presses Enter after all agents in the project have finished working for 10 seconds."
+                .to_string()
         } else {
-            self.dispatch_gpui_app_modal_toast(
-                "warning",
-                "Delayed Send unavailable",
-                "gxserver could not persist this Delayed Send.",
-                cx,
-            );
-        }
+            let duration = Duration::from_millis(delay_ms.unwrap_or_default());
+            format!(
+                "Presses Enter in {}.",
+                gpui_command_delayed_send_duration_label(duration)
+            )
+        };
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_schedule_agents_delayed_send_with_current_gxserver_build(&params)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if result.is_ok() {
+                    this.agents_delayed_send_timers.remove(&session_id);
+                    this.agents_send_when_stopped_watchers.remove(&session_id);
+                    this.refresh_sidebar_agents_delayed_sends_if_changed(cx);
+                    this.persist_shell_layout_state();
+                    this.dispatch_gpui_app_modal_toast(
+                        "info",
+                        "Delayed Send scheduled",
+                        &description,
+                        cx,
+                    );
+                } else {
+                    this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Delayed Send unavailable",
+                        "gxserver could not persist this Delayed Send.",
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
     }
 
     fn handle_gpui_cancel_agents_delayed_send_command(
@@ -44671,11 +44747,10 @@ impl GhostexGpuiApp {
 
     /*
     CDXC:SessionChatDraftHandoff 2026-08-18:
-    Background terminal → chat draft transfer for the switches that must not
-    block on it: the automatic switch that fires when a terminal-started agent
-    becomes chat-eligible, and remote sessions (whose CLI, marker files and
-    Saved Prompts all live on the other machine, out of reach of the local
-    filesystem handshake `request_terminal_handoff_to_session_chat` uses).
+    Background terminal → chat draft transfer for every view switch. Automatic,
+    manual, local, and remote switches all show Chat first; draft capture must
+    never keep the user trapped on a terminal startup/permission prompt or on
+    an agent version that cannot answer the Ctrl+G handshake.
 
     Chat is shown immediately and the captured draft lands in the composer when
     the daemon's Ctrl+G handshake answers, so a slow or unanswerable capture
@@ -44743,6 +44818,146 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    fn start_session_chat_queued_count_polling(&mut self, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(GPUI_SESSION_CHAT_QUEUE_COUNT_POLL_INTERVAL)
+                    .await;
+
+                if this
+                    .update(cx, |this, cx| {
+                        this.refresh_session_chat_queued_counts(cx);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Sessions whose queued-prompt count the terminal chrome needs right now,
+    /// each with the daemon that owns it (`None` is this Mac's local daemon)
+    /// and that daemon's own project/session ids.
+    fn session_chat_queued_count_requests(
+        &self,
+    ) -> Vec<(
+        TerminalSessionId,
+        Option<GpuiRemoteGxserverRequestTarget>,
+        String,
+        String,
+    )> {
+        if self.active_mode != TitlebarMode::Agents {
+            return Vec::new();
+        }
+        self.agents_workspace
+            .rendered_leaf_order()
+            .into_iter()
+            .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
+            .filter(|session_id| {
+                !self.agents_chat_mode_sessions.contains(session_id)
+                    && !self.agents_find_mode_sessions.contains(session_id)
+            })
+            .filter(|session_id| {
+                self.agents_session_chat_transcript_agent(*session_id)
+                    .is_some()
+            })
+            .filter_map(|session_id| {
+                if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+                    return Some((session_id, None, key.project_id, key.session_id));
+                }
+                let key = self.agents_chat_remote_key_for_session(session_id)?;
+                let target = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)?;
+                Some((session_id, Some(target), key.project_id, key.session_id))
+            })
+            .collect()
+    }
+
+    fn refresh_session_chat_queued_counts(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.session_chat_queued_count_refresh_in_flight {
+            return;
+        }
+        let requests = self.session_chat_queued_count_requests();
+        if requests.is_empty() {
+            if !self.session_chat_queued_counts.is_empty() {
+                self.session_chat_queued_counts.clear();
+                cx.notify();
+            }
+            return;
+        }
+        self.session_chat_queued_count_refresh_in_flight = true;
+        cx.spawn(async move |this, cx| {
+            let reads = cx
+                .background_executor()
+                .spawn(async move {
+                    requests
+                        .into_iter()
+                        .map(|(session_id, target, project_id, gxserver_session_id)| {
+                            let params = serde_json::json!({
+                                "projectId": project_id,
+                                "sessionId": gxserver_session_id,
+                            });
+                            let result = match target.as_ref() {
+                                Some(target) => gpui_remote_gxserver_rpc_result(
+                                    target,
+                                    "/api/readSessionChatQueue",
+                                    &params,
+                                    GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT,
+                                ),
+                                None => gpui_gxserver_rpc_result(
+                                    "/api/readSessionChatQueue",
+                                    &params,
+                                    GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT,
+                                ),
+                            };
+                            (
+                                session_id,
+                                result.ok().map(|value| {
+                                    gpui_session_chat_queued_counts_from_result(&value)
+                                }),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.session_chat_queued_count_refresh_in_flight = false;
+                this.apply_session_chat_queued_counts(reads, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// A read that failed (dead tunnel, daemon restart, a daemon that predates
+    /// the queue) keeps the previous count instead of blanking the chip, so a
+    /// single lost round trip cannot make a pane's queue look emptied.
+    fn apply_session_chat_queued_counts(
+        &mut self,
+        reads: Vec<(TerminalSessionId, Option<GpuiSessionChatQueuedCounts>)>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let mut counts = HashMap::new();
+        for (session_id, read) in reads {
+            let read = match read {
+                Some(read) => read,
+                None => self
+                    .session_chat_queued_counts
+                    .get(&session_id)
+                    .copied()
+                    .unwrap_or_default(),
+            };
+            if read.total > 0 {
+                counts.insert(session_id, read);
+            }
+        }
+        if self.session_chat_queued_counts != counts {
+            self.session_chat_queued_counts = counts;
+            cx.notify();
+        }
     }
 
     /// Puts transferred draft text in the chat composer, or parks it until the
@@ -45396,7 +45611,12 @@ impl GhostexGpuiApp {
             .agents_chat_surfaces
             .keys()
             .copied()
-            .filter(|session_id| !self.agents_chat_mode_sessions.contains(session_id))
+            .filter(|session_id| {
+                !self.agents_chat_mode_sessions.contains(session_id)
+                    && !self
+                        .pending_session_chat_draft_handoffs
+                        .contains(session_id)
+            })
             .collect::<Vec<_>>();
         for session_id in stale_surface_ids {
             self.session_chat_composer_ready_sessions
@@ -52515,6 +52735,11 @@ impl GhostexGpuiApp {
         };
         let paste_previewable_images_enabled =
             shared_settings::shared_sidebar_settings_snapshot().terminal_paste_previewable_images();
+        if paste_previewable_images_enabled
+            && self.paste_clipboard_image_into_focused_remote_terminal(&item, cx)
+        {
+            return true;
+        }
         let Some(text) = terminal_clipboard_paste_text(
             &item,
             paste_previewable_images_enabled,
@@ -52546,40 +52771,175 @@ impl GhostexGpuiApp {
     fn paste_image_or_send_control_v(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         let enabled =
             shared_settings::shared_sidebar_settings_snapshot().terminal_paste_previewable_images();
-        if enabled
-            && let Some(item) = cx.read_from_clipboard()
-            && let Some(markdown) = terminal_clipboard_previewable_image_markdown_text(&item)
-        {
-            let text = if self.focused_terminal_is_factory_droid() {
-                format!("  {markdown}")
-            } else {
-                markdown
-            };
-            return self.paste_text_into_focused_terminal_surface(&text, cx);
+        if enabled && let Some(item) = cx.read_from_clipboard() {
+            if self.paste_clipboard_image_into_focused_remote_terminal(&item, cx) {
+                return true;
+            }
+            if let Some(markdown) = terminal_clipboard_previewable_image_markdown_text(&item) {
+                let text = if self.focused_terminal_is_factory_droid() {
+                    format!("  {markdown}")
+                } else {
+                    markdown
+                };
+                return self.paste_text_into_focused_terminal_surface(&text, cx);
+            }
         }
         self.send_text_to_focused_terminal_surface("\u{16}", cx)
     }
 
-    fn focused_terminal_is_factory_droid(&self) -> bool {
-        let shell_session_id =
-            match focused_terminal_text_target(self.active_mode, self.shell_focus) {
-                Some(FocusedTerminalTextTarget::Agents) => {
-                    focused_agents_terminal_surface_mount_slot(
-                        self.active_mode,
-                        self.shell_focus,
-                        &self.agents_workspace,
+    /*
+    CDXC:GPUITerminalRemoteImagePaste 2026-08-21:
+    A remote session's terminal runs on the remote machine, so the local
+    "[Image #N](path)" reference a clipboard image normally produces names a
+    file the remote agent cannot open. Pasting into a remote terminal therefore
+    takes the same route the Attach File or Folder button already takes: stage
+    the clipboard payload, upload it over that machine's SSH connection, and
+    paste the returned remote path. Ownership of the paste is claimed only once
+    a remote image destination is proven (focused remote-attached session, an
+    accepted clipboard image, and a reachable remote machine); every other
+    clipboard shape falls through to the unchanged local paste path.
+    */
+    fn paste_clipboard_image_into_focused_remote_terminal(
+        &mut self,
+        item: &ClipboardItem,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(session_id) = self.focused_terminal_shell_session_id() else {
+            return false;
+        };
+        let Some(remote_machine_id) = self.remote_machine_id_for_attached_shell_session(session_id)
+        else {
+            return false;
+        };
+        let Some(payload) = terminal_clipboard_image_payload(item) else {
+            return false;
+        };
+
+        // Engine terminals keep their own runtime identity, so the upload can
+        // land in that exact terminal even if focus moved. The ghostty path has
+        // no runtime handle here, so it re-checks focus instead.
+        let runtime_session_id = self
+            .agents_gpui_engine_terminals
+            .get(&session_id)
+            .map(|record| record.runtime_session_id);
+        let target = GpuiEngineTerminalEventTarget::Agents(session_id);
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) =
+            gpui_remote_machine_config_from_settings(settings.object(), remote_machine_id.as_str())
+        else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Image paste unavailable",
+                "The saved remote machine is missing required SSH settings.",
+                cx,
+            );
+            return true;
+        };
+        let Some(remote_target) = self.gpui_remote_gxserver_request_target(&remote_machine_id)
+        else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Image paste unavailable",
+                "Reconnect the remote machine before pasting an image.",
+                cx,
+            );
+            return true;
+        };
+
+        let pad_reference = self.focused_terminal_is_factory_droid();
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            "Uploading image",
+            "Uploading the pasted image to the remote machine.",
+            cx,
+        );
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_upload_terminal_clipboard_image_to_remote(
+                        &config,
+                        &remote_target.execution_target,
+                        payload,
                     )
-                    .map(|slot| slot.session_id)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let destination_is_live = match runtime_session_id {
+                    Some(runtime_session_id) => {
+                        this.gpui_engine_terminal_target_matches_runtime(target, runtime_session_id)
+                    }
+                    None => this.focused_terminal_shell_session_id() == Some(session_id),
+                };
+                if !destination_is_live {
+                    return;
                 }
-                Some(FocusedTerminalTextTarget::ProjectEditorCompanion) => {
-                    self.project_editor_companion_focused_terminal_session_id()
+                match result {
+                    Ok(references) => {
+                        let markdown = gpui_terminal_attachment_markdown_text(&references);
+                        let text = if pad_reference {
+                            format!("  {markdown}")
+                        } else {
+                            markdown
+                        };
+                        match runtime_session_id {
+                            Some(runtime_session_id) => {
+                                this.paste_text_into_gpui_engine_terminal_target(
+                                    target,
+                                    runtime_session_id,
+                                    text.as_str(),
+                                    cx,
+                                );
+                            }
+                            None => {
+                                this.paste_text_into_focused_terminal_surface(text.as_str(), cx);
+                            }
+                        }
+                    }
+                    Err(message) => this.dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Image upload failed",
+                        message.as_str(),
+                        cx,
+                    ),
                 }
-                _ => None,
-            };
-        shell_session_id
+            });
+        })
+        .detach();
+        true
+    }
+
+    fn focused_terminal_shell_session_id(&self) -> Option<TerminalSessionId> {
+        match focused_terminal_text_target(self.active_mode, self.shell_focus) {
+            Some(FocusedTerminalTextTarget::Agents) => focused_agents_terminal_surface_mount_slot(
+                self.active_mode,
+                self.shell_focus,
+                &self.agents_workspace,
+            )
+            .map(|slot| slot.session_id),
+            Some(FocusedTerminalTextTarget::ProjectEditorCompanion) => {
+                self.project_editor_companion_focused_terminal_session_id()
+            }
+            _ => None,
+        }
+    }
+
+    fn focused_terminal_is_factory_droid(&self) -> bool {
+        self.focused_terminal_shell_session_id()
             .and_then(|session_id| self.agents_workspace.session(session_id))
             .and_then(|session| session.agent_icon)
             == Some("factory-droid")
+    }
+
+    fn remote_machine_id_for_attached_shell_session(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<String> {
+        self.remote_attach_sessions
+            .iter()
+            .find_map(|(key, mapped_session_id)| {
+                (*mapped_session_id == session_id).then(|| key.remote_machine_id.clone())
+            })
     }
 
     fn paste_text_into_focused_terminal_surface(
@@ -58796,192 +59156,28 @@ impl GhostexGpuiApp {
         if !self.agents_session_chat_eligible(shell_session_id) {
             return;
         }
+        if !self.show_agents_session_chat_mode(shell_session_id, cx) {
+            return;
+        }
         /*
-        Grok Build fullscreen owns Ctrl+G for its Tasks pane, so it cannot
-        participate in Ghostex's prompt-editor draft handoff. Switch surfaces
-        directly and tell the user where the draft remains instead of waiting
-        for a handoff response Grok will never produce.
+        CDXC:SessionChatViewSwitch 2026-08-21:
+        Show Chat before asking the daemon to copy the terminal draft. Agent
+        startup prompts, permission prompts, shell state, and older CLIs may
+        not answer Ctrl+G; none of those terminal states may veto the view
+        switch. The daemon handshake is already loss-safe: success clears and
+        delivers the captured draft, while failure leaves it in the parked
+        terminal.
         */
         if self.agents_session_chat_transcript_agent(shell_session_id) == Some("grok") {
-            if self.show_agents_session_chat_mode(shell_session_id, cx) {
-                self.dispatch_gpui_app_modal_toast(
-                    "info",
-                    "Note: Prompt Text is left in the CLI for Grok Build (limitation).",
-                    "Please copy your prompt manually to the chat view.",
-                    cx,
-                );
-            }
-            return;
-        }
-        /*
-        The local terminal-to-chat handoff moves the CLI draft through a local
-        filesystem marker, which a remote session's CLI cannot see: its marker
-        files, prompt-editor and Saved Prompts all live on the other machine.
-        Switch immediately (the remote terminal and its draft stay alive while
-        the body is parked) and let the remote daemon run the same handshake
-        through `/api/handoffSessionChatDraft`, delivering the text into the
-        composer when it answers.
-        */
-        if self
-            .agents_chat_remote_key_for_session(shell_session_id)
-            .is_some()
-        {
-            if self.show_agents_session_chat_mode(shell_session_id, cx) {
-                self.request_session_chat_draft_transfer(shell_session_id, cx);
-            }
-            return;
-        }
-        if !self
-            .pending_session_chat_draft_handoffs
-            .insert(shell_session_id)
-        {
-            return;
-        }
-        let Some(key) = self.local_workspace_key_for_shell_session(shell_session_id) else {
-            self.pending_session_chat_draft_handoffs
-                .remove(&shell_session_id);
             self.dispatch_gpui_app_modal_toast(
-                "warning",
-                "Draft handoff unavailable",
-                "This terminal is not attached to a local gxserver session.",
-                cx,
-            );
-            return;
-        };
-        let request_id = format!(
-            "{}-{}",
-            std::process::id(),
-            GPUI_PROMPT_HANDOFF_SEQUENCE.fetch_add(1, Ordering::Relaxed),
-        );
-        let response_path = gpui_prompt_handoff_response_path(&request_id);
-        let _ = std::fs::remove_file(&response_path);
-        let marker = format!("handoff:{request_id}\n");
-        if !gpui_write_prompt_stash_request_marker(&key.project_id, &key.session_id, &marker) {
-            self.pending_session_chat_draft_handoffs
-                .remove(&shell_session_id);
-            self.dispatch_gpui_app_modal_toast(
-                "warning",
-                "Draft handoff failed",
-                "Could not prepare the terminal draft for transfer.",
+                "info",
+                "Note: Prompt Text is left in the CLI for Grok Build (limitation).",
+                "Please copy your prompt manually to the chat view.",
                 cx,
             );
             return;
         }
-
-        let delivered = if let Some(view) = self
-            .agents_gpui_engine_terminals
-            .get(&shell_session_id)
-            .map(|record| record.view.clone())
-        {
-            view.update(cx, |view, cx| view.send_text_input("\u{7}", cx));
-            true
-        } else {
-            #[cfg(target_os = "macos")]
-            {
-                self.send_text_bytes_to_focused_agents_terminal_surface(b"\x07")
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                false
-            }
-        };
-        if !delivered {
-            let _ = gpui_remove_prompt_stash_request_marker(&key.project_id, &key.session_id);
-            self.pending_session_chat_draft_handoffs
-                .remove(&shell_session_id);
-            self.dispatch_gpui_app_modal_toast(
-                "warning",
-                "Draft handoff failed",
-                "The terminal could not open its prompt transfer editor.",
-                cx,
-            );
-            return;
-        }
-
-        let project_id = key.project_id;
-        let background = cx.background_executor().clone();
-        let timer = background.clone();
-        let task = background.spawn(async move {
-            let started = Instant::now();
-            let response = loop {
-                if let Ok(text) = std::fs::read_to_string(&response_path)
-                    && let Ok(value) = serde_json::from_str::<serde_json::Value>(&text)
-                {
-                    let _ = std::fs::remove_file(&response_path);
-                    break Ok(value);
-                }
-                if started.elapsed() >= Duration::from_secs(16) {
-                    let _ = std::fs::remove_file(&response_path);
-                    break Err("The terminal did not finish moving the draft.".to_string());
-                }
-                timer.timer(Duration::from_millis(50)).await;
-            }?;
-            if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-                return Err("The terminal could not save the draft.".to_string());
-            }
-            if response.get("empty").and_then(serde_json::Value::as_bool) == Some(true) {
-                return Ok(String::new());
-            }
-            let prompt_id = response
-                .get("promptId")
-                .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| "The saved draft could not be identified.".to_string())?;
-            let result = gpui_gxserver_rpc_result(
-                "/api/listStashedPrompts",
-                &serde_json::json!({ "projectId": project_id }),
-                Duration::from_secs(10),
-            )?;
-            let content = result
-                .get("prompts")
-                .and_then(serde_json::Value::as_array)
-                .and_then(|prompts| {
-                    prompts.iter().find(|prompt| {
-                        prompt.get("promptId").and_then(serde_json::Value::as_str)
-                            == Some(prompt_id)
-                    })
-                })
-                .and_then(|prompt| prompt.get("content"))
-                .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| "The saved draft could not be recalled.".to_string())?
-                .to_string();
-            if response.get("created").and_then(serde_json::Value::as_bool) == Some(true) {
-                let _ = gpui_gxserver_rpc_result(
-                    "/api/deleteStashedPrompt",
-                    &serde_json::json!({ "promptId": prompt_id }),
-                    Duration::from_secs(5),
-                );
-            }
-            Ok(content)
-        });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            let _ = this.update(cx, |this, cx| {
-                if !this
-                    .pending_session_chat_draft_handoffs
-                    .remove(&shell_session_id)
-                {
-                    return;
-                }
-                match result {
-                    Ok(content) => {
-                        if !content.is_empty() {
-                            this.pending_session_chat_composer_insert
-                                .insert(shell_session_id, content);
-                        }
-                        this.toggle_agents_session_chat_mode(shell_session_id, cx);
-                    }
-                    Err(message) => {
-                        this.dispatch_gpui_app_modal_toast(
-                            "warning",
-                            "Draft handoff failed",
-                            &message,
-                            cx,
-                        );
-                    }
-                }
-            });
-        })
-        .detach();
+        self.request_session_chat_draft_transfer(shell_session_id, cx);
     }
 
     /// The terminal "Prompts" overlay action opens the stashed-prompts recall
@@ -59544,7 +59740,7 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
-                Err(message) => self.dispatch_gpui_app_modal_toast(
+                Err(message) => self.dispatch_gpui_workspace_action_toast(
                     "warning",
                     "Attachment unavailable",
                     message.as_str(),
@@ -59558,7 +59754,7 @@ impl GhostexGpuiApp {
         let Some(config) =
             gpui_remote_machine_config_from_settings(settings.object(), remote_machine_id.as_str())
         else {
-            self.dispatch_gpui_app_modal_toast(
+            self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Attachment unavailable",
                 "The saved remote machine is missing required SSH settings.",
@@ -59568,7 +59764,7 @@ impl GhostexGpuiApp {
         };
         let Some(remote_target) = self.gpui_remote_gxserver_request_target(&remote_machine_id)
         else {
-            self.dispatch_gpui_app_modal_toast(
+            self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Attachment unavailable",
                 "Reconnect the remote machine before attaching a file or folder.",
@@ -59577,7 +59773,7 @@ impl GhostexGpuiApp {
             return;
         };
 
-        self.dispatch_gpui_app_modal_toast(
+        self.dispatch_gpui_workspace_action_toast(
             "info",
             "Uploading attachment",
             "Uploading the selected item to the remote machine.",
@@ -59609,7 +59805,7 @@ impl GhostexGpuiApp {
                             text.as_str(),
                             cx,
                         ) {
-                            this.dispatch_gpui_app_modal_toast(
+                            this.dispatch_gpui_workspace_action_toast(
                                 "success",
                                 "Attachment uploaded",
                                 "The remote attachment reference was pasted into the terminal.",
@@ -59617,7 +59813,7 @@ impl GhostexGpuiApp {
                             );
                         }
                     }
-                    Err(message) => this.dispatch_gpui_app_modal_toast(
+                    Err(message) => this.dispatch_gpui_workspace_action_toast(
                         "warning",
                         "Attachment upload failed",
                         message.as_str(),
@@ -61902,6 +62098,104 @@ impl GhostexGpuiApp {
                 self.end_programmatic_focus();
             }
         }
+    }
+
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    The terminal view's "Queued: N" control is the leading item of the pane's
+    own tab bar — existing chrome, a normal sibling frame, drawn beside the tab
+    strip rather than over anything.
+
+    It deliberately does NOT float over the terminal the way the web host's does:
+    GPUI cannot paint above a mounted Ghostty/CEF body, and solving that with a
+    transparent overlay or hit-test routing is exactly what this repo's native
+    layout discipline forbids. A chrome ROW between the tab bar and the body (the
+    search bar's slot) was the other candidate and was rejected: it would resize
+    the Ghostty surface — reflowing the user's scrollback — every time a queue
+    filled or drained. The tab bar has a fixed height, so appearing and
+    disappearing here cannot touch terminal geometry at all.
+    */
+    fn render_agents_terminal_queued_prompts_chip(
+        &self,
+        leaf: &WorkspaceLeaf,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let session_id = leaf.tab_group.active_session_id()?;
+        // Chat and Find own this pane's body when they are on, and the chat view
+        // renders the queue rows themselves, so the chip has nothing to add.
+        if self.agents_chat_mode_sessions.contains(&session_id)
+            || self.agents_find_mode_sessions.contains(&session_id)
+        {
+            return None;
+        }
+        let counts = self
+            .session_chat_queued_counts
+            .get(&session_id)
+            .copied()
+            .unwrap_or_default();
+        if counts.total == 0 {
+            return None;
+        }
+        let count = counts.total;
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-21-b:
+        A `failed` row holds the whole queue until the user retries or deletes
+        it, so the chip's dot turns the sidebar's error red instead of the
+        waiting yellow. Only the dot's colour changes — every box property below
+        is identical either way, so the chip cannot resize the tab bar and
+        therefore cannot touch the Ghostty surface's geometry.
+        */
+        let dot_color = if counts.failed > 0 {
+            terminal_queued_prompts_failed_dot_color()
+        } else {
+            terminal_queued_prompts_dot_color()
+        };
+        let element_id_suffix = format!("agents-{}-{}", leaf.pane_id.0, session_id.0);
+        Some(
+            h_flex()
+                .id(format!(
+                    "ghostex-gpui-terminal-queued-prompts-{element_id_suffix}"
+                ))
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(5.0))
+                .ml(px(6.0))
+                .mr(px(2.0))
+                .h(px(TERMINAL_QUEUED_PROMPTS_CHIP_HEIGHT))
+                .px(px(7.0))
+                .rounded(px(4.0))
+                .border_1()
+                .border_color(terminal_queued_prompts_border_color())
+                .bg(terminal_queued_prompts_background_color())
+                .text_size(px(11.0))
+                .text_color(terminal_queued_prompts_text_color())
+                .cursor_default()
+                .hover(|this| this.bg(terminal_queued_prompts_hover_color()))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|_this, _event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |this, _event: &MouseUpEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.handoff_agents_session_chat_mode(session_id, cx);
+                    }),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .size(px(6.0))
+                        .rounded_full()
+                        .bg(dot_color),
+                )
+                .child(div().child(format!("Queued: {count}")))
+                .into_any_element(),
+        )
     }
 
     fn render_agents_terminal_search_bar(
@@ -69029,6 +69323,10 @@ impl GhostexGpuiApp {
             .bg(workspace_tab_bar_color())
             .border_b_1()
             .border_color(workspace_tab_border_color())
+            .when_some(
+                self.render_agents_terminal_queued_prompts_chip(leaf, cx),
+                |this, chip| this.child(chip),
+            )
             .child(
                 h_flex()
                     .id(format!(
@@ -87649,6 +87947,35 @@ fn terminal_search_bar_border_color() -> Hsla {
     rgb(0x252525).into()
 }
 
+/// The same yellow the sidebar's queued-prompt badge uses, so one queue never
+/// looks like two different things in two places.
+fn terminal_queued_prompts_dot_color() -> Hsla {
+    rgb(0xf6c945).into()
+}
+
+/// The sidebar's error red (`.session-status-dot-anchored[data-lifecycle-state
+/// ="error"]`), which the queued-prompt badge also switches to when a row has
+/// failed, so a stalled queue reads the same in the sidebar and in the pane.
+fn terminal_queued_prompts_failed_dot_color() -> Hsla {
+    rgb(0xff6b6b).into()
+}
+
+fn terminal_queued_prompts_text_color() -> Hsla {
+    rgba(0xffffffe0).into()
+}
+
+fn terminal_queued_prompts_background_color() -> Hsla {
+    rgb(0x1b1b1b).into()
+}
+
+fn terminal_queued_prompts_hover_color() -> Hsla {
+    rgb(0x2a2a2a).into()
+}
+
+fn terminal_queued_prompts_border_color() -> Hsla {
+    rgb(0x323232).into()
+}
+
 fn terminal_search_bar_text_color() -> Hsla {
     rgba(0xffffffef).into()
 }
@@ -96083,6 +96410,50 @@ fn gpui_upload_terminal_attachment_to_remote(
     _local_path: &Path,
 ) -> Result<GpuiTerminalAttachmentReference, String> {
     Err("Remote attachments are unavailable in this GPUI build.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_upload_terminal_clipboard_image_to_remote(
+    config: &GpuiRemoteMachineConfig,
+    execution_target: &GpuiRemoteExecutionTarget,
+    payload: TerminalClipboardImagePayload,
+) -> Result<Vec<GpuiTerminalAttachmentReference>, String> {
+    match payload {
+        TerminalClipboardImagePayload::FilePaths(paths) => paths
+            .iter()
+            .map(|path| {
+                gpui_upload_terminal_attachment_to_remote(config, execution_target, path.as_path())
+            })
+            .collect(),
+        TerminalClipboardImagePayload::Bytes { bytes, extension } => {
+            let unique_id = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let staged_image = env::temp_dir().join(format!(
+                "ghostex-gpui-clipboard-image-{}-{unique_id}.{extension}",
+                std::process::id()
+            ));
+            fs::write(staged_image.as_path(), &bytes)
+                .map_err(|_| "Could not stage the pasted image for upload.".to_string())?;
+            let result = gpui_upload_terminal_attachment_to_remote(
+                config,
+                execution_target,
+                staged_image.as_path(),
+            );
+            let _ = fs::remove_file(staged_image.as_path());
+            result.map(|reference| vec![reference])
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn gpui_upload_terminal_clipboard_image_to_remote(
+    _config: &GpuiRemoteMachineConfig,
+    _execution_target: &GpuiRemoteExecutionTarget,
+    _payload: TerminalClipboardImagePayload,
+) -> Result<Vec<GpuiTerminalAttachmentReference>, String> {
+    Err("Remote image paste is unavailable in this GPUI build.".to_string())
 }
 
 fn gpui_terminal_attachment_sanitized_filename(path: &Path) -> Result<String, String> {
@@ -105922,6 +106293,33 @@ fn gpui_ghostex_folder_stats_message() -> serde_json::Value {
     })
 }
 
+/// Every queue row held for this session, plus how many of them are `failed`.
+/// A `failed` row waits on the user rather than on the agent, but it still
+/// counts: a queue stalled behind one has stopped dead, and hiding it would make
+/// that look identical to no queue. This mirrors the sidebar badge's
+/// `queuedPromptCount` / `queuedPromptFailedCount` exactly — one count, one
+/// meaning, on every surface.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct GpuiSessionChatQueuedCounts {
+    total: usize,
+    failed: usize,
+}
+
+fn gpui_session_chat_queued_counts_from_result(
+    value: &serde_json::Value,
+) -> GpuiSessionChatQueuedCounts {
+    let Some(rows) = value.get("queue").and_then(serde_json::Value::as_array) else {
+        return GpuiSessionChatQueuedCounts::default();
+    };
+    GpuiSessionChatQueuedCounts {
+        total: rows.len(),
+        failed: rows
+            .iter()
+            .filter(|row| row.get("state").and_then(serde_json::Value::as_str) == Some("failed"))
+            .count(),
+    }
+}
+
 fn gpui_gxserver_rpc_result(
     endpoint: &str,
     params: &serde_json::Value,
@@ -106774,6 +107172,74 @@ fn gpui_expected_local_gxserver_build_identity() -> Option<String> {
         .map(str::trim)
         .filter(|identity| !identity.is_empty())
         .map(str::to_string)
+}
+
+/// A running app can outlive replacement of its app bundle during an update.
+/// Reconcile that version skew at the durable Delayed Send command boundary so
+/// the user's submission is persisted by the daemon that implements the
+/// bundled contract instead of being accepted by the modal and rejected by an
+/// obsolete control plane.
+fn gpui_schedule_agents_delayed_send_with_current_gxserver_build(
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if matches!(
+        gpui_probe_local_gxserver_health(),
+        GpuiLocalGxserverHealthState::BuildMismatch
+    ) {
+        gpui_restart_local_gxserver_for_current_build()?;
+    }
+    gpui_gxserver_rpc_result("/api/scheduleDelayedSend", params, Duration::from_secs(5))
+}
+
+fn gpui_restart_local_gxserver_for_current_build() -> Result<(), String> {
+    let (status_code, _) = gxserver_post_typed_operation(
+        "/api/control/stop",
+        &serde_json::json!({}),
+        Duration::from_secs(5),
+    )?;
+    if !(200..300).contains(&status_code) {
+        return Err(format!("gxserver stop failed with HTTP {status_code}."));
+    }
+
+    let mut stopped = false;
+    for _ in 0..20 {
+        std::thread::sleep(Duration::from_millis(250));
+        if matches!(
+            gpui_probe_local_gxserver_health(),
+            GpuiLocalGxserverHealthState::Unreachable
+        ) {
+            stopped = true;
+            break;
+        }
+    }
+    if !stopped {
+        return Err("gxserver did not stop before its build update.".to_string());
+    }
+
+    let binary = gpui_resolve_local_gxserver_binary()
+        .ok_or_else(|| "Bundled gxserver binary is missing.".to_string())?;
+    gpui_spawn_local_gxserver_daemon(&binary)?;
+    for _ in 0..40 {
+        std::thread::sleep(Duration::from_millis(500));
+        match gpui_probe_local_gxserver_health() {
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: true,
+            } => return Ok(()),
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: false,
+            } => {
+                return Err(
+                    "The current gxserver build is missing its required toolchain.".to_string(),
+                );
+            }
+            GpuiLocalGxserverHealthState::ProtocolMismatch { .. } => {
+                return Err("The current gxserver build has an incompatible protocol.".to_string());
+            }
+            GpuiLocalGxserverHealthState::BuildMismatch
+            | GpuiLocalGxserverHealthState::Unreachable => {}
+        }
+    }
+    Err("The current gxserver build did not become healthy in time.".to_string())
 }
 
 fn gpui_gxserver_required_tools_available(health: &serde_json::Value) -> bool {
@@ -109805,13 +110271,6 @@ fn gpui_write_prompt_stash_request_marker(
         return false;
     }
     std::fs::write(&path, marker.as_bytes()).is_ok()
-}
-
-fn gpui_prompt_handoff_response_path(request_id: &str) -> PathBuf {
-    shared_settings::ghostex_storage_paths()
-        .state_dir
-        .join("prompt-handoffs")
-        .join(format!("{request_id}.json"))
 }
 
 fn gpui_remove_prompt_stash_request_marker(project_id: &str, session_id: &str) -> bool {
@@ -119913,6 +120372,13 @@ fn gxserver_workspace_tab_session_from_value(
             "kind",
             "lifecycleState",
             "projectId",
+            // CDXC:SessionChatPromptQueue 2026-08-21: gxserver publishes a
+            // session's queued-prompt count on the presentation snapshot the
+            // sidebar runtime already reads. Accepted here (unused for now, the
+            // pane chip reads the count itself) so that the day the runtime
+            // forwards it, one added key cannot invalidate the whole
+            // focus-state message and blank the Agents tab strip.
+            "queuedPromptCount",
             "sessionId",
             "title",
         ],
