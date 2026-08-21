@@ -48,6 +48,7 @@ import "./action-events";
 import { CommandPane } from "./command-pane";
 import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
 import { SessionChatHostActionsCluster } from "@/sidebar/chat/session-chat-host-actions-cluster";
+import { SessionChatQueuedPromptsButton } from "../chat/session-chat-queued-prompts-button";
 import { createWebSessionHostActions, SessionChatHost } from "./session-chat-host";
 import { FindPromptsHost } from "./find-prompts-host";
 import {
@@ -614,10 +615,22 @@ export function IntegratedAgentsPage() {
                   sessionId={session.sessionId as GxserverSessionId}
                 />
                 {chatEligible ? (
-                  <SessionChatHostActionsCluster
-                    hostActions={createWebSessionHostActions(session, controls.switchToChat)}
-                    surface="terminal"
-                  />
+                  <>
+                    {/*
+                      Plan 016: the queue keeps draining while the terminal is
+                      on screen, so the count lives here and one click goes back
+                      to the chat view where the rows can be edited.
+                    */}
+                    <SessionChatQueuedPromptsButton
+                      count={session.queuedPromptCount ?? 0}
+                      failedCount={session.queuedPromptFailedCount ?? 0}
+                      onOpenChat={controls.switchToChat}
+                    />
+                    <SessionChatHostActionsCluster
+                      hostActions={createWebSessionHostActions(session, controls.switchToChat)}
+                      surface="terminal"
+                    />
+                  </>
                 ) : null}
               </div>
             );

@@ -26,6 +26,19 @@ export interface WorkspaceSession {
   presentationState: WorkspacePresentationState;
   activity: WorkspaceActivity;
   statusMessage?: string;
+  /**
+   * Ghostex-owned queued prompts waiting on this session (plan 016). Comes off
+   * the presentation projection, which gxserver republishes on every queue
+   * mutation and every scheduler delivery, so the terminal view's "Queued: N"
+   * button stays live without polling.
+   */
+  queuedPromptCount?: number;
+  /**
+   * How many of those rows failed to deliver and are held for the user. Any
+   * non-zero value means the queue has stopped draining until they retry or
+   * delete the row, so the terminal-view button says so in red.
+   */
+  queuedPromptFailedCount?: number;
   /** Terminal↔chat body toggle; defaults to "terminal" when absent. */
   sessionSurfaceMode?: SessionSurfaceMode;
 }

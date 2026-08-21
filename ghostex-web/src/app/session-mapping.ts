@@ -33,6 +33,13 @@ export function presentationSessionToWorkspaceSession(
       : {}),
     ...(session.agentId ? { agentId: session.agentId } : {}),
     ...(session.agentSessionId ? { agentSessionId: session.agentSessionId } : {}),
+    ...(typeof session.queuedPromptCount === "number" && session.queuedPromptCount > 0
+      ? { queuedPromptCount: session.queuedPromptCount }
+      : {}),
+    ...(typeof session.queuedPromptFailedCount === "number" &&
+    session.queuedPromptFailedCount > 0
+      ? { queuedPromptFailedCount: session.queuedPromptFailedCount }
+      : {}),
     presentationState: presentationStateForSession(session),
     title: session.displayTitle ?? session.title,
     workspaceId: createWorkspaceSessionId(reference),
