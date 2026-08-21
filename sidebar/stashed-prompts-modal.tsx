@@ -179,6 +179,20 @@ export function StashedPromptsModal({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen || isAddingPrompt) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      document
+        .querySelector<HTMLInputElement>(
+          '.ghostex-stashed-prompts-dialog [data-slot="command-input"]'
+        )
+        ?.focus();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [isAddingPrompt, isOpen]);
+
+  useEffect(() => {
     if (!isOpen || !isAddingPrompt) {
       return;
     }
