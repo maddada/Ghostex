@@ -16,10 +16,6 @@ const sharedSidebarContractSource = readFileSync(
   new URL("../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
-const nativeSidebarSource = readFileSync(
-  new URL("../native/sidebar/native-sidebar.tsx", import.meta.url),
-  "utf8",
-);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -653,11 +649,6 @@ describe("settings modal source", () => {
       "Settings -> Projects exposes explicit Portless setup actions",
       'type: "postponePortlessSetupPrompt"',
     );
-    const nativeSettingsHandler = sourceBetween(
-      nativeSidebarSource,
-      "function runPortlessSettingsAdminAction",
-      "function setPortlessEnabledFromSetupPrompt",
-    );
 
     expect(projectsPanel).toContain('type: "runPortlessSettingsAdminAction"');
     expect(projectsPanel).toContain('action === "remove"');
@@ -667,10 +658,6 @@ describe("settings modal source", () => {
     expect(sharedSettingsCommand).toContain("action: NativePortlessAdminInstallAction;");
     expect(sharedSettingsCommand).toContain("protocol: NativePortlessProtocol;");
     expect(sharedSettingsCommand).toContain('action: "remove";');
-    expect(nativeSettingsHandler).toContain("runTrackedPortlessAdminAction");
-    expect(nativeSettingsHandler).not.toContain("runProcess");
-    expect(nativeSettingsHandler).not.toContain("stdout");
-    expect(nativeSettingsHandler).not.toContain("stderr");
   });
 
   test("shows assigned Portless domains as read-only project and worktree summaries", () => {
@@ -701,7 +688,6 @@ describe("settings modal source", () => {
     expect(domainGrouping).toContain("liveRoutesByProjectAndHostname");
     expect(domainGrouping).toContain("worktreeParentProjectId");
     expect(sharedSidebarContractSource).toContain("worktreeParentProjectId?: string");
-    expect(nativeSidebarSource).toContain("worktreeParentProjectId: worktree.parentProjectId");
   });
 
   test("wires the App Icon picker to the native wire contract with prop-driven confirm-before-persist", () => {
@@ -795,17 +781,6 @@ describe("settings modal source", () => {
       new URL("../native/sidebar/modal-host.tsx", import.meta.url),
       "utf8",
     );
-
-    // native-sidebar.tsx: host-event handler + relay that posts to the bus and
-    // the modal host, reading the Swift event's DIRECT fields (no payloadJson).
-    expect(nativeSidebarSource).toContain('if (hostEvent.type === "appIconState") {');
-    expect(nativeSidebarSource).toContain("postAppIconState({");
-    expect(nativeSidebarSource).toContain("function postAppIconState(message: SidebarAppIconStateMessage)");
-    expect(nativeSidebarSource).toContain('postAppModalHost({ message, type: "sidebarState" });');
-    expect(nativeSidebarSource).toContain('case "listAppIcons":');
-    expect(nativeSidebarSource).toContain('case "setAppIcon":');
-    expect(nativeSidebarSource).toContain('case "pickAppIconFile":');
-    expect(nativeSidebarSource).toContain('postNative({ type: "pickAppIconFile" });');
 
     // modal-host.tsx: route the relayed message into modal state and pass it on.
     expect(modalHostSource).toContain("isAppIconStateMessage(message.message)");

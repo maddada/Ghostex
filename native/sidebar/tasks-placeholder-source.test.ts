@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const tasksPlaceholderSource = readFileSync(new URL("./tasks-placeholder.tsx", import.meta.url), "utf8");
-const nativeSidebarSource = readFileSync(new URL("./native-sidebar.tsx", import.meta.url), "utf8");
 
 function sourceBetweenIn(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -324,16 +323,8 @@ describe("Project Board form event handling", () => {
      */
     const saveSource = sourceBetween("const persistTicketDetail = async", "const createTicket = async");
     const toastSource = sourceBetween("const showProjectBoardToast = useCallback", "const setLocalTicketStatus");
-    const nativeToastSource = sourceBetweenIn(
-      nativeSidebarSource,
-      "async function handleProjectBoardRequest",
-      "async function handleRemoteProjectBoardRequest",
-    );
 
     expect(toastSource).toContain('action: "showToast"');
-    expect(nativeToastSource).toContain('if (request.action === "showToast")');
-    expect(nativeToastSource).toContain("showAppToast(");
-    expect(nativeToastSource).toContain("postProjectBoardResponse(request);");
     expect(saveSource).toContain("setDetail(createEmptyDetailDraft());");
     expect(saveSource).toContain("upsertLocalIssue(optimisticIssue);");
     expect(saveSource).toContain("void persistTicketDetail(draft).catch");

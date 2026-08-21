@@ -1,25 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const nativeSidebarSource = readFileSync(new URL("./native-sidebar.tsx", import.meta.url), "utf8");
 const modalHostSource = readFileSync(new URL("./modal-host.tsx", import.meta.url), "utf8");
 const contractSource = readFileSync(
   new URL("../../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
-const gxserverClientSource = readFileSync(new URL("./gxserver-client.ts", import.meta.url), "utf8");
-
-function sourceBetween(source: string, start: string, end: string): string {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  expect(startIndex).toBeGreaterThanOrEqual(0);
-  expect(endIndex).toBeGreaterThan(startIndex);
-  return source
-    .slice(startIndex, endIndex)
-    .replace(/\s+/g, " ")
-    .replace(/([([])\s+/g, "$1")
-    .replace(/,?\s+([)\]])/g, "$1");
-}
+const gxserverProtocolSource = readFileSync(
+  new URL("../../shared/gxserver-protocol.ts", import.meta.url),
+  "utf8",
+);
 
 describe("agent hook status source", () => {
   test("checks requested hook providers one at a time and prioritizes Codex, Claude, OpenCode, and Pi", () => {
@@ -38,25 +28,6 @@ describe("agent hook status source", () => {
     expect(contractSource).toContain("agentIds?: readonly string[];");
     expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: \"requestAgentHookStatus\" });");
     expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: \"installAgentHooks\" });");
-    expect(nativeSidebarSource).toContain('const nativeAgentHookPriorityStatusAgentIds = ["codex", "claude", "opencode", "pi"] as const;');
-
-    const requestStatus = sourceBetween(
-      nativeSidebarSource,
-      "async function requestNativeAgentHookStatus",
-      "function orderedNativeAgentHookStatusAgentIds",
-    );
-    expect(requestStatus).toContain("for (const agentId of orderedNativeAgentHookStatusAgentIds(agentIds))");
-    expect(requestStatus).toContain("gxserverClient.readAgentHookStatus([agentId])");
-    expect(requestStatus).toContain("postAgentHookStatus(");
-    expect(requestStatus).toContain("mergeAgentHookStatusMessages(latestNativeAgentHookStatus, nextStatus)");
-
-    const orderedStatus = sourceBetween(
-      nativeSidebarSource,
-      "function orderedNativeAgentHookStatusAgentIds",
-      "function mergeAgentHookStatusMessages",
-    );
-    expect(orderedStatus).toContain("DEFAULT_SIDEBAR_AGENTS.map");
-    expect(orderedStatus).toContain("nativeAgentHookPriorityStatusAgentIds.filter");
   });
 
   test("wires advanced Settings uninstall actions for hooks and bundled skills", () => {
@@ -79,11 +50,7 @@ describe("agent hook status source", () => {
       'vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });',
     );
     expect(modalHostSource).toContain('vscode.postMessage({ type: "uninstallBundledAgentSkills" });');
-    expect(nativeSidebarSource).toContain("async function uninstallNativeAgentHooksFromSettings");
-    expect(nativeSidebarSource).toContain("gxserverClient.uninstallAgentHooks(agentIds)");
-    expect(nativeSidebarSource).toContain("async function uninstallNativeBundledAgentSkills");
-    expect(nativeSidebarSource).toContain("selectedSkills.map((skill) => skill.skillName)");
-    expect(gxserverClientSource).toContain('"/api/uninstallAgentHooks"');
+    expect(gxserverProtocolSource).toContain('"/api/uninstallAgentHooks"');
   });
 
   test("does not keep a titlebar direct-install hook command", () => {
@@ -94,7 +61,5 @@ describe("agent hook status source", () => {
      * hook writes behind Settings and first-launch setup only.
      */
     expect(contractSource).not.toContain('"installAgentHooksFromTitlebarNotice"');
-    expect(nativeSidebarSource).not.toContain("installNativeAgentHooksFromTitlebarNotice");
-    expect(nativeSidebarSource).not.toContain('case "installAgentHooksFromTitlebarNotice"');
   });
 });

@@ -2,20 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 /**
- * The Agents Hub filesystem catalog has two scanner implementations: the
- * macOS Node helper script embedded in native-sidebar.tsx
- * (getAgentsHubCatalogNodeScript) and the GPUI native Rust port
- * (GpuiAgentsHubCatalogBuilder in gpui/src/main.rs). Repo policy forbids
- * tests inside gpui/, so this shared source test extracts every
- * home-relative catalog root/file path from BOTH sources and asserts the
- * sets stay identical. Adding, removing, or renaming a provider root on one
- * side without the other fails here.
+ * The Agents Hub filesystem catalog is scanned by the GPUI native Rust port
+ * (GpuiAgentsHubCatalogBuilder in gpui/src/main.rs). Repo policy forbids tests
+ * inside gpui/, so this shared source test extracts every home-relative
+ * catalog root/file path from that scanner and asserts the known provider
+ * roots are all still present. Removing or renaming a provider root fails here.
+ *
+ * CDXC:AgentsHubCatalog 2026-08-20-13:05:
+ * This was a two-sided parity test against the macOS `native-sidebar.tsx`
+ * helper script. That host is gone, so only the GPUI side is asserted now.
  */
 
-const macosSidebarSource = readFileSync(
-  new URL("../native/sidebar/native-sidebar.tsx", import.meta.url),
-  "utf8",
-);
 const gpuiMainSource = readFileSync(
   new URL("../gpui/src/main.rs", import.meta.url),
   "utf8",
@@ -31,24 +28,6 @@ function sourceBetween(source: string, start: string, end: string): string {
 
 function quotedSegments(argList: string): string[] {
   return [...argList.matchAll(/"([^"]*)"/g)].map((match) => match[1]!);
-}
-
-function macosCatalogHomePaths(): Set<string> {
-  const catalogScript = sourceBetween(
-    macosSidebarSource,
-    "function getAgentsHubCatalogNodeScript",
-    "function getProjectEditorAutoSleepTimeoutMs",
-  );
-  const paths = new Set<string>();
-  // p("segment", ...) — the script's home-relative path helper.
-  for (const match of catalogScript.matchAll(/(?<![A-Za-z0-9_.])p\(((?:\s*"[^"]*"\s*,?)+)\)/g)) {
-    paths.add(quotedSegments(match[1]!).join("/"));
-  }
-  // path.join(home, "segment", ...) — the non-dot shared agents trees.
-  for (const match of catalogScript.matchAll(/path\.join\(home,((?:\s*"[^"]*"\s*,?)+)\)/g)) {
-    paths.add(quotedSegments(match[1]!).join("/"));
-  }
-  return paths;
 }
 
 function gpuiCatalogHomePaths(): Set<string> {
@@ -73,14 +52,12 @@ function gpuiCatalogHomePaths(): Set<string> {
   return paths;
 }
 
-describe("GPUI Agents Hub scanner parity with the macOS catalog script", () => {
-  test("both scanners reference the same home-relative catalog paths", () => {
-    const macosPaths = macosCatalogHomePaths();
+describe("GPUI Agents Hub scanner catalog roots", () => {
+  test("the scanner references every known home-relative catalog path", () => {
     const gpuiPaths = gpuiCatalogHomePaths();
 
     // Guard the extraction itself: a regex or boundary regression that
     // extracts nothing must fail loudly instead of passing on empty sets.
-    expect(macosPaths.size).toBeGreaterThanOrEqual(20);
     expect(gpuiPaths.size).toBeGreaterThanOrEqual(20);
     for (const anchor of [
       ".agents/skills",
@@ -106,19 +83,7 @@ describe("GPUI Agents Hub scanner parity with the macOS catalog script", () => {
       "agents/skills",
       "agents/hooks",
     ]) {
-      expect(macosPaths.has(anchor), `macOS scanner lost ${anchor}`).toBe(true);
       expect(gpuiPaths.has(anchor), `GPUI scanner lost ${anchor}`).toBe(true);
     }
-
-    // The macOS script additionally names the bare shared-agents directory as
-    // a profile containment root (path.join(home, "agents")); the Rust port
-    // expresses that containment through its subtree roots, so the bare root
-    // is the one accepted one-sided entry.
-    const macosOnly = [...macosPaths]
-      .filter((path) => !gpuiPaths.has(path) && path !== "agents")
-      .sort();
-    const gpuiOnly = [...gpuiPaths].filter((path) => !macosPaths.has(path)).sort();
-    expect(macosOnly).toEqual([]);
-    expect(gpuiOnly).toEqual([]);
   });
 });

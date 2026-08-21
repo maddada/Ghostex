@@ -33,10 +33,6 @@ const commandInputSource = readFileSync(
   "utf8",
 );
 const modalHostSource = readFileSync(new URL("../native/sidebar/modal-host.tsx", import.meta.url), "utf8");
-const nativeSidebarSource = readFileSync(
-  new URL("../native/sidebar/native-sidebar.tsx", import.meta.url),
-  "utf8",
-);
 const sessionGridContractSource = readFileSync(
   new URL("../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
@@ -806,10 +802,6 @@ describe("command palette source contracts", () => {
     expect(sessionGridContractSource).toContain('type: "openCurrentProjectInFinder"');
     expect(sessionGridContractSource).toContain('type: "openGhostexTutorialVideo"');
     expect(sessionGridContractSource).toContain('type: "openCurrentProjectInTarget"');
-    expect(nativeSidebarSource).toContain("function openCurrentProjectInFinderFromCommandPalette()");
-    expect(nativeSidebarSource).toContain("function openCurrentProjectInTargetFromCommandPalette");
-    expect(nativeSidebarSource).toContain('case "openCurrentProjectInFinder":');
-    expect(nativeSidebarSource).toContain('case "openCurrentProjectInTarget":');
   });
 
   test("keeps command search scoped to the Quick Access command tab", () => {

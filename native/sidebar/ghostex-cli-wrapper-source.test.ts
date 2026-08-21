@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const nativeSidebarSource = readFileSync(new URL("./native-sidebar.tsx", import.meta.url), "utf8");
 const releaseGhostexSource = readFileSync(new URL("../../scripts/release-ghostex.mjs", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
@@ -13,52 +12,6 @@ function sourceBetween(source: string, start: string, end: string): string {
 }
 
 describe("Ghostex CLI command wrappers", () => {
-  test("native startup writes PATH wrapper files instead of app-bundled symlinks", () => {
-    /*
-     * CDXC:CliInstall 2026-06-12-09:31:
-     * Public ghostex/gx commands must be executable wrapper files outside
-     * Ghostex.app so macOS does not directly execute sealed app-bundled shell
-     * scripts and kill the process during syspolicyd assessment.
-     */
-    const installer = sourceBetween(
-      nativeSidebarSource,
-      "function getNativeGhostexCliCommandInstallNodeScript",
-      "async function installNativeBrowserControlSkill",
-    );
-
-    expect(installer).toContain("const cliBinaryPath = path.join(cliDir, \"ghostex\")");
-    expect(installer).toContain("function commandWrapperContent()");
-    expect(installer).toContain("CDXC:CliInstall 2026-06-12-09:31");
-    expect(installer).toContain('"exec " + shellSingleQuote(cliBinaryPath)');
-    expect(installer).toContain("function clearMacosExecutionPolicyXattrs(filePath)");
-    expect(installer).toContain('"com.apple.provenance", "com.apple.quarantine"');
-    expect(installer).toContain("fs.writeFileSync(linkPath, wrapper, { mode: 0o755 })");
-    expect(installer).toContain("isGhostexWrapperFile(filePath)");
-    expect(installer).not.toContain("fs.symlinkSync(target, linkPath)");
-  });
-
-  test("native status treats Ghostex-owned wrappers as usable commands", () => {
-    /*
-     * CDXC:CliInstall 2026-06-12-09:31:
-     * Settings and first launch status must recognize the wrapper command
-     * shape after startup repairs old Ghostex-owned symlinks.
-     */
-    const statusScript = sourceBetween(
-      nativeSidebarSource,
-      "function getNativeGhostexCliStatusNodeScript",
-      "function createNativeAgentHookStatusErrorMessage",
-    );
-
-    expect(statusScript).toContain("function isGhostexCommandWrapper(filePath)");
-    expect(statusScript).toContain("CDXC:CliInstall 2026-06-12-09:31");
-    expect(statusScript).toContain(
-      'const ghostexUsable = isGhostexCommandWrapper(ghostexPath) || isGhostexCommandRealpath(ghostexRealpath, "ghostex")',
-    );
-    expect(statusScript).toContain(
-      'const gxUsable = isGhostexCommandWrapper(gxPath) || isGhostexCommandRealpath(gxRealpath, "gx")',
-    );
-  });
-
   test("Homebrew cask generation installs wrappers instead of CLI binary aliases", () => {
     /*
      * CDXC:CliInstall 2026-06-12-09:31:

@@ -15,19 +15,22 @@ Only three Ghostex apps are active development targets:
 
 Deprecated, kept in-tree but **not** development targets. Never route new features, refactors, parity work, or bug fixes to these:
 
-- **macOS Swift/AppKit app** — `native/` and `src/`. Superseded by the gpui app. Do not add features here, do not "keep it in sync", and do not treat its behavior as the spec for new work.
+- **macOS Swift/AppKit app** — removed on 2026-08-20. The Swift sources and its `native/sidebar/native-sidebar.tsx` WKWebView host are gone; do not restore them, re-add a macOS Swift target, or treat the old app's behavior as the spec for new work. What is left under `native/sidebar/` is listed below and is compiled into gpui.
 - **Native iOS app** and **Termux-fork Android app** — already removed from this checkout; they live under `/Users/madda/dev/_active/ghostex-deprecated/` and must never be restored as active release inputs.
 
-Important: "deprecated app" does not mean "dead directory". Some files under the deprecated trees are still compiled into active apps and are fair game when the task is about an active app:
+Important: `native/` is no longer a deprecated app directory — it is now only a
+holding folder for gpui-owned CEF surfaces plus `src/assets/` agent icons. Everything
+still there is compiled into an active app:
 
 - `native/sidebar/modal-host.tsx` and `native/sidebar/titlebar-host.tsx` are built by `gpui/vite.config.ts` into gpui's CEF `modal-host.html` / `titlebar-host.html` surfaces. Note that gpui only loads `titlebar-host.html` for the Tips/info dropdown panel: the gpui titlebar itself (project name, Agents/Code/Browser/Kanban/Automate/Docs mode tabs, buttons, tooltips) is drawn natively in Rust by `render_titlebar` / `render_mode_tab` in `gpui/src/main.rs`. Titlebar work for the desktop app belongs there, not in the React mode switcher inside `titlebar-host.tsx`.
 - `native/sidebar/manage.tsx` and `native/sidebar/tasks-placeholder.tsx` are loaded by `gpui/sidebar/manage-main.tsx` and `gpui/sidebar/kanban-main.tsx`.
-- Many `native/sidebar/*.ts` modules (for example `gxserver-client.ts`, `project-board-shared.ts`) are shared logic consumed by active surfaces.
+- `native/sidebar/project-board-shared.ts` and `native/sidebar/combined-sidebar-mode.ts` are shared logic consumed by those surfaces. Note that shared gxserver logic lives in `shared/` (for example `shared/gxserver-presentation-cache.ts`), and the web app has its own client at `ghostex-web/src/connections/gxserver-client.ts` — the old macOS `native/sidebar/gxserver-client.ts` is gone.
+- `native/sidebar/meo/` is the markdown editor behind the Docs surface, reached through `manage.tsx` -> `meo/editor.ts`. It has no VS Code webview entry any more.
 - `shared/` is shared contract/logic code used by gpui, web, mobile, and gxserver. It is active.
 - `sidebar/` is the shared React sidebar (`sidebar/sidebar-app.tsx`), mounted by gpui through `gpui/sidebar/main.tsx` and by the web app. It is active.
-- `native/sidebar/native-sidebar.tsx` is specifically the deprecated Swift app's host adapter. That one is not an active surface.
+- `src/` now contains only `src/assets/` (agent and editor icons) imported by `sidebar/brand-icons.tsx`. It has no Swift app left in it.
 
-When in doubt about a file under `native/`, check whether an active app imports it before deciding it is dead or before "fixing" it for the Swift app's benefit.
+When in doubt about a file under `native/`, check whether an active app imports it before deciding it is dead.
 
 ### Repository Search Routing
 
@@ -62,8 +65,8 @@ rg -n "pattern" gpui/src gpui/sidebar sidebar shared scripts gxserver-rs ghostex
 ```
 
 Add `native/sidebar` to that list only when the task is about the gpui-owned modal
-host, titlebar host, manage, or kanban surfaces, or about shared `native/sidebar/*.ts`
-logic. Do not add `native/` or `src/` when the task is new desktop-app work.
+host, titlebar host, manage, kanban, or Docs/`meo` surfaces, or about shared
+`native/sidebar/*.ts` logic.
 
 ### Don't write any tests at all except if explicitly asked to do so by the user
 

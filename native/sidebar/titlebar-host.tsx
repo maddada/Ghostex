@@ -502,8 +502,37 @@ type ResolvedOpenTarget =
       resolvedCommand?: string;
     };
 
+/*
+CDXC:TitlebarHostBootstrap 2026-08-20-12:40:
+The host bootstrap object used to be declared by the removed macOS
+`native-sidebar.tsx`. GPUI injects only `codeServerRuntime.port` into it (see
+`render_titlebar`'s bootstrap script in gpui/src/main.rs), so this host owns the
+declaration for the fields it reads. Keep it a type alias rather than an
+interface: `App` forwards the bootstrap to `createInitialProjectState`, which
+takes `Record<string, unknown>`.
+*/
+type TitlebarNativeBootstrap = {
+  bundleIdentifier?: string;
+  codeServerRuntime?: {
+    host?: string;
+    origin?: string;
+    ownerId?: string;
+    port?: number;
+    storageName?: string;
+  };
+  cwd?: string;
+  ghostexHomeDir?: string;
+  homeDir?: string;
+  sharedSidebarStorage?: {
+    settings?: string;
+  };
+  updateAvailable?: boolean;
+  workspaceName?: string;
+};
+
 declare global {
   interface Window {
+    __ghostex_NATIVE_HOST__?: TitlebarNativeBootstrap;
     __ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__?: boolean;
     __ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOAD_PROGRESS__?: number | null;
     __ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOADING__?: boolean;

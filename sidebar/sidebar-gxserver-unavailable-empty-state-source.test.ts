@@ -2,10 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
-const nativeSidebarSource = readFileSync(
-  new URL("../native/sidebar/native-sidebar.tsx", import.meta.url),
-  "utf8",
-);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -44,11 +40,6 @@ describe("gxserver unavailable sidebar empty state source", () => {
       "const referenceProjectsEmptyState = showGxserverUnavailableEmptyState",
       "const {",
     );
-    const nativePlaceholderSource = sourceBetween(
-      nativeSidebarSource,
-      "function createGxserverUnavailableSidebarGroups(): SidebarSessionGroup[] {",
-      "function buildSidebarMessage(): SidebarHydrateMessage {",
-    );
 
     expect(constantsSource).toContain(
       "const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;",
@@ -67,8 +58,5 @@ describe("gxserver unavailable sidebar empty state source", () => {
     expect(emptyStateSource).toContain(
       "Hover over the Projects label and click on the plus button to add your first project and get started!",
     );
-    expect(nativePlaceholderSource).toContain('title: "",');
-    expect(nativePlaceholderSource).not.toContain('"gxserver unavailable"');
-    expect(nativePlaceholderSource).not.toContain('"gxserver stopped"');
   });
 });

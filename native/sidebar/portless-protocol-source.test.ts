@@ -13,7 +13,6 @@ const sidebarContractSource = readFileSync(
   new URL("../../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
-const nativeSidebarSource = readFileSync(new URL("native-sidebar.tsx", import.meta.url), "utf8");
 const portlessRustSource = readFileSync(
   new URL("../../gxserver-rs/src/portless.rs", import.meta.url),
   "utf8",
@@ -135,24 +134,6 @@ describe("Portless Phase 12 protocol plumbing source contract", () => {
     expect(sidebarPortlessStateSource).not.toContain("stdout");
     expect(sidebarPortlessStateSource).not.toContain("stderr");
 
-    const nativeProjection = sourceBetween(
-      nativeSidebarSource,
-      "function createSidebarPortlessState(options",
-      "function buildSidebarMessage()",
-    );
-    expect(nativeProjection).toContain("createSidebarPortlessNativeAdminActions(health, nativeAdminAvailable)");
-    expect(nativeProjection).toContain("options.isLocalGxserver && isNativePortlessAdminBridgeAvailable()");
-    expect(nativeProjection).toContain("isNativePortlessAdminBridgeAvailable()");
-    expect(nativeProjection).toContain('"localMacOnly"');
-    expect(nativeProjection).toContain('"install"');
-    expect(nativeProjection).toContain('"reconfigure"');
-    expect(nativeProjection).toContain('"retry"');
-    expect(nativeProjection).toContain('"remove"');
-    expect(nativeProjection).toContain("health.setupOwnership === \"missing\"");
-    expect(nativeProjection).toContain("health.setupOwnership === \"ghostex\"");
-    expect(nativeSidebarSource).toContain("portless: createSidebarPortlessState({ isLocalGxserver: true })");
-    expect(nativeSidebarSource).toContain("lastPortlessAdminResult = hostEvent");
-
     expect(nativeHostProtocolSource).toContain("export type NativePortlessAdminResult = Extract<");
     const sharedNativeResult = sourceBetween(
       nativeHostProtocolSource,
@@ -194,33 +175,5 @@ describe("Portless Phase 12 protocol plumbing source contract", () => {
     expect(sharedStatusSource).not.toContain("stderr");
     expect(sharedStatusSource).not.toContain("command");
     expect(sharedStatusSource).not.toContain("env");
-
-    const nativeFailureUx = sourceBetween(
-      nativeSidebarSource,
-      "function syncPortlessSettings",
-      "function createSidebarPortlessState",
-    );
-    expect(nativeFailureUx).toContain("syncPortlessProtocolSetting(nextSettings.portlessProtocol)");
-    expect(nativeFailureUx).toContain("isPortlessServiceInstalledForProtocolReconfigure");
-    expect(nativeFailureUx).toContain('runTrackedPortlessAdminAction("reconfigure", { protocol })');
-    expect(nativeFailureUx).toContain('kind: "setProtocol"');
-    expect(nativeFailureUx).toContain('kind: "setEnabled"');
-    expect(nativeFailureUx).toContain("suppressPortlessSetupPromptForThisRun()");
-    expect(nativeFailureUx).not.toContain('runTrackedPortlessAdminAction("remove"');
-
-    const nativeAdminFlow = sourceBetween(
-      nativeSidebarSource,
-      "function recordPortlessAdminResultInGxserver",
-      "function buildSidebarMessage()",
-    );
-    expect(nativeAdminFlow).toContain('kind: "recordAdminResult"');
-    expect(nativeAdminFlow).toContain("ok: result.ok");
-    expect(nativeAdminFlow).toContain("action: result.action");
-    expect(nativeAdminFlow).toContain('message.action === "retry"');
-    expect(nativeAdminFlow).toContain('runTrackedPortlessAdminAction("remove"');
-    expect(nativeAdminFlow).toContain("portlessSetupPromptSuppressedUntilRestart = false");
-    expect(nativeAdminFlow).not.toContain("runProcess");
-    expect(nativeAdminFlow).not.toContain("stdout");
-    expect(nativeAdminFlow).not.toContain("stderr");
   });
 });

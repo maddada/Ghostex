@@ -8,7 +8,7 @@ import type {
   GxserverProjectDomainState,
   GxserverProjectId,
   GxserverSessionId,
-} from "../../shared/gxserver-protocol";
+} from "./gxserver-protocol";
 import {
   reduceGxserverPresentationDelta,
   reduceGxserverProjectCacheForPresentationDelta,

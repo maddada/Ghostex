@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const titlebarHostSource = readFileSync(new URL("./titlebar-host.tsx", import.meta.url), "utf8");
-const nativeSidebarSource = readFileSync(new URL("./native-sidebar.tsx", import.meta.url), "utf8");
 const sidebarGitSource = readFileSync(new URL("../../shared/sidebar-git.ts", import.meta.url), "utf8");
 
 describe("native titlebar Git source", () => {
@@ -151,9 +150,6 @@ describe("native titlebar Git source", () => {
     expect(titlebarHostSource).toMatch(
       /function titlebarGitRemoteSyncDisabledReason\(state: SidebarGitState\): string \| undefined \{[\s\S]*No remote commits to sync\./,
     );
-    expect(nativeSidebarSource).toMatch(
-      /if \(action === "syncRemote"\) \{\s*if \(!hasSidebarGitRemoteCommitDelta\(gitState\)\) \{/,
-    );
   });
 
   test("hydrates transient refresh state from cached Git metadata", () => {
@@ -210,18 +206,5 @@ describe("native titlebar Git source", () => {
     expect(titlebarHostSource).toContain('onRunGitAction("syncRemote")');
     expect(titlebarHostSource).not.toContain("titlebarGitSyncMainLabel");
     expect(titlebarHostSource).not.toContain(" / +");
-  });
-
-  test("runs remote sync through fast-forward pull and push", () => {
-    /*
-     * CDXC:TitlebarGit 2026-06-16-07:31:
-     * Clicking the titlebar sync row must pull from the upstream with
-     * fast-forward-only semantics, then push remaining ahead commits through the
-     * existing branch push helper.
-     */
-    expect(nativeSidebarSource).toContain('if (action === "syncRemote")');
-    expect(nativeSidebarSource).toContain('action: "pullFastForward"');
-    expect(nativeSidebarSource).toContain("await pushCurrentBranch();");
-    expect(nativeSidebarSource).toContain("async function syncCurrentBranchWithRemote()");
   });
 });
