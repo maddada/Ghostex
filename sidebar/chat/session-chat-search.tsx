@@ -1,12 +1,6 @@
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconSearch,
-  IconX,
-} from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconX } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { Button } from "../../components/ui/button";
 import {
   InputGroup,
   InputGroupAddon,
@@ -118,14 +112,30 @@ function centerMatch(root: HTMLElement, range: Range): void {
   });
 }
 
+/**
+ * How a host opens transcript search when it has no keyboard shortcut to give.
+ * The mobile app owns the entry point (its terminal header's overflow menu) and
+ * reaches this component through the registered `open` action, so the chat page
+ * carries no in-transcript search button of its own.
+ */
+export interface SessionChatHostSearchBridge {
+  register: (actions: { open: () => void }) => () => void;
+}
+
 export function SessionChatSearch({
+  hostBridge,
+  layout = "inline",
   rootRef,
   searchRevision,
-  showButton = false,
 }: {
+  hostBridge?: SessionChatHostSearchBridge;
+  /**
+   * "inline": the terminal-style row the desktop and web chats drop in above
+   * the transcript. "overlay": the floating card the touch hosts use.
+   */
+  layout?: "inline" | "overlay";
   rootRef: RefObject<HTMLDivElement | null>;
   searchRevision: unknown;
-  showButton?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -162,6 +172,8 @@ export function SessionChatSearch({
     window.addEventListener("keydown", handleShortcut, true);
     return () => window.removeEventListener("keydown", handleShortcut, true);
   }, []);
+
+  useEffect(() => hostBridge?.register({ open: () => setOpen(true) }), [hostBridge]);
 
   useEffect(() => {
     if (!open) {
@@ -242,18 +254,7 @@ export function SessionChatSearch({
   );
 
   if (!open) {
-    return showButton ? (
-      <Button
-        aria-label="Search conversation"
-        className="absolute right-3 top-3 z-30 shadow-sm"
-        onClick={() => setOpen(true)}
-        size="icon"
-        type="button"
-        variant="secondary"
-      >
-        <IconSearch aria-hidden="true" data-icon="inline-start" />
-      </Button>
-    ) : null;
+    return null;
   }
 
   const resultLabel = query.trim()
@@ -262,7 +263,7 @@ export function SessionChatSearch({
       : "No results"
     : "";
 
-  if (!showButton) {
+  if (layout === "inline") {
     const terminalResultLabel = query.trim()
       ? matches.length > 0
         ? `${activeIndex + 1}/${matches.length}`
@@ -340,9 +341,12 @@ export function SessionChatSearch({
         <InputGroupInput
           aria-label="Search conversation"
           autoFocus
+          // text-sm is the transcript's own body size (Bubble content); the
+          // input's shadcn default is a step larger on a phone-width viewport.
+          className="text-sm"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleInputKeyDown}
-          placeholder="Search conversation"
+          placeholder="Search..."
           ref={inputRef}
           value={query}
         />

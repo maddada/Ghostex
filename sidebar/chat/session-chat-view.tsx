@@ -29,7 +29,10 @@ import {
 } from "./session-chat-links";
 import { SessionChatInteractiveCard } from "./session-chat-interactive-card";
 import { SessionChatMessageList } from "./session-chat-message-list";
-import { SessionChatSearch } from "./session-chat-search";
+import {
+  SessionChatSearch,
+  type SessionChatHostSearchBridge,
+} from "./session-chat-search";
 import { SessionChatTerminalNoticeCard } from "./session-chat-terminal-notice-card";
 import {
   SessionChatSessionOptionPills,
@@ -66,7 +69,12 @@ const INTERACTIVE_TARGET_SELECTOR = [
   '[data-session-chat-typing-redirect-ignore="true"]',
 ].join(", ");
 
-export type { SessionChatHostAction, SessionChatHostActions, SessionChatHostLinks };
+export type {
+  SessionChatHostAction,
+  SessionChatHostActions,
+  SessionChatHostLinks,
+  SessionChatHostSearchBridge,
+};
 
 export interface SessionChatHostComposerActions {
   focus: () => void;
@@ -129,8 +137,10 @@ export interface SessionChatViewProps {
   theme?: SessionChatTheme;
   /** Reveal thinking-owned tool calls without requiring a click. */
   verboseMode?: boolean;
-  /** Show the touch-friendly search affordance used by the mobile host. */
-  showSearchButton?: boolean;
+  /** Presentation of the transcript search box (see SessionChatSearch). */
+  searchLayout?: "inline" | "overlay";
+  /** Lets a native host open transcript search from its own chrome. */
+  hostSearchBridge?: SessionChatHostSearchBridge;
   /**
    * Show the composer's per-session Verbose Mode pill. The mobile host hides
    * it: there, Verbose Mode is owned by the app's Settings screen.
@@ -302,9 +312,10 @@ export function SessionChatView({
   previewText,
   sendOnEnter = true,
   sessionKey,
+  hostSearchBridge,
+  searchLayout = "inline",
   showComposerAgentName = true,
   showNewSessionWelcomeTitle = true,
-  showSearchButton = false,
   showVerbosePill = true,
   theme = "dark",
   transport,
@@ -657,9 +668,10 @@ export function SessionChatView({
       <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
       <div className="relative flex min-h-0 flex-1 flex-col">
       <SessionChatSearch
+        {...(hostSearchBridge ? { hostBridge: hostSearchBridge } : {})}
+        layout={searchLayout}
         rootRef={chatRootRef}
         searchRevision={chat.messages}
-        showButton={showSearchButton}
       />
       <div className="relative flex min-h-0 flex-1 flex-col">
       {hostActions ? (

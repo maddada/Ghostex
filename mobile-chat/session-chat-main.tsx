@@ -17,6 +17,7 @@ import { GXSERVER_PROTOCOL_VERSION } from "../shared/gxserver-protocol";
 import {
   SessionChatView,
   type SessionChatHostComposerBridge,
+  type SessionChatHostSearchBridge,
 } from "../sidebar/chat/session-chat-view";
 import type { SessionChatTransport } from "../sidebar/chat/session-chat-transport";
 
@@ -52,6 +53,9 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
   window.ghostexMobileChatSetHostState({ working?, canSend? })
 - RN terminal-draft transfer (pushed when the user switches into chat and the
   agent CLI's composer held text): window.ghostexMobileChatInsertDraft(content)
+- RN transcript search (the phone's entry point is the terminal header's
+  overflow menu, not a button on this page):
+  window.ghostexMobileChatOpenSearch()
 */
 
 interface MobileChatConfig {
@@ -125,6 +129,7 @@ declare global {
     ghostexMobileChatSetPresentation?: (state: Partial<MobileChatPresentation>) => void;
     ghostexMobileChatSetHostState?: (state: Partial<MobileChatHostState>) => void;
     ghostexMobileChatInsertDraft?: (content: string) => void;
+    ghostexMobileChatOpenSearch?: () => void;
     __ghostexMobileChatConfig?: MobileChatConfig;
   }
 }
@@ -179,6 +184,38 @@ const mobileComposerBridge: SessionChatHostComposerBridge = {
     return () => {
       if (insertDraftIntoComposer === actions.insertPrompt) {
         insertDraftIntoComposer = null;
+      }
+    };
+  },
+};
+
+/*
+Transcript search is opened from the app's own chrome (the terminal header's
+⋯ menu), so the chat page shows no search button of its own. Same pending-box
+shape as the draft handoff above: a request that lands before the search box
+has registered opens it as soon as it mounts instead of being dropped.
+*/
+let openChatSearch: (() => void) | null = null;
+let pendingSearchOpen = false;
+
+window.ghostexMobileChatOpenSearch = () => {
+  if (openChatSearch === null) {
+    pendingSearchOpen = true;
+    return;
+  }
+  openChatSearch();
+};
+
+const mobileSearchBridge: SessionChatHostSearchBridge = {
+  register(actions) {
+    openChatSearch = actions.open;
+    if (pendingSearchOpen) {
+      pendingSearchOpen = false;
+      actions.open();
+    }
+    return () => {
+      if (openChatSearch === actions.open) {
+        openChatSearch = null;
       }
     };
   },
@@ -523,6 +560,7 @@ function MobileSessionChat({
         canSend={canSend}
         className="gpui-session-chat-view"
         hostComposerBridge={mobileComposerBridge}
+        hostSearchBridge={mobileSearchBridge}
         onSwitchToTerminalForAgentPicker={() => {
           void bridgeCall("switchToTerminalForAgentPicker");
         }}
@@ -530,7 +568,7 @@ function MobileSessionChat({
         sessionKey={sessionKey}
         showComposerAgentName={false}
         showNewSessionWelcomeTitle={false}
-        showSearchButton
+        searchLayout="overlay"
         showVerbosePill={false}
         theme={theme}
         transport={transport}
