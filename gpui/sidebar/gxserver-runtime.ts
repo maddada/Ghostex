@@ -4194,10 +4194,10 @@ class GpuiSidebarRuntime {
   ): Record<string, unknown> {
     /*
     macOS `openNativeBrowserPaneFromCli` parity for `ghostex browser open` /
-    `gx ln`. The renderer payload contributes only the URL-or-search text and
-    the fixed reuse selector; Rust re-normalizes the address and owns tab
-    reuse/creation. GPUI's Browser shell swaps with the active project, so the
-    reuse scope is the current project's Browser tabs.
+    `gx ln`. Resolve CLI project selectors against the live sidebar project
+    model, then forward only the validated project key; Rust re-normalizes the
+    address and owns project-model swapping plus tab reuse/creation. An
+    untargeted `--active-project` open keeps using the current Browser model.
     */
     const post = window.ghostexGpui?.postOpenBrowserUrl;
     if (typeof post !== "function") {
@@ -4209,7 +4209,19 @@ class GpuiSidebarRuntime {
     }
     const rawReuse = readGpuiRecordString(command.payload, "reuse")?.trim().toLowerCase();
     const reuse = rawReuse === "exact" || rawReuse === "none" ? rawReuse : "similar";
+    const groupId = readGpuiRecordString(command.payload, "groupId")?.trim();
+    const requestedProjectId = readGpuiRecordString(command.payload, "projectId")?.trim();
+    const projectPath = readGpuiRecordString(command.payload, "projectPath")?.trim();
+    const projectId = this.resolveEmbeddedBrowserRendererCommandProjectId({
+      groupId,
+      projectId: requestedProjectId,
+      projectPath,
+    });
+    if ((groupId || requestedProjectId || projectPath) && !projectId) {
+      throw new Error("No matching project was found.");
+    }
     const payload = JSON.stringify({
+      ...(projectId ? { projectId } : {}),
       reuse,
       type: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
       url,
@@ -4223,6 +4235,31 @@ class GpuiSidebarRuntime {
       action: command.action,
       ok: true,
     };
+  }
+
+  private resolveEmbeddedBrowserRendererCommandProjectId(scope: {
+    groupId?: string;
+    projectId?: string;
+    projectPath?: string;
+  }): string | undefined {
+    if (scope.groupId) {
+      const groupProjectId = this.resolveWorkspaceGroupProjectId(scope.groupId);
+      return groupProjectId
+        ? this.resolveEmbeddedBrowserKnownProjectId(groupProjectId)
+        : undefined;
+    }
+    if (scope.projectId) {
+      return this.resolveEmbeddedBrowserKnownProjectId(scope.projectId);
+    }
+    return this.resolveDomainProjectScope({ projectPath: scope.projectPath })?.projectId;
+  }
+
+  private resolveEmbeddedBrowserKnownProjectId(projectId: string): string | undefined {
+    const remoteScope = this.resolveRemotePresentationProjectScope({ projectId });
+    if (remoteScope) {
+      return createGpuiRemotePresentationProjectId(remoteScope.machineId, remoteScope.projectId);
+    }
+    return this.domainProjectById(projectId)?.projectId;
   }
 
   private resolveGxserverRendererCommandSession(
@@ -6699,7 +6736,7 @@ class GpuiSidebarRuntime {
         await this.requestPreviousSessions(message);
         return;
       case "searchPreviousSessionsByText":
-        await this.searchPreviousSessionsByText();
+        this.searchPreviousSessionsByText();
         return;
       case "restorePreviousSession":
         await this.restorePreviousSession(message.historyId);
@@ -7807,82 +7844,18 @@ class GpuiSidebarRuntime {
     }
   }
 
-  private async searchPreviousSessionsByText(): Promise<void> {
-    const projectId = this.activeProjectId;
-    if (!this.client || !projectId) {
-      this.postSidebarActionToast("info", "Search by Text needs an active project.");
-      return;
-    }
-    const response = await this.client
-      .rpc<GpuiGxserverCreatedSessionResult>("/api/createSession", {
-        kind: "terminal",
-        lifecycleState: "running",
-        projectId,
-        runtimeSettings: {
-          titleSource: "placeholder",
-        },
-        surface: "workspace",
-        title: "Search by Text",
-      })
-      .catch(() => undefined);
-    if (!response) {
-      this.postSidebarActionToast("error", "Search by Text failed", {
-        description: "gxserver could not create the search terminal.",
-      });
-      return;
-    }
-    const createdSessionId = normalizeNonEmptyString(response.session?.sessionId);
-    if (createdSessionId) {
-      const createdProjectId = normalizeNonEmptyString(response.session?.projectId) ?? projectId;
-      const started = await this.client
-        .rpc("/api/startSessionProvider", {
-          projectId: createdProjectId,
-          sessionId: createdSessionId,
-          startupText: gpuiWithAtuinIgnoredShellHistoryPrefix("gx f\r"),
-        })
-        .catch(() => undefined);
-      if (!started) {
-        this.postSidebarActionToast("error", "Search by Text failed", {
-          description: "gxserver could not start the search terminal.",
-        });
-        return;
-      }
-      this.focusLocalWorkspaceSession(createdProjectId, createdSessionId);
-    }
-  }
-
   /*
-  GPUI port of the macOS OS-integration sidebar router (`handleNativeCliCommand`
-  "createQuickTerminal" / "openPaths" in native-sidebar.tsx). Rust owns URL and
-  file parsing, the script Run/Edit/Cancel consent dialog, existence checks,
-  and git-root resolution; this handler only registers daemon projects and
-  creates/focuses sessions through existing reviewed paths. Payloads are
-  first-party fixed shapes from the Rust bridge (bounded action enum plus
-  path/command/title strings); unknown actions surface an honest toast instead
-  of dropping silently.
+  CDXC:AgentHistorySearch 2026-08-20:
+  Search by Text used to create a terminal and type `gx f` into it. The same
+  search is now a first-class surface, so this forwards the native Find action
+  and both entry points — the Previous Sessions search row and the command
+  palette — land on one implementation instead of two.
   */
-  private async handleGpuiOsIntegrationCommand(payload: unknown): Promise<void> {
-    const record =
-      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : undefined;
-    const action = normalizeNonEmptyString(record?.action);
-    if (!record || !action) {
-      return;
-    }
-    if (action === "createQuickTerminal") {
-      await this.createOsIntegrationTerminal({
-        command: normalizeNonEmptyString(record.command),
-        cwd: normalizeNonEmptyString(record.cwd),
-        title: normalizeNonEmptyString(record.title),
-      });
-      return;
-    }
-    if (action === "openProjectPaths") {
-      await this.openOsIntegrationProjectPaths(
-        Array.isArray(record.projects) ? record.projects : [],
-      );
-      return;
-    }
-    this.postSidebarActionToast("warning", "Unsupported OS integration action.");
+  private searchPreviousSessionsByText(): void {
+    this.postGhostexHotkeyAction({
+      actionId: "openFindPrompts",
+      type: "runGhostexHotkeyAction",
+    });
   }
 
   /*
@@ -20538,10 +20511,6 @@ function gpuiProjectNameFromPath(path: string): string {
   return path.split("/").filter(Boolean).at(-1) ?? "Project";
 }
 
-function gpuiWithAtuinIgnoredShellHistoryPrefix(text: string): string {
-  return text.startsWith(" ") ? text : ` ${text}`;
-}
-
 function gpuiDirname(path: string): string {
   const parts = path.replace(/\/+$/u, "").split("/").filter(Boolean);
   if (parts.length <= 1) {
@@ -21586,6 +21555,7 @@ function safeGpuiRendererCommandErrorMessage(error: unknown): string {
   }
   if (
     error.message === "Invalid renderer command title." ||
+    error.message === "No matching project was found." ||
     error.message === "No matching session was found." ||
     error.message === "Renderer command bridge unavailable." ||
     error.message === "Unsupported renderer command."
