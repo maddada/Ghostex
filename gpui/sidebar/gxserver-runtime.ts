@@ -18031,6 +18031,9 @@ function shouldAutoSleepGpuiPresentationAgentSession({
   if (gpuiAutoSleepSessionHasArmedDelayedSend(session)) {
     return false;
   }
+  if (gpuiAutoSleepSessionHasQueuedChatPrompts(session)) {
+    return false;
+  }
   if (session.isFavorite === true && settings.autoSleepFavoriteAgentSessions !== true) {
     return false;
   }
@@ -18061,6 +18064,31 @@ function gpuiAutoSleepSessionHasArmedDelayedSend(session: GxserverPresentationSe
     session.sendWhenAgentStopsActive === true ||
     session.sendWhenAllProjectSessionsStopActive === true
   );
+}
+
+function gpuiAutoSleepSessionHasQueuedChatPrompts(
+  session: GxserverPresentationSession,
+): boolean {
+  /*
+  CDXC:SessionChatPromptQueue 2026-08-21:
+  A session with Ghostex-owned chat prompts still waiting is not idle in the
+  sense Auto Sleep means: the daemon's queue scheduler is about to hand the
+  agent more work. Automatic sleeps decline here for the same reason they
+  decline for an armed Delayed Send. An explicit user Sleep never reaches this
+  path and stays untouched.
+
+  CDXC:SessionChatPromptQueue 2026-08-21-b:
+  `queuedPromptCount` now includes `failed` rows so the badge can show a stalled
+  queue, but a failed row is waiting on the USER, not on the agent — nothing is
+  about to be delivered because of it. Subtract them so this stays byte-for-byte
+  the same rule gxserver's own decline uses
+  (`session_has_pending_session_chat_queue`, `state <> 'failed'`); otherwise a
+  single failed row would keep a session awake forever.
+  */
+  const total = typeof session.queuedPromptCount === "number" ? session.queuedPromptCount : 0;
+  const failed =
+    typeof session.queuedPromptFailedCount === "number" ? session.queuedPromptFailedCount : 0;
+  return total - failed > 0;
 }
 
 function gpuiAutoSleepSessionHasAgentResumeReference(

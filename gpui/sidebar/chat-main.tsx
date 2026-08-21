@@ -4,13 +4,17 @@ import {
   isSessionChatEventType,
   normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
+  type GxserverQueueSessionChatPromptResult,
   type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverReadSessionChatSkillsResult,
   type GxserverSaveSessionChatAttachmentResult,
   type GxserverSaveSessionChatImageResult,
+  type GxserverSendSessionChatQueuedPromptResult,
   type GxserverSessionChatEvent,
+  type GxserverSessionChatQueueResult,
+  type GxserverSessionChatRemoveQueuedPromptResult,
   type SessionChatTheme,
 } from "../../shared/session-chat";
 import { GXSERVER_PROTOCOL_VERSION } from "../../shared/gxserver-protocol";
@@ -263,6 +267,70 @@ function createGpuiSessionChatTransport(
     // the bytes travel with the request and never touch the session's machine.
     saveImageAs(params) {
       return requestNativeImageSave(params.base64Data, params.suggestedName);
+    },
+    /*
+    CDXC:GPUISessionChatPromptQueue 2026-08-21:
+    Ghostex's prompt queue and the synced composer draft are plain gxserver
+    round trips on the same bootstrap as every other chat call, so a remote
+    session's queue rides the machine's own SSH tunnel exactly like its
+    transcript does — no bridge hop through Rust, which would only add a
+    second identity vocabulary for data the page can already reach.
+
+    These six are unconditional here: the daemon's `queue` field is the
+    capability probe the shared UI gates on, so a daemon that predates the
+    queue hides the controls without this host guessing at versions.
+    */
+    queuePrompt(params) {
+      return rpc<GxserverQueueSessionChatPromptResult>(
+        bootstrap,
+        "/api/queueSessionChatPrompt",
+        { projectId, sessionId, text: params.text },
+      );
+    },
+    updateQueuedPrompt(params) {
+      return rpc<GxserverSessionChatQueueResult>(
+        bootstrap,
+        "/api/updateSessionChatQueuedPrompt",
+        {
+          projectId,
+          promptId: params.promptId,
+          sessionId,
+          ...(params.text !== undefined ? { text: params.text } : {}),
+          ...(params.retry !== undefined ? { retry: params.retry } : {}),
+        },
+      );
+    },
+    removeQueuedPrompt(params) {
+      return rpc<GxserverSessionChatRemoveQueuedPromptResult>(
+        bootstrap,
+        "/api/removeSessionChatQueuedPrompt",
+        { projectId, promptId: params.promptId, sessionId },
+      );
+    },
+    reorderQueue(params) {
+      return rpc<GxserverSessionChatQueueResult>(bootstrap, "/api/reorderSessionChatQueue", {
+        projectId,
+        promptIds: params.promptIds,
+        sessionId,
+      });
+    },
+    sendQueuedPrompt(params) {
+      return rpc<GxserverSendSessionChatQueuedPromptResult>(
+        bootstrap,
+        "/api/sendSessionChatQueuedPrompt",
+        { projectId, promptId: params.promptId, sessionId },
+      );
+    },
+    // `clientId` is minted and persisted by the shared chat hook. Forward it
+    // verbatim: a per-call or per-mount id would make this client's own draft
+    // echo look like another device and pop the conflict bar for nothing.
+    async setDraft(params) {
+      await rpc(bootstrap, "/api/setSessionChatDraft", {
+        clientId: params.clientId,
+        content: params.content,
+        projectId,
+        sessionId,
+      });
     },
     subscribe({ currentLimit, onEvent }) {
       /*
