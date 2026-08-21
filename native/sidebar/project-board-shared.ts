@@ -193,6 +193,124 @@ function boardStatusNameToLabel(name: string): string {
     .join(" ");
 }
 
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Column management edits the same `status.custom` comma list that buildBoardColumns reads, so both directions share one parse.
+  An entry's optional `:<bd category>` suffix is bd's own concern: this module never sets one, and every write preserves whatever bd already put there, because dropping a category silently changes how bd treats that status.
+  Only entries that are not built-in lanes are manageable. The required entries (backlog, test, review) back real Ghostex lanes and are reconciled by ensureWorkflowStatuses, so offering them for rename or delete would just fight that reconciliation on the next load.
+*/
+export type BoardColumnConfigEntry = {
+  name: string;
+  suffix: string;
+};
+
+export function parseBoardColumnConfig(config: string): BoardColumnConfigEntry[] {
+  const entries: BoardColumnConfigEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of config.split(",")) {
+    const entry = raw.trim();
+    if (!entry) {
+      continue;
+    }
+    const separatorIndex = entry.indexOf(":");
+    const name = (separatorIndex === -1 ? entry : entry.slice(0, separatorIndex)).trim();
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    entries.push({ name, suffix: separatorIndex === -1 ? "" : entry.slice(separatorIndex) });
+  }
+  return entries;
+}
+
+export function serializeBoardColumnConfig(entries: ReadonlyArray<BoardColumnConfigEntry>): string {
+  return entries.map((entry) => `${entry.name}${entry.suffix}`).join(",");
+}
+
+export function isManagedBoardColumnName(name: string): boolean {
+  return !BUILTIN_BOARD_STATUS_NAMES.has(name);
+}
+
+export function managedBoardColumnNames(config: string): string[] {
+  return parseBoardColumnConfig(config)
+    .map((entry) => entry.name)
+    .filter(isManagedBoardColumnName);
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  The name rule matches what gxserver accepts for a status value, so a name that passes here can never be rejected later by the transport that has to carry it.
+*/
+export function boardColumnNameError(name: string, config: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "Enter a column name.";
+  }
+  if (trimmed.length > 64) {
+    return "Column names are limited to 64 characters.";
+  }
+  if (
+    !trimmed.split("").every((ch, index) =>
+      index === 0 ? /[A-Za-z]/u.test(ch) : /[A-Za-z0-9_-]/u.test(ch),
+    )
+  ) {
+    return "Use letters, numbers, hyphens and underscores, starting with a letter.";
+  }
+  if (!isManagedBoardColumnName(trimmed)) {
+    return `${boardStatusNameToLabel(trimmed)} is a built-in lane.`;
+  }
+  if (parseBoardColumnConfig(config).some((entry) => entry.name === trimmed)) {
+    return "That column already exists.";
+  }
+  return "";
+}
+
+export function addBoardColumn(config: string, name: string): string {
+  const entries = parseBoardColumnConfig(config);
+  entries.push({ name: name.trim(), suffix: "" });
+  return serializeBoardColumnConfig(entries);
+}
+
+export function renameBoardColumn(config: string, from: string, to: string): string {
+  return serializeBoardColumnConfig(
+    parseBoardColumnConfig(config).map((entry) =>
+      entry.name === from && isManagedBoardColumnName(entry.name)
+        ? { name: to.trim(), suffix: entry.suffix }
+        : entry,
+    ),
+  );
+}
+
+export function removeBoardColumn(config: string, name: string): string {
+  return serializeBoardColumnConfig(
+    parseBoardColumnConfig(config).filter(
+      (entry) => !(entry.name === name && isManagedBoardColumnName(entry.name)),
+    ),
+  );
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Reordering swaps a column with its neighbour among the managed entries only, then writes the whole list back in place.
+  Built-in entries keep their positions in the config because they are not part of the swap, which matters because the six built-in lanes always render first regardless of config order and moving them would change nothing on screen while still churning the stored value.
+*/
+export function moveBoardColumn(config: string, name: string, delta: -1 | 1): string {
+  const entries = parseBoardColumnConfig(config);
+  const managedIndexes = entries
+    .map((entry, index) => (isManagedBoardColumnName(entry.name) ? index : -1))
+    .filter((index) => index !== -1);
+  const position = managedIndexes.findIndex((index) => entries[index].name === name);
+  const target = position + delta;
+  if (position === -1 || target < 0 || target >= managedIndexes.length) {
+    return serializeBoardColumnConfig(entries);
+  }
+  const left = managedIndexes[position];
+  const right = managedIndexes[target];
+  const swapped = [...entries];
+  [swapped[left], swapped[right]] = [swapped[right], swapped[left]];
+  return serializeBoardColumnConfig(swapped);
+}
+
 export const PRIORITY_OPTIONS = [
   /*
     CDXC:ProjectBoard 2026-05-28-09:18:
