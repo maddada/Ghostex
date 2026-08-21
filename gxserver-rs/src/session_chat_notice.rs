@@ -67,6 +67,9 @@ pub const SESSION_CHAT_NOTICE_AGENT_EXITED: &str = "agentExited";
 pub const SESSION_CHAT_NOTICE_QUEUED_INPUT: &str = "queuedInput";
 /// The send watchdog could not prove a message reached the agent.
 pub const SESSION_CHAT_NOTICE_DELIVERY_FAILED: &str = "deliveryFailed";
+/// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
+/// ANSWER, not just point at. Its rows ride the notice as `choices`.
+pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatTerminalNoticeSeverity {
@@ -159,6 +162,37 @@ impl SessionChatTerminalNoticeAction {
     }
 }
 
+/*
+CDXC:SessionChatTerminalPicker 2026-08-21:
+Rows of an on-screen picker the chat surface can answer from here. A notice
+that carries them is not just "go look at your terminal": the client renders
+the same option rows the AskUserQuestion card uses and sends the pick back
+through answerSessionChatPrompt's `terminalChoice` lane, which re-reads the
+live screen and walks the highlight onto that row.
+
+`selected` is where the TUI highlight sits AT DETECTION TIME. It is shown as
+the TUI's own default, never used to compute keystrokes — the highlight can
+move (the user arrows around in the terminal) between a detection and an
+answer, so the answer path always re-derives it from a fresh capture.
+*/
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChatTerminalNoticeChoice {
+    /// 0-based row index, which is what an answer addresses.
+    pub index: usize,
+    pub label: String,
+    pub selected: bool,
+}
+
+impl SessionChatTerminalNoticeChoice {
+    fn to_value(&self) -> Value {
+        json!({
+            "index": self.index,
+            "label": self.label,
+            "selected": self.selected,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChatTerminalNotice {
     /// Open set: clients must render an unknown kind generically.
@@ -172,6 +206,9 @@ pub struct SessionChatTerminalNotice {
     /// RFC3339 millis; also the client's dismissal key.
     pub detected_at: String,
     pub actions: Vec<SessionChatTerminalNoticeAction>,
+    /// Answerable picker rows, in screen order. Empty for every notice that
+    /// only describes a state.
+    pub choices: Vec<SessionChatTerminalNoticeChoice>,
 }
 
 impl SessionChatTerminalNotice {
@@ -190,6 +227,7 @@ impl SessionChatTerminalNotice {
             source,
             detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             actions: Vec::new(),
+            choices: Vec::new(),
         }
     }
 
@@ -209,6 +247,16 @@ impl SessionChatTerminalNotice {
         self
     }
 
+    pub fn with_choices(mut self, choices: Vec<SessionChatTerminalNoticeChoice>) -> Self {
+        self.choices = choices;
+        self
+    }
+
+    /// True when this notice offers rows the chat surface can answer itself.
+    pub fn is_answerable(&self) -> bool {
+        !self.choices.is_empty()
+    }
+
     /// True when two detections say the SAME thing. `detectedAt` and the raw
     /// screen tail are ignored on purpose: a re-detect every probe must not
     /// emit a frame (and must not churn the long-poll fingerprint) while the
@@ -221,6 +269,10 @@ impl SessionChatTerminalNotice {
                 && self.detail == other.detail
                 && self.source == other.source
                 && self.actions == other.actions
+                // Labels only: the highlight moves whenever the user arrows
+                // around in the terminal, and re-minting `detectedAt` for that
+                // would resurrect a card they just dismissed.
+                && choice_labels(&self.choices) == choice_labels(&other.choices)
         })
     }
 
@@ -243,6 +295,13 @@ impl SessionChatTerminalNotice {
                 self.detected_at = previous.detected_at.clone();
             }
         }
+    }
+
+    /// True when a message delivered while this notice is showing would not
+    /// reach the model — see `session_chat_notice_kind_blocks_input`. This is
+    /// NOT `severity == Error`; the two axes disagree in both directions.
+    pub fn blocks_input(&self) -> bool {
+        session_chat_notice_kind_blocks_input(&self.kind)
     }
 
     /// Stable identity for the long-poll fingerprint: kind plus the human text.
@@ -269,6 +328,17 @@ impl SessionChatTerminalNotice {
         }
         map.insert("source".to_string(), json!(self.source.as_str()));
         map.insert("detectedAt".to_string(), json!(self.detected_at));
+        if !self.choices.is_empty() {
+            map.insert(
+                "choices".to_string(),
+                Value::Array(
+                    self.choices
+                        .iter()
+                        .map(SessionChatTerminalNoticeChoice::to_value)
+                        .collect(),
+                ),
+            );
+        }
         if !self.actions.is_empty() {
             map.insert(
                 "actions".to_string(),
@@ -282,6 +352,10 @@ impl SessionChatTerminalNotice {
         }
         Value::Object(map)
     }
+}
+
+fn choice_labels(choices: &[SessionChatTerminalNoticeChoice]) -> Vec<&str> {
+    choices.iter().map(|choice| choice.label.as_str()).collect()
 }
 
 /// Change test for a notice that can also disappear. Both absent ⇒ unchanged;
@@ -601,6 +675,23 @@ struct NoticeRule {
     severity: SessionChatTerminalNoticeSeverity,
     title: &'static str,
     detail: &'static str,
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    Severity and "blocks input" are DIFFERENT axes and must not be collapsed.
+    Severity says how alarming the card looks; this says whether a message
+    delivered while the state is up actually reaches the model. A trust dialog
+    is only a `Warning` — the user is one keypress from continuing — yet
+    anything typed into it is eaten as the ANSWER to it, which is worse for an
+    automated sender than a loud `Error` banner the composer still works
+    behind.
+
+    True ⇒ a message sent now does not reach the model: it is consumed by an
+    on-screen dialog, swallowed by a CLI that cannot talk to its provider, or
+    typed at a shell where the agent used to be. Anything that only makes a
+    turn *fail loudly* (a transient stream error the CLI retries) stays false:
+    holding there would stall the queue on a state that heals itself.
+    */
+    blocks_input: bool,
     /// Ordered newest-wording-first; the first match wins.
     signatures: &'static [NoticeSignature],
     actions: &'static [NoticeActionSpec],
@@ -617,6 +708,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Codex login expired",
         detail: "Codex needs a fresh login on this machine. Open the terminal and run /login — the sign-in flow is interactive, so it cannot be answered from chat.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -660,6 +752,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Codex is waiting for directory trust",
         detail: "Codex asks whether to trust this folder before it will run anything here. Nothing you send reaches the agent until it is answered.",
+        blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Dialog,
             parts: &[NoticePart::Text(
@@ -685,6 +778,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Codex is no longer running in this terminal",
         detail: "The codex process appears to have exited in this terminal. Messages sent from chat cannot reach it until it is started again.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Exit,
@@ -709,6 +803,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Codex reported a usage limit",
         detail: "Codex says it is out of quota, so new turns will fail until it resets.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -739,6 +834,12 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Codex hit a network or server error",
         detail: "Codex reported a transport failure on screen. The turn may need to be retried.",
+        // The only `false` in the catalog. The composer still accepts input and
+        // codex retries the transport itself, so a message sent now DOES reach
+        // the model once the connection comes back. Holding here would stall a
+        // queue on a state that heals without the user, which is the failure
+        // mode of over-widening this predicate.
+        blocks_input: false,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -800,6 +901,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Info,
         title: "Codex is showing an update prompt",
         detail: "An update dialog is on screen. It blocks the composer until it is answered.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
@@ -841,6 +943,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Claude Code login expired",
         detail: "Claude Code needs a fresh login on this machine — open the terminal and run /login.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -905,6 +1008,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code is waiting for folder trust",
         detail: "Claude Code is showing its workspace-trust dialog and accepts nothing until it is answered. Which option is focused differs between versions, so answer it in the terminal rather than blind-pressing Enter.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
@@ -936,6 +1040,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code is waiting on a permissions dialog",
         detail: "Claude Code is showing a settings/permissions dialog that blocks its composer. Answer it in the terminal.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
@@ -958,6 +1063,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Claude Code stopped with an error",
         detail: "Claude Code printed a fatal error in this terminal. Check it there before sending more messages.",
+        blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[
@@ -975,6 +1081,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code is waiting to continue",
         detail: "The usage limit has reset and Claude Code is waiting for a keypress before it resumes.",
+        blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[
@@ -1000,6 +1107,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code hit a usage limit",
         detail: "Claude Code reported a usage limit on screen.",
+        blocks_input: true,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -1051,6 +1159,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Info,
         title: "Claude Code is in first-run setup",
         detail: "Claude Code is showing a first-run setup screen, which blocks its composer until it is finished in the terminal.",
+        blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Dialog,
             parts: &[NoticePart::Text(
@@ -1067,6 +1176,53 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
+    }
+}
+
+/// Every catalog, for the kind-level queries below. Adding an agent's rules
+/// here is the only step needed to teach the predicate about it.
+const ALL_NOTICE_RULES: &[&[NoticeRule]] = &[CODEX_RULES, CLAUDE_RULES];
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+Whether a message delivered right now would actually reach the model, DERIVED
+from the catalog above rather than restated as a second list of kind strings
+that would drift the first time a rule is added. Automated senders — the chat
+prompt queue's scheduler is the first — must gate on this, never on severity:
+a `Warning` trust dialog eats what it is sent, while an `Error` stream banner
+does not.
+
+Kind-level rather than rule-level because the wire notice only carries its
+kind, and because two agents' rules for the same kind describe the same state.
+When they ever disagree, ANY blocking rule wins: holding costs a visible failed
+row the user can retry, delivering into a dialog costs the turn.
+
+The two watchdog-only kinds have no catalog rule and are answered here:
+  - `deliveryFailed` — the watchdog could not prove the LAST message arrived,
+    so the terminal has already demonstrated it is not accepting sends.
+  - `queuedInput` — the opposite: the CLI accepted the message and is holding
+    it client-side. Nothing is lost, so failing a row for it would be a false
+    alarm. The scheduler's own idle gate is what keeps it from piling on.
+An unknown kind is not blocking: it can only come from a newer peer, and this
+predicate runs on notices this daemon classified itself.
+*/
+pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
+    match kind {
+        SESSION_CHAT_NOTICE_DELIVERY_FAILED => true,
+        SESSION_CHAT_NOTICE_QUEUED_INPUT => false,
+        /*
+        CDXC:SessionChatTerminalPicker 2026-08-21: the resume-usage picker owns
+        the input line, and unlike the dialogs in the catalog it does not merely
+        swallow a message — its trailing Enter CONFIRMS a row. A send delivered
+        into it silently compacts the conversation the user was continuing, so
+        it blocks harder than anything else here. It has no catalog rule because
+        its rows are read off the screen rather than declared.
+        */
+        SESSION_CHAT_NOTICE_RESUME_PROMPT => true,
+        _ => ALL_NOTICE_RULES
+            .iter()
+            .flat_map(|rules| rules.iter())
+            .any(|rule| rule.kind == kind && rule.blocks_input),
     }
 }
 
@@ -1130,6 +1286,49 @@ fn notice_from_rule(
 }
 
 /*
+CDXC:SessionChatTerminalPicker 2026-08-21:
+The picker as a notice. `detail` is Claude's OWN prose (the session's age and
+token count, and its usage-limit recommendation) because that is the entire
+basis for the choice — restating it in our words would drop the numbers the
+user decides on. The switch-to-terminal action stays as the escape hatch for a
+row this build cannot drive.
+*/
+fn notice_from_picker(
+    screen: &NoticeScreen,
+    picker: crate::session_chat_resume_prompt::SessionChatTerminalPicker,
+) -> SessionChatTerminalNotice {
+    const PICKER_GUIDANCE: &str =
+        "Claude Code accepts no input until this is answered — pick an option to answer it here.";
+    let detail = match picker.detail.as_deref() {
+        Some(prose) => format!("{prose} {PICKER_GUIDANCE}"),
+        None => PICKER_GUIDANCE.to_string(),
+    };
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_RESUME_PROMPT,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        "Claude Code is asking how to resume this session",
+    )
+    .with_detail(detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_choices(
+        picker
+            .rows
+            .into_iter()
+            .enumerate()
+            .map(|(index, row)| SessionChatTerminalNoticeChoice {
+                index,
+                label: row.label,
+                selected: row.selected,
+            })
+            .collect(),
+    )
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
+/*
 CDXC:SessionChatTerminalNotices 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
 precedence order (login > trust > permissions > exited > usage > stream >
@@ -1146,6 +1345,20 @@ pub fn classify_session_chat_terminal_notice(
     let screen = NoticeScreen::new(screen_text);
     if screen.folded.is_empty() {
         return None;
+    }
+    /*
+    CDXC:SessionChatTerminalPicker 2026-08-21:
+    The resume-usage picker outranks the whole catalog below it. Every rule
+    there can only say "answer this in your terminal"; this one carries the
+    rows, so the user answers it from the chat surface they are already on.
+    Claude Code is the only CLI that paints it.
+    */
+    if agent == SessionChatOptionAgent::Claude {
+        if let Some(picker) =
+            crate::session_chat_resume_prompt::detect_session_chat_terminal_picker(screen_text)
+        {
+            return Some(notice_from_picker(&screen, picker));
+        }
     }
     for rule in notice_rules(agent) {
         if let Some(signature) = rule
@@ -1296,13 +1509,32 @@ pub fn retire_session_chat_watchdog_notice_on_clean_screen(
     (stored.stored_at.elapsed() < WATCHDOG_NOTICE_MAX_AGE).then_some(stored.notice)
 }
 
-/// A watchdog notice always wins: it is both fresher and more specific than
-/// whatever the screen classifier read at the same moment.
+/*
+A watchdog notice normally wins: it is both fresher and more specific than
+whatever the screen classifier read at the same moment.
+
+CDXC:SessionChatTerminalPicker 2026-08-21: an ANSWERABLE screen notice is the
+one exception, and it is not a close call. A watchdog notice reports a PAST
+event ("your message could not be proven delivered") and its only advice is to
+go look at the terminal; an answerable picker is the LIVE state that most
+likely caused that event, and it can be resolved from the chat surface in one
+click. Letting the past-event card mask it left the user staring at a
+delivery-failed banner with the picker sitting unanswered on screen — the exact
+dead end this feature exists to remove. `deliveryFailed` in particular is
+exempt from clean-screen retirement, so it would have masked the picker for its
+full 10-minute lifetime.
+*/
 pub fn merge_session_chat_terminal_notices(
     watchdog: Option<SessionChatTerminalNotice>,
     screen: Option<SessionChatTerminalNotice>,
 ) -> Option<SessionChatTerminalNotice> {
-    watchdog.or(screen)
+    if let Some(screen) = screen {
+        if screen.is_answerable() {
+            return Some(screen);
+        }
+        return watchdog.or(Some(screen));
+    }
+    watchdog
 }
 
 /// Store lookup + merge, for the read/frame paths that only hold a screen

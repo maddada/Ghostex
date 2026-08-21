@@ -16,6 +16,18 @@ Dismissal is local and per-detection: hiding a notice remembers `kind` +
 `detectedAt`, so the same detection stays hidden while a NEW one (a fresh
 `detectedAt`) shows again. The server keeps re-sending an unresolved notice, so
 a dismissal is a "I know, hide it" — never a resolution.
+
+CDXC:SessionChatTerminalPicker 2026-08-21:
+A notice that carries `choices` is not just news, it is an ANSWERABLE picker the
+agent CLI painted on screen (Claude Code's resume-usage chooser). Those rows
+render with the same component the AskUserQuestion card uses, and the pick goes
+back through answerSessionChatPrompt's `terminalChoice` lane — which re-reads
+the live screen, so the row the user sees marked as the CLI's default here is
+never what drives the keystrokes.
+
+A picker is not dismissable: hiding it would leave the composer disabled with
+nothing on screen explaining why, since the CLI accepts no input until it is
+answered. "Open terminal" stays as the escape hatch.
 */
 
 import {
@@ -25,14 +37,18 @@ import {
   IconTerminal2,
   IconX,
 } from "@tabler/icons-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SessionChatTerminalNotice } from "../../shared/session-chat";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
+import { SessionChatChoiceRows } from "./session-chat-choice-rows";
 
 const SEND_FAILED_NOTICE =
   "Couldn't deliver those keys — switch to Terminal View to act there.";
 const READ_ONLY_HINT = "Input is held by another device.";
+const CHOICE_FAILED_NOTICE =
+  "Couldn't answer that picker — it may have been answered in the terminal already.";
+const CHOICE_DEFAULT_BADGE = "Selected in terminal";
 
 export function sessionChatTerminalNoticeDismissKey(
   notice: SessionChatTerminalNotice | null,
@@ -49,8 +65,21 @@ export interface SessionChatTerminalNoticeCardProps {
    * approval lane — the same path the interactive card's Allow/Deny uses.
    */
   onSendKeys: (send: string) => Promise<void>;
+  /**
+   * Answers an on-screen picker by row index. Rejects when the picker has left
+   * the screen, which the card reports rather than swallowing: the alternative
+   * is a card that looks answered while the CLI still waits.
+   */
+  onAnswerChoice?: (choiceIndex: number) => Promise<void>;
   /** Host switch-back; `switchToTerminal` actions hide when the host has none. */
   onSwitchToTerminal?: () => void;
+  /**
+   * Reports whether this card is on screen. The parent stacks the card above
+   * the composer and needs to know it is there — the new-session welcome is a
+   * centered overlay that would otherwise paint straight through it — and the
+   * per-detection dismissal that decides it lives only in here.
+   */
+  onVisibleChange?: (visible: boolean) => void;
 }
 
 /** An action this build knows how to run, with its payload already proven. */
@@ -108,13 +137,17 @@ function NoticeShell({
 export function SessionChatTerminalNoticeCard({
   canSend,
   notice,
+  onAnswerChoice,
   onSendKeys,
   onSwitchToTerminal,
+  onVisibleChange,
 }: SessionChatTerminalNoticeCardProps) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [tailOpen, setTailOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
+  const [choiceFailed, setChoiceFailed] = useState(false);
+  const [pickedChoice, setPickedChoice] = useState<number | null>(null);
   const sendingRef = useRef(false);
 
   const noticeKey = sessionChatTerminalNoticeDismissKey(notice);
@@ -126,12 +159,27 @@ export function SessionChatTerminalNoticeCard({
     sendingRef.current = false;
     setSending(false);
     setSendFailed(false);
+    setChoiceFailed(false);
+    setPickedChoice(null);
     setTailOpen(false);
   }, [noticeKey]);
 
-  if (!notice || noticeKey === null || noticeKey === dismissedKey) {
+  const visible = notice !== null && noticeKey !== null && noticeKey !== dismissedKey;
+
+  useEffect(() => {
+    onVisibleChange?.(visible);
+    return () => onVisibleChange?.(false);
+  }, [onVisibleChange, visible]);
+
+  if (!visible || !notice) {
     return null;
   }
+
+  // A picker the daemon proved is answerable from here. Rows without labels are
+  // dropped: an unlabelled row is a keystroke with no name, which is exactly
+  // the blind confirm this feature exists to stop.
+  const choices = (notice.choices ?? []).filter((choice) => choice.label.trim().length > 0);
+  const answerable = choices.length > 0 && onAnswerChoice !== undefined;
 
   // Actions are normalized here so the render below never has to re-prove that
   // a `sendKeys` action carries bytes. An action kind this build does not know
@@ -175,6 +223,28 @@ export function SessionChatTerminalNoticeCard({
       });
   };
 
+  const answerChoice = (choiceIndex: number): void => {
+    if (sendingRef.current || !canSend || !onAnswerChoice) {
+      return;
+    }
+    sendingRef.current = true;
+    setSending(true);
+    setChoiceFailed(false);
+    setPickedChoice(choiceIndex);
+    void onAnswerChoice(choiceIndex)
+      .catch(() => {
+        // The picker was gone (answered in the terminal, or already dismissed
+        // by the CLI): keep the card and say so rather than leaving a row that
+        // reads as confirmed.
+        setChoiceFailed(true);
+        setPickedChoice(null);
+      })
+      .finally(() => {
+        sendingRef.current = false;
+        setSending(false);
+      });
+  };
+
   const SeverityIcon = notice.severity === "info" ? IconInfoCircle : IconAlertTriangle;
 
   return (
@@ -191,6 +261,28 @@ export function SessionChatTerminalNoticeCard({
             <p className="mt-1 text-xs leading-snug text-muted-foreground">
               {notice.detail}
             </p>
+          ) : null}
+          {answerable ? (
+            <div className="mt-3">
+              <SessionChatChoiceRows
+                onSelect={answerChoice}
+                options={choices.map((choice) => ({
+                  label: choice.label,
+                  ...(choice.selected ? { badge: CHOICE_DEFAULT_BADGE } : {}),
+                }))}
+                // A pick stays locked in until the notice itself clears (the
+                // daemon re-reads the screen a couple of seconds after the
+                // keystrokes land). Re-enabling the rows in that gap would let
+                // a second answer arrive at a picker that is already gone.
+                readOnly={!canSend || sending || pickedChoice !== null}
+                selected={pickedChoice === null ? [] : [pickedChoice]}
+              />
+              {!canSend ? (
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                  {READ_ONLY_HINT}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {notice.screenTail ? (
             <div className="mt-2">
@@ -226,6 +318,11 @@ export function SessionChatTerminalNoticeCard({
               {SEND_FAILED_NOTICE}
             </p>
           ) : null}
+          {choiceFailed ? (
+            <p className="mt-2 text-[11px] leading-snug text-destructive/80">
+              {CHOICE_FAILED_NOTICE}
+            </p>
+          ) : null}
           {actions.length > 0 ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {actions.map((action) =>
@@ -255,14 +352,16 @@ export function SessionChatTerminalNoticeCard({
             </div>
           ) : null}
         </div>
-        <Button
-          aria-label="Dismiss"
-          onClick={() => setDismissedKey(noticeKey)}
-          size="icon-xs"
-          variant="ghost"
-        >
-          <IconX aria-hidden="true" stroke={2} />
-        </Button>
+        {answerable ? null : (
+          <Button
+            aria-label="Dismiss"
+            onClick={() => setDismissedKey(noticeKey)}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <IconX aria-hidden="true" stroke={2} />
+          </Button>
+        )}
       </div>
     </NoticeShell>
   );

@@ -58,16 +58,12 @@ pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear tow
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
 /*
-Resume-picker answering (see session_chat_resume_prompt). One arrow press per
+Terminal-picker answering (see session_chat_resume_prompt). One arrow press per
 row, then a settle before Enter so the TUI has repainted the new highlight —
 the same measured discipline the message body uses for its own delayed Enter.
-After confirming, the send waits for the picker to leave the screen so the
-message is typed into the restored composer instead of into a loading frame.
 */
-const SESSION_CHAT_RESUME_PROMPT_ROW_STEP_MS: u64 = 150;
-const SESSION_CHAT_RESUME_PROMPT_CONFIRM_DELAY_MS: u64 = 300;
-const SESSION_CHAT_RESUME_PROMPT_SETTLE_POLL_MS: u64 = 500;
-const SESSION_CHAT_RESUME_PROMPT_SETTLE_POLLS: usize = 12;
+const SESSION_CHAT_PICKER_ROW_STEP_MS: u64 = 150;
+const SESSION_CHAT_PICKER_CONFIRM_DELAY_MS: u64 = 300;
 const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
@@ -368,13 +364,6 @@ pub enum SessionChatSendStep {
     PreserveTerminalDraft {
         state_dir: PathBuf,
     },
-    /*
-    Answer Claude Code's resume-usage picker before the message takes the
-    input line. A no-op unless the picker is actually on screen: the chat
-    surface is already showing the session the user resumed, so the only
-    answer it ever wants is "Resume full session as-is".
-    */
-    ResolveResumePrompt,
     /// One `zmx send` stdin burst.
     Write(String),
     SleepMs(u64),
@@ -425,6 +414,38 @@ pub fn build_session_chat_key_steps(key: &str) -> Option<Vec<SessionChatSendStep
         _ => return None,
     };
     Some(vec![SessionChatSendStep::Write(payload.to_string())])
+}
+
+/*
+CDXC:SessionChatTerminalPicker 2026-08-21:
+Answering an on-screen picker (Claude Code's resume-usage chooser today): walk
+the highlight `row_moves` rows — positive means Down — then confirm. The move
+count is derived by the caller from a capture taken at ANSWER time, never from
+the detection that painted the card, because the user can arrow the highlight
+around in the terminal in between.
+
+No clear burst and no bracketed paste: these are keystrokes for a dialog that
+owns the input line, not text for a composer.
+*/
+pub fn build_terminal_picker_answer_steps(row_moves: i32) -> Vec<SessionChatSendStep> {
+    let (row_key, presses) = if row_moves >= 0 {
+        (ASK_NEXT_ROW, row_moves as usize)
+    } else {
+        (ASK_PREVIOUS_ROW, row_moves.unsigned_abs() as usize)
+    };
+    let mut steps = Vec::with_capacity(presses * 2 + 2);
+    for _ in 0..presses {
+        steps.push(SessionChatSendStep::Write(row_key.to_string()));
+        // Every press trails its own settle, the last one included: the pause
+        // before Enter is therefore row-step + confirm-delay, which is the
+        // cadence this picker was measured against.
+        steps.push(SessionChatSendStep::SleepMs(SESSION_CHAT_PICKER_ROW_STEP_MS));
+    }
+    steps.push(SessionChatSendStep::SleepMs(
+        SESSION_CHAT_PICKER_CONFIRM_DELAY_MS,
+    ));
+    steps.push(SessionChatSendStep::Write(ASK_ENTER.to_string()));
+    steps
 }
 
 /// Keystroke groups written 1000ms apart; raw groups go verbatim, text groups
@@ -660,17 +681,6 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
-                SessionChatSendStep::ResolveResumePrompt => {
-                    resolve_resume_prompt(
-                        &project_id,
-                        &session_id,
-                        &zmx_name,
-                        source,
-                        &generation,
-                        job_generation,
-                    )
-                    .await;
-                }
                 SessionChatSendStep::Write(payload) => {
                     if let Err(error) = write_session_chat_payload(
                         &project_id,
@@ -738,78 +748,6 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
     .ok()?
     .ok()?;
     (!capture.truncated).then_some(capture.text)
-}
-
-/*
-Answers the resume-usage picker when it is live: walk the highlight onto
-"Resume full session as-is" (the row count comes from the captured screen, it
-is never assumed) and confirm. Best effort throughout — a terminal that cannot
-be read, or a picker that outlives the settle budget, leaves the caller with
-exactly today's behaviour instead of failing the user's message.
-*/
-async fn resolve_resume_prompt(
-    project_id: &str,
-    session_id: &str,
-    zmx_name: &str,
-    source: &'static str,
-    generation: &AtomicU64,
-    job_generation: u64,
-) {
-    let Some(text) = capture_session_terminal_text(zmx_name).await else {
-        return;
-    };
-    let Some(plan) = crate::session_chat_resume_prompt::detect_resume_full_session_prompt(&text)
-    else {
-        return;
-    };
-    let (row_key, presses) = if plan.row_moves >= 0 {
-        (ASK_NEXT_ROW, plan.row_moves as usize)
-    } else {
-        (ASK_PREVIOUS_ROW, plan.row_moves.unsigned_abs() as usize)
-    };
-    for _ in 0..presses {
-        if job_generation != generation.load(Ordering::SeqCst) {
-            return;
-        }
-        if write_session_chat_payload(project_id, session_id, zmx_name, source, row_key)
-            .await
-            .is_err()
-        {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(
-            SESSION_CHAT_RESUME_PROMPT_ROW_STEP_MS,
-        ))
-        .await;
-    }
-    tokio::time::sleep(Duration::from_millis(
-        SESSION_CHAT_RESUME_PROMPT_CONFIRM_DELAY_MS,
-    ))
-    .await;
-    if job_generation != generation.load(Ordering::SeqCst) {
-        return;
-    }
-    if write_session_chat_payload(project_id, session_id, zmx_name, source, ASK_ENTER)
-        .await
-        .is_err()
-    {
-        return;
-    }
-    for _ in 0..SESSION_CHAT_RESUME_PROMPT_SETTLE_POLLS {
-        tokio::time::sleep(Duration::from_millis(
-            SESSION_CHAT_RESUME_PROMPT_SETTLE_POLL_MS,
-        ))
-        .await;
-        if job_generation != generation.load(Ordering::SeqCst) {
-            return;
-        }
-        let Some(text) = capture_session_terminal_text(zmx_name).await else {
-            return;
-        };
-        if crate::session_chat_resume_prompt::detect_resume_full_session_prompt(&text).is_none() {
-            return;
-        }
-    }
 }
 
 fn prompt_stash_request_path(state_dir: &Path, project_id: &str, session_id: &str) -> PathBuf {

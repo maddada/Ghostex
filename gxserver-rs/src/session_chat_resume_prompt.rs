@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatResumePrompt 2026-08-18:
+CDXC:SessionChatResumePrompt 2026-08-18 (picker rewrite 2026-08-21):
 Claude Code's resume-usage chooser. When a session is resumed after it has
 grown old/large, the CLI paints a blocking picker before it will accept any
 input:
@@ -16,13 +16,20 @@ input:
     Enter to confirm · Esc to cancel
 
 Session Chat sends are pty writes, so a chat message typed while that picker
-owns the input line is read as picker keystrokes and the message is lost. The
-chat surface always wants the session it is already showing, so the send path
-answers the picker with "Resume full session as-is" first.
+owns the input line is read as picker keystrokes: the body is swallowed and the
+trailing Enter confirms whatever row happens to be highlighted — the summary
+row, which silently compacts the conversation the user was about to continue.
+
+Which row the user wants is NOT ours to decide (summary vs full session is a
+usage-limit trade-off only they can make), so this module no longer answers the
+picker. It DESCRIBES it: the prose above the rows, every row in screen order,
+and which row the TUI highlights right now. `session_chat_notice.rs` turns that
+into the input-blocking `resumePrompt` terminal notice the chat surfaces render
+as an answer picker, and `answerSessionChatPrompt`'s `terminalChoice` lane
+walks the highlight onto the row the user picked.
 
 Detection lives here (server side) so every chat client — gpui, ghostex-web
-and the RN mobile app — inherits it from one implementation; they all send
-through /api/sendSessionChatMessage.
+and the RN mobile app — inherits it from one implementation.
 
 Matching is deliberately narrow: the picker only counts when a run of
 consecutive numbered rows carries BOTH canonical labels, one of those rows is
@@ -45,6 +52,14 @@ const SESSION_CHAT_RESUME_PROMPT_SCAN_LINES: usize = 25;
 /// answered, and that one is followed by the resumed conversation.
 const SESSION_CHAT_RESUME_PROMPT_FOOTER_TAIL_LINES: usize = 3;
 
+/// Prose lines above the rows that describe the choice ("This session is 2h 44m
+/// old…", "Resuming the full session will consume…"). Claude wraps them, so
+/// this counts SCREEN lines, not sentences.
+const SESSION_CHAT_RESUME_PROMPT_PROSE_LINES: usize = 6;
+
+/// Cap on the joined prose, which becomes the notice's `detail`.
+const SESSION_CHAT_RESUME_PROMPT_PROSE_MAX_CHARS: usize = 400;
+
 /// Row-marker glyphs Claude/Codex-style pickers use for the highlighted row.
 const SELECTION_MARKERS: &[char] = &['\u{276f}', '\u{203a}', '\u{25b6}', '\u{2192}', '>'];
 
@@ -52,13 +67,37 @@ const RESUME_FULL_SESSION_LABEL: &str = "Resume full session";
 const RESUME_FROM_SUMMARY_LABEL: &str = "Resume from summary";
 const CONFIRM_FOOTER: &str = "Enter to confirm";
 
-/// What the send path has to type to land on "Resume full session as-is".
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SessionChatResumePromptPlan {
-    /// Rows to travel from the highlighted row to the full-session row.
-    /// Positive means Down presses, negative means Up presses, 0 means the
-    /// row is already highlighted and only Enter is needed.
-    pub row_moves: i32,
+/// Notice kind the picker publishes itself as.
+pub const SESSION_CHAT_RESUME_PROMPT_KIND: &str = "resumePrompt";
+
+/// One row of an on-screen picker, in the order it is painted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChatTerminalPickerRow {
+    pub label: String,
+    /// True for the row the TUI highlights right now (the one a bare Enter
+    /// would confirm).
+    pub selected: bool,
+}
+
+/// A live, answerable picker: what it asks, what it offers, and where the
+/// highlight sits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionChatTerminalPicker {
+    /// Prose painted above the rows, joined and capped. `None` when the picker
+    /// stands alone.
+    pub detail: Option<String>,
+    pub rows: Vec<SessionChatTerminalPickerRow>,
+    /// Index into `rows` of the highlighted row.
+    pub selected_index: usize,
+}
+
+impl SessionChatTerminalPicker {
+    /// Rows to travel from the highlighted row to `target`: positive means Down
+    /// presses, negative means Up, 0 means Enter alone. `None` when `target` is
+    /// not a row this picker painted, so an answer can never be guessed at.
+    pub fn row_moves_to(&self, target: usize) -> Option<i32> {
+        (target < self.rows.len()).then(|| target as i32 - self.selected_index as i32)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -156,26 +195,64 @@ fn picker_runs(window: &[String]) -> Vec<Vec<PickerRow>> {
     runs
 }
 
-/// `Some` only when the resume-usage picker is live on screen and the
-/// full-session row can be reached deterministically.
-pub fn detect_resume_full_session_prompt(text: &str) -> Option<SessionChatResumePromptPlan> {
+/// True for a line that is pure box/rule chrome, which carries no prose.
+fn is_chrome_line(line: &str) -> bool {
+    let content = strip_box_border(line);
+    content.is_empty() || !content.chars().any(char::is_alphanumeric)
+}
+
+/// The prose Claude painted directly above the rows, oldest first, joined into
+/// one paragraph. Stops at chrome or at another picker row so a previous
+/// picker's rows can never be read as this one's description.
+fn prose_above(window: &[String], first_row_line: usize) -> Option<String> {
+    let mut collected: Vec<&str> = Vec::new();
+    for line in window[..first_row_line].iter().rev() {
+        if collected.len() >= SESSION_CHAT_RESUME_PROMPT_PROSE_LINES {
+            break;
+        }
+        if is_chrome_line(line) || parse_picker_row(line).is_some() {
+            break;
+        }
+        collected.push(strip_box_border(line));
+    }
+    collected.reverse();
+    let prose = collected.join(" ").trim().to_string();
+    if prose.is_empty() {
+        return None;
+    }
+    let capped = if prose.chars().count() > SESSION_CHAT_RESUME_PROMPT_PROSE_MAX_CHARS {
+        let head: String = prose
+            .chars()
+            .take(SESSION_CHAT_RESUME_PROMPT_PROSE_MAX_CHARS)
+            .collect();
+        format!("{}…", head.trim_end())
+    } else {
+        prose
+    };
+    Some(capped)
+}
+
+/// `Some` only when the resume-usage picker is live on screen and its highlight
+/// is proven, so every row is reachable with a derived key count.
+pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerminalPicker> {
     let window = scan_window(text);
     for run in picker_runs(&window).into_iter().rev() {
-        let Some(full_session) = run
+        if !run
             .iter()
-            .position(|row| row.label.starts_with(RESUME_FULL_SESSION_LABEL))
-        else {
+            .any(|row| row.label.starts_with(RESUME_FULL_SESSION_LABEL))
+        {
             continue;
-        };
+        }
         if !run
             .iter()
             .any(|row| row.label.starts_with(RESUME_FROM_SUMMARY_LABEL))
         {
             continue;
         }
-        let Some(selected) = run.iter().position(|row| row.selected) else {
+        let Some(selected_index) = run.iter().position(|row| row.selected) else {
             continue; // no highlight proven ⇒ no derivable key count
         };
+        let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
         let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
         let confirmed = window
             .iter()
@@ -188,8 +265,16 @@ pub fn detect_resume_full_session_prompt(text: &str) -> Option<SessionChatResume
         if !confirmed {
             continue; // an answered picker left in scrollback, not a live one
         }
-        return Some(SessionChatResumePromptPlan {
-            row_moves: full_session as i32 - selected as i32,
+        return Some(SessionChatTerminalPicker {
+            detail: prose_above(&window, first_row_line),
+            rows: run
+                .into_iter()
+                .map(|row| SessionChatTerminalPickerRow {
+                    label: row.label,
+                    selected: row.selected,
+                })
+                .collect(),
+            selected_index,
         });
     }
     None

@@ -21,7 +21,6 @@
 
 import {
   IconArrowLeft,
-  IconCheck,
   IconChevronDown,
   IconTerminal2,
   IconX,
@@ -34,6 +33,7 @@ import type {
 } from "../../shared/session-chat";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
+import { SessionChatChoiceRows } from "./session-chat-choice-rows";
 
 export function sessionChatCardDismissKey(
   prompt: SessionChatInteractivePrompt | null,
@@ -62,6 +62,12 @@ export interface SessionChatInteractiveCardProps {
   onInterrupt: () => void;
   /** The question card replaces the composer while showing. */
   onShowingQuestionChange?: (showing: boolean) => void;
+  /**
+   * Reports whether the card is on screen at all — question, approval or plan.
+   * The parent needs that to keep the new-session welcome, a centered overlay
+   * over the same column, from painting through the card.
+   */
+  onShowingChange?: (showing: boolean) => void;
   /** Host switch-back, offered by the read-only and delivery-failed notices. */
   onSwitchToTerminal?: () => void;
 }
@@ -224,6 +230,7 @@ export function SessionChatInteractiveCard({
   canSend,
   onAnswer,
   onInterrupt,
+  onShowingChange,
   onShowingQuestionChange,
   onSwitchToTerminal,
   prompt,
@@ -271,6 +278,11 @@ export function SessionChatInteractiveCard({
   useEffect(() => {
     onShowingQuestionChange?.(showingQuestion === true);
   }, [onShowingQuestionChange, showingQuestion]);
+
+  useEffect(() => {
+    onShowingChange?.(showing);
+    return () => onShowingChange?.(false);
+  }, [onShowingChange, showing]);
 
   const toggleOption = useCallback(
     (optionIndex: number): void => {
@@ -495,52 +507,14 @@ export function SessionChatInteractiveCard({
             {question.multiSelect ? (
               <p className="mt-1 text-xs text-muted-foreground">Select one or more options.</p>
             ) : null}
-            <div className="mt-3 max-h-[45vh] space-y-1.5 overflow-y-auto">
-              {question.options.map((option, optionIndex) => {
-                const selected =
-                  !customAnswerActive && draft.indices.includes(optionIndex);
-                const shortcutKey = optionIndex < 9 ? optionIndex + 1 : null;
-                return (
-                  <button
-                    className={cn(
-                      "group/option flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left outline-none transition-all duration-150 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/30",
-                      selected
-                        ? "border-primary/30 bg-primary/10 text-foreground"
-                        : "border-transparent bg-foreground/[0.045] text-foreground/85 hover:border-border hover:bg-foreground/[0.08]",
-                      readOnly && "cursor-default opacity-60",
-                    )}
-                    data-chat-answer-control=""
-                    data-selected={selected ? "true" : undefined}
-                    data-slot="session-chat-question-option"
-                    disabled={readOnly}
-                    key={`${optionIndex}:${option.label}`}
-                    onClick={() => {
-                      toggleOption(optionIndex);
-                    }}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-sm leading-snug font-medium">{option.label}</span>
-                      {option.description && option.description !== option.label ? (
-                        <span className="text-xs leading-snug text-muted-foreground">
-                          {option.description}
-                        </span>
-                      ) : null}
-                    </span>
-                    {selected ? (
-                      <IconCheck
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0 text-primary"
-                        stroke={2.6}
-                      />
-                    ) : shortcutKey !== null ? (
-                      <kbd className="flex size-5 shrink-0 items-center justify-center rounded border border-border/60 bg-background/40 text-[11px] font-medium text-muted-foreground tabular-nums transition-colors duration-150 group-hover/option:text-foreground">
-                        {shortcutKey}
-                      </kbd>
-                    ) : null}
-                  </button>
-                );
-              })}
+            <div className="mt-3">
+              <SessionChatChoiceRows
+                onSelect={toggleOption}
+                options={question.options}
+                readOnly={readOnly}
+                selected={customAnswerActive ? [] : draft.indices}
+                showShortcuts
+              />
             </div>
           </div>
         ) : null}
