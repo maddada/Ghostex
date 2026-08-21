@@ -1,0 +1,30 @@
+/*
+ * CDXC:AgentHistorySearch 2026-08-20:
+ * Shared Find surface (sidebar/find/) — the GUI for `gx f`. Like the Session
+ * Chat sheet, this file keeps only what Tailwind utilities cannot express
+ * per-host: the match-highlight color token and the gpui page shell's height
+ * chain.
+ */
+
+.ghostex-find-scope {
+  /* Warm accent for matched characters, matching the terminal picker's bold
+     yellow highlight while staying legible on the chat surface's background. */
+  --ghostex-find-match: #e3b341;
+  font-family: var(
+    --ghostex-find-font-family,
+    var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif)
+  );
+}
+
+/* The gpui Find page wraps the view in .native-sidebar-shell, whose implicit
+   grid row is auto-sized; pin it to the page height so the results list owns
+   the scrolling instead of the document. */
+.native-sidebar-shell.gpui-find-prompts {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* Selected rows keep the prompt readable at a glance rather than clipping mid
+   word when the pane is narrow. */
+.ghostex-find-row-prompt {
+  white-space: pre;
+}

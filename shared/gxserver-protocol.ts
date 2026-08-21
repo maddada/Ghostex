@@ -173,6 +173,10 @@ export type GxserverEndpointPath =
   | "/api/listSessions"
   | "/api/removeSession"
   | "/api/readSessionText"
+  | "/api/searchAgentPrompts"
+  | "/api/readAgentPromptText"
+  | "/api/toggleAgentPromptFavorite"
+  | "/api/resolveAgentPromptLaunch"
   | "/api/readSessionChat"
   | "/api/readSessionChatSkills"
   | "/api/readSessionChatFiles"
@@ -419,14 +423,14 @@ export interface GxserverServerHealthResponse extends GxserverMinimalHealthRespo
   tools: readonly GxserverToolCapabilityStatus[];
 }
 
-export type GxserverToolName = "zmx" | "zehn" | "bd";
+export type GxserverToolName = "zmx" | "bd";
 export type GxserverToolAvailability = "available" | "missing" | "notExecutable" | "unsupported";
 export type GxserverToolResolutionSource = "devSubmodule" | "appResource" | "gxserverBundle";
 
 export interface GxserverToolCapabilityStatus {
   availability: GxserverToolAvailability;
   candidatePaths?: readonly string[];
-  capability: "zmxLifecycle" | "previousSessionHistory" | "beadsProjectBoard" | "deferred";
+  capability: "zmxLifecycle" | "beadsProjectBoard" | "deferred";
   executablePath?: string;
   guidance?: string;
   message: string;

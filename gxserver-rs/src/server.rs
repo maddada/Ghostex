@@ -2842,6 +2842,18 @@ async fn route_http(
         "/api/generateSessionTitle" => {
             handle_generate_session_title_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/searchAgentPrompts" => {
+            handle_search_agent_prompts_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/readAgentPromptText" => {
+            handle_read_agent_prompt_text_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/toggleAgentPromptFavorite" => {
+            handle_toggle_agent_prompt_favorite_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/resolveAgentPromptLaunch" => {
+            handle_resolve_agent_prompt_launch_http(&state, endpoint.path, request_id, &body_json)
+        }
         "/api/readSessionChat" => {
             handle_read_session_chat_http(&state, endpoint.path, request_id, &body_json).await
         }
@@ -11650,6 +11662,113 @@ struct SessionChatReadResolution {
     stored_prompt: Option<String>,
     transcript_path: Option<std::path::PathBuf>,
     fingerprint: String,
+}
+
+/*
+CDXC:AgentHistorySearch 2026-08-20:
+The Find surface's four RPCs. All of them go through the one warm
+`zehn::SearchIndex` in `agent_prompt_search`, which is the same index, favorites
+file, and ranking `gx f` uses, so the GUI and the terminal picker can never
+disagree about what matched or what is starred.
+*/
+fn agent_prompt_search_params(
+    body: &Value,
+) -> Result<Map<String, Value>, crate::agent_prompt_search::PromptSearchError> {
+    match read_domain_rpc_params(body) {
+        Ok(params) => Ok(params),
+        Err(error) => Err(crate::agent_prompt_search::PromptSearchError {
+            code: error.code,
+            message: error.message,
+        }),
+    }
+}
+
+fn agent_prompt_search_response(
+    endpoint_path: String,
+    request_id: String,
+    outcome: Result<Value, crate::agent_prompt_search::PromptSearchError>,
+) -> RoutedResponse {
+    match outcome {
+        Ok(payload) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, payload),
+        ),
+        Err(error) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError { code: error.code, message: error.message },
+        ),
+    }
+}
+
+fn handle_search_agent_prompts_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let outcome = agent_prompt_search_params(body).and_then(|params| {
+        crate::agent_prompt_search::search_agent_prompts(&state.paths, &params)
+    });
+    agent_prompt_search_response(endpoint_path, request_id, outcome)
+}
+
+fn handle_read_agent_prompt_text_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let outcome = agent_prompt_search_params(body).and_then(|params| {
+        crate::agent_prompt_search::read_agent_prompt_text(&state.paths, &params)
+    });
+    agent_prompt_search_response(endpoint_path, request_id, outcome)
+}
+
+fn handle_toggle_agent_prompt_favorite_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let outcome = agent_prompt_search_params(body).and_then(|params| {
+        crate::agent_prompt_search::toggle_agent_prompt_favorite(&state.paths, &params)
+    });
+    agent_prompt_search_response(endpoint_path, request_id, outcome)
+}
+
+fn handle_resolve_agent_prompt_launch_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let outcome = agent_prompt_search_params(body).and_then(|params| {
+        let sessions = read_all_sessions_for_prompt_launch(state)?;
+        crate::agent_prompt_search::resolve_agent_prompt_launch(&state.paths, &params, &sessions)
+    });
+    agent_prompt_search_response(endpoint_path, request_id, outcome)
+}
+
+/// Every stored session row, so the launch resolver can decide whether a live
+/// Ghostex session already owns the selected agent conversation.
+fn read_all_sessions_for_prompt_launch(
+    state: &AppState,
+) -> Result<Vec<Value>, crate::agent_prompt_search::PromptSearchError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| {
+        crate::agent_prompt_search::PromptSearchError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        }
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    repository.list_sessions(None).map_err(|error| {
+        crate::agent_prompt_search::PromptSearchError {
+            code: error.code,
+            message: error.message,
+        }
+    })
 }
 
 async fn handle_read_session_chat_skills_http(

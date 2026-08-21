@@ -1,4 +1,5 @@
 pub mod agent_hooks;
+pub mod agent_prompt_search;
 pub mod agent_skills;
 pub mod agent_transcripts;
 pub mod agents;

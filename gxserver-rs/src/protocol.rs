@@ -424,6 +424,19 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/listSessions"
         | "/api/removeSession"
         | "/api/readSessionText"
+        /*
+        CDXC:AgentHistorySearch 2026-08-20:
+        The Find surface is remote-allowed for the same reason chat is: an
+        agent's prompt history lives on the machine that ran the agent, so a
+        client looking at a remote machine has to ask that machine. These calls
+        carry a bounded query plus index positions the daemon itself handed out;
+        they never name a filesystem path and never write outside the favorites
+        file the terminal picker already owns.
+        */
+        | "/api/searchAgentPrompts"
+        | "/api/readAgentPromptText"
+        | "/api/toggleAgentPromptFavorite"
+        | "/api/resolveAgentPromptLaunch"
         | "/api/readSessionChat"
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"

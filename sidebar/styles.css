@@ -13,6 +13,7 @@
 @import "./styles/pets.css";
 @import "./styles/hierarchy-panels.css";
 @import "./styles/chat.css";
+@import "./styles/find.css";
 /*
  * CDXC:SidebarV2 2026-07-29:
  * Sidebar V2 imports LAST so its `[data-sidebar-version="v2"]`-scoped rules win
