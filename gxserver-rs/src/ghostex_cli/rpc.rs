@@ -409,10 +409,31 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
     resolve_gxserver_profile_target(&profile, flags)
 }
 
+/*
+CDXC:GxserverDevPort 2026-08-20:
+The daemon already lets a compat/dev run move its loopback listener with
+GHOSTEX_GXSERVER_DEV_PORT (see `config::read_selected_local_api_port`). The CLI
+hardcoded 58744, so `gx` against such a daemon silently talked to the packaged
+one on the default port and failed on its auth token. Read the same variable so
+one setting describes one daemon; unset or unparseable keeps the product port.
+*/
+pub fn local_gxserver_api_port() -> u16 {
+    std::env::var(crate::constants::GXSERVER_DEV_LOCAL_API_PORT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(GXSERVER_LOCAL_API_PORT)
+}
+
 pub fn resolve_local_gxserver_target() -> CliResult<Target> {
     let token = read_local_gxserver_auth_token()?;
     Ok(Target {
-        base_url: format!("http://{GXSERVER_LOCAL_API_HOST}:{GXSERVER_LOCAL_API_PORT}"),
+        base_url: format!(
+            "http://{GXSERVER_LOCAL_API_HOST}:{}",
+            local_gxserver_api_port()
+        ),
         forward_plan: None,
         kind: "local".to_string(),
         profile_id: None,
