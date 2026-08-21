@@ -50,6 +50,7 @@ Search these app-owned areas first by task:
 - Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `shared/`, then the consuming surface in `sidebar/`, `gpui/sidebar/`, `native/sidebar/`, `mobile/`, or `gxserver-rs/`.
 - Server, remote protocol, hooks, authentication, remote setup: `gxserver-rs/`, `shared/`, `scripts/`.
 - TUI or zmx behavior: `tui2/`, `zmx/src/`, and `zmx/test/`; keep `tui2/vendor/**` excluded unless the task is specifically about the vendored VT library.
+- Prompt-history search (`gx f`, the Find surface): `zehn-rs/` for the engine, `gxserver-rs/src/agent_prompt_search.rs` for the API, `sidebar/find/` for the shared UI. `zehn/` is the retired Zig source — reference only, never a build input.
 - Mobile app work: `mobile/` is the only active mobile app and releases Android through the React Native/Expo project. The retired native `iOS/` and Termux-fork `android/` repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
 - Assets, sounds, icons, and release notes: `media/`, `gpui/assets/`, `src/assets/`, `release/`, and the relevant script under `scripts/`.
 
@@ -67,6 +68,24 @@ rg -n "pattern" gpui/src gpui/sidebar sidebar shared scripts gxserver-rs ghostex
 Add `native/sidebar` to that list only when the task is about the gpui-owned modal
 host, titlebar host, manage, kanban, or Docs/`meo` surfaces, or about shared
 `native/sidebar/*.ts` logic.
+
+### Prompt-history search: zehn is Rust, and `zehn/` is dead
+
+`gx f` used to spawn a bundled Zig binary built from the `zehn/` submodule. It
+does not any more. Prompt-history search is the `zehn-rs/` Rust crate, compiled
+into gxserver and the `ghostex` CLI, so:
+
+- `gx f` runs the picker **in-process**. There is no `bin/zehn` to stage, no
+  `GHOSTEX_ZEHN_BIN`, no `ZEHN_ZIG`, and no Zig 0.16 requirement for a release.
+- The `zehn/` directory is kept only as reference for the original
+  implementation. Never build it, bundle it, add it back to a packaging list, or
+  treat it as the spec for new work — change `zehn-rs/` instead.
+- Two hotkeys moved in **both** the terminal picker and the GUI so the surfaces
+  share one key map: agents is `^g` (was `^t`) and projects is `^j` (was `^r`),
+  because browsers reserve Ctrl+T and Ctrl+R and will not hand them to a page.
+- The GUI (`sidebar/find/`) and `gx f` share the same scanner, matcher, Codex
+  cache, and favorites file, so a prompt starred in one is starred in the other.
+  Anything that would make them rank or star differently is a bug.
 
 ### Don't write any tests at all except if explicitly asked to do so by the user
 
