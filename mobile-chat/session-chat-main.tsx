@@ -534,6 +534,40 @@ fallbacks — notably the desktop's 75% transcript width — in charge.
 */
 applyDocumentPresentation(presentationState);
 
+/*
+CDXC:SessionChatMobileKeyboard 2026-08-21:
+The page sizes itself off `height: 100%`, i.e. the LAYOUT viewport. A software
+keyboard does not shrink that: iOS/WKWebView contracts only the VISUAL viewport,
+so the page keeps its full height and the keyboard covers whatever is at the
+bottom — which is exactly the interactive card's answer row, leaving "Send
+answer" unreachable. The page also cannot scroll to it: the root is a fixed-
+height non-scrolling grid, and the host disables webview bounce.
+
+Track the visual viewport instead and give the shell a real height, so the
+transcript gives up the space and the answer row lands directly above the
+keyboard. `offsetTop` is included because iOS also scrolls the visual viewport
+within the layout viewport while a focused field is being revealed. On Android
+the host already resizes the webview around the IME, which leaves the two
+viewports the same size and makes this a no-op rather than a double correction.
+*/
+function trackVisualViewportHeight(): void {
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    return;
+  }
+  const apply = (): void => {
+    const height = Math.round(viewport.height + viewport.offsetTop);
+    document.documentElement.style.setProperty(
+      "--ghostex-mobile-chat-viewport-height",
+      `${height}px`,
+    );
+  };
+  viewport.addEventListener("resize", apply);
+  viewport.addEventListener("scroll", apply);
+  apply();
+}
+trackVisualViewportHeight();
+
 function MobileSessionChat({
   agentLabel,
   sessionKey,

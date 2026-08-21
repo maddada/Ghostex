@@ -26,3 +26,16 @@
     max-width: 100%;
   }
 }
+
+/*
+ * CDXC:SessionChatMobileKeyboard 2026-08-21:
+ * The height the page is actually allowed to paint into, published by
+ * `trackVisualViewportHeight` in session-chat-main.tsx. Without it the shell
+ * would keep the layout-viewport height that the iOS keyboard covers, and the
+ * interactive card's "Send answer" row would sit under the keyboard with no way
+ * to scroll to it. The fallback keeps the page correct before the first
+ * measurement and on any host with no visualViewport support.
+ */
+.native-sidebar-shell.gpui-session-chat {
+  height: var(--ghostex-mobile-chat-viewport-height, 100%);
+}
