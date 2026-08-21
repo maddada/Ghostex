@@ -439,6 +439,28 @@ export function createGxserverPresentationSidebarSession({
       delayedSend?.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
     sendWhenAgentStopsActive:
       delayedSend?.sendWhenAgentStopsActive === true ? true : undefined,
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    The queued-prompt count is daemon-owned, exactly like the Delayed Send
+    countdown above it, so it is copied straight through. Anything that is not
+    a positive number collapses to `undefined` so a `0` or a garbled value from
+    an unknown daemon can never render an empty badge.
+
+    CDXC:SessionChatPromptQueue 2026-08-21-b:
+    The count now includes `failed` rows, and the failed tally rides with it so
+    the badge can turn red. The two are projected independently on purpose: a
+    daemon that predates the failed tally still badges yellow with a correct
+    count rather than dropping the badge entirely.
+    */
+    queuedPromptCount:
+      typeof presentation.queuedPromptCount === "number" && presentation.queuedPromptCount > 0
+        ? Math.floor(presentation.queuedPromptCount)
+        : undefined,
+    queuedPromptFailedCount:
+      typeof presentation.queuedPromptFailedCount === "number" &&
+      presentation.queuedPromptFailedCount > 0
+        ? Math.floor(presentation.queuedPromptFailedCount)
+        : undefined,
     displayTitle: presentation.displayTitle,
     displayTitleTooltip: presentation.displayTitleTooltip,
     /*

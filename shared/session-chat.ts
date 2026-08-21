@@ -4,6 +4,34 @@
 // All values must stay plain JSON: they cross the /api/events websocket, the CEF bridge,
 // and the gpui remote-machine proxy.
 
+// Ghostex's own prompt queue and the synced composer draft live in
+// ./session-chat-queue (canonical) and are re-exported here so consumers keep
+// a single import surface. Do NOT confuse SessionChatQueuedPrompt with
+// SessionChatMessage.queued — see the note on that field below.
+export type {
+  GxserverQueueSessionChatPromptParams,
+  GxserverQueueSessionChatPromptResult,
+  GxserverReadSessionChatQueueParams,
+  GxserverReadSessionChatQueueResult,
+  GxserverRemoveSessionChatQueuedPromptParams,
+  GxserverReorderSessionChatQueueParams,
+  GxserverSendSessionChatQueuedPromptParams,
+  GxserverSendSessionChatQueuedPromptResult,
+  GxserverSessionChatQueueResult,
+  GxserverSessionChatRemoveQueuedPromptResult,
+  GxserverSetSessionChatDraftParams,
+  GxserverSetSessionChatDraftResult,
+  GxserverUpdateSessionChatQueuedPromptParams,
+  SessionChatDraft,
+  SessionChatQueuedPrompt,
+  SessionChatQueuedPromptState,
+} from "./session-chat-queue";
+
+import type {
+  SessionChatDraft,
+  SessionChatQueuedPrompt,
+} from "./session-chat-queue";
+
 export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   "claude",
   "openclaude",
@@ -101,6 +129,13 @@ export interface SessionChatMessage {
    * the row the moment the queue releases it and the delivered turn replaces
    * it. Never set on client-sourced optimistic echoes: those render
    * identically to real turns so the swap is invisible.
+   *
+   * NOT Ghostex's prompt queue. This flag is the AGENT CLI's own internal
+   * queue (Claude Code's `queue-operation` rows) holding a prompt the user
+   * already sent with Enter. Ghostex's queue — prompts the agent has never
+   * seen, held above the composer — is `SessionChatQueuedPrompt` in
+   * ./session-chat-queue, surfaced as the `queue` field below. Never conflate,
+   * rename, extend or reuse this field for that feature.
    */
   queued?: boolean;
 }
@@ -200,12 +235,38 @@ export interface SessionChatTerminalNoticeAction {
   send?: string;
 }
 
+/*
+CDXC:SessionChatTerminalPicker 2026-08-21:
+Rows of an on-screen picker the chat surface can ANSWER, rather than only point
+at — Claude Code's resume-usage chooser ("Resume from summary" / "Resume full
+session as-is" / "Don't ask me again"), which owns the CLI's input line after a
+large session is resumed and whose Enter CONFIRMS a row, so a chat message
+delivered into it silently compacts the conversation it was meant to continue.
+
+A notice that carries these renders the same option rows as the AskUserQuestion
+card, and the pick goes back through answerSessionChatPrompt's `terminalChoice`
+lane. `selected` is where the TUI highlight sat AT DETECTION TIME: shown as the
+CLI's own default, never used to compute keystrokes, because the highlight can
+move between the detection and the answer.
+
+A daemon that predates this omits the field, and a client that predates it
+renders the notice as title + detail + "Open terminal" — exactly what this
+state used to get, which was nothing at all.
+*/
+export interface SessionChatTerminalNoticeChoice {
+  /** 0-based row index, which is what an answer addresses. */
+  index: number;
+  label: string;
+  /** True for the row the agent TUI highlighted when this was detected. */
+  selected: boolean;
+}
+
 export interface SessionChatTerminalNotice {
   /**
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
-   * `queuedInput`, `deliveryFailed`). Clients MUST render an unknown kind
-   * generically — title/detail/severity are self-sufficient.
+   * `queuedInput`, `deliveryFailed`, `resumePrompt`). Clients MUST render an
+   * unknown kind generically — title/detail/severity are self-sufficient.
    */
   kind: string;
   severity: "error" | "warning" | "info";
@@ -219,6 +280,45 @@ export interface SessionChatTerminalNotice {
   /** ISO-8601 millis; also the key a client's local dismissal remembers. */
   detectedAt: string;
   actions?: SessionChatTerminalNoticeAction[];
+  /**
+   * Answerable picker rows, in screen order. Absent for every notice that only
+   * describes a state; present means the card shows an answer picker.
+   */
+  choices?: SessionChatTerminalNoticeChoice[];
+}
+
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Long-running work the agent CLI reports ONLY as a progress line on its terminal
+screen, with nothing in the transcript until it finishes — Claude Code's
+compaction is the first and today the only one:
+
+    ✶ Compacting conversation… (1m 1s)
+      ████████████████████░░░░░░░░░░░░░░░░░░░░ 49%
+
+Deliberately NOT a `terminalNotice`: nothing is wrong, nothing is blocked, and
+there is nothing to answer. It is progress, so it renders in the TRANSCRIPT,
+where the work is — and for compaction in particular, next to the very messages
+it is about to replace.
+
+`percent` and `elapsedSeconds` are read off the screen or omitted; a client must
+never estimate them. `detectedAt` is the anchor for a smoothly ticking local
+clock: it belongs to the RUN, not the sample, so it holds still while the
+numbers move. Carried by read results and by snapshot/replaced/state frames with
+`prompt` semantics — an omitted field means CLEARED, which is how a client
+learns the work finished.
+*/
+export interface SessionChatTerminalActivity {
+  /** Open set (`compacting`). Render an unknown kind from `label` alone. */
+  kind: string;
+  /** Agent-facing wording, without the spinner glyph or the clock. */
+  label: string;
+  /** 0-100, only when the screen actually painted a percentage. */
+  percent?: number;
+  /** Seconds the CLI reported, only when it painted them. */
+  elapsedSeconds?: number;
+  /** ISO-8601 millis; stable for the whole run, so a local clock can tick. */
+  detectedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +365,25 @@ export interface GxserverReadSessionChatResult {
   selectedOptions?: SessionChatDetectedOptions;
   /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
   terminalNotice?: SessionChatTerminalNotice;
+  /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
+  terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * The session's Ghostex-owned prompt queue, head first. PRESENT (even as an
+   * empty array) is the daemon capability probe: a daemon that predates this
+   * feature omits it, and a client that sees it omitted hides every queue
+   * control instead of calling endpoints that will 404.
+   * When present, it is authoritative and replaces the client's list.
+   * See CDXC:SessionChatQueueCarriage in ./session-chat-queue.
+   */
+  queue?: SessionChatQueuedPrompt[];
+  /**
+   * Latest synced composer draft. Unlike `prompt`/`terminalNotice`, an OMITTED
+   * draft means "unchanged / none on the server", NOT cleared — clearing a
+   * local draft because an old daemon never sends the field would destroy
+   * text the user typed. Clear a draft by writing an empty `content` through
+   * /api/setSessionChatDraft instead.
+   */
+  draft?: SessionChatDraft;
   error?: string;
 }
 
@@ -397,11 +516,18 @@ export interface GxserverReadSessionChatImageResult {
 export interface GxserverAnswerSessionChatPromptParams {
   projectId: string;
   sessionId: string;
-  kind: "question" | "approval";
+  kind: "question" | "approval" | "terminalChoice";
   /** For questions: one entry per question. */
   selections?: SessionChatQuestionSelection[];
   /** For approvals: the raw byte string of the chosen option ("1" allow, "" deny). */
   approvalSend?: string;
+  /**
+   * For terminalChoice: the `index` of the `SessionChatTerminalNoticeChoice`
+   * the user picked. gxserver re-reads the live screen and walks the highlight
+   * onto that row, so a picker that was answered in the terminal meanwhile
+   * fails loudly instead of confirming whatever replaced it.
+   */
+  choiceIndex?: number;
 }
 
 export interface GxserverAnswerSessionChatPromptResult {
@@ -486,6 +612,22 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   selectedOptions?: SessionChatDetectedOptions;
   /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
   terminalNotice?: SessionChatTerminalNotice;
+  /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
+  terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
+   * capability probe; omitted ⇒ this daemon has no queue and the client hides
+   * every queue control. When present it is authoritative and replaces the
+   * client's list. Never carried by `sessionChatAppended`.
+   */
+  queue?: SessionChatQueuedPrompt[];
+  /**
+   * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
+   * opposite of the `prompt`/`terminalNotice` rule above, because this is text
+   * the user typed and an old daemon that never sends it must not erase it.
+   * Clear it by writing an empty `content` through /api/setSessionChatDraft.
+   */
+  draft?: SessionChatDraft;
   agentSessionId?: string;
 }
 
@@ -515,6 +657,22 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   selectedOptions?: SessionChatDetectedOptions;
   /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
   terminalNotice?: SessionChatTerminalNotice;
+  /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
+  terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
+   * capability probe; omitted ⇒ this daemon has no queue and the client hides
+   * every queue control. When present it is authoritative and replaces the
+   * client's list. Never carried by `sessionChatAppended`.
+   */
+  queue?: SessionChatQueuedPrompt[];
+  /**
+   * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
+   * opposite of the `prompt`/`terminalNotice` rule above, because this is text
+   * the user typed and an old daemon that never sends it must not erase it.
+   * Clear it by writing an empty `content` through /api/setSessionChatDraft.
+   */
+  draft?: SessionChatDraft;
   agentSessionId?: string;
 }
 
@@ -527,6 +685,22 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   selectedOptions?: SessionChatDetectedOptions;
   /** Blocking/failed terminal state. Omitted ⇒ cleared (prompt semantics). */
   terminalNotice?: SessionChatTerminalNotice;
+  /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
+  terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
+   * capability probe; omitted ⇒ this daemon has no queue and the client hides
+   * every queue control. When present it is authoritative and replaces the
+   * client's list. Never carried by `sessionChatAppended`.
+   */
+  queue?: SessionChatQueuedPrompt[];
+  /**
+   * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
+   * opposite of the `prompt`/`terminalNotice` rule above, because this is text
+   * the user typed and an old daemon that never sends it must not erase it.
+   * Clear it by writing an empty `content` through /api/setSessionChatDraft.
+   */
+  draft?: SessionChatDraft;
   agentSessionId?: string;
 }
 

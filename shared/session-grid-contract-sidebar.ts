@@ -493,6 +493,21 @@ export type SidebarSessionItem = {
   delayedSendDeadlineAt?: string;
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * Number of Ghostex-owned chat prompts held for this session, `failed` rows
+   * included. Drives the count badge over the leading agent icon; absent or
+   * zero means no badge, which is also what a daemon that predates the queue
+   * reports.
+   */
+  queuedPromptCount?: number;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * How many of those rows failed to deliver and are held for the user. Any
+   * non-zero value paints the same badge red instead of yellow, because a queue
+   * that has stopped dead is the one queue state that needs the user to act.
+   */
+  queuedPromptFailedCount?: number;
   /** True when Delayed Send is armed for every agent in this project to finish. */
   sendWhenAllProjectSessionsStopActive?: boolean;
   /** True when Delayed Send is armed for this agent to finish. */

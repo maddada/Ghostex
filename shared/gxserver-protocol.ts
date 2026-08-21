@@ -28,17 +28,33 @@ export type {
   GxserverHandoffSessionChatDraftResult,
   GxserverInterruptSessionChatParams,
   GxserverInterruptSessionChatResult,
+  GxserverQueueSessionChatPromptParams,
+  GxserverQueueSessionChatPromptResult,
   GxserverReadSessionChatParams,
+  GxserverReadSessionChatQueueParams,
+  GxserverReadSessionChatQueueResult,
   GxserverReadSessionChatResult,
+  GxserverRemoveSessionChatQueuedPromptParams,
+  GxserverReorderSessionChatQueueParams,
   GxserverSendSessionChatMessageParams,
   GxserverSendSessionChatMessageResult,
+  GxserverSendSessionChatQueuedPromptParams,
+  GxserverSendSessionChatQueuedPromptResult,
   GxserverSessionChatAppendedEvent,
   GxserverSessionChatEvent,
+  GxserverSessionChatQueueResult,
+  GxserverSessionChatRemoveQueuedPromptResult,
   GxserverSessionChatReplacedEvent,
   GxserverSessionChatSnapshotEvent,
   GxserverSessionChatStateEvent,
+  GxserverSetSessionChatDraftParams,
+  GxserverSetSessionChatDraftResult,
   GxserverSubscribeSessionChatMessage,
   GxserverUnsubscribeSessionChatMessage,
+  GxserverUpdateSessionChatQueuedPromptParams,
+  SessionChatDraft,
+  SessionChatQueuedPrompt,
+  SessionChatQueuedPromptState,
 } from "./session-chat";
 
 export const GXSERVER_PRODUCT = "gxserver" as const;
@@ -187,6 +203,13 @@ export type GxserverEndpointPath =
   | "/api/answerSessionChatPrompt"
   | "/api/interruptSessionChat"
   | "/api/handoffSessionChatDraft"
+  | "/api/readSessionChatQueue"
+  | "/api/queueSessionChatPrompt"
+  | "/api/updateSessionChatQueuedPrompt"
+  | "/api/removeSessionChatQueuedPrompt"
+  | "/api/reorderSessionChatQueue"
+  | "/api/sendSessionChatQueuedPrompt"
+  | "/api/setSessionChatDraft"
   | "/api/exportSessionTranscript"
   | "/api/sendSessionText"
   | "/api/sendSessionMessage"
@@ -2229,6 +2252,25 @@ export interface GxserverPresentationSession {
   workingStartedAt?: string;
   providerSessionState: GxserverPresentationProviderSessionState;
   projectId: GxserverProjectId;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * How many Ghostex-owned chat prompts are held for this session, so the
+   * sidebar can badge the agent icon without subscribing to every session's
+   * chat. EVERY row counts, `failed` included: a queue stalled behind a failed
+   * row is precisely the state that needs the user, and leaving those rows out
+   * made a dead queue look identical to no queue. The key is ABSENT at zero —
+   * never `0` — which is also what a daemon that predates the queue publishes,
+   * so both mean the same thing to a client: no badge.
+   */
+  queuedPromptCount?: number;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * How many of those rows are `failed` (delivery attempted, held for the user
+   * to retry or delete). Non-zero turns the badge red instead of yellow, and
+   * `queuedPromptCount - queuedPromptFailedCount` is what still counts as work
+   * the agent is going to receive. ABSENT means none failed.
+   */
+  queuedPromptFailedCount?: number;
   sessionId: GxserverSessionId;
   sessionPersistenceProvider?: "tmux" | "zmx" | "zellij";
   sessionTag?: GxserverSessionTag;
