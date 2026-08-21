@@ -86,6 +86,11 @@ export interface AgentsWorkspaceProps {
     controls: WorkspaceTerminalBodyControls,
   ): ReactNode;
   renderChatBody?(session: WorkspaceSession, controls: WorkspaceChatBodyControls): ReactNode;
+  /*
+  CDXC:AgentHistorySearch 2026-08-20:
+  The Find surface — the GUI for `gx f` — swaps a pane body exactly like chat.
+  */
+  renderFindBody?(session: WorkspaceSession, controls: WorkspaceChatBodyControls): ReactNode;
   onNewTerminal?(paneId: string, splitAxis?: WorkspaceSplitAxis): void;
   onPlaceholderAction?(session: WorkspaceSession, action: WorkspacePlaceholderAction): void;
   onFindEvent?(event: WorkspaceFindEvent): void;
@@ -281,6 +286,7 @@ function Pane({
   insertionTarget,
   renderTerminalBody,
   renderChatBody,
+  renderFindBody,
   onChange,
   onFindEvent,
   onFindOpenChange,
@@ -295,6 +301,7 @@ function Pane({
   insertionTarget: string | null;
   renderTerminalBody?: AgentsWorkspaceProps["renderTerminalBody"];
   renderChatBody?: AgentsWorkspaceProps["renderChatBody"];
+  renderFindBody?: AgentsWorkspaceProps["renderFindBody"];
   onChange(model: WorkspaceModel): void;
   onFindEvent(event: WorkspaceFindEvent): void;
   onFindOpenChange(open: boolean): void;
@@ -312,7 +319,7 @@ function Pane({
   });
   const focused = model.focusedPane === leaf.paneId;
   const surfaceMode = active?.sessionSurfaceMode ?? "terminal";
-  const setSurfaceMode = (mode: "terminal" | "chat") => {
+  const setSurfaceMode = (mode: "terminal" | "chat" | "find") => {
     if (leaf.tabGroup.activeTab) {
       onChange(setWorkspaceSessionSurfaceMode(model, leaf.tabGroup.activeTab, mode));
     }
@@ -475,11 +482,11 @@ function Pane({
           const sessionSurfaceMode = session.sessionSurfaceMode ?? "terminal";
           return (
             <div
-              aria-hidden={!isActive || sessionSurfaceMode === "chat" || undefined}
+              aria-hidden={!isActive || sessionSurfaceMode !== "terminal" || undefined}
               className={`workspace-surface-layer workspace-surface-layer--terminal${
                 !isActive ? " workspace-surface-layer--parked" : ""
               }${
-                isActive && sessionSurfaceMode === "chat"
+                isActive && sessionSurfaceMode !== "terminal"
                   ? " workspace-surface-layer--hidden"
                   : ""
               }`}
@@ -508,6 +515,18 @@ function Pane({
                   <div className="workspace-terminal-slot">
                     <span>{active.title}</span>
                     <small>Chat body slot</small>
+                  </div>
+                )}
+              </div>
+            )}
+            {surfaceMode === "find" && (
+              <div className="workspace-surface-layer workspace-surface-layer--chat">
+                {renderFindBody?.(active, {
+                  switchToTerminal: () => setSurfaceMode("terminal"),
+                }) ?? (
+                  <div className="workspace-terminal-slot">
+                    <span>{active.title}</span>
+                    <small>Find body slot</small>
                   </div>
                 )}
               </div>
@@ -592,6 +611,7 @@ export function AgentsWorkspace({
   debugSeed = false,
   renderTerminalBody,
   renderChatBody,
+  renderFindBody,
   onNewTerminal,
   onPlaceholderAction,
   onFindEvent,
@@ -643,6 +663,25 @@ export function AgentsWorkspace({
         : addWorkspaceSession(current, paneId, openRequest.session);
     });
   }, [openRequest]);
+
+  /*
+  CDXC:AgentHistorySearch 2026-08-20:
+  Find is a pane surface, so opening it is a model change and belongs here where
+  the model lives. With no focused session there is nothing to swap; the shell
+  says so rather than opening an empty search over nothing.
+  */
+  useEffect(() => {
+    const openFind = () => {
+      setModel((current) => {
+        const activeTab = workspaceLeaf(current, current.focusedPane)?.tabGroup.activeTab;
+        return activeTab
+          ? setWorkspaceSessionSurfaceMode(current, activeTab, "find")
+          : current;
+      });
+    };
+    window.addEventListener("ghostex-web:openFindPrompts", openFind);
+    return () => window.removeEventListener("ghostex-web:openFindPrompts", openFind);
+  }, []);
 
   useEffect(() => {
     saveWorkspaceLayout(primaryMachineId, model);
@@ -772,6 +811,7 @@ export function AgentsWorkspace({
               setTabMenu({ ...tab, x: event.clientX, y: event.clientY });
             }}
             renderChatBody={renderChatBody}
+            renderFindBody={renderFindBody}
             renderTerminalBody={renderTerminalBody}
           />
         )}

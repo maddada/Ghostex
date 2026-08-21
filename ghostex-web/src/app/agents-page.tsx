@@ -49,6 +49,7 @@ import { CommandPane } from "./command-pane";
 import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
 import { SessionChatHostActionsCluster } from "@/sidebar/chat/session-chat-host-actions-cluster";
 import { createWebSessionHostActions, SessionChatHost } from "./session-chat-host";
+import { FindPromptsHost } from "./find-prompts-host";
 import {
   createWorkspaceSessionId,
   domainSessionToWorkspaceSession,
@@ -577,6 +578,9 @@ export function IntegratedAgentsPage() {
           openRequest={openRequest}
           renderChatBody={(session, controls) => (
             <SessionChatHost onSwitchToTerminal={controls.switchToTerminal} session={session} />
+          )}
+          renderFindBody={(session, controls) => (
+            <FindPromptsHost onSwitchToTerminal={controls.switchToTerminal} session={session} />
           )}
           renderTerminalBody={(session, controls) => {
             const machine = connections.find(
