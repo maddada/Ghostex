@@ -58,6 +58,7 @@ pub enum AppModalHostBridgeSurface {
     Sidebar,
     Titlebar,
     SessionChat,
+    FindPrompts,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -190,6 +191,7 @@ const APP_MODAL_HOST_BRIDGE_SURFACE_NATIVE_WINDOW: &str = "nativeWindow";
 const APP_MODAL_HOST_BRIDGE_SURFACE_SIDEBAR: &str = "sidebar";
 const APP_MODAL_HOST_BRIDGE_SURFACE_TITLEBAR: &str = "titlebar";
 const APP_MODAL_HOST_BRIDGE_SURFACE_SESSION_CHAT: &str = "sessionChat";
+const APP_MODAL_HOST_BRIDGE_SURFACE_FIND_PROMPTS: &str = "findPrompts";
 pub(crate) const APP_MODAL_HOST_SURFACE_JS_FIELD: &str = "__ghostex_APP_MODAL_HOST_SURFACE__";
 pub(crate) const APP_MODAL_HOST_ID_JS_FIELD: &str = "__ghostex_APP_MODAL_HOST_ID__";
 pub(crate) const APP_MODAL_HOST_SURFACE_VALUE: &str = "nativeWindow";
@@ -364,7 +366,7 @@ pub(crate) const PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS: [ProjectWorkareaBridgeF
     },
 ];
 
-pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurfaceSpec; 4] = [
+pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurfaceSpec; 5] = [
     AppModalHostBridgeSurfaceSpec {
         surface: AppModalHostBridgeSurface::NativeWindow,
         entry_file_name: "modal-host.html",
@@ -395,6 +397,22 @@ pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurface
         surface: AppModalHostBridgeSurface::SessionChat,
         entry_file_name: "chat.html",
         extra_info_value: APP_MODAL_HOST_BRIDGE_SURFACE_SESSION_CHAT,
+        exposes_native_window_identity: false,
+    },
+    /*
+    CDXC:AgentHistorySearch 2026-08-20:
+    find.html is the Find pane surface — the GUI for `gx f`. It registers here
+    for the same reason chat.html does: the renderer installs the bounded
+    ghostexAppModalHost shim for this bundled entry so the page can post its
+    focus/launch/close requests to Rust, and nothing else. It never receives the
+    native-window identity fields, and it reuses the session-chat gxserver
+    bootstrap process message, which installs only
+    `window.ghostexGpui.gxserverBootstrap`.
+    */
+    AppModalHostBridgeSurfaceSpec {
+        surface: AppModalHostBridgeSurface::FindPrompts,
+        entry_file_name: "find.html",
+        extra_info_value: APP_MODAL_HOST_BRIDGE_SURFACE_FIND_PROMPTS,
         exposes_native_window_identity: false,
     },
 ];

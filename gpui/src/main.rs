@@ -1872,6 +1872,8 @@ const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("exportTranscript", ""),
     ("toggleAgentActions", ""),
     ("toggleChatView", "alt+g"),
+    // CDXC:AgentHistorySearch 2026-08-20: mirrors shared/ghostex-hotkeys.ts.
+    ("openFindPrompts", "alt+f"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
     ("forkSession", "ctrl+shift+f"),
@@ -25202,6 +25204,18 @@ pub struct GhostexGpuiApp {
     /// mapped session enters Chat mode before any terminal focus handoff.
     pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
     agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
+    /*
+    CDXC:AgentHistorySearch 2026-08-20:
+    Find mode swaps a session's pane body for the shared Find surface — the GUI
+    for `gx f` — exactly like Chat mode does, and the two are mutually exclusive
+    because they claim the same rectangle.
+
+    Deliberately not persisted in the shell layout state: Find is a transient
+    search you open, pick from, and leave, so restoring an app to a pane full of
+    search results instead of the user's terminal would be wrong.
+    */
+    agents_find_mode_sessions: HashSet<TerminalSessionId>,
+    agents_find_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
     /// Chat surfaces whose page-side composer bridge has registered.
     session_chat_composer_ready_sessions: HashSet<TerminalSessionId>,
     /// One-shot terminal-to-chat keyboard handoff, completed only after the
@@ -25882,6 +25896,8 @@ impl GhostexGpuiApp {
                 ),
                 pending_agents_chat_launch_intents: HashSet::new(),
                 agents_chat_surfaces: HashMap::new(),
+                agents_find_mode_sessions: HashSet::new(),
+                agents_find_surfaces: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),
                 pending_session_chat_composer_focus: None,
                 pending_session_chat_composer_insert: HashMap::new(),
@@ -28037,7 +28053,7 @@ impl GhostexGpuiApp {
                 surface.refresh_session_chat_gxserver_bootstrap(bootstrap);
             });
         }
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         true
     }
 
@@ -42298,6 +42314,18 @@ impl GhostexGpuiApp {
                 if self.run_gpui_terminal_toolbar_hotkey_action(action_id, window, cx) {
                     return;
                 }
+                if action_id == "openFindPrompts" {
+                    /*
+                    CDXC:AgentHistorySearch 2026-08-20:
+                    Find swaps the focused pane the way Chat View does, so it
+                    resolves the focused Agents session directly rather than
+                    requiring a focused terminal view — the terminal is hidden
+                    behind the Find surface while it is open, and the same id
+                    must always be able to toggle back out.
+                    */
+                    self.toggle_agents_session_find_mode_for_focused_session(cx);
+                    return;
+                }
                 if action_id == "toggleChatView" {
                     /*
                     CDXC:GPUISessionChatSurface 2026-07-31:
@@ -44603,7 +44631,7 @@ impl GhostexGpuiApp {
                 }
                 _ => {}
             }
-            self.reconcile_agents_chat_surfaces(cx);
+            self.reconcile_agents_pane_surfaces(cx);
             self.persist_shell_layout_state();
             cx.notify();
             return;
@@ -44619,7 +44647,7 @@ impl GhostexGpuiApp {
         if self.agents_chat_mode_sessions.contains(&slot_id.session_id) {
             self.pending_agents_terminal_text_focus_slot = None;
             self.pending_session_chat_composer_focus = Some(slot_id.session_id);
-            self.reconcile_agents_chat_surfaces(cx);
+            self.reconcile_agents_pane_surfaces(cx);
         } else {
             self.pending_session_chat_composer_focus = None;
             self.request_agents_terminal_text_focus_handoff(slot_id);
@@ -44634,7 +44662,7 @@ impl GhostexGpuiApp {
         if self.agents_chat_mode_sessions.contains(&slot_id.session_id) {
             self.pending_project_editor_companion_terminal_text_focus_slot = None;
             self.pending_session_chat_composer_focus = Some(slot_id.session_id);
-            self.reconcile_agents_chat_surfaces(cx);
+            self.reconcile_agents_pane_surfaces(cx);
         } else {
             self.pending_session_chat_composer_focus = None;
             self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
@@ -44754,7 +44782,7 @@ impl GhostexGpuiApp {
         }
         self.agents_chat_mode_sessions.insert(session_id);
         self.pending_session_chat_composer_focus = Some(session_id);
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         self.persist_shell_layout_state();
         cx.notify();
         true
@@ -44807,7 +44835,7 @@ impl GhostexGpuiApp {
         self.pending_agents_terminal_text_focus_slot = None;
         self.pending_project_editor_companion_terminal_text_focus_slot = None;
         self.pending_session_chat_composer_focus = Some(session_id);
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         true
     }
 
@@ -44935,6 +44963,350 @@ impl GhostexGpuiApp {
         })
     }
 
+    /*
+    CDXC:AgentHistorySearch 2026-08-20:
+    The Find pane surface. It mirrors the Session Chat surface deliberately —
+    same CefSurface construction, same app-modal host bridge, same reconcile
+    shape — because it occupies the same pane rectangle under the same rules.
+    What it does not need is session identity: prompt history is machine-wide,
+    so the page only wants the local gxserver bootstrap and the current theme.
+    */
+    fn agents_find_runtime_url(&self) -> Option<String> {
+        let base_url = gpui_cef_html_entry_url("GHOSTEX_GPUI_FIND_URL", "find.html").ok()?;
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        Some(append_url_query_params(
+            base_url,
+            &[
+                (
+                    "theme",
+                    gpui_session_chat_theme_from_settings(settings.object()).to_string(),
+                ),
+                (
+                    "fontFamily",
+                    gpui_session_chat_font_family_from_settings(settings.object()),
+                ),
+            ],
+        ))
+    }
+
+    fn find_prompts_host_bridge_event_handler(
+        &self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> cef::AppModalHostBridgeEventHandler {
+        let app = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        let foreground = cx.foreground_executor().clone();
+
+        Rc::new(move |event: cef::AppModalHostBridgeEvent| {
+            let cef::AppModalHostBridgeEvent::Message(payload) = event else {
+                return;
+            };
+            let app = app.clone();
+            let mut async_cx = async_cx.clone();
+            foreground
+                .spawn(async move {
+                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
+                        this.receive_find_prompts_host_action(session_id, &payload, window, cx);
+                    });
+                })
+                .detach();
+        })
+    }
+
+    /*
+    The Find page decides nothing about the workspace. gxserver resolves what
+    opening a result means (focus a live session, or run a command in a folder)
+    and the page forwards that decision here, because only Rust can move panes
+    and only the sidebar runtime can create sessions.
+    */
+    fn receive_find_prompts_host_action(
+        &mut self,
+        session_id: TerminalSessionId,
+        payload: &str,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(payload) else {
+            return;
+        };
+        if message.get("type").and_then(serde_json::Value::as_str) != Some("findPromptsHostAction")
+        {
+            return;
+        }
+        let Some(action) = message.get("action").and_then(serde_json::Value::as_str) else {
+            return;
+        };
+        match action {
+            "close" => {
+                self.toggle_agents_session_find_mode(session_id, cx);
+            }
+            "focusSession" => {
+                let project_id = message
+                    .get("projectId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let gxserver_session_id = message
+                    .get("sessionId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if project_id.is_empty() || gxserver_session_id.is_empty() {
+                    return;
+                }
+                // Leave Find first: the pane the focused session lands in may be
+                // this one, and a surfaced terminal must not stay hidden behind
+                // a search that already did its job.
+                self.toggle_agents_session_find_mode(session_id, cx);
+                self.focus_local_workspace_terminal_from_message(
+                    &GpuiSidebarWorkspaceTerminalFocusMessage {
+                        force_remount: false,
+                        placement_target_session_id: None,
+                        preferred_interface: GpuiPreferredAgentInterface::Terminal,
+                        project_id,
+                        session_id: gxserver_session_id,
+                    },
+                    cx,
+                );
+            }
+            "launchSession" => {
+                let command = message
+                    .get("command")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let cwd = message
+                    .get("cwd")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if command.is_empty() || cwd.is_empty() {
+                    return;
+                }
+                let title = message
+                    .get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.toggle_agents_session_find_mode(session_id, cx);
+                /*
+                Reuse the existing `ghostex://terminal` launcher contract: the
+                sidebar runtime registers (or reuses) the daemon project at that
+                folder and starts one agent session with this exact command.
+                Rust does not gain a second session factory for Find.
+                */
+                self.dispatch_gpui_os_integration_command_message(
+                    serde_json::json!({
+                        "action": "createQuickTerminal",
+                        "command": command,
+                        "cwd": cwd,
+                        "title": title,
+                    }),
+                    cx,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    fn toggle_agents_session_find_mode_for_focused_session(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(session_id) = self.focused_agents_or_companion_shell_session_id() else {
+            return;
+        };
+        self.toggle_agents_session_find_mode(session_id, cx);
+    }
+
+    fn toggle_agents_session_find_mode(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.agents_find_mode_sessions.remove(&session_id) {
+            // Find's CEF child owns keyboard focus while visible. Queue the
+            // canonical terminal focus handoff for the exact shell-focused slot
+            // so the terminal reclaims first responder as it remounts.
+            match self.focused_terminal_text_mount_target() {
+                Some(FocusedTerminalTextMountTarget::Agents(slot_id))
+                    if slot_id.session_id == session_id =>
+                {
+                    self.request_agents_terminal_text_focus_handoff(slot_id);
+                }
+                Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id))
+                    if slot_id.session_id == session_id =>
+                {
+                    self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
+                }
+                _ => {}
+            }
+            self.reconcile_agents_find_surfaces(cx);
+            cx.notify();
+            return;
+        }
+        // Chat and Find claim the same pane rectangle, so entering one always
+        // leaves the other.
+        if self.agents_chat_mode_sessions.remove(&session_id) {
+            self.reconcile_agents_pane_surfaces(cx);
+            self.persist_shell_layout_state();
+        }
+        self.agents_find_mode_sessions.insert(session_id);
+        self.reconcile_agents_find_surfaces(cx);
+        cx.notify();
+    }
+
+    fn ensure_agents_find_surface(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<Entity<CefSurface>> {
+        if let Some(surface) = self.agents_find_surfaces.get(&session_id) {
+            return Some(surface.clone());
+        }
+        // Prompt history is local to this machine, so Find always talks to the
+        // local daemon. Without its bootstrap the page can do nothing; the next
+        // visibility reconcile retries once the bootstrap arrives.
+        let bootstrap = self.sidebar_gxserver_bootstrap.clone()?;
+        let url = self.agents_find_runtime_url()?;
+        let host_action_handler = self.find_prompts_host_bridge_event_handler(session_id, cx);
+        let theme = gpui_session_chat_theme_from_settings(
+            shared_settings::shared_sidebar_settings_snapshot().object(),
+        );
+        let prepaint_background = if theme == "light" {
+            CEF_LIGHT_PREPAINT_BACKGROUND_COLOR
+        } else {
+            CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR
+        };
+        let background = if theme == "light" {
+            rgb(0xfdfdfd).into()
+        } else {
+            rgb(0x111111).into()
+        };
+        let surface = match CefSurface::try_new(
+            format!("ghostex-gpui-find-prompts-{}", session_id.0),
+            self.parent_ns_view,
+            url,
+            "session-chat".to_string(),
+            prepaint_background,
+            false,
+            background,
+            None,
+            true,
+            None,
+            None,
+            None,
+            None,
+            Some(bootstrap),
+            None,
+            None,
+            None,
+            Some(cef::AppModalHostBridgeSurface::FindPrompts),
+            Some(host_action_handler),
+            None,
+            cx,
+        ) {
+            Ok(surface) => surface,
+            Err(error) => {
+                // Ensure-style reconcile: skip this pass, retried on the next
+                // visibility sync (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                support_logs::append(
+                    support_logs::GpuiSupportLog::CrashReports,
+                    "gpui.cefSurface.createFailed",
+                    serde_json::json!({ "surface": "findPrompts", "error": error }),
+                );
+                return None;
+            }
+        };
+        self.agents_find_surfaces.insert(session_id, surface.clone());
+        Some(surface)
+    }
+
+    fn reconcile_agents_find_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
+        let live_session_ids = self
+            .agents_workspace
+            .terminal_session_ids()
+            .into_iter()
+            .collect::<HashSet<_>>();
+        self.agents_find_mode_sessions
+            .retain(|session_id| live_session_ids.contains(session_id));
+        let stale_surface_ids = self
+            .agents_find_surfaces
+            .keys()
+            .copied()
+            .filter(|session_id| !self.agents_find_mode_sessions.contains(session_id))
+            .collect::<Vec<_>>();
+        for session_id in stale_surface_ids {
+            if let Some(surface) = self.agents_find_surfaces.remove(&session_id) {
+                surface.update(cx, |surface, _| surface.set_visible(false));
+            }
+        }
+
+        let drag_active = self.workspace_tab_drag_active
+            || self.browser_tab_drag_active
+            || self.command_tab_drag_active;
+        let visible_session_ids = if drag_active {
+            HashSet::new()
+        } else if self.active_mode == TitlebarMode::Agents {
+            self.agents_workspace
+                .rendered_leaf_order()
+                .into_iter()
+                .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
+                .filter(|session_id| self.agents_find_mode_sessions.contains(session_id))
+                .collect::<HashSet<_>>()
+        } else if self.active_mode.is_project_editor_mode() {
+            self.current_project_editor_companion_terminal_body_mount_slots()
+                .into_iter()
+                .map(|slot_id| slot_id.session_id)
+                .filter(|session_id| self.agents_find_mode_sessions.contains(session_id))
+                .collect::<HashSet<_>>()
+        } else {
+            HashSet::new()
+        };
+        for session_id in &visible_session_ids {
+            let _ = self.ensure_agents_find_surface(*session_id, cx);
+        }
+        for (session_id, surface) in &self.agents_find_surfaces {
+            let visible = visible_session_ids.contains(session_id);
+            surface.update(cx, |surface, _| surface.set_visible(visible));
+        }
+    }
+
+    /// Both pane surfaces at once. Every caller that used to reconcile chat
+    /// reconciles both, so the two can never disagree about which one owns a
+    /// pane.
+    fn reconcile_agents_pane_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
+        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_find_surfaces(cx);
+    }
+
+    fn remove_agents_find_surface_for_session(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.agents_find_mode_sessions.remove(&session_id);
+        if let Some(surface) = self.agents_find_surfaces.remove(&session_id) {
+            surface.update(cx, |surface, _| surface.set_visible(false));
+        }
+    }
+
+    fn remove_all_agents_find_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
+        self.agents_find_mode_sessions.clear();
+        for surface in self.agents_find_surfaces.values() {
+            surface.update(cx, |surface, _| surface.set_visible(false));
+        }
+        self.agents_find_surfaces.clear();
+    }
+
+    /// The CEF surface currently occupying a session's pane, whichever it is.
+    fn agents_pane_cef_surface(&self, session_id: TerminalSessionId) -> Option<&Entity<CefSurface>> {
+        self.agents_chat_surfaces
+            .get(&session_id)
+            .or_else(|| self.agents_find_surfaces.get(&session_id))
+    }
+
     fn ensure_agents_chat_surface(
         &mut self,
         session_id: TerminalSessionId,
@@ -44962,6 +45334,15 @@ impl GhostexGpuiApp {
         } else {
             rgb(0x111111).into()
         };
+        /*
+        CDXC:GPUISessionChatContextMenu 2026-08-21:
+        The first-party chat composer owns a shadcn context menu instead of
+        exposing Chromium's page/developer menu. Its explicit Paste action
+        reads the clipboard during the user's menu gesture, so grant only this
+        bundled chat origin the same bounded clipboard capability that the
+        app-owned Source surface receives.
+        */
+        let trusted_clipboard_origin = Some(url.clone());
         let surface = match CefSurface::try_new(
             format!("ghostex-gpui-session-chat-{}", session_id.0),
             self.parent_ns_view,
@@ -44970,7 +45351,7 @@ impl GhostexGpuiApp {
             prepaint_background,
             false,
             background,
-            None,
+            trusted_clipboard_origin,
             true,
             None,
             None,
@@ -48222,6 +48603,7 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = None;
         self.local_app_shot_session_mappings.clear();
         self.remove_all_agents_chat_surfaces(cx);
+        self.remove_all_agents_find_surfaces(cx);
         self.agents_chat_mode_sessions = chat_mode_sessions;
         self.agents_terminal_startup_coordinator = AgentsTerminalStartupCoordinator::new();
         self.agents_terminal_surface_host = NativeTerminalSurfaceHost::new();
@@ -48511,6 +48893,9 @@ impl GhostexGpuiApp {
                 self.update_active_mode_cef_child_visibility(cx);
                 self.persist_shell_layout_state();
                 cx.notify();
+            }
+            cef::BrowserPageMetadataEvent::CloseRequested => {
+                self.close_browser_tab(tab_id, window, cx);
             }
             cef::BrowserPageMetadataEvent::TitleChanged(title) => {
                 /*
@@ -49358,7 +49743,7 @@ impl GhostexGpuiApp {
         // Session Chat is also a native CEF child view. Reconcile it at the
         // same mode-switch boundary so entering a project workarea with the
         // companion hidden removes the old Agents-pane chat view immediately.
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         if restore_companion_focus {
             /*
             CDXC:GPUIProjectBrowserDefault 2026-07-14:
@@ -49759,7 +50144,10 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        let Some(surface) = self.agents_chat_surfaces.get(&session_id) else {
+        // CDXC:AgentHistorySearch 2026-08-20: the SessionChat responder class
+        // means "a CEF surface owns this session's pane", which is true of the
+        // Find surface too. Resolve whichever one is mounted.
+        let Some(surface) = self.agents_pane_cef_surface(session_id) else {
             return;
         };
         let focus_handle = surface.read(cx).focus_handle.clone();
@@ -49936,6 +50324,24 @@ impl GhostexGpuiApp {
             The chat pane is a first-class work surface: classifying its
             responder keeps focus arbitration from reclaiming keyboard focus
             while the user types in the chat composer.
+            */
+            return Some(FirstResponderCefSurface::SessionChat(session_id));
+        }
+        if let Some(session_id) = self
+            .agents_find_surfaces
+            .iter()
+            .find_map(|(session_id, surface)| {
+                surface
+                    .read(cx)
+                    .native_view_contains_responder(responder)
+                    .then_some(*session_id)
+            })
+        {
+            /*
+            CDXC:AgentHistorySearch 2026-08-20:
+            The Find pane is a first-class work surface for focus arbitration in
+            exactly the way chat is, so it reports the same responder class:
+            keyboard focus must stay in the search box while the user types.
             */
             return Some(FirstResponderCefSurface::SessionChat(session_id));
         }
@@ -50135,7 +50541,11 @@ impl GhostexGpuiApp {
         let Some(session) = self.agents_workspace.session(session_id) else {
             return false;
         };
-        let active_session_is_in_chat_view = self.agents_chat_mode_sessions.contains(&session_id);
+        // CDXC:AgentHistorySearch 2026-08-20: a Find-mode pane parks its
+        // terminal exactly like a chat-mode pane, so every "is this tab showing
+        // a CEF surface instead of its terminal?" decision covers both.
+        let active_session_is_in_chat_view = self.agents_chat_mode_sessions.contains(&session_id)
+            || self.agents_find_mode_sessions.contains(&session_id);
         #[cfg(target_os = "windows")]
         {
             /*
@@ -50219,7 +50629,8 @@ impl GhostexGpuiApp {
                             == FirstResponderTarget::TerminalSurface(
                                 FirstResponderTerminalSurface::ProjectEditorCompanion(session_id),
                             )
-                            || (self.agents_chat_mode_sessions.contains(&session_id)
+                            || ((self.agents_chat_mode_sessions.contains(&session_id)
+                                || self.agents_find_mode_sessions.contains(&session_id))
                                 && self.first_responder_target
                                     == FirstResponderTarget::CefSurface(
                                         FirstResponderCefSurface::SessionChat(session_id),
@@ -51599,6 +52010,7 @@ impl GhostexGpuiApp {
                 GpuiWorkspaceTerminalSessionKey::Local(_) => None,
             });
         self.remove_agents_chat_surface_for_session(shell_session_id, cx);
+        self.remove_agents_find_surface_for_session(shell_session_id, cx);
         if let Some(remote_key) = scoped_remote_key.as_ref() {
             self.clear_project_editor_companion_remote_attach_state_for_key(remote_key);
             self.remote_attach_sessions.remove(remote_key);
@@ -52670,7 +53082,7 @@ impl GhostexGpuiApp {
         {
             self.pending_session_chat_composer_focus = Some(focused_session_id);
         }
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         self.persist_shell_layout_state();
         cx.notify();
     }
@@ -55963,7 +56375,7 @@ impl GhostexGpuiApp {
         self.project_editor_companion_split_drag = None;
         self.clear_project_editor_companion_split_divider_hover_state();
         // The dropped bottom slot may have been rendering a chat CEF child.
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
         self.persist_shell_layout_state();
 
         if let Some(session_id) = focused_session_id {
@@ -62523,7 +62935,7 @@ impl GhostexGpuiApp {
         `open_browser_url_from_renderer_command`, for example) used to leave
         the Agents chat child painted over the new workarea.
         */
-        self.reconcile_agents_chat_surfaces(cx);
+        self.reconcile_agents_pane_surfaces(cx);
     }
 
     fn begin_browser_tab_drag(&mut self, cx: &mut gpui::Context<Self>) {
@@ -69316,6 +69728,21 @@ impl GhostexGpuiApp {
             if self.agents_chat_mode_sessions.contains(&session_id) {
                 return self.render_agents_session_chat_body(leaf.pane_id, session_id, cx);
             }
+            /*
+            CDXC:AgentHistorySearch 2026-08-20:
+            Find mode swaps this tab's body for the Find CEF surface on the same
+            terms as chat: the terminal mount is parked, not destroyed, and
+            toggling back reattaches through the normal parked-owner path.
+            */
+            if self.agents_find_mode_sessions.contains(&session_id) {
+                let content = self.render_session_find_surface_content(session_id);
+                return self.render_agents_session_chat_body_frame(
+                    leaf.pane_id,
+                    session_id,
+                    content,
+                    cx,
+                );
+            }
         }
         let mount_candidate = self.agents_workspace.terminal_body_mount_candidate(leaf);
         let pane_id = mount_candidate.pane_id;
@@ -69920,6 +70347,76 @@ impl GhostexGpuiApp {
                 )
                 .into_any_element()
         }
+    }
+
+    /// The Find surface (or its loading/unavailable placeholder) for one pane.
+    fn render_session_find_surface_content(&self, session_id: TerminalSessionId) -> AnyElement {
+        let surface = self.agents_find_surfaces.get(&session_id).cloned();
+        if let Some(surface) = surface {
+            return div()
+                .id(format!("ghostex-gpui-find-prompts-cef-{}", session_id.0))
+                .relative()
+                .size_full()
+                .min_w_0()
+                .min_h_0()
+                .overflow_hidden()
+                .child(surface)
+                .into_any_element();
+        }
+        let bootstrap_missing = self.sidebar_gxserver_bootstrap.is_none();
+        let (title, message) = if bootstrap_missing {
+            (
+                "Find unavailable",
+                "Searching your prompt history needs the local Ghostex server. Start it from the sidebar, then open Find again.",
+            )
+        } else {
+            ("Loading Find...", "")
+        };
+        v_flex()
+            .id(format!("ghostex-gpui-find-prompts-placeholder-{}", session_id.0))
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .items_center()
+            .justify_center()
+            .bg(gpui_session_chat_background_color())
+            .child(
+                v_flex()
+                    .max_w(px(WORKSPACE_STATE_PLACEHOLDER_MAX_WIDTH))
+                    .items_center()
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(workspace_terminal_placeholder_title_color())
+                            .child(title),
+                    )
+                    .when(!bootstrap_missing, |this| {
+                        this.child(
+                            canvas(
+                                move |_bounds, _window, _cx| {},
+                                move |bounds, _state: (), window, _cx| {
+                                    window.request_animation_frame();
+                                    paint_agent_gui_loading_spinner(bounds, window);
+                                },
+                            )
+                            .size(px(18.0))
+                            .mt(px(10.0)),
+                        )
+                    })
+                    .when(bootstrap_missing, |this| {
+                        this.child(
+                            div()
+                                .mt(px(5.0))
+                                .max_w(px(390.0))
+                                .text_size(px(12.5))
+                                .line_height(px(18.0))
+                                .text_color(workspace_terminal_placeholder_message_color())
+                                .child(message),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
 
     fn render_agents_session_chat_body_frame(
@@ -70596,13 +71093,23 @@ impl GhostexGpuiApp {
         chat mode. The way back is the chat page's in-DOM cluster.
         */
         if let Some(session_id) = session_id {
-            if self.agents_chat_mode_sessions.contains(&session_id) {
-                return self.render_project_editor_companion_session_chat_body(
+            // CDXC:AgentHistorySearch 2026-08-20: Find swaps the companion slot
+            // on the same terms as chat, so both go through one body.
+            let pane_surface_content = if self.agents_chat_mode_sessions.contains(&session_id) {
+                Some(self.render_session_chat_surface_content(session_id))
+            } else if self.agents_find_mode_sessions.contains(&session_id) {
+                Some(self.render_session_find_surface_content(session_id))
+            } else {
+                None
+            };
+            if let Some(content) = pane_surface_content {
+                return self.render_project_editor_companion_pane_surface_body(
                     mode,
                     slot,
                     session_id,
                     flex_grow,
                     show_focus_outline,
+                    content,
                     cx,
                 );
             }
@@ -70839,13 +71346,14 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    fn render_project_editor_companion_session_chat_body(
+    fn render_project_editor_companion_pane_surface_body(
         &self,
         mode: TitlebarMode,
         slot: ProjectEditorCompanionTerminalSlot,
         session_id: TerminalSessionId,
         flex_grow: f32,
         show_focus_outline: bool,
+        content: AnyElement,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let has_terminal_split = self
@@ -70887,7 +71395,7 @@ impl GhostexGpuiApp {
                     cx.notify();
                 }),
             )
-            .child(self.render_session_chat_surface_content(session_id))
+            .child(content)
             .into_any_element()
     }
 

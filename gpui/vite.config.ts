@@ -3,6 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { defineConfig, type Plugin } from "vite";
+import {
+  SHIKI_ASSET_DIR_NAME,
+  shikiClassicScriptEsbuildPlugin,
+  writeShikiClassicAssets,
+} from "../scripts/shiki-classic-assets.mjs";
 
 const gpuiRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(gpuiRoot, "..");
@@ -10,6 +15,7 @@ const sidebarOutDir = path.resolve(gpuiRoot, "dist/sidebar");
 const cefHtmlEntries = [
   "index.html",
   "chat.html",
+  "find.html",
   "kanban.html",
   "manage.html",
   "modal-host.html",
@@ -22,6 +28,7 @@ const cefHtmlEntries = [
 const cefHtmlEntryScripts = {
   "index.html": path.resolve(gpuiRoot, "sidebar/main.tsx"),
   "chat.html": path.resolve(gpuiRoot, "sidebar/chat-main.tsx"),
+  "find.html": path.resolve(gpuiRoot, "sidebar/find-main.tsx"),
   "kanban.html": path.resolve(gpuiRoot, "sidebar/kanban-main.tsx"),
   "manage.html": path.resolve(gpuiRoot, "sidebar/manage-main.tsx"),
   "modal-host.html": path.resolve(repoRoot, "native/sidebar/modal-host.tsx"),
@@ -113,6 +120,30 @@ function stageMonacoVs(): Plugin {
       const monacoDest = path.join(sidebarOutDir, "monaco", "vs");
       fs.rmSync(monacoDest, { force: true, recursive: true });
       fs.cpSync(monacoSource, monacoDest, { recursive: true });
+    },
+  };
+}
+
+/*
+ * CDXC:SessionChatCodeHighlighting 2026-08-21:
+ * Session Chat highlights fenced code with Shiki, loading the engine and one
+ * grammar per language on demand. Those loaders are dynamic imports, which the
+ * single-file CEF bundler above cannot code-split: esbuild inlines every
+ * dynamic import when splitting is off, and a file:// CEF page cannot fetch
+ * module chunks anyway. Left alone that turned chat.html from 1.3 MB into
+ * 4.9 MB of highlighter parsed by EVERY chat pane.
+ *
+ * So the highlighter ships the way Monaco does: prebuilt classic scripts staged
+ * beside the bundle, pulled in by <script src> only when a fence needs them.
+ * scripts/shiki-classic-assets.mjs owns both the staged files and the loader
+ * shim, and the mobile chat build uses the same module so the two hosts cannot
+ * drift apart.
+ */
+function stageShikiChatRuntime(): Plugin {
+  return {
+    name: "ghostex-gpui-stage-shiki-chat-runtime",
+    async closeBundle() {
+      await writeShikiClassicAssets(path.join(sidebarOutDir, SHIKI_ASSET_DIR_NAME));
     },
   };
 }
@@ -269,6 +300,11 @@ function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
         contents: "",
         loader: "js",
       }));
+      // See stageShikiChatRuntime: CEF pages load the Shiki engine and its
+      // grammars as classic scripts from ./shiki, never as ES module chunks.
+      // The shared plugin swaps both dynamic-import modules for that loader
+      // before esbuild can inline the highlighter into every chat pane.
+      shikiClassicScriptEsbuildPlugin().setup(build);
       build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
         const contents = await fs.promises.readFile(args.path, "utf8");
         return {
@@ -287,7 +323,7 @@ function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
 export default defineConfig({
   base: "./",
   root: gpuiRoot,
-  plugins: [inlineCefHtmlAssets(), stageMonacoVs()],
+  plugins: [inlineCefHtmlAssets(), stageMonacoVs(), stageShikiChatRuntime()],
   build: {
     emptyOutDir: true,
     outDir: sidebarOutDir,
@@ -299,6 +335,7 @@ export default defineConfig({
       input: {
         index: path.resolve(gpuiRoot, "index.html"),
         chat: path.resolve(gpuiRoot, "chat.html"),
+        find: path.resolve(gpuiRoot, "find.html"),
         kanban: path.resolve(gpuiRoot, "kanban.html"),
         manage: path.resolve(gpuiRoot, "manage.html"),
         modalHost: path.resolve(gpuiRoot, "modal-host.html"),
