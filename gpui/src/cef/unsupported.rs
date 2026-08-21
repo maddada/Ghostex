@@ -31,6 +31,7 @@ pub type BrowserPopupOpenHandler = Rc<dyn Fn(String, BrowserPopupPlacement)>;
 
 pub enum BrowserPageMetadataEvent {
     AddressChanged(String),
+    CloseRequested,
     FaviconUrlChanged(Option<String>),
     FindResult {
         match_count: i32,

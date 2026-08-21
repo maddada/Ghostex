@@ -608,6 +608,7 @@ pub struct SidebarGxserverBootstrap {
 
 pub enum BrowserPageMetadataEvent {
     AddressChanged(String),
+    CloseRequested,
     FaviconUrlChanged(Option<String>),
     FindResult {
         match_count: i32,
@@ -3226,7 +3227,7 @@ fn show_browser_dev_tools(
     };
     let browser_settings = cef::BrowserSettings::default();
     let mut devtools_client = Some(GhostexGpuiCefClient::new(
-        Some(GhostexGpuiLifeSpanHandler::new(None, true)),
+        Some(GhostexGpuiLifeSpanHandler::new(None, None, true)),
         None,
         None,
         None,
@@ -3390,6 +3391,7 @@ wrap_find_handler! {
 wrap_life_span_handler! {
     struct GhostexGpuiLifeSpanHandler {
         popup_open_handler: Option<BrowserPopupOpenHandler>,
+        page_metadata_handler: Option<BrowserPageMetadataHandler>,
         register_created_native_view: bool,
     }
 
@@ -3416,7 +3418,18 @@ wrap_life_span_handler! {
             then terminated the whole app. Return handled: browser teardown
             is fully owned by `CefBrowser::drop`, and the host GPUI window
             must never receive a close from CEF.
+
+            CDXC:GPUIBrowserAgentClose 2026-08-21:
+            DevTools Target.closeTarget and /json/close enter through this
+            same CEF close request. Browser panes must hand that request back
+            to the GPUI tab model before returning handled; otherwise CEF
+            accepts the request but the app-owned pane remains. App-initiated
+            closes may report this during teardown too, and the model close
+            path deliberately treats that as a no-op.
             */
+            if let Some(handler) = self.page_metadata_handler.as_ref() {
+                handler(BrowserPageMetadataEvent::CloseRequested);
+            }
             1
         }
 
@@ -3945,6 +3958,7 @@ impl CefBrowser {
                     .clone()
                     .map(GhostexGpuiBrowserRequestHandler::new)
             });
+        let browser_lifecycle_handler = page_metadata_handler.clone();
         let load_handler = if let Some(page_load_end_handler) = page_load_end_handler {
             /*
             CDXC:GPUITutorialVideoFullscreen 2026-08-18:
@@ -3981,7 +3995,11 @@ impl CefBrowser {
         // DoClose is always handled and CEF can never close the host GPUI
         // window when a browser is dropped.
         let mut client = Some(GhostexGpuiCefClient::new(
-            Some(GhostexGpuiLifeSpanHandler::new(popup_open_handler, false)),
+            Some(GhostexGpuiLifeSpanHandler::new(
+                popup_open_handler,
+                browser_lifecycle_handler,
+                false,
+            )),
             Some(context_menu_handler),
             display_handler,
             find_handler,
