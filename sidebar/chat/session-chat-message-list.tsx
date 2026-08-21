@@ -337,10 +337,12 @@ function plainReasoningTeaser(markdown: string): string {
 }
 
 function ReasoningRow({
+  isStreaming,
   markdown,
   tools,
   verboseMode,
 }: {
+  isStreaming: boolean;
   markdown: string;
   tools: ReturnType<typeof splitSessionChatBlocks>["tools"];
   verboseMode: boolean;
@@ -351,7 +353,7 @@ function ReasoningRow({
 
   const body = (
     <SessionChatScrollCap className="ghostex-chat-thinking-body">
-      <SessionChatMarkdown markdown={markdown} />
+      <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
     </SessionChatScrollCap>
   );
 
@@ -473,10 +475,17 @@ function userTurnCopyMarkdown(
 }
 
 function MessageRow({
+  isStreaming = false,
   message,
   showAssistantCopy,
   verboseMode,
 }: {
+  /**
+   * True while the agent is still appending to this row. Only the markdown
+   * renderer's syntax highlighting reads it (a fence that is still growing must
+   * not be re-tokenized per chunk, and must not enter the highlight cache).
+   */
+  isStreaming?: boolean;
   message: SessionChatMessage;
   showAssistantCopy: boolean;
   verboseMode: boolean;
@@ -553,7 +562,12 @@ function MessageRow({
    */
   if (isReasoning && markdown.length > 0 && images.length === 0) {
     return (
-      <ReasoningRow markdown={markdown} tools={tools} verboseMode={verboseMode} />
+      <ReasoningRow
+        isStreaming={isStreaming}
+        markdown={markdown}
+        tools={tools}
+        verboseMode={verboseMode}
+      />
     );
   }
 
@@ -595,7 +609,7 @@ function MessageRow({
         <ImageAttachments blocks={images} />
         {markdown.length > 0 ? (
           <div className="ghostex-chat-agent-message">
-            <SessionChatMarkdown markdown={markdown} />
+            <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
           </div>
         ) : null}
         {tools.length > 0 ? (
@@ -951,7 +965,7 @@ export function SessionChatMessageList({
             </div>
           ) : null}
           <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]">
-            {renderItems.map((item) => (
+            {renderItems.map((item, index) => (
               <MessageScrollerItem
                 key={
                   item.kind === "message"
@@ -972,6 +986,17 @@ export function SessionChatMessageList({
               >
                 {item.kind === "message" ? (
                   <MessageRow
+                    /*
+                     * Only the newest row can still be growing, and only while
+                     * the agent is working: transcript tailing appends to the
+                     * last message, and the synthetic streaming preview row is
+                     * always last when it exists. Earlier rows are settled, so
+                     * their code fences are safe to highlight and cache.
+                     * `completedWorkRenderItems` never folds the newest turn
+                     * while working, so a "completed-work" item is settled by
+                     * construction and keeps the default `isStreaming={false}`.
+                     */
+                    isStreaming={isWorking && index === renderItems.length - 1}
                     message={item.message}
                     showAssistantCopy={copyableAssistantMessageIds.has(
                       item.message.id,
