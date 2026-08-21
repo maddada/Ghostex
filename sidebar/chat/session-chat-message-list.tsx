@@ -22,7 +22,10 @@ import {
   IconPhoto,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SessionChatMessage } from "../../shared/session-chat";
+import type {
+  SessionChatMessage,
+  SessionChatTerminalActivity,
+} from "../../shared/session-chat";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
 import { Separator } from "../../components/ui/separator";
@@ -54,6 +57,7 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
 } from "../../components/ui/message-scroller";
+import { SessionChatActivityRow } from "./session-chat-activity-row";
 import { orderSessionChatMessages } from "./session-chat-assembler";
 import {
   centerSessionChatExpansion,
@@ -85,6 +89,12 @@ const SCROLLBAR_FADE_MS = 2000;
 export interface SessionChatMessageListProps {
   messages: readonly SessionChatMessage[];
   isWorking: boolean;
+  /**
+   * CDXC:SessionChatTerminalActivity 2026-08-22: live on-screen progress
+   * (compaction). Shown INSTEAD of the typing indicator: it says the same
+   * "still working" thing with the detail the indicator cannot carry.
+   */
+  terminalActivity?: SessionChatTerminalActivity | null;
   hasMore: boolean;
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
@@ -862,6 +872,7 @@ function ScrollToLatestSend({
 export function SessionChatMessageList({
   hasMore,
   isWorking,
+  terminalActivity,
   loadingEarlier,
   messages,
   onLoadEarlier,
@@ -921,8 +932,11 @@ export function SessionChatMessageList({
     [messages],
   );
 
+  const showActivity = terminalActivity != null;
   const showTypingIndicator =
-    isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+    !showActivity &&
+    isWorking &&
+    !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
   const renderItems = useMemo(
     () => completedWorkRenderItems(rendered, isWorking),
     [isWorking, rendered],
@@ -1011,6 +1025,9 @@ export function SessionChatMessageList({
                 )}
               </MessageScrollerItem>
             ))}
+            {showActivity && terminalActivity ? (
+              <SessionChatActivityRow activity={terminalActivity} />
+            ) : null}
             {showTypingIndicator ? (
               <div
                 aria-label="Agent is responding"
