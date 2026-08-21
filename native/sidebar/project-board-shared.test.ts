@@ -13,7 +13,7 @@ import {
   moveBoardColumn,
   parseBoardColumnConfig,
   removeBoardColumn,
-  renameBoardColumn,
+  beginBoardColumnRename,
   serializeBoardColumnConfig,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   extractDescriptionImagePreviews,
@@ -713,14 +713,24 @@ describe("board column management", () => {
     expect(addBoardColumn(config, " blocked ")).toBe(`${config},blocked`);
   });
 
-  test("renaming preserves the category suffix", () => {
-    expect(renameBoardColumn(config, "needs_input", "waiting")).toBe(
-      "backlog,test,review,waiting:wip,parked",
+  test("renaming keeps both names live and carries the category onto the new one", () => {
+    // the old entry must survive this step: a bead may not hold a status the config does not list
+    expect(beginBoardColumnRename(config, "needs_input", "waiting")).toBe(
+      "backlog,test,review,needs_input:wip,parked,waiting:wip",
     );
   });
 
   test("renaming refuses to touch a built-in entry", () => {
-    expect(renameBoardColumn(config, "review", "nope")).toBe(config);
+    expect(beginBoardColumnRename(config, "review", "nope")).toBe(config);
+  });
+
+  test("renaming an absent column changes nothing", () => {
+    expect(beginBoardColumnRename(config, "ghost", "nope")).toBe(config);
+  });
+
+  test("the finished rename drops the old entry and keeps the category", () => {
+    const both = beginBoardColumnRename(config, "needs_input", "waiting");
+    expect(removeBoardColumn(both, "needs_input")).toBe("backlog,test,review,parked,waiting:wip");
   });
 
   test("removing drops only the named managed entry", () => {

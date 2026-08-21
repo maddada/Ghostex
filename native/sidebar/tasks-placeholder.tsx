@@ -81,6 +81,7 @@ import {
   TSHIRT_OPTIONS,
   addBoardColumn,
   appendImageMarkdownToDescription,
+  beginBoardColumnRename,
   beadsErrorMessage,
   beadsStatusToBoardStatus,
   boardColumnNameError,
@@ -1788,7 +1789,7 @@ function ProjectBoardApp() {
    */
   const applyBoardColumnRename = async (from: string, to: string) => {
     const nextName = to.trim();
-    const bothConfig = addBoardColumn(boardColumnConfigRef.current, nextName);
+    const bothConfig = beginBoardColumnRename(boardColumnConfigRef.current, from, nextName);
     await runBeads({ action: "configSet", value: bothConfig });
     boardColumnConfigRef.current = bothConfig;
     for (const ticket of tickets.filter((candidate) => candidate.boardStatus === from)) {

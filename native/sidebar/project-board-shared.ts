@@ -271,14 +271,22 @@ export function addBoardColumn(config: string, name: string): string {
   return serializeBoardColumnConfig(entries);
 }
 
-export function renameBoardColumn(config: string, from: string, to: string): string {
-  return serializeBoardColumnConfig(
-    parseBoardColumnConfig(config).map((entry) =>
-      entry.name === from && isManagedBoardColumnName(entry.name)
-        ? { name: to.trim(), suffix: entry.suffix }
-        : entry,
-    ),
-  );
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Renaming cannot be one config write. A bead may not hold a status the config does not list, so the
+  new name has to exist alongside the old one while the beads move across, and only then can the old
+  entry go. This builds that intermediate config, carrying the old entry's bd category onto the new
+  name — an earlier version appended the new name with no suffix and silently dropped a `:wip`
+  category off a real board, which is what this comment exists to stop happening again.
+*/
+export function beginBoardColumnRename(config: string, from: string, to: string): string {
+  const entries = parseBoardColumnConfig(config);
+  const source = entries.find((entry) => entry.name === from);
+  if (!source || !isManagedBoardColumnName(from)) {
+    return serializeBoardColumnConfig(entries);
+  }
+  entries.push({ name: to.trim(), suffix: source.suffix });
+  return serializeBoardColumnConfig(entries);
 }
 
 export function removeBoardColumn(config: string, name: string): string {
