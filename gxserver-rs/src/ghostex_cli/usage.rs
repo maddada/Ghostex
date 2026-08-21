@@ -61,7 +61,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "find | f [zehn args...]",
-            "Search agent prompt history with bundled zehn",
+            "Search agent prompt history (built-in Zehn picker)",
         ),
         format_help_command(
             "history | h [ghostex-history args...]",
@@ -423,7 +423,7 @@ Selectors:
 Sessions:
   Running ghostex or gx with no subcommand launches or activates the Ghostex desktop app.
   ghostex tui and gx tui open the Ghostex terminal TUI.
-  gx find and gx f launch bundled zehn for prompt-history search; gx history and gx h open the transcript viewer.
+  gx find and gx f open the built-in Zehn prompt-history picker; gx history and gx h open the transcript viewer.
   The TUI shows the attached session, with a top switch button for project/session switching.
   The switcher lists Ghostex projects and sessions in macOS sidebar order and attaches through the existing zmx path.
   Direct attach stays available through attach/a/resume/r without opening the TUI.

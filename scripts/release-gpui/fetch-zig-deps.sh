@@ -14,7 +14,7 @@
 # the hash pinned in build.zig.zon and refuses a mismatch, and a hash mismatch is
 # classified FATAL, so it can never be retried into acceptance.
 #
-# Usage: scripts/release-gpui/fetch-zig-deps.sh [root ...]      (default: ghostty zmx zehn)
+# Usage: scripts/release-gpui/fetch-zig-deps.sh [root ...]      (default: ghostty zmx)
 
 set -euo pipefail
 
@@ -28,14 +28,11 @@ mkdir -p "$ZIG_GLOBAL_CACHE_DIR"
 
 ROOTS=("$@")
 if [[ ${#ROOTS[@]} -eq 0 ]]; then
-  ROOTS=(ghostty zmx zehn)
+  ROOTS=(ghostty zmx)
 fi
 
 zig_for_root() {
-  case "$1" in
-    zehn) printf '%s\n' "${ZEHN_ZIG:-${GHOSTEX_ZIG:-${ZIG:-zig}}}" ;;
-    *) printf '%s\n' "${GHOSTEX_ZIG:-${ZIG:-zig}}" ;;
-  esac
+  printf '%s\n' "${GHOSTEX_ZIG:-${ZIG:-zig}}"
 }
 
 FETCHED=0

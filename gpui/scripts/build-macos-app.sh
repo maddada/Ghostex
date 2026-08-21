@@ -553,7 +553,6 @@ validate_remote_gxserver_linux_package() {
 	for required_path in \
 		"bin/gxserver" \
 		"bin/zmx" \
-		"bin/zehn" \
 		"bin/bd"; do
 		if [[ ! -e "$package_dir/$required_path" ]]; then
 			echo "Remote gxserver $package_label package is missing required resource: $required_path" >&2
@@ -569,7 +568,6 @@ validate_remote_gxserver_linux_package() {
 	for required_path in \
 		"bin/gxserver" \
 		"bin/zmx" \
-		"bin/zehn" \
 		"bin/bd"; do
 		file_output="$(file "$package_dir/$required_path")"
 		if [[ "$file_output" == *"Mach-O"* ]]; then
@@ -649,7 +647,7 @@ stage_remote_gxserver_linux_package_if_available() {
 		exit 1
 	fi
 	# CDXC:GPUIRemoteMachines 2026-06-24-20:08:
-	# GPUI remote gxserver install parity may stage only explicit prebuilt Linux packages into Contents/Resources/Web. Validate required gxserver/zmx/zehn/bd/Node/Portless/CLI resources and reject Mach-O or wrong-architecture payloads before copying, so runtime install never falls back to source checkout paths or uploads a host macOS package to Linux.
+	# GPUI remote gxserver install parity may stage only explicit prebuilt Linux packages into Contents/Resources/Web. Validate required gxserver/zmx/bd/Node/Portless/CLI resources and reject Mach-O or wrong-architecture payloads before copying, so runtime install never falls back to source checkout paths or uploads a host macOS package to Linux.
 	rm -rf "$target_dir"
 	mkdir -p "$target_dir"
 	rsync -a --delete "$source_dir"/ "$target_dir"/

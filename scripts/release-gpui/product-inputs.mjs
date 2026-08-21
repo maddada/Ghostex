@@ -81,6 +81,10 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "mobile-chat", why: "Mobile chat bundle source; consumed by the mobile submodule build, not by release jobs." },
   { path: "plans", why: "Planning documents; metadata only." },
   { path: "src", why: "Deprecated macOS Swift app; not a release target." },
+  {
+    path: "zehn",
+    why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the zehn-rs crate compiled into gxserver.",
+  },
   { path: "vitest.config.ts", why: "Test runner configuration; release:test uses vitest.release.config.ts." },
   { path: "vitest.release.config.ts", why: "Runs in prepare only; cannot change artifact bytes." },
 ]);
@@ -119,6 +123,8 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: ":(exclude)gpui/build" },
   { pathspec: ":(exclude)gpui/target" },
   { pathspec: "ghostex-paths/**" },
+  { pathspec: "zehn-rs/**" },
+  { pathspec: ":(exclude)zehn-rs/target" },
   { pathspec: "gxserver-rs/**" },
   { pathspec: ":(exclude)gxserver-rs/target" },
   { pathspec: "shared/**" },
@@ -138,7 +144,6 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "scripts/release-gpui/publish-component.mjs" },
   { pathspec: "scripts/release-gpui/on-demand-manifest.mjs" },
   { pathspec: "scripts/release-gpui/patches" },
-  { pathspec: "scripts/build-native-web-bundles.mjs" },
   { pathspec: "tsconfig.json" },
 ]);
 
@@ -147,10 +152,11 @@ const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: "gxserver-rs/**" },
   { pathspec: ":(exclude)gxserver-rs/target" },
   { pathspec: "ghostex-paths/**" },
+  { pathspec: "zehn-rs/**" },
+  { pathspec: ":(exclude)zehn-rs/target" },
   { pathspec: "tui2/**" },
   { pathspec: ":(exclude)tui2/target" },
   { pathspec: "zmx" },
-  { pathspec: "zehn" },
   { pathspec: "scripts/build-remote-gxserver-linux-release.sh" },
   { pathspec: "scripts/beads-release.mjs" },
   { pathspec: "scripts/build-pinned-beads-release.mjs" },

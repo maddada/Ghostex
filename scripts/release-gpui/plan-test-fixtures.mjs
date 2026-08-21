@@ -23,7 +23,6 @@ const FIXTURE_GITLINKS = {
   ".dependencies/zed": "5775362fbd422f00ef7ca3e7a88b088a65d7c22b",
   "code-server": "390f119a145ec13b6421c5ec905163dd4cd20514",
   mobile: "65979ba85098bf336c49bbfc216c3e1ccb4702f1",
-  zehn: "493bc746ef63cfabb636d5bd0242d4a0fd2ba5f3",
   zmx: "50e66a9b6cd1ecbc821669c8101e18c8e3c924d6",
 };
 
@@ -71,7 +70,6 @@ const FIXTURE_FILES = {
     2,
   )}\n`,
   "scripts/beads-release.mjs": "export const BEADS_VERSION = \"1.1.0\";\n",
-  "scripts/build-native-web-bundles.mjs": "// bundles\n",
   "scripts/build-pinned-beads-release.mjs": "// beads\n",
   "scripts/build-remote-gxserver-linux-release.sh": "#!/usr/bin/env bash\n",
   "scripts/release-ghostex.mjs": "// remote package\n",

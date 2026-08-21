@@ -18,7 +18,7 @@ const repoRoot = path.resolve(gxserverRoot, '..');
  * CDXC:RemoteMinimalDeps 2026-07-13:
  * Remote hosts must not need a specific glibc/libstdc++ floor, so the Rust
  * binaries (gxserver, ghostex, ghostex-tui) build against musl and link
- * statically, matching the already-static zmx/zehn (Zig musl). bd is the
+ * statically, matching the already-static zmx (Zig musl). bd is the
  * checksum-verified schema-compatible Beads binary with embedded Dolt support.
  */
 const archConfigs = {
@@ -46,7 +46,6 @@ Run this on Ubuntu or in Linux CI. The default output is:
 
 Inputs can be overridden with:
   --zmx-root <dir>       default: zmx
-  --zehn-root <dir>      default: zehn
   --out-root <dir>       default for --arch all: build/remote-gxserver-linux
   --rust-target <triple> default: arch-specific Linux musl target (static)
   --tui-root <dir>       default: tui2
@@ -54,7 +53,6 @@ Inputs can be overridden with:
   --tui-zig-bin <path>   default: TUI_ZIG, ZMX_ZIG, ZIG, or zig
   --zig-target <triple>  default: arch-specific Linux musl target
   --zmx-zig-bin <path>   default: ZMX_ZIG, ZIG, or zig
-  --zehn-zig-bin <path>  default: ZEHN_ZIG, ZIG, or zig
   --allow-cross          allow running outside Linux when cross toolchains are configured
 `;
 
@@ -120,17 +118,6 @@ async function buildLinuxPackageForArch({ arch, options }) {
       label: 'Zig 0.15.x for zmx',
       versionMatches: (version) => /^0\.15\./u.test(version),
     });
-    const zehnZigBin = await resolveZigBinary({
-      candidates: [
-        options.zehnZigBin,
-        process.env.ZEHN_ZIG,
-        path.join(os.homedir(), 'apps', `zig-${zigHostArch()}-linux-0.16.0`, 'zig'),
-        process.env.ZIG,
-        'zig',
-      ],
-      label: 'Zig 0.16+ for zehn',
-      versionMatches: isZig016OrNewer,
-    });
     const config = {
       ...archConfig,
       arch,
@@ -144,15 +131,13 @@ async function buildLinuxPackageForArch({ arch, options }) {
       tuiZigBin: options.tuiZigBin || process.env.TUI_ZIG || zmxZigBin,
       zmxRoot: path.resolve(repoRoot, options.zmxRoot || 'zmx'),
       zmxZigBin,
-      zehnRoot: path.resolve(repoRoot, options.zehnRoot || 'zehn'),
-      zehnZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
     };
 
     /*
      * CDXC:RemoteMachines 2026-06-23-10:07:
      * Ubuntu install must be a first-run package, not an on-host source build.
-     * Build gxserver-rs, zmx, zehn, and ghostex-tui and stage the pinned
+     * Build gxserver-rs, zmx, and ghostex-tui and stage the pinned
      * schema-compatible bd release artifact into one package
      * directory so the macOS app
      * can upload it over SSH and start the same Rust control plane without PATH
@@ -231,9 +216,10 @@ async function buildPackage({ config, outputDir, workRoot }) {
 
   const { ghostexBin, gxserverBin } = await buildGxserver(config);
   /*
-   * CDXC:RemoteMachines 2026-06-24-05:42:
-   * zmx and zehn share Ghostex packaging but intentionally pin different Zig versions.
-   * Build each tool with its own Zig binary so the Ubuntu remote package contains both tools without forcing either source tree onto the wrong compiler.
+   * CDXC:AgentHistorySearch 2026-08-20:
+   * zehn used to be built here with its own pinned Zig 0.16 toolchain. It is now
+   * a Rust crate inside gxserver, so the Linux remote package needs exactly one
+   * Zig toolchain (zmx's 0.15.x) again.
    */
   const zmxBin = await buildZigTool({
     binName: 'zmx',
@@ -241,13 +227,6 @@ async function buildPackage({ config, outputDir, workRoot }) {
     target: config.zigTarget,
     workRoot,
     zigBin: config.zmxZigBin,
-  });
-  const zehnBin = await buildZigTool({
-    binName: 'zehn',
-    root: config.zehnRoot,
-    target: config.zigTarget,
-    workRoot,
-    zigBin: config.zehnZigBin,
   });
   const bdBin = path.join(workRoot, 'bd');
   const prebuiltBeadsBinary = process.env.GHOSTEX_BEADS_PREBUILT_BINARY?.trim();
@@ -267,7 +246,6 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await copyExecutable(ghostexBin, path.join(binsDir, 'ghostex'), 'ghostex');
   await copyExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
-  await copyExecutable(zehnBin, path.join(binsDir, 'zehn'), 'zehn');
   await copyExecutable(bdBin, path.join(binsDir, 'bd'), 'bd');
   await copyExecutable(tuiBin, path.join(binsDir, 'ghostex-tui'), 'ghostex-tui');
 
@@ -345,11 +323,11 @@ async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/zehn', 'bin/bd', 'bin/ghostex-tui'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd', 'bin/ghostex-tui'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }
-  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/zehn', 'bin/bd', 'bin/ghostex-tui']) {
+  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd', 'bin/ghostex-tui']) {
     const fullPath = path.join(packageDir, relativePath);
     if (!(await isElf(fullPath))) {
       throw new Error(`Linux remote package expected an ELF binary at ${relativePath}.`);
@@ -464,14 +442,6 @@ async function resolveZigBinary({ candidates, label, versionMatches }) {
 
 function zigHostArch() {
   return process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-}
-
-function isZig016OrNewer(version) {
-  const match = version.match(/^(\d+)\.(\d+)\./u);
-  if (!match) return false;
-  const major = Number.parseInt(match[1], 10);
-  const minor = Number.parseInt(match[2], 10);
-  return major > 0 || minor >= 16;
 }
 
 async function assertSafeOutputDir(outputDir) {

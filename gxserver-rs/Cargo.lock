@@ -480,6 +480,7 @@ dependencies = [
  "url",
  "uuid",
  "windows-sys 0.59.0",
+ "zehn",
 ]
 
 [[package]]
@@ -2119,6 +2120,16 @@ dependencies = [
  "quote",
  "syn",
  "synstructure",
+]
+
+[[package]]
+name = "zehn"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

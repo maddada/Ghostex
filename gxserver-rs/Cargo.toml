@@ -12,6 +12,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 crossterm = "0.28"
 futures-util = "0.3"
 ghostex-paths = { path = "../ghostex-paths" }
+zehn = { path = "../zehn-rs" }
 libc = "0.2"
 md-5 = "0.10"
 portable-pty = "0.9"

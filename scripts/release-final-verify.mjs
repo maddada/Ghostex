@@ -46,7 +46,7 @@ const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const githubRepo = "maddada/Ghostex";
 export const MAX_RELEASE_DMG_BYTES = 300 * 1024 * 1024;
 const subrepoCandidates = [
-  "mobile", "tui", "tui2", "crossplatform", "zmx", "zehn",
+  "mobile", "tui", "tui2", "crossplatform", "zmx",
 ];
 
 function usage() {

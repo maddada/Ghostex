@@ -78,7 +78,7 @@ if [[ "${GHOSTEX_RELEASE_SKIP_SUBMODULES:-0}" != "1" ]]; then
   if [[ "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" == "1" ]]; then
     requested=(mobile)
   else
-    requested=(code-server zehn zmx)
+    requested=(code-server zmx)
   fi
   if [[ "${GHOSTEX_RELEASE_INCLUDE_ANDROID:-0}" == "1" && "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" != "1" ]]; then
     requested+=(mobile)

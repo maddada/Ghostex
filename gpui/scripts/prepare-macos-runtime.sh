@@ -19,10 +19,10 @@ if ! xcrun xcodebuild -version >/dev/null 2>&1; then
 	done
 fi
 
-ZEHN_ROOT_EXPLICITLY_CONFIGURED=0
-[[ -n "${ZEHN_ROOT:-}" ]] && ZEHN_ROOT_EXPLICITLY_CONFIGURED=1
+# CDXC:AgentHistorySearch 2026-08-20: zehn is no longer a Zig submodule that this
+# script builds and stages as Web/bin/zehn. Prompt-history search is a Rust crate
+# compiled into gxserver, so there is nothing to build, cache, or copy here.
 ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/zmx}"
-ZEHN_ROOT="${ZEHN_ROOT:-$REPO_ROOT/zehn}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/gxserver-rs}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
@@ -124,7 +124,6 @@ esac
 APP_CAPABILITY_SHARED_NODE_RUNTIME=false
 APP_CAPABILITY_SOURCE_EDITOR=false
 APP_CAPABILITY_TUI=false
-APP_CAPABILITY_ZEHN=false
 APP_CAPABILITY_BEADS=false
 APP_CAPABILITY_ZMX=true
 APP_OPTIONAL_RESOURCE_NOTES=()
@@ -1037,32 +1036,6 @@ EOF
 	GXSERVER_RUST_BIN="$output_path"
 }
 
-build_zehn_if_needed() {
-	local output_path="$ZEHN_ROOT/zig-out/bin/zehn"
-	local build_digest
-	build_digest="$(fingerprint_inputs \
-		--value "zehn-build-v1" \
-		--value "target=$ZEHN_TARGET" \
-		--value "zig=$ZEHN_ZIG_VERSION" \
-		--path "$ZEHN_ROOT/src" \
-		--path "$ZEHN_ROOT/build.zig" \
-		--path "$ZEHN_ROOT/build.zig.zon")"
-	if cache_matches "zehn-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		# CDXC:LocalStartArchitecture 2026-06-08-08:42: zehn also emits to a shared zig-out/bin path across target switches. Check the Mach-O slice before reusing a cached artifact so bundled CLI search tools match the selected app architecture.
-		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
-			echo "zehn is current; skipping Zig build."
-			return 0
-		fi
-		echo "zehn cache is stale for $GHOSTEX_MACOS_ARCH; rebuilding Zig artifact."
-	fi
-
-	(
-		cd "$ZEHN_ROOT"
-		env ZIG="$ZEHN_ZIG_BIN" "$ZEHN_ZIG_BIN" build -Doptimize=ReleaseFast -Dtarget="$ZEHN_TARGET"
-	)
-	write_cache_stamp "zehn-$GHOSTEX_MACOS_ARCH" "$build_digest"
-}
-
 stage_beads_release_if_needed() {
 	local output_path="$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd"
 	local release_arch build_digest
@@ -1141,7 +1114,6 @@ gxserver_rust_package_supports_macos_arch() {
 		fi
 	done
 	for binary_path in \
-		"$target_dir/bin/zehn" \
 		"$WEB_DIR/bin/bd"; do
 		if [[ -e "$binary_path" ]] && ! binary_supports_macos_arch "$binary_path" "$GHOSTEX_MACOS_ARCH"; then
 			return 1
@@ -1262,7 +1234,7 @@ This package uses the bundled native gxserver executable in `bin/gxserver` and d
 - `bin/gxserver stop`: stop only the gxserver control plane; zmx sessions are not killed.
 - `bin/gxserver stop-all`: kill gxserver-tracked zmx sessions, then stop the control plane.
 
-The package includes Ghostex's pinned zmx and zehn artifacts plus the checksum-verified schema-v54 Beads `bd` artifact in `bin/`. Project board operations require the bundled `bd`; shell-installed `bd` is intentionally ignored so Ghostex and agent workflows share one pinned Beads binary.
+The package includes Ghostex's pinned zmx artifact plus the checksum-verified schema-v54 Beads `bd` artifact in `bin/`. Project board operations require the bundled `bd`; shell-installed `bd` is intentionally ignored so Ghostex and agent workflows share one pinned Beads binary.
 EOF
 }
 
@@ -1326,7 +1298,7 @@ package_gxserver_rust_package() {
 	local rust_bin="$2"
 	local package_version="$3"
 	# CDXC:GxserverRustPackaging 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from gxserver-rs, shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
-	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required and Zehn is optional. Beads is always staged from the checksum-pinned schema-compatible release artifact before this package is assembled.
+	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required. Beads is always staged from the checksum-pinned schema-compatible release artifact before this package is assembled.
 	rm -rf "$package_dir"
 	mkdir -p "$package_dir/bin"
 	cp "$rust_bin" "$package_dir/bin/gxserver"
@@ -1335,13 +1307,7 @@ package_gxserver_rust_package() {
 	# app bundles and PATH wrappers resolve one implementation.
 	cp "${rust_bin%/*}/ghostex" "$package_dir/bin/ghostex"
 	cp "$WEB_DIR/bin/zmx" "$package_dir/bin/zmx"
-	if [[ -x "$WEB_DIR/bin/zehn" ]]; then
-		cp "$WEB_DIR/bin/zehn" "$package_dir/bin/zehn"
-	fi
 	chmod 755 "$package_dir/bin/gxserver" "$package_dir/bin/ghostex" "$package_dir/bin/zmx"
-	if [[ -x "$package_dir/bin/zehn" ]]; then
-		chmod 755 "$package_dir/bin/zehn"
-	fi
 	if [[ -x "$WEB_DIR/bin/bd" ]]; then
 		write_gxserver_shared_bd_launcher "$package_dir/bin/bd"
 	fi
@@ -1359,7 +1325,6 @@ validate_remote_gxserver_linux_package() {
 		"bin/gxserver" \
 		"bin/ghostex" \
 		"bin/zmx" \
-		"bin/zehn" \
 		"bin/bd" \
 		"bin/ghostex-tui"; do
 		if [[ ! -e "$package_dir/$required_path" ]]; then
@@ -1370,7 +1335,6 @@ validate_remote_gxserver_linux_package() {
 	for required_path in \
 		"bin/gxserver" \
 		"bin/zmx" \
-		"bin/zehn" \
 		"bin/bd" \
 		"bin/ghostex-tui"; do
 		file_output="$(file "$package_dir/$required_path")"
@@ -1433,7 +1397,7 @@ stage_remote_gxserver_linux_package_if_configured() {
 		printf '%s\n' "$validation_output" >&2
 		exit 1
 	fi
-	# CDXC:RemoteMachines 2026-06-23-09:46: macOS app bundles may stage Linux remote gxserver packages only from explicit prebuilt directories. Validate required gxserver/zmx/zehn/bd/Node/Portless/CLI resources and require Linux ELF payloads before copying to Web/gxserver-linux-* so the installer never uploads the host Darwin package to Ubuntu.
+	# CDXC:RemoteMachines 2026-06-23-09:46: macOS app bundles may stage Linux remote gxserver packages only from explicit prebuilt directories. Validate required gxserver/zmx/bd/Node/Portless/CLI resources and require Linux ELF payloads before copying to Web/gxserver-linux-* so the installer never uploads the host Darwin package to Ubuntu.
 	#
 	# CDXC:RemoteMachines 2026-06-23-10:07: The Ubuntu package builder writes build/remote-gxserver-linux/<arch>/package by default. Auto-stage that deterministic output when it exists so release/local app packaging can include the already-built Linux package without requiring another env var or rebuilding it in the macOS app pass.
 	rm -rf "$target_dir"
@@ -1671,7 +1635,7 @@ package_gxserver_if_needed() {
 	# GPUI bundles the native Rust gxserver package used by standalone installs.
 	# TypeScript daemon packaging is intentionally unsupported.
 	#
-	# CDXC:LocalStartFast 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, bundled zmx/zehn/bd binaries, and generated protocol inputs are unchanged.
+	# CDXC:LocalStartFast 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, bundled zmx/bd binaries, and generated protocol inputs are unchanged.
 	#
 	# CDXC:ProjectBoardBeads 2026-06-08-10:46: Package the full checksum-verified schema-v54 Beads CLI with gxserver so Project/Kanban opens without PATH setup. The active macOS release target is arm64 and receives its matching signed binary.
 	# Rust packaging preserves generated TypeScript protocol exports for web
@@ -1695,13 +1659,12 @@ package_gxserver_if_needed() {
 			--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 			--path "$GXSERVER_RS_ROOT/Cargo.lock" \
 			--path "$WEB_DIR/bin/zmx" \
-			--path "$WEB_DIR/bin/zehn" \
 			--path "$WEB_DIR/bin/bd")"
 	local cache_outputs=("$target_dir/build-identity.json" "$target_dir/bin/gxserver" "$target_dir/dist/protocol/index.js" "$target_dir/dist/protocol/index.d.ts")
 	cache_outputs+=("$target_dir/bin/ghostex")
 	if cache_matches "gxserver-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "${cache_outputs[@]}" &&
 		gxserver_package_supports_macos_arch "$target_dir"; then
-		# CDXC:GxserverPackaging 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver, zmx, zehn, and bd binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
+		# CDXC:GxserverPackaging 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver, zmx, and bd binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
 		echo "gxserver package is current; skipping package rebuild."
 		return 0
 	fi
@@ -1730,7 +1693,6 @@ write_build_capabilities_manifest() {
 	GHOSTEX_CAP_SHARED_NODE_RUNTIME="$APP_CAPABILITY_SHARED_NODE_RUNTIME" \
 		GHOSTEX_CAP_SOURCE_EDITOR="$APP_CAPABILITY_SOURCE_EDITOR" \
 		GHOSTEX_CAP_TUI="$APP_CAPABILITY_TUI" \
-		GHOSTEX_CAP_ZEHN="$APP_CAPABILITY_ZEHN" \
 		GHOSTEX_CAP_BEADS="$APP_CAPABILITY_BEADS" \
 		GHOSTEX_CAP_ZMX="$APP_CAPABILITY_ZMX" \
 		GHOSTEX_CAP_ALLOW_MISSING_OPTIONAL="$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" \
@@ -1760,7 +1722,6 @@ writeFileSync(
       sharedNodeRuntime: bool("GHOSTEX_CAP_SHARED_NODE_RUNTIME"),
       sourceEditor: bool("GHOSTEX_CAP_SOURCE_EDITOR"),
       tui: bool("GHOSTEX_CAP_TUI"),
-      zehn: bool("GHOSTEX_CAP_ZEHN"),
       zmx: bool("GHOSTEX_CAP_ZMX"),
     },
     skippedOptionalResources: notes,
@@ -1908,61 +1869,6 @@ EOF
 	exit 1
 else
 	record_optional_resource_note "Ghostex TUI" "tui2 checkout was not found"
-fi
-if [[ -f "$ZEHN_ROOT/build.zig" ]]; then
-	ZEHN_ZIG_BIN="${ZEHN_ZIG:-}"
-	if [[ -z "$ZEHN_ZIG_BIN" ]]; then
-		ZEHN_ZIG_BIN="$(command -v zig || true)"
-	fi
-	if [[ -z "$ZEHN_ZIG_BIN" ]]; then
-		cat >&2 <<EOF
-Zig 0.16 or newer is required to build bundled zehn.
-
-Install it, then rerun this script:
-  brew install zig
-EOF
-		exit 1
-	fi
-	ZEHN_ZIG_VERSION="$("$ZEHN_ZIG_BIN" version 2>/dev/null || true)"
-	case "$ZEHN_ZIG_VERSION" in
-		0.16.* | 0.17.* | 0.18.* | 0.19.* | 0.20.*)
-			;;
-		*)
-			cat >&2 <<EOF
-Zig 0.16 or newer is required to build bundled zehn.
-
-Selected Zig:
-  $ZEHN_ZIG_BIN
-  version: ${ZEHN_ZIG_VERSION:-unknown}
-
-Set ZEHN_ZIG explicitly if your compatible Zig binary is not first on PATH.
-EOF
-			exit 1
-			;;
-	esac
-	case "$GHOSTEX_MACOS_ARCH" in
-		arm64)
-			ZEHN_TARGET="aarch64-macos.15.0"
-			;;
-		x86_64)
-			ZEHN_TARGET="x86_64-macos.13.0"
-			;;
-	esac
-	build_zehn_if_needed
-	cp "$ZEHN_ROOT/zig-out/bin/zehn" "$WEB_DIR/bin/zehn"
-	chmod 755 "$WEB_DIR/bin/zehn"
-	APP_CAPABILITY_ZEHN=true
-elif [[ "$ZEHN_ROOT_EXPLICITLY_CONFIGURED" == "1" || "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" == "0" ]]; then
-	cat >&2 <<EOF
-zehn source is missing:
-  $ZEHN_ROOT
-
-Initialize submodules before building:
-  git submodule update --init zehn
-EOF
-	exit 1
-else
-	record_optional_resource_note "Zehn search CLI" "zehn checkout was not found"
 fi
 stage_beads_release_if_needed
 cp "$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd" "$WEB_DIR/bin/bd"

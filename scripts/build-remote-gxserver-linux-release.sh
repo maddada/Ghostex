@@ -5,7 +5,8 @@ set -euo pipefail
 # The 5.4.0 release lost most of its controllable time rediscovering the macOS
 # cross-build recipe for the Ubuntu remote gxserver packages (Zig CC/AR
 # wrappers, Rust-style --target argument stripping, split Zig toolchains for
-# zmx/tui versus zehn). This script owns that recipe so releases run one
+# zmx/tui versus the musl cc/ar wrappers). This script owns that recipe so
+# releases run one
 # deterministic command instead of hand-typing environment variables.
 #
 # Usage:
@@ -193,8 +194,12 @@ zig_version_of() {
 	"$1" version 2>/dev/null || true
 }
 
-# zmx and the TUI vendor tree require Zig 0.15.x while zehn requires Zig
-# 0.16+. Resolve both toolchains explicitly instead of trusting PATH order.
+# zmx and the TUI vendor tree require Zig 0.15.x, while the musl `zig cc`/`zig ar`
+# wrappers that link the static Rust binaries need Zig 0.16+. Resolve both
+# toolchains explicitly instead of trusting PATH order.
+#
+# CDXC:AgentHistorySearch 2026-08-20: the 0.16 toolchain used to exist for zehn
+# as well. Zehn is Rust now, so 0.16 is here purely for the cc/ar wrappers.
 resolve_zig_015() {
 	local candidate
 	for candidate in \
@@ -216,7 +221,7 @@ resolve_zig_015() {
 resolve_zig_016() {
 	local candidate
 	for candidate in \
-		"${ZEHN_ZIG:-}" \
+		"${GHOSTEX_ZIG_016:-}" \
 		/opt/homebrew/bin/zig \
 		"$HOME/.local/share/mise/installs/zig/0.16"*/bin/zig \
 		"$(command -v zig || true)"; do
@@ -242,9 +247,9 @@ EOF
 fi
 if ! ZIG_016="$(resolve_zig_016)"; then
 	cat >&2 <<'EOF'
-Could not find Zig 0.16+ for zehn cross builds.
+Could not find Zig 0.16+ for the musl cc/ar cross-link wrappers.
 
-Install it with Homebrew, or point ZEHN_ZIG at a Zig 0.16 binary:
+Install it with Homebrew, or point GHOSTEX_ZIG_016 at a Zig 0.16 binary:
   brew install zig
 EOF
 	exit 1
@@ -307,7 +312,7 @@ EOF
 chmod 755 "$WRAPPER_DIR/zig-ar"
 
 echo "Zig 0.15 (zmx/TUI): $ZIG_015 ($(zig_version_of "$ZIG_015"))"
-echo "Zig 0.16 (zehn/cc): $ZIG_016 ($(zig_version_of "$ZIG_016"))"
+echo "Zig 0.16 (musl cc/ar): $ZIG_016 ($(zig_version_of "$ZIG_016"))"
 
 build_arch() {
 	local arch="$1"
@@ -335,7 +340,6 @@ build_arch() {
 		"CARGO_TARGET_${env_suffix}_RUSTFLAGS=-C linker-flavor=ld.lld" \
 		ZMX_ZIG="$ZIG_015" \
 		TUI_ZIG="$ZIG_015" \
-		ZEHN_ZIG="$ZIG_016" \
 		node "$REPO_ROOT/gxserver-rs/package-remote-linux.mjs" --arch "$arch" --allow-cross
 
 	if ! status="$(package_status "$arch")"; then

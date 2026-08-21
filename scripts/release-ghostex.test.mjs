@@ -266,7 +266,6 @@ describe("Ghostex release automation helpers", () => {
     const existing = new Set([
       "/package/bin/gxserver",
       "/package/bin/zmx",
-      "/package/bin/zehn",
       "/package/bin/bd",
       "/package/bin/ghostex-tui",
       "/package/bin/ghostex",

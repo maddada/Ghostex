@@ -48,12 +48,16 @@ CDXC:GxserverToolchain 2026-06-14-20:37:
 Managed terminal/search tools resolve from Ghostex-pinned development or bundled resources. Project-board operations intentionally resolve the user's machine-installed Beads CLI so Ghostex and shell agents use one binary and one schema owner.
 
 CDXC:GxserverUbuntu 2026-06-23-07:52:
-The same gxserver-rs binary resolves zmx and zehn from package-relative resources on macOS and Ubuntu. Beads is the deliberate exception: resolve the user's system `bd` from portable PATH locations so local and remote boards follow the machine operator's installed version.
+The same gxserver-rs binary resolves zmx from package-relative resources on macOS and Ubuntu. Beads is the deliberate exception: resolve the user's system `bd` from portable PATH locations so local and remote boards follow the machine operator's installed version.
+
+CDXC:AgentHistorySearch 2026-08-20:
+Zehn is no longer in this list. Prompt-history search is compiled into gxserver
+as a Rust crate, so there is no bundled `zehn` executable to resolve, report as
+missing, or install on a remote host.
 */
 pub fn get_gxserver_tool_statuses() -> Vec<ToolCapabilityStatus> {
     vec![
         resolve_bundled_tool_status("zmx"),
-        resolve_bundled_tool_status("zehn"),
         get_bd_tool_status(),
     ]
 }
@@ -99,11 +103,7 @@ fn resolve_bundled_tool_status(tool: &str) -> ToolCapabilityStatus {
         return ToolCapabilityStatus {
             availability: "available".to_string(),
             candidate_paths: None,
-            capability: if tool == "zmx" {
-                "zmxLifecycle".to_string()
-            } else {
-                "previousSessionHistory".to_string()
-            },
+            capability: "zmxLifecycle".to_string(),
             executable_path: Some(candidate.executable_path.to_string_lossy().to_string()),
             guidance: None,
             message: format!("{tool} resolved from {}.", candidate.source.as_str()),
@@ -118,19 +118,11 @@ fn resolve_bundled_tool_status(tool: &str) -> ToolCapabilityStatus {
     ToolCapabilityStatus {
         availability: "missing".to_string(),
         candidate_paths: Some(candidate_paths),
-        capability: if tool == "zmx" {
-            "zmxLifecycle".to_string()
-        } else {
-            "previousSessionHistory".to_string()
-        },
+        capability: "zmxLifecycle".to_string(),
         executable_path: None,
         guidance: None,
-        message: if tool == "zmx" {
-            "Ghostex-managed zmx sessions require bundled zmx, but bundled zmx was not found."
-                .to_string()
-        } else {
-            "Ghostex CLI search requires bundled zehn, but bundled zehn was not found.".to_string()
-        },
+        message: "Ghostex-managed zmx sessions require bundled zmx, but bundled zmx was not found."
+            .to_string(),
         source: None,
         tool: tool.to_string(),
     }
@@ -326,7 +318,7 @@ fn default_gxserver_root() -> PathBuf {
 fn gxserver_root_from_executable_path(executable_path: &Path) -> Option<PathBuf> {
     /*
     CDXC:GxserverToolchain 2026-06-21-13:59:
-    The macOS app launches gxserver-rs from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx/zehn/bd from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
+    The macOS app launches gxserver-rs from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx/bd from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
     */
     let parent = executable_path.parent()?;
     if parent.file_name().and_then(|name| name.to_str()) != Some("bin") {

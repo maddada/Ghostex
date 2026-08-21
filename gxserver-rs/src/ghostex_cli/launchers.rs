@@ -11,7 +11,7 @@ use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 /*
 CDXC:GhostexRustCli 2026-07-13:
 Faithful port of the Node CLI's tool launchers: interactive shell resolution,
-desktop activation, explicit `gx tui` launch, zehn/ghostex-history/bd/gxserver
+desktop activation, explicit `gx tui` launch, ghostex-history/bd/gxserver
 binary discovery, and the shared interactive process runner. Resolution order and error strings must
 match scripts/ghostex-cli.mjs so installed bundles, remote Ubuntu packages,
 and source checkouts keep resolving the exact same binaries.
@@ -256,7 +256,7 @@ fn env_path(name: &str) -> Option<PathBuf> {
 
 pub fn ghostex_bundled_web_resource_roots(cli_dir: &Path) -> Vec<PathBuf> {
     /*
-    Installed app CLIs moved from Web/cli to CLI, but zmx/zehn/gxserver/TUI
+    Installed app CLIs moved from Web/cli to CLI, but zmx/gxserver/TUI
     runtime assets still live under Web. Check both the new sibling Web folder
     and the legacy parent layout so old dev bundles and new release bundles
     resolve app-owned tools without PATH fallbacks.
@@ -736,25 +736,33 @@ fn interactive_session_picker_command(args: &[String]) -> CliResult<()> {
 }
 
 // ---------------------------------------------------------------------------
-// zehn (`gx find`) and ghostex-history (`gx h`)
+// Zehn prompt search (`gx find`) and ghostex-history (`gx h`)
 // ---------------------------------------------------------------------------
 
+/*
+CDXC:AgentHistorySearch 2026-08-20:
+Zehn is no longer a separate Zig binary that Ghostex bundles and spawns. It is a
+Rust crate compiled into this one, so `gx f` runs the picker in-process: no
+`bin/zehn` to stage, no Zig toolchain in the release path, and the Find GUI
+shares the exact same scanner, matcher, and ranking through the same crate.
+*/
 pub fn zehn_search_command(args: &[String]) -> CliResult<()> {
-    let launch = resolve_zehn_launch()?;
-    let zehn_args = resolve_zehn_search_args(args);
-    let mut full_args = launch.args.clone();
-    full_args.extend(zehn_args);
     /*
     CDXC:AgentHistoryFocus 2026-08-07-09:18:
-    `ghostex find` must give bundled Zehn the exact Ghostex CLI executable that launched it. Zehn can then request agent-session focus through the authenticated gxserver control path without PATH discovery or coupling itself to Ghostex storage/protocol internals.
+    `ghostex find` must give Zehn the exact Ghostex CLI executable that launched
+    it. Zehn can then request agent-session focus through the authenticated
+    gxserver control path without PATH discovery or coupling itself to Ghostex
+    storage/protocol internals. In-process, that is simply an env var on self.
     */
-    let mut env = launch.env.clone();
-    env.retain(|(key, _)| key != "GHOSTEX_CLI_EXECUTABLE");
-    env.push((
-        "GHOSTEX_CLI_EXECUTABLE".to_string(),
-        current_cli_executable().to_string_lossy().to_string(),
-    ));
-    run_interactive_process(&launch.command, &full_args, launch.cwd.as_deref(), &env)?;
+    std::env::set_var(
+        "GHOSTEX_CLI_EXECUTABLE",
+        current_cli_executable().as_os_str(),
+    );
+    let zehn_args = resolve_zehn_search_args(args);
+    let code = zehn::cli::run(&zehn_args);
+    if code != 0 {
+        crate::ghostex_cli::set_exit_code(code);
+    }
     Ok(())
 }
 
@@ -886,81 +894,6 @@ pub fn apply_zehn_accept_all_args(args: &[String], accept_all_enabled: bool) -> 
 pub fn has_zehn_accept_all_override(args: &[String]) -> bool {
     args.iter()
         .any(|arg| arg == "--accept-all" || arg == "--no-accept-all")
-}
-
-pub fn resolve_zehn_launch() -> CliResult<Launch> {
-    let explicit_bin = std::env::var("GHOSTEX_ZEHN_BIN")
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    if !explicit_bin.is_empty() {
-        return Ok(Launch {
-            command: explicit_bin,
-            args: Vec::new(),
-            cwd: None,
-            env: Vec::new(),
-        });
-    }
-
-    let cli_dir = cli_dir();
-    for bundled_root in ghostex_bundled_web_resource_roots(&cli_dir) {
-        let bundled_bin = js_path_resolve(&bundled_root.join("bin").join("zehn"));
-        if file_exists_sync(&bundled_bin) {
-            return Ok(Launch {
-                command: bundled_bin.to_string_lossy().to_string(),
-                args: Vec::new(),
-                cwd: None,
-                env: Vec::new(),
-            });
-        }
-    }
-
-    let repo_root = js_path_resolve(&cli_dir.join(".."));
-    let roots = unique_paths(&[
-        Some(repo_root),
-        env_path("GHOSTEX_SOURCE_ROOT"),
-        find_ghostex_source_root(None),
-    ]);
-    for root in roots {
-        if let Some(launch) = resolve_zehn_launch_from_root(&root) {
-            return Ok(launch);
-        }
-    }
-
-    Err(CliError::Other(
-        "Bundled zehn was not found. Initialize the submodule with `git submodule update --init zehn`, build it with Zig 0.16+, or set GHOSTEX_ZEHN_BIN to a reviewed zehn binary.".to_string(),
-    ))
-}
-
-pub fn resolve_zehn_launch_from_root(root: &Path) -> Option<Launch> {
-    let bin = root.join("zehn").join("zig-out").join("bin").join("zehn");
-    if file_exists_sync(&bin) {
-        return Some(Launch {
-            command: bin.to_string_lossy().to_string(),
-            args: Vec::new(),
-            cwd: None,
-            env: Vec::new(),
-        });
-    }
-    let manifest_path = root.join("zehn").join("build.zig");
-    if !file_exists_sync(&manifest_path) {
-        return None;
-    }
-    let zig_bin = std::env::var("GHOSTEX_ZEHN_ZIG")
-        .or_else(|_| std::env::var("ZEHN_ZIG"))
-        .unwrap_or_else(|_| "zig".to_string())
-        .trim()
-        .to_string();
-    Some(Launch {
-        command: if zig_bin.is_empty() {
-            "zig".to_string()
-        } else {
-            zig_bin
-        },
-        args: vec!["build".to_string(), "run".to_string(), "--".to_string()],
-        cwd: Some(root.join("zehn")),
-        env: Vec::new(),
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1383,23 +1316,6 @@ mod tests {
         assert_eq!(launch.command, bundled.to_string_lossy());
     }
 
-    #[test]
-    fn zehn_launch_prefers_built_binary_then_zig_build() {
-        let root = temp_root("zehn");
-        assert!(resolve_zehn_launch_from_root(&root).is_none());
-
-        touch(&root.join("zehn").join("build.zig"));
-        let launch = resolve_zehn_launch_from_root(&root).expect("zig launch");
-        assert_eq!(launch.args, vec!["build", "run", "--"]);
-        assert_eq!(launch.cwd, Some(root.join("zehn")));
-
-        let bin = root.join("zehn").join("zig-out").join("bin").join("zehn");
-        touch(&bin);
-        let launch = resolve_zehn_launch_from_root(&root).expect("bin launch");
-        assert_eq!(launch.command, bin.to_string_lossy());
-        assert!(launch.args.is_empty());
-        assert_eq!(launch.cwd, None);
-    }
 
     #[test]
     fn tui_launch_prefers_bundled_then_release_then_debug_then_cargo() {

@@ -119,7 +119,6 @@ const remoteGxserverLinuxPackageConfigs = [
 const remoteGxserverLinuxRequiredPackageResources = [
   "bin/gxserver",
   "bin/zmx",
-  "bin/zehn",
   "bin/bd",
   "bin/ghostex-tui",
   "bin/ghostex",
