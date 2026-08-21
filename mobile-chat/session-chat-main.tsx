@@ -4,13 +4,18 @@ import "./session-chat.css";
 import {
   normalizeSessionChatTheme,
   resolveSessionChatTranscriptAgent,
+  type GxserverQueueSessionChatPromptResult,
   type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
   type GxserverReadSessionChatResult,
   type GxserverReadSessionChatSkillsResult,
   type GxserverSaveSessionChatAttachmentResult,
   type GxserverSaveSessionChatImageResult,
+  type GxserverSendSessionChatQueuedPromptResult,
+  type GxserverSessionChatQueueResult,
+  type GxserverSessionChatRemoveQueuedPromptResult,
   type GxserverSessionChatSnapshotEvent,
+  type SessionChatQueuedPrompt,
   type SessionChatTheme,
 } from "../shared/session-chat";
 import { GXSERVER_PROTOCOL_VERSION } from "../shared/gxserver-protocol";
@@ -38,8 +43,13 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - page → RN: window.ReactNativeWebView.postMessage(JSON.stringify(
     { id, op: "read" | "readSkills" | "readFiles" | "send" | "sendKey"
         | "switchToTerminalForAgentPicker" | "answerPrompt" | "interrupt"
-        | "saveImage" | "saveAttachment" | "loadImage",
+        | "saveImage" | "saveAttachment" | "loadImage"
+        | "queuePrompt" | "updateQueuedPrompt"
+        | "removeQueuedPrompt" | "reorderQueue" | "sendQueuedPrompt"
+        | "setDraft",
       params }))
+- page → RN notice (no id, no answer):
+  { notice: "queueCount", count } — see reportQueueCount below
 - RN → page: window.ghostexMobileChatDeliver({ id, ok, result?, error? })
 - RN config (injected before content loads):
   window.__ghostexMobileChatConfig = {
@@ -103,7 +113,13 @@ type BridgeOp =
   | "interrupt"
   | "saveImage"
   | "saveAttachment"
-  | "loadImage";
+  | "loadImage"
+  | "queuePrompt"
+  | "updateQueuedPrompt"
+  | "removeQueuedPrompt"
+  | "reorderQueue"
+  | "sendQueuedPrompt"
+  | "setDraft";
 
 const CONFIG_RETRY_DELAY_MS = 100;
 const CONFIG_MAX_ATTEMPTS = 100;
@@ -362,6 +378,43 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The app's terminal view carries a "Queued: N" button, and this page is the
+only thing on the phone already watching that queue: every read — including
+each long-poll iteration — and every queue mutation answers with the
+authoritative list. Reporting the count from here keeps the app chrome live
+without opening a second polling channel over SSH, and an id-less notice keeps
+it out of the request/response map.
+
+`failed` rows are excluded, mirroring the sidebar badge (presentation.rs): a
+failed row is waiting on the user, not on the agent.
+
+An ABSENT queue is a daemon that predates the feature, and reports nothing at
+all: the button must stay hidden rather than claim a queue of zero.
+*/
+let reportedQueueCount: number | null = null;
+
+function reportQueueCount(queue: readonly SessionChatQueuedPrompt[] | undefined): void {
+  if (queue === undefined) {
+    return;
+  }
+  const count = queue.filter((prompt) => prompt.state !== "failed").length;
+  if (count === reportedQueueCount) {
+    return;
+  }
+  reportedQueueCount = count;
+  window.ReactNativeWebView?.postMessage(JSON.stringify({ count, notice: "queueCount" }));
+}
+
+/** Pass-through that reports whatever queue an answer happened to carry. */
+function withQueueReport<TResult extends { queue?: readonly SessionChatQueuedPrompt[] }>(
+  result: TResult,
+): TResult {
+  reportQueueCount(result.queue);
+  return result;
+}
+
 function snapshotEventFromRead(
   result: GxserverReadSessionChatResult,
 ): GxserverSessionChatSnapshotEvent {
@@ -394,6 +447,25 @@ function snapshotEventFromRead(
     ...(result.terminalNotice !== undefined
       ? { terminalNotice: result.terminalNotice }
       : {}),
+    /*
+    CDXC:SessionChatTerminalActivity 2026-08-22: the transcript's progress row,
+    same carriage rule. The phone's long poll re-reads whenever the bar moves
+    (the fingerprint hashes its numbers), so this is what makes a compaction
+    tick on a device with no event socket at all.
+    */
+    ...(result.terminalActivity !== undefined
+      ? { terminalActivity: result.terminalActivity }
+      : {}),
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-21: the queue and the synced draft.
+    Both keep the READ's semantics here, and both matter: an absent queue is
+    the daemon capability probe that hides every queue control, and an absent
+    draft means "unchanged", never "cleared". This synthesized snapshot is the
+    host's only frame, so passing the presence/absence through verbatim is
+    what makes those two rules survive on the phone.
+    */
+    ...(result.queue !== undefined ? { queue: result.queue } : {}),
+    ...(result.draft !== undefined ? { draft: result.draft } : {}),
     status: result.status,
   };
 }
@@ -410,7 +482,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
       return bridgeCall<GxserverReadSessionChatResult>("read", {
         ...(params.limit !== undefined ? { limit: params.limit } : {}),
         ...(params.beforeOffset !== undefined ? { beforeOffset: params.beforeOffset } : {}),
-      });
+      }).then(withQueueReport);
     },
     readSkills() {
       return bridgeCall<GxserverReadSessionChatSkillsResult>("readSkills");
@@ -456,6 +528,51 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     async sendKey(key) {
       await bridgeCall("sendKey", { key });
     },
+    /*
+    Ghostex's prompt queue and the cross-client composer draft (plan 016).
+    gxserver owns both and this host reaches them the same way it reaches
+    everything else — one SSH-exec'd CLI verb each — so all six transport
+    methods exist here and the shared UI shows every queue control. The
+    daemon's own capability gate still applies: a machine whose Ghostex
+    predates the feature omits `queue` from its reads, and the shared UI hides
+    the strip no matter what this transport implements.
+    */
+    queuePrompt(params) {
+      return bridgeCall<GxserverQueueSessionChatPromptResult>("queuePrompt", {
+        text: params.text,
+      }).then(withQueueReport);
+    },
+    updateQueuedPrompt(params) {
+      return bridgeCall<GxserverSessionChatQueueResult>("updateQueuedPrompt", {
+        promptId: params.promptId,
+        ...(params.text !== undefined ? { text: params.text } : {}),
+        ...(params.retry !== undefined ? { retry: params.retry } : {}),
+      }).then(withQueueReport);
+    },
+    removeQueuedPrompt(params) {
+      return bridgeCall<GxserverSessionChatRemoveQueuedPromptResult>("removeQueuedPrompt", {
+        promptId: params.promptId,
+      }).then(withQueueReport);
+    },
+    reorderQueue(params) {
+      return bridgeCall<GxserverSessionChatQueueResult>("reorderQueue", {
+        promptIds: params.promptIds,
+      }).then(withQueueReport);
+    },
+    sendQueuedPrompt(params) {
+      return bridgeCall<GxserverSendSessionChatQueuedPromptResult>("sendQueuedPrompt", {
+        promptId: params.promptId,
+      }).then(withQueueReport);
+    },
+    // The client id is minted and persisted by the shared hook; forwarding it
+    // untouched is what keeps this device's own echo from reading as another
+    // device and popping the conflict bar against itself.
+    async setDraft(params) {
+      await bridgeCall("setDraft", {
+        clientId: params.clientId,
+        content: params.content,
+      });
+    },
     subscribe({ currentLimit, onEvent }) {
       let stopped = false;
       void (async () => {
@@ -483,6 +600,10 @@ function createMobileSessionChatTransport(): SessionChatTransport {
           if (stopped) {
             return;
           }
+          // The read fingerprint folds in the queue revision and the draft
+          // stamp, so a queue change on another device wakes this long poll
+          // and arrives as an ordinary snapshot — no second channel needed.
+          reportQueueCount(result.queue);
           const changed = result.fingerprint === undefined || result.fingerprint !== fingerprint;
           fingerprint = result.fingerprint;
           if (changed || !emitted) {
