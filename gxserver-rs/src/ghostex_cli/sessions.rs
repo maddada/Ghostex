@@ -460,12 +460,32 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     let mut result = Map::new();
     result.insert("ok".to_string(), json!(true));
     result.insert("product".to_string(), json!(GXSERVER_PRODUCT));
+    /*
+     * CDXC:MobileProjectIcons 2026-08-21:
+     * A project's DISCOVERED icon (the favicon its own repository ships) lives
+     * only in the daemon's project_icon cache, so the CLI cannot read it: it is
+     * a separate process with an empty cache. The presentation snapshot already
+     * publishes it per project, so fold that key back onto the inventory rows
+     * here and every consumer — mobile, TUI, `--json` — sees the same icon
+     * chain the gpui sidebar ranks.
+     */
+    let discovered_project_icons =
+        presentation_project_icon_map(snapshot.and_then(|snapshot| snapshot.get("projects")));
     result.insert(
         "projects".to_string(),
         Value::Array(
             active_projects
                 .iter()
-                .map(|project| (*project).clone())
+                .map(|project| {
+                    let mut merged = (*project).clone();
+                    let discovered = value_key(project.get("projectId"))
+                        .and_then(|project_id| discovered_project_icons.get(&project_id))
+                        .map(|value| (*value).clone());
+                    if let (Some(map), Some(discovered)) = (merged.as_object_mut(), discovered) {
+                        map.insert("discoveredIconDataUrl".to_string(), discovered);
+                    }
+                    merged
+                })
                 .collect(),
         ),
     );
@@ -511,6 +531,24 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("capabilities")),
     );
     Ok(Value::Object(result))
+}
+
+/// `discoveredIconDataUrl` per projectId from the daemon's presentation
+/// snapshot. Projects the icon pass has not reached publish no key at all, so
+/// they are simply absent from the map.
+fn presentation_project_icon_map(projects: Option<&Value>) -> HashMap<String, &Value> {
+    let mut map = HashMap::new();
+    if let Some(list) = projects.and_then(Value::as_array) {
+        for project in list {
+            let Some(project_id) = value_key(project.get("projectId")) else {
+                continue;
+            };
+            if let Some(icon) = project.get("discoveredIconDataUrl") {
+                map.insert(project_id, icon);
+            }
+        }
+    }
+    map
 }
 
 fn presentation_session_map(sessions: Option<&Value>) -> HashMap<String, &Value> {
@@ -1449,6 +1487,42 @@ fn to_mobile_session_list(result: &Value) -> Value {
                         insert_present(&mut project_map, "name", project.get("name"));
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
+                        /*
+                         * CDXC:MobileProjectIcons 2026-08-21:
+                         * The phone's sessions list ranks project icons exactly
+                         * like SidebarV2ProjectIcon does — user image, then the
+                         * icon the repository ships, then a typed glyph — so it
+                         * needs all three inputs plus the workspace theme color
+                         * the branched project rail is drawn from.
+                         */
+                        let identity_icon = project.get("identityIcon");
+                        insert_present(
+                            &mut project_map,
+                            "icon",
+                            identity_icon.and_then(|icon| icon.get("icon")),
+                        );
+                        insert_present(
+                            &mut project_map,
+                            "iconDataUrl",
+                            identity_icon.and_then(|icon| icon.get("iconDataUrl")),
+                        );
+                        insert_present(
+                            &mut project_map,
+                            "themeColor",
+                            identity_icon.and_then(|icon| icon.get("themeColor")),
+                        );
+                        insert_present(
+                            &mut project_map,
+                            "discoveredIconDataUrl",
+                            project.get("discoveredIconDataUrl"),
+                        );
+                        insert_present(
+                            &mut project_map,
+                            "worktree",
+                            project
+                                .get("worktreeJson")
+                                .or_else(|| project.get("worktree")),
+                        );
                         project_map.insert(
                             "isChat".to_string(),
                             json!(is_mobile_chats_collection_project(project)),
