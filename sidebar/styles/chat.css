@@ -167,6 +167,13 @@ body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
   --input: var(--border);
   --ring: oklch(70.5% 0.015 286.067);
   --info-foreground: oklch(48.8% 0.243 264.376);
+  /* The answer's running prose, one notch under --foreground so headings have
+     somewhere to be louder than (see "Prose altitude" further down). Mixed
+     towards the page rather than expressed as an alpha, so the same colour
+     lands unchanged on a code card, an alert, or a bubble fill instead of
+     picking up whatever is behind it. 14.6:1 -> 8.2:1 here, still far above
+     the 4.7:1 muted lane the reasoning rows own. */
+  --chat-prose-foreground: color-mix(in srgb, var(--foreground) 82%, var(--background));
   /* GitHub's alert colour families, in GitHub's own order. Note reuses the
      link/info blue and Caution the destructive red so an alert never disagrees
      with the rest of the chat about what "informational" or "dangerous" looks
@@ -202,6 +209,10 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   --input: color-mix(in srgb, #fff 8%, transparent);
   --ring: oklch(55.6% 0 0);
   --info-foreground: oklch(70.7% 0.165 254.624);
+  /* Same 82% step as light. #fcfcfc on #111 is the loudest pairing in the app,
+     so this is the theme the softening was really for: 18.4:1 -> 12.5:1, well
+     clear of the 7.1:1 muted lane. */
+  --chat-prose-foreground: color-mix(in srgb, var(--foreground) 82%, var(--background));
   /* Same five families lifted for a dark background: the light theme's shades
      go muddy on #111, so each one moves up to its brighter sibling. */
   --alert-note: var(--info-foreground);
@@ -1010,19 +1021,65 @@ body[data-session-chat-theme="dark"]
   margin-bottom: 0;
 }
 
+/* --- Prose altitude ------------------------------------------------------- */
+
+/* An answer used to render every element at full --foreground, so a heading
+   weighed the same as the sentence under it and a long reply read as one flat
+   slab. Dropping the running prose one notch gives the headings somewhere to
+   be louder than, which is what makes the structure legible.
+
+   Deliberately scoped to .ghostex-chat-agent-message rather than put on
+   .ghostex-chat-markdown itself. The renderer is also mounted inside the
+   reasoning lane (.ghostex-chat-thinking-row) and the tool/work surfaces,
+   which already paint themselves --muted-foreground and let the markdown
+   inherit it. A colour on .ghostex-chat-markdown would OVERWRITE that
+   inherited muting and make reasoning louder than it is today, so the answer
+   — the only markdown surface that runs at full strength — is the only one
+   that steps down.
+
+   The user's bubble is deliberately left at full strength too: it sits on its
+   own fill (--accent in light, #1d1d1d in dark), which in dark is barely a
+   shade off the page, so the text is most of what makes the bubble read as an
+   object. It is also short, it is the thing you scan for when you scroll back,
+   and it almost never contains headings — so there is no hierarchy to win
+   there and only contrast to lose.
+
+   Overridable from an ancestor (see session-chat-prose-hierarchy.stories.tsx,
+   which reverts one pane to var(--foreground) to show the before state). */
+.ghostex-chat-agent-message .ghostex-chat-markdown {
+  color: var(--chat-prose-foreground);
+}
+
+/* Headings keep the full-strength colour, so the step down above reads as
+   hierarchy instead of as a dimmer message. h6 is not listed: it already sits
+   in the muted lane below (GitHub does the same), and it is the label-ish
+   heading rather than a section title. */
+.ghostex-chat-agent-message .ghostex-chat-markdown :is(h1, h2, h3, h4, h5) {
+  color: var(--foreground);
+}
+
 .ghostex-chat-markdown p,
 .ghostex-chat-markdown ul,
 .ghostex-chat-markdown ol,
 .ghostex-chat-markdown blockquote,
 .ghostex-chat-markdown pre,
-.ghostex-chat-markdown table,
-.ghostex-chat-markdown .ghostex-chat-markdown-codeblock {
+.ghostex-chat-markdown .ghostex-chat-markdown-codeblock,
+.ghostex-chat-markdown .ghostex-chat-markdown-table {
   margin: 0.65rem 0;
 }
 
+/* Markers sit outside the padding box (`list-style-position: outside`), so a
+   marker wider than the gutter is painted to the left of the list — past the
+   message's own text edge and into the agent rail. 1.25rem holds two digits;
+   SessionChatMarkdown's `ol` renderer widens --chat-list-gutter inline for the
+   rare list whose last marker reaches three (see sessionChatOrderedListGutter),
+   so an ordinary list keeps the tight indent. Both rules re-declare the default
+   because the property is inherited: a list nested under a widened one would
+   otherwise take the outer list's gutter as its own. */
 .ghostex-chat-markdown ul,
 .ghostex-chat-markdown ol {
-  padding-left: 1.25rem;
+  --chat-list-gutter: 1.25rem;
+  padding-left: var(--chat-list-gutter);
 }
 
 .ghostex-chat-markdown ul {
@@ -1057,9 +1114,23 @@ body[data-session-chat-theme="dark"]
   list-style: none;
 }
 
+/* The checkbox stands in for the suppressed list marker, so it is pulled by the
+   gutter the marker would have used rather than by a constant that only happens
+   to look right at the default 1.25rem — a task list written inside a widened
+   ordered list keeps its boxes on the same text edge as everything else. */
 .ghostex-chat-markdown input[type="checkbox"] {
-  margin: 0 0.375rem 0 -1.1rem;
+  margin: 0 0.375rem 0 calc(-1 * var(--chat-list-gutter, 1.25rem));
   vertical-align: -0.1em;
+}
+
+/* The Tailwind preflight makes every image `display: block`, which turns the
+   row of status badges an agent pastes into one image per line. Markdown means
+   an image as inline content, so the prose ones go back to being inline. The
+   viewer's own pictures are excluded: those are already wrapped in an
+   inline-flex frame and the block display is what keeps the frame tight around
+   them (see Inline images below). */
+.ghostex-chat-markdown img:not(.ghostex-chat-inline-image) {
+  display: inline-block;
 }
 
 .ghostex-chat-markdown h1,
@@ -1090,6 +1161,100 @@ body[data-session-chat-theme="dark"]
   padding: 0.1rem 0.35rem;
 }
 
+/* An inline-code span that is a file reference. It borrows the inline-code
+   card exactly — same fill, border, radius, and metrics — so a paragraph full
+   of chips still reads as a paragraph; the glyph and the hover lift are the
+   only things marking it as something you can press.
+
+   The chip shows the whole path, which a ~385px transcript column cannot
+   always fit, so it is laid out as a row that knows what to give up. It stays
+   on one line and never exceeds its column (`max-width: 100%`); inside, only
+   the parent directory is allowed to shrink, so the filename and the
+   coordinates survive at any width. Wrapping was the alternative and it is
+   worse: a chip that broke across two lines would stop reading as a word in a
+   sentence and start reading as a box someone dropped into the paragraph.
+
+   No `gap`: the parent and the filename are one path and must read as one
+   string, so the spacing is placed on the glyph and the detail instead. */
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
+  align-items: center;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  color: var(--chat-prose-foreground);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.1rem 0.35rem 0.1rem 0.28rem;
+  text-align: left;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  vertical-align: baseline;
+}
+
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--info-foreground) 45%, var(--border));
+  color: var(--info-foreground);
+  outline: none;
+}
+
+.ghostex-chat-markdown-file-chip-icon {
+  color: var(--muted-foreground);
+  flex: none;
+  margin-right: 0.25rem;
+  transition: color 120ms ease;
+}
+
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover
+  .ghostex-chat-markdown-file-chip-icon,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible
+  .ghostex-chat-markdown-file-chip-icon {
+  color: inherit;
+}
+
+/* The directories are context, so they are the part that gives: a shrink
+   factor this large means the parent absorbs the whole deficit before the
+   filename is asked for a single pixel, and it ellipsizes from its tail so the
+   leading folder — the one that says which world this path is in — is the last
+   thing to go. */
+.ghostex-chat-markdown-file-chip-parent {
+  color: var(--muted-foreground);
+  flex: 0 9999 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The filename only shrinks once the parent has nothing left to give, which
+   takes a column narrower than any the chat has. */
+.ghostex-chat-markdown-file-chip-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* L913:C8 never truncates: a half-written line number is worse than none. */
+.ghostex-chat-markdown-file-chip-detail {
+  color: var(--muted-foreground);
+  flex: none;
+  margin-left: 0.25rem;
+  white-space: nowrap;
+}
+
+.ghostex-chat-markdown-file-chip-detail::before {
+  content: "·";
+  margin-right: 0.25rem;
+  opacity: 0.7;
+}
+
 .ghostex-chat-markdown-codeblock {
   background: var(--muted);
   border: 1px solid var(--border);
@@ -1106,10 +1271,69 @@ body[data-session-chat-theme="dark"]
   display: flex;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 0.6875rem;
+  gap: 0.5rem;
   justify-content: space-between;
   min-height: 2rem;
   padding: 0.125rem 0.375rem 0.125rem 0.75rem;
+}
+
+/* Only the language is lowercased. A filename is a name — `README.md` and
+   `Dockerfile` have to survive the header exactly as the agent wrote them. */
+.ghostex-chat-markdown-codeblock-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: lowercase;
+  white-space: nowrap;
+}
+
+/* No gap: the icon carries its own margin instead, so the two halves of a
+   split path meet with nothing between them and `gpui/src/c…/shell.rs` reads
+   as one path rather than two words. */
+.ghostex-chat-markdown-codeblock-title {
+  align-items: center;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.ghostex-chat-markdown-codeblock-title-icon {
+  flex-shrink: 0;
+  margin-right: 0.35rem;
+  opacity: 0.85;
+}
+
+/* The directories of a named path give first and give all of it, exactly as
+   they do in an inline path chip: at a 385px transcript column a deep path and
+   three actions cannot both fit, and a header that elided its filename would
+   have stopped naming anything. */
+.ghostex-chat-markdown-codeblock-title-parent {
+  flex: 0 9999 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-markdown-codeblock-title-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-markdown-codeblock-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.125rem;
+}
+
+/* The wrap toggle is the one piece of chat chrome that holds a state, so it
+   has to look held: ghost buttons otherwise read identically pressed and not. */
+.ghostex-chat-markdown-codeblock-actions [aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--foreground);
 }
 
 .ghostex-chat-markdown .ghostex-chat-markdown-codeblock pre {
@@ -1121,6 +1345,16 @@ body[data-session-chat-theme="dark"]
   overflow-x: auto;
   padding: 0.8rem 0.9rem;
   scrollbar-width: thin;
+}
+
+/* The header's wrap toggle. Written against any <pre> in the block so the plain
+   one and the <pre class="shiki"> that replaces it once highlighting lands both
+   obey it; `anywhere` because the lines that need wrapping are long tokens —
+   base64, a minified payload, a URL — that have no space to break at. Off, the
+   overflow-x above is what carries them. */
+.ghostex-chat-markdown .ghostex-chat-markdown-codeblock[data-wrap="true"] pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* Fenced code sits one notch under the 0.875rem prose around it: a monospace
@@ -1172,7 +1406,9 @@ body[data-session-chat-theme="dark"]
    instead of a <blockquote>: a quote mutes its text, but an alert's body is
    ordinary prose sitting under a coloured title, so only the rule and the title
    take the colour. Geometry stays identical to a quote's so the two read as the
-   same family. */
+   same family. The body therefore inherits --chat-prose-foreground like every
+   other sentence in the answer: it is prose, not an aside, so it stays level
+   with the paragraphs around it and never drops into the quote's muted lane. */
 .ghostex-chat-markdown-alert {
   border-left: 2px solid color-mix(in srgb, var(--alert-accent) 70%, transparent);
   margin: 0.65rem 0;
@@ -1223,6 +1459,106 @@ body[data-session-chat-theme="dark"]
   margin-bottom: 0;
 }
 
+/* --- Disclosures ---------------------------------------------------------- */
+
+/* `<details>` / `<summary>`, which agents write whenever an answer carries
+   something long the reader should be able to skip — a failing test's output, a
+   full diff, an env dump. session-chat-details.ts folds the tags out of the
+   mdast into a real <details>, so the open/close behaviour, the keyboard
+   handling and the announced expanded state all come from the platform and this
+   sheet only dresses them.
+
+   Rules rather than a fill: the disclosure sits inside an answer, and a boxed
+   card would read as louder than the paragraphs it interrupts even while
+   closed. The row is the only part that is ever coloured. */
+.ghostex-chat-markdown-details {
+  border-block: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  margin: 0.65rem 0;
+}
+
+.ghostex-chat-markdown-details-summary {
+  align-items: center;
+  color: var(--foreground);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  gap: 0.375rem;
+  /* The whole row is the hit target, so a one-word summary is not a one-word
+     button. */
+  list-style: none;
+  min-width: 0;
+  padding: 0.4rem 0;
+  /* Deliberately NOT user-select: none, which is what a control this shape
+     would usually carry. The transcript turns selection back on so a reply can
+     be copied by dragging across it (see Conversation selection above), and a
+     summary is part of that reply's prose — dropping it out of the drag would
+     copy a disclosure with its heading missing. */
+}
+
+/* Chromium paints its own disclosure triangle on the marker box; the chevron
+   below is the one the rest of the chat's disclosures use. */
+.ghostex-chat-markdown-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ghostex-chat-markdown-details-summary::marker {
+  content: "";
+}
+
+.ghostex-chat-markdown-details-summary:hover .ghostex-chat-markdown-details-chevron {
+  color: var(--foreground);
+}
+
+.ghostex-chat-markdown-details-summary:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.ghostex-chat-markdown-details-chevron {
+  color: var(--muted-foreground);
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.ghostex-chat-markdown-details[open] .ghostex-chat-markdown-details-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-markdown-details-chevron {
+    transition: none;
+  }
+}
+
+.ghostex-chat-markdown-details-summary-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The body lines up under the summary's label rather than under its chevron, so
+   the disclosure reads as one indented block instead of two columns. */
+.ghostex-chat-markdown-details-body {
+  min-width: 0;
+  padding-block-end: 0.5rem;
+  padding-inline-start: 1.125rem;
+}
+
+.ghostex-chat-markdown-details-body > :first-child {
+  margin-top: 0;
+}
+
+.ghostex-chat-markdown-details-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* A disclosure that is only ever going to hold one thing (a fence, a table)
+   should not also carry the gap that separates paragraphs. */
+.ghostex-chat-markdown-details-body:empty {
+  display: none;
+}
+
 .ghostex-chat-markdown a {
   color: var(--info-foreground);
   text-decoration: none;
@@ -1234,6 +1570,45 @@ body[data-session-chat-theme="dark"]
   background-position: 0 100%;
   background-repeat: repeat-x;
   background-size: 4px 2px;
+}
+
+/* --- Footnotes ------------------------------------------------------------ */
+
+/* GFM footnotes land as a trailing <section data-footnotes> holding an ordered
+   list of the definitions. Unstyled that reads as one more numbered list in the
+   answer, which is exactly what it is not: it is apparatus below the reply, so
+   it gets the rule, the muted lane and the smaller size that say so. The heading
+   inside it is remark's own visually-hidden "Footnotes" label; the rule is the
+   visible version of it. */
+.ghostex-chat-markdown section[data-footnotes] {
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+}
+
+.ghostex-chat-markdown section[data-footnotes] ol {
+  margin: 0;
+}
+
+.ghostex-chat-markdown section[data-footnotes] li + li {
+  margin-top: 0.35rem;
+}
+
+/* The reference in the prose and the ↩ that comes back from the definition are
+   one-glyph targets, so they get a minimum width to click at rather than the
+   width of the digit that happens to be in them. */
+.ghostex-chat-markdown a[data-footnote-ref],
+.ghostex-chat-markdown a[data-footnote-backref] {
+  align-items: center;
+  border-radius: 0.25rem;
+  display: inline-flex;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  justify-content: center;
+  min-width: 1rem;
+  text-decoration: none;
 }
 
 /* Image links render as inline buttons that open the centered overlay. */
@@ -1416,24 +1791,128 @@ body[data-session-chat-theme="dark"]
   text-underline-offset: 2px;
 }
 
+/* Tables (MarkdownTable in session-chat-markdown.tsx).
+
+   The overflow lives on this wrapper rather than on the <table>. Putting it on
+   the table means `display: block`, and a block table has no column algorithm:
+   every row sizes itself, so the columns stop lining up and the header stops
+   describing what is under it. Here the table stays a table and the wrapper
+   scrolls. */
+.ghostex-chat-markdown-table {
+  container-type: inline-size;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ghostex-chat-markdown-table-scroll {
+  /* How wide one cell may get before it is truncated (collapsed) or wrapped
+     (expanded). 24rem is the ceiling, but a chat transcript column is often
+     narrower than that, and a cap wider than the column would let a single cell
+     own the whole table and leave collapsing with nothing to do. So it follows
+     the column, which is what makes a collapsed table usually just fit.
+
+     Declared here rather than on the wrapper above because the wrapper is the
+     container, and a container cannot answer its own query. */
+  --chat-table-cell-max: min(24rem, 60cqw);
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* `min-width: max-content` is what makes the wrapper scroll instead of the
+   columns crushing. The markdown root sets `overflow-wrap: anywhere` for prose,
+   which inside a table would let a column shrink to one character per line and
+   defeat the overflow entirely — so word boundaries are restored here, making
+   the longest word a column's natural floor. */
 .ghostex-chat-markdown table {
   border-collapse: collapse;
-  display: block;
-  max-width: 100%;
+  font-size: 0.8125rem;
   min-width: max-content;
-  overflow-x: auto;
+  overflow-wrap: normal;
   width: 100%;
+  word-break: normal;
 }
 
 .ghostex-chat-markdown th,
 .ghostex-chat-markdown td {
-  border-bottom: 1px solid var(--border);
   padding: 0.45rem 0.75rem;
   text-align: left;
+  vertical-align: top;
 }
 
-.ghostex-chat-markdown th {
+.ghostex-chat-markdown thead th {
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.ghostex-chat-markdown tbody td {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+/* The cap is what stops one long cell from deciding the shape of the whole
+   table. It sits on the cell box because that is what the column algorithm
+   measures. */
+.ghostex-chat-markdown-table :is(th, td) {
+  max-width: var(--chat-table-cell-max);
+}
+
+/* The truncation itself sits one level in, on a block inside the cell:
+   `text-overflow` is not applied to a `display: table-cell` box, so putting it
+   on the cell clips the text with no ellipsis and the reader has no way to know
+   anything was cut. */
+.ghostex-chat-markdown-table-cell {
+  display: block;
+}
+
+.ghostex-chat-markdown-table[data-expanded="false"] .ghostex-chat-markdown-table-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expanded lifts the cap on height, not on width: cells wrap in place instead
+   of growing sideways. `anywhere` because what overflows a cell is usually one
+   unbreakable token — a path, a URL, an id. */
+.ghostex-chat-markdown-table[data-expanded="true"] .ghostex-chat-markdown-table-cell {
+  overflow-wrap: anywhere;
+}
+
+/* The actions sit under the table, right-aligned, and stay out of the way: a
+   two-by-two table of short cells is the common case and deserves no chrome at
+   all. They fade in on hover or keyboard focus, stay up while their menu is
+   open or while the table is expanded, and are always visible where there is no
+   pointer to hover with (the phone). */
+.ghostex-chat-markdown-table-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.125rem;
+  justify-content: flex-end;
+  min-height: 1.25rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ghostex-chat-markdown-table:hover .ghostex-chat-markdown-table-actions,
+.ghostex-chat-markdown-table:focus-within .ghostex-chat-markdown-table-actions,
+.ghostex-chat-markdown-table[data-expanded="true"] .ghostex-chat-markdown-table-actions,
+.ghostex-chat-markdown-table-actions:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ghostex-chat-markdown-table-actions {
+    opacity: 1;
+  }
+}
+
+/* Same reason as the code block's wrap toggle: a ghost button holding a state
+   has to look held. */
+.ghostex-chat-markdown-table-actions [aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--foreground);
 }
 
 /* --- Empty states ----------------------------------------------------------- */
@@ -1461,11 +1940,15 @@ body[data-session-chat-theme="dark"]
   max-width: 26rem;
 }
 
+/* Fills the transcript region and centers in whatever height the cards above
+   the composer leave behind. It is deliberately NOT an overlay: the notice and
+   interactive cards claim their space first, so nothing can paint over them. */
 .ghostex-chat-new-session {
   align-items: center;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
+  justify-content: center;
   padding: 1.5rem 1.5rem 0;
   text-align: center;
 }
@@ -1501,4 +1984,195 @@ body[data-session-chat-theme="dark"]
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.25;
+}
+
+/* --- Ghostex prompt queue (plan 016) --------------------------------------- */
+
+/* Rows for prompts the user parked with Tab or a long-press on Send. gxserver
+   releases one each time the agent stops.
+
+   READ THIS TWICE: this is NOT .ghostex-chat-queued-label further up. That one
+   marks the agent CLI's OWN internal queue inside the transcript and belongs to
+   a different feature. These rows live inside the composer container, above the
+   input, and the agent has never seen them. */
+.ghostex-chat-queue-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  /* Around five rows, then scroll: a long queue must never push the input off
+     the pane. 1.75rem row + 0.125rem gap. */
+  max-height: 9.375rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 0.375rem;
+}
+
+.ghostex-chat-queue-row {
+  align-items: center;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  display: flex;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+  min-width: 0;
+  padding: 0 0.125rem 0 0;
+}
+
+.ghostex-chat-queue-row:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.ghostex-chat-queue-row[data-dragging="true"] {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  opacity: 0.85;
+}
+
+/* A row the scheduler already claimed is being delivered right now; it reads as
+   busy and refuses edit / reorder / delete. */
+.ghostex-chat-queue-row[data-state="sending"] .ghostex-chat-queue-row-text {
+  opacity: 0.7;
+}
+
+.ghostex-chat-queue-row-failed .ghostex-chat-queue-row-text {
+  color: var(--destructive);
+}
+
+/* The grab target is the handle itself, never invisible overlap over the row.
+   touch-action:none is what lets a touch drag start here at all: without it the
+   browser claims the gesture as a scroll of the strip and dnd-kit's pointer
+   stream dies before activation. */
+.ghostex-chat-queue-row-handle {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--muted-foreground);
+  cursor: grab;
+  display: flex;
+  flex: none;
+  height: 1.25rem;
+  justify-content: center;
+  padding: 0;
+  touch-action: none;
+  width: 1.125rem;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ghostex-chat-queue-row-handle:active {
+  cursor: grabbing;
+}
+
+.ghostex-chat-queue-row-handle:hover {
+  color: var(--foreground);
+}
+
+/* Keeps the text column aligned when a row has no handle (single row, no
+   reorder endpoint, or a row that is being delivered). */
+.ghostex-chat-queue-row-handle-slot {
+  align-items: center;
+  color: var(--muted-foreground);
+  display: flex;
+  flex: none;
+  height: 1.25rem;
+  justify-content: center;
+  width: 1.125rem;
+}
+
+/* One line, always: the first non-empty line of the prompt, ellipsized. */
+.ghostex-chat-queue-row-text {
+  flex: 1 1 auto;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-queue-row-error {
+  align-items: center;
+  color: var(--destructive);
+  display: flex;
+  flex: 0 1 auto;
+  font-size: 0.6875rem;
+  gap: 0.1875rem;
+  max-width: 45%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Controls stay quiet until the row is hovered or something in it has focus,
+   so a queue of five rows does not read as a wall of buttons. Focus-visible is
+   included so keyboard users never lose them. */
+.ghostex-chat-queue-row-actions {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ghostex-chat-queue-row:hover .ghostex-chat-queue-row-actions,
+.ghostex-chat-queue-row:focus-within .ghostex-chat-queue-row-actions {
+  opacity: 1;
+}
+
+/* Coarse pointers have no hover to reveal them with. */
+@media (hover: none) {
+  .ghostex-chat-queue-row-actions {
+    opacity: 1;
+  }
+}
+
+.ghostex-chat-queue-row-button {
+  color: var(--muted-foreground);
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.ghostex-chat-queue-row-button:hover:not(:disabled) {
+  color: var(--foreground);
+}
+
+/* --- Cross-client draft conflict bar --------------------------------------- */
+
+/* One line above the composer. It only ever OFFERS the other device's draft:
+   pressing Use is the single path that writes the composer. */
+.ghostex-chat-draft-conflict {
+  align-items: center;
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted-foreground);
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: 0.3125rem 0.625rem;
+}
+
+.ghostex-chat-draft-conflict-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-draft-conflict-action {
+  background: none;
+  border: 0;
+  color: var(--foreground);
+  cursor: pointer;
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.ghostex-chat-draft-conflict-action:hover {
+  text-decoration: underline;
 }

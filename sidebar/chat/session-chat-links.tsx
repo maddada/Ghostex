@@ -9,6 +9,7 @@
 // (navigating a browser to /Users/... would only break the page).
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { SessionChatFilePosition } from "./session-chat-file-paths";
 
 export interface SessionChatHostLinks {
   /**
@@ -21,8 +22,15 @@ export interface SessionChatHostLinks {
    * Opens a file that lives on the session's machine, in whichever editor
    * surface the host has. Hosts without one omit it and file links render as
    * inert text instead of anchors that would navigate the page away.
+   *
+   * The path arrives exactly as the agent wrote it, which means a relative one
+   * arrives relative: the chat surface never learns the session's working
+   * directory, and the host that owns an editor is also the one that knows the
+   * project root (gpui joins it in open_session_chat_file). `position` carries
+   * the `:line:column` an agent quoted, for hosts whose editor can land on it;
+   * hosts that only know how to open a file ignore it.
    */
-  openFile?: (path: string) => void;
+  openFile?: (path: string, position?: SessionChatFilePosition) => void;
 }
 
 export type SessionChatLinkTarget =
