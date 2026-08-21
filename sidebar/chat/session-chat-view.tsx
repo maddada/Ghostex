@@ -33,7 +33,10 @@ import {
   SessionChatSearch,
   type SessionChatHostSearchBridge,
 } from "./session-chat-search";
-import { SessionChatTerminalNoticeCard } from "./session-chat-terminal-notice-card";
+import {
+  SessionChatTerminalNoticeCard,
+  sessionChatTerminalNoticeDismissKey,
+} from "./session-chat-terminal-notice-card";
 import {
   SessionChatSessionOptionPills,
   useSessionChatSessionOptions,
@@ -183,6 +186,14 @@ function displayAgentName(agentLabel?: string | null): string | null {
   );
 }
 
+/*
+The welcome fills the transcript region and nothing else. It used to be an
+`absolute inset-0` overlay spanning the whole chat column, which painted its
+centered logo and title straight through the terminal-notice / interactive
+cards stacked above the composer. Living in flow means the cards take their
+height first and the welcome centers in whatever is left; `showTitle` drops the
+headline once a card is up, so the remaining space belongs to the logo alone.
+*/
 function NewSessionWelcome({
   agentLabel,
   showTitle = true,
@@ -194,7 +205,7 @@ function NewSessionWelcome({
   const agentName = displayAgentName(agentLabel);
 
   return (
-    <div className="ghostex-chat-new-session pointer-events-none absolute inset-0 justify-center">
+    <div className="ghostex-chat-new-session pointer-events-none min-h-0 flex-1 overflow-hidden">
       <div
         aria-label={agentName ?? "Agent"}
         className="ghostex-chat-new-session-agent"
@@ -531,6 +542,12 @@ export function SessionChatView({
       : undefined;
   }, [transport]);
   const [questionActive, setQuestionActive] = useState(false);
+  // Cards stacked above the composer own their own visibility (per-detection
+  // dismissal, prompt identity), so each reports it back here. While one is up
+  // the new-session headline stands down instead of competing for the same
+  // vertical space.
+  const [noticeCardVisible, setNoticeCardVisible] = useState(false);
+  const [interactiveCardVisible, setInteractiveCardVisible] = useState(false);
   const chatRootRef = useRef<HTMLDivElement | null>(null);
 
   const interrupt = useCallback((): void => {
@@ -546,6 +563,41 @@ export function SessionChatView({
       chatAnswerPrompt({ approvalSend: send, kind: "approval" }),
     [chatAnswerPrompt],
   );
+
+  /*
+  CDXC:SessionChatTerminalPicker 2026-08-21:
+  A terminal notice carrying rows is a picker that owns the agent CLI's input
+  line, so the composer is held shut behind it: a message sent now would be
+  typed into the picker and its Enter would confirm whichever row is
+  highlighted. The daemon refuses such a send anyway, but a disabled composer
+  that says WHY beats a red delivery failure after the fact.
+  */
+  const noticeKey = sessionChatTerminalNoticeDismissKey(chat.terminalNotice);
+  const [retiredNoticeKey, setRetiredNoticeKey] = useState<string | null>(null);
+  const answerNoticeChoice = useCallback(
+    async (choiceIndex: number): Promise<void> => {
+      try {
+        await chatAnswerPrompt({ choiceIndex, kind: "terminalChoice" });
+      } catch (error) {
+        /*
+        The answer did not land, which the daemon only reports after PROVING
+        the picker is gone from the live screen. Releasing the composer here is
+        what keeps a card that outlived its picker — a session slept out from
+        under it, or it was answered in the terminal — from locking the user
+        out of a session that is perfectly willing to take a message. The card
+        stays up with its own failure line so the reason is still on screen,
+        and the send path re-detects anyway, so nothing can be typed into a
+        picker that really is still there.
+        */
+        setRetiredNoticeKey(noticeKey);
+        throw error;
+      }
+    },
+    [chatAnswerPrompt, noticeKey],
+  );
+  const terminalChoicePending =
+    (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
+  const composerEnabled = canSend && !terminalChoicePending;
 
   // A command the user types themselves reconciles the pills (§1.4), so the
   // Model pill follows a hand-typed "/model opus" without a second dispatch.
@@ -639,6 +691,7 @@ export function SessionChatView({
       : chat.view.kind === "error"
         ? ("error" as const)
         : chat.view.kind;
+  const bottomCardVisible = noticeCardVisible || interactiveCardVisible;
   const showNewSessionWelcome =
     // A new agent reports `starting` until its first transcript file exists.
     // Keep the designed welcome visible throughout that pre-transcript window.
@@ -687,12 +740,13 @@ export function SessionChatView({
             loadingEarlier={chat.loadingEarlier}
             messages={chat.messages}
             onLoadEarlier={chat.loadEarlier}
+            terminalActivity={chat.terminalActivity}
             verboseMode={verbose}
           />
         ) : showNewSessionWelcome ? (
           <NewSessionWelcome
             agentLabel={agentLabel}
-            showTitle={showNewSessionWelcomeTitle}
+            showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
           />
         ) : emptyKind ? (
           chat.view.kind === "error" ? (
@@ -712,7 +766,9 @@ export function SessionChatView({
         <SessionChatTerminalNoticeCard
           canSend={canSend}
           notice={chat.terminalNotice}
+          onAnswerChoice={answerNoticeChoice}
           onSendKeys={sendNoticeKeys}
+          onVisibleChange={setNoticeCardVisible}
           {...(hostActions?.onSwitchToTerminal
             ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
             : {})}
@@ -721,16 +777,19 @@ export function SessionChatView({
           canSend={canSend}
           onAnswer={chat.answerPrompt}
           onInterrupt={interrupt}
+          onShowingChange={setInteractiveCardVisible}
           onShowingQuestionChange={setQuestionActive}
           onSwitchToTerminal={hostActions?.onSwitchToTerminal}
           prompt={chat.prompt}
         />
         {questionActive ? null : (
           <SessionChatComposer
-            disabled={!canSend}
+            disabled={!composerEnabled}
+            draftSync={chat.draft}
             isWorking={chat.working}
             key={sessionKey}
             monacoVsBaseUrl={monacoVsBaseUrl}
+            queue={chat.queue}
             sessionKey={sessionKey}
             theme={theme}
             onAttachFile={attachFile}
@@ -772,7 +831,13 @@ export function SessionChatView({
                 ) : null}
               </>
             }
-            placeholder={canSend ? undefined : "Input is held by another device."}
+            placeholder={
+              !canSend
+                ? "Input is held by another device."
+                : terminalChoicePending
+                  ? "Answer the question above to continue."
+                  : undefined
+            }
             ref={composerRef}
             slashCommands={slashCommands}
             slashHeading={sessionChatSlashHeadingForAgent(agentLabel ?? null)}

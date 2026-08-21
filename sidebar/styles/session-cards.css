@@ -905,6 +905,15 @@
   --session-leading-icon-top: calc(5px * var(--sidebar-density-scale));
   --session-pinned-icon-glyph-size: calc(var(--session-leading-icon-size) - 2px);
   --session-pinned-icon-left-shift: 3px;
+  /*
+   * CDXC:SessionChatPromptQueue 2026-08-21:
+   * The queued-prompt badge's own geometry, derived from the leading icon box
+   * so it tracks sidebar density without ever being measured against the row.
+   * The overhang lets the circle sit on the icon's top-right corner.
+   */
+  --session-queued-prompt-badge-size: calc(10px * var(--sidebar-density-scale));
+  --session-queued-prompt-badge-font-size: calc(7px * var(--sidebar-density-scale));
+  --session-queued-prompt-badge-overhang: calc(3px * var(--sidebar-density-scale));
   anchor-scope: --session-leading-icon;
 }
 
@@ -1012,6 +1021,92 @@
     position-anchor: --session-leading-icon;
     top: anchor(top);
   }
+}
+
+/*
+ * CDXC:SessionChatPromptQueue 2026-08-21:
+ * The queued-prompt count badge. It sits on the top-right corner of the leading
+ * agent icon and, unlike the Delayed Send clock, never replaces that icon — the
+ * agent logo (or clock) keeps rendering underneath.
+ *
+ * Layout ownership is the whole point of this rule set. The badge is a
+ * position: absolute sibling of the icon, positioned from the session's own
+ * leading-icon coordinates and, where the engine supports it, anchored to
+ * `--session-leading-icon` — the same anchor `.session-pinned-floating-button`
+ * uses. It therefore contributes NOTHING to the row's flow: adding or removing
+ * it cannot move the icon slot, the title, or the row height. Do not "fix" a
+ * future positioning problem here by wrapping the agent icon in a container:
+ * that container becomes a real flow box and pushes the icon out of the row,
+ * which is exactly what happened to the Delayed Send clock.
+ */
+.session-queued-prompt-badge {
+  align-items: center;
+  background: #f6c945;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(12, 12, 14, 0.75);
+  box-sizing: border-box;
+  color: #1d1704;
+  display: flex;
+  font-size: var(--session-queued-prompt-badge-font-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  height: var(--session-queued-prompt-badge-size);
+  justify-content: center;
+  left: calc(
+    var(--session-leading-icon-left) + var(--session-leading-icon-size) -
+      var(--session-queued-prompt-badge-size) + var(--session-queued-prompt-badge-overhang)
+  );
+  letter-spacing: 0;
+  line-height: 1;
+  min-width: var(--session-queued-prompt-badge-size);
+  padding: 0 2px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(var(--session-leading-icon-top) - var(--session-queued-prompt-badge-overhang));
+  width: max-content;
+  z-index: 6;
+}
+
+/*
+ * CDXC:SessionChatPromptQueue 2026-08-21-b:
+ * A `failed` row holds the queue until the user retries or deletes it, so the
+ * badge stops meaning "waiting" and starts meaning "stopped, act on me". #ff6b6b
+ * is the sidebar's existing error red — the same value
+ * `.session-status-dot-anchored[data-lifecycle-state="error"]` uses above, and
+ * the one mobile mirrors as `SidebarPalette.ERROR_DOT`.
+ *
+ * Colour ONLY. Every box property stays on the rule above, so the red badge is
+ * pixel-identical in geometry to the yellow one and cannot move the icon slot.
+ */
+.session-queued-prompt-badge[data-queued-prompt-failed="true"] {
+  background: #ff6b6b;
+  color: #2a0505;
+}
+
+/*
+ * Scoped to the reference layout because that is the only layout that renders
+ * `.session-floating-icon-anchor`; anywhere else the anchor does not exist and
+ * `anchor()` would compute to `auto`. The declarations above are the exact same
+ * box expressed in the session's own custom properties, so the fallback is not
+ * an approximation.
+ */
+@supports (left: anchor(left)) {
+  .sidebar-reference-layout[data-reference-sidebar="true"] .session-queued-prompt-badge {
+    left: calc(
+      anchor(right) - var(--session-queued-prompt-badge-size) +
+        var(--session-queued-prompt-badge-overhang)
+    );
+    position-anchor: --session-leading-icon;
+    top: calc(anchor(top) - var(--session-queued-prompt-badge-overhang));
+  }
+}
+
+/*
+ * Dragging a row already fades every leading decoration; the badge follows so a
+ * dragged card does not carry a bright yellow dot across the sidebar.
+ */
+.session-frame[data-dragging="true"] .session-queued-prompt-badge {
+  opacity: 0;
 }
 
 .session-floating-agent-icon {

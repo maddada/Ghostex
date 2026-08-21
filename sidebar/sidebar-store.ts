@@ -1281,6 +1281,20 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.kind === right.kind &&
     left.lastInteractionAt === right.lastInteractionAt &&
     left.primaryTitle === right.primaryTitle &&
+    /*
+     * CDXC:SessionChatPromptQueue 2026-08-21:
+     * Queueing or draining a chat prompt lands as a lone field change on an
+     * otherwise identical row. Leaving it out here reuses the previous object
+     * and the agent-icon badge never moves off its stale count.
+     */
+    left.queuedPromptCount === right.queuedPromptCount &&
+    /*
+     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * The failed tally moves on its own — a delivery failure or a Retry changes
+     * only the badge's colour, not its number — so it needs its own comparison
+     * for exactly the reason the count above does.
+     */
+    left.queuedPromptFailedCount === right.queuedPromptFailedCount &&
     left.row === right.row &&
     left.sessionId === right.sessionId &&
     left.sessionKind === right.sessionKind &&

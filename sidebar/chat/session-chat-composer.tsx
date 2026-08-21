@@ -27,6 +27,7 @@ import {
   IconClipboard,
   IconCopy,
   IconCut,
+  IconDeviceMobileMessage,
   IconFile,
   IconLoader2,
   IconMaximize,
@@ -87,7 +88,22 @@ import {
   sessionChatImageTargetForHref,
   useSessionChatImageViewer,
 } from "./session-chat-image-viewer";
-import type { SessionChatSkill, SessionChatTheme } from "../../shared/session-chat";
+import { SessionChatQueueRows } from "./session-chat-queue-rows";
+import {
+  isNewerSessionChatDraftStamp,
+  SESSION_CHAT_QUEUE_LONG_PRESS_MS,
+  shouldOfferSessionChatDraft,
+} from "./session-chat-queue";
+import type {
+  SessionChatDraftController,
+  SessionChatQueueController,
+} from "./use-session-chat";
+import type {
+  SessionChatDraft,
+  SessionChatQueuedPrompt,
+  SessionChatSkill,
+  SessionChatTheme,
+} from "../../shared/session-chat";
 
 export interface SessionChatComposerHandle {
   /** Clear the draft only when it still matches the supplied snapshot. */
@@ -214,6 +230,23 @@ export interface SessionChatComposerProps {
   monacoVsBaseUrl?: string;
   /** Palette used by the chat-owned Monaco prompt input. */
   theme?: SessionChatTheme;
+  /*
+  CDXC:SessionChatPromptQueue 2026-08-21:
+  Ghostex's own prompt queue (plan 016). Rows render above the input, inside
+  this composer's container, and Tab / a long-press on Send add to them. Absent
+  — or present with `capabilities.supported === false`, which is what an old
+  daemon looks like — hides every queue control instead of offering buttons
+  that would 404. This is NOT `SessionChatMessage.queued`, the agent CLI's own
+  internal queue that renders in the transcript.
+  */
+  queue?: SessionChatQueueController;
+  /**
+   * Cross-client composer draft. The composer pushes on blur / unmount /
+   * backgrounding (never per keystroke) and offers a newer draft from another
+   * device behind a Use / Dismiss bar. Absent keeps drafts local-only; the
+   * per-client localStorage cache is unaffected either way.
+   */
+  draftSync?: SessionChatDraftController;
 }
 
 interface PastedImagePreview {
@@ -395,6 +428,7 @@ export const SessionChatComposer = forwardRef<
 >(function SessionChatComposer(
   {
     disabled = false,
+    draftSync,
     fileHeading,
     files,
     filesLoading = false,
@@ -410,6 +444,7 @@ export const SessionChatComposer = forwardRef<
     onStash,
     optionPills,
     placeholder,
+    queue,
     sendOnEnter = true,
     sessionKey,
     slashCommands,
@@ -439,6 +474,8 @@ export const SessionChatComposer = forwardRef<
   const [maximized, setMaximized] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [contextSelection, setContextSelection] = useState({ end: 0, start: 0 });
+  /** A newer draft from another device, waiting behind the Use / Dismiss bar. */
+  const [incomingDraft, setIncomingDraft] = useState<SessionChatDraft | null>(null);
   const imageViewer = useSessionChatImageViewer();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -453,6 +490,12 @@ export const SessionChatComposer = forwardRef<
   const pendingFocusRef = useRef(false);
   const pendingInsertTextRef = useRef("");
   const sendInFlightRef = useRef(false);
+  /** Newest draft stamp already applied or dismissed here (never re-offered). */
+  const lastHandledDraftAtRef = useRef<string | null>(null);
+  /** Exact content of the last successful push, so blur cannot spam gxserver. */
+  const lastPushedDraftRef = useRef<string | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const useMonaco = monacoVsBaseUrl !== undefined && !monacoFailed;
 
   // Previews mirror the draft: deleting a reference (by any means, including
@@ -680,16 +723,12 @@ export const SessionChatComposer = forwardRef<
     },
   }));
 
-  const send = (text: string = draft): void => {
-    if (text.trim() === "" || disabled || sendInFlightRef.current) {
-      return;
-    }
-    sendInFlightRef.current = true;
-    setSendError(null);
-
-    // The optimistic transcript echo is created synchronously by onSend.
-    // Vacate the composer first so the submit gesture feels immediate and
-    // any typing that follows belongs to the next draft.
+  /**
+   * Empties the field and every picker's dismissal state. Shared by send and
+   * by queueing (Tab / long-press), because both hand the text off somewhere
+   * else and both must leave a clean composer behind.
+   */
+  const vacateComposer = (): void => {
     writeStoredSessionChatDraft(sessionKey, "");
     draftRef.current = "";
     setDraft("");
@@ -702,6 +741,32 @@ export const SessionChatComposer = forwardRef<
     setSkillIndex(0);
     setFileDismissed(false);
     setFileIndex(0);
+  };
+
+  /** Puts text back in the field, keeping anything typed since it left. */
+  const restoreComposerText = (text: string): void => {
+    const current = getInputApi()?.getValue() ?? draftRef.current;
+    const restored = current === "" || current === text ? text : `${text}\n${current}`;
+    writeStoredSessionChatDraft(sessionKey, restored);
+    draftRef.current = restored;
+    setDraft(restored);
+    setCaret(restored.length);
+    setHistory((value) => resetSessionChatComposerHistoryIndex(value));
+    getInputApi()?.applyValue(restored, restored.length);
+    getInputApi()?.focus();
+  };
+
+  const send = (text: string = draft): void => {
+    if (text.trim() === "" || disabled || sendInFlightRef.current) {
+      return;
+    }
+    sendInFlightRef.current = true;
+    setSendError(null);
+
+    // The optimistic transcript echo is created synchronously by onSend.
+    // Vacate the composer first so the submit gesture feels immediate and
+    // any typing that follows belongs to the next draft.
+    vacateComposer();
 
     const sendRequest = (() => {
       try {
@@ -717,21 +782,198 @@ export const SessionChatComposer = forwardRef<
       .catch(() => {
         // Do not overwrite a next draft typed while the send was in flight.
         // Put the failed message first so retrying still preserves send order.
-        const current = getInputApi()?.getValue() ?? draftRef.current;
-        const restored =
-          current === "" || current === text ? text : `${text}\n${current}`;
-        writeStoredSessionChatDraft(sessionKey, restored);
-        draftRef.current = restored;
-        setDraft(restored);
-        setCaret(restored.length);
-        setHistory((value) => resetSessionChatComposerHistoryIndex(value));
-        getInputApi()?.applyValue(restored, restored.length);
-        getInputApi()?.focus();
+        restoreComposerText(text);
         setSendError("Message could not be sent. Your draft was restored.");
       })
       .finally(() => {
         sendInFlightRef.current = false;
       });
+  };
+
+  // --- Ghostex prompt queue (plan 016) ---------------------------------------
+  // Enter is untouched by everything below: it still sends immediately,
+  // mid-turn included. Tab and a long-press on Send are the ONLY gestures that
+  // make a queued row.
+  const queueCapabilities = queue?.capabilities;
+  const canQueueDraft =
+    queueCapabilities?.canQueue === true && !disabled && draft.trim() !== "";
+
+  /** Loads text into the field, replacing whatever is there. */
+  const loadComposerText = (text: string): void => {
+    writeStoredSessionChatDraft(sessionKey, text);
+    draftRef.current = text;
+    setDraft(text);
+    setCaret(text.length);
+    setHistory((value) => resetSessionChatComposerHistoryIndex(value));
+    getInputApi()?.applyValue(text, text.length);
+    getInputApi()?.focus();
+  };
+
+  const queueCurrentDraft = (): void => {
+    const controller = queue;
+    if (!controller?.capabilities.canQueue || disabled) {
+      return;
+    }
+    const text = (getInputApi()?.getValue() ?? draftRef.current).trim();
+    if (text === "") {
+      return;
+    }
+    setSendError(null);
+    // Vacate first: the queued row becomes the only copy of the text, exactly
+    // as a send does, so the gesture reads as "this left the composer".
+    vacateComposer();
+    void controller.queuePrompt(text).catch(() => {
+      restoreComposerText(text);
+      setSendError("The prompt could not be queued. Your draft was restored.");
+    });
+  };
+
+  /*
+  Edit, in the order the plan fixes: remove the row (its text rides back on the
+  answer), queue whatever the composer already held at the END, then load the
+  removed text. Nothing the user typed is ever dropped on the floor.
+  */
+  const editQueuedPrompt = (prompt: SessionChatQueuedPrompt): void => {
+    const controller = queue;
+    if (!controller?.capabilities.canEdit || disabled) {
+      return;
+    }
+    void (async () => {
+      const removed = await controller.removePrompt(prompt.id);
+      const current = getInputApi()?.getValue() ?? draftRef.current;
+      if (current.trim() !== "") {
+        await controller.queuePrompt(current);
+      }
+      loadComposerText(removed?.text ?? prompt.text);
+    })().catch(() => {
+      setSendError("The queued prompt could not be edited.");
+    });
+  };
+
+  // --- Long-press on Send ------------------------------------------------------
+  // Pointer events, not touch events, so one implementation covers the mouse,
+  // the pen and the phone. Long-press is the ONLY queue gesture on mobile, so
+  // it has to survive a touch stream that also fires a click afterwards.
+  const cancelSendLongPress = (): void => {
+    if (longPressTimerRef.current !== null) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const beginSendLongPress = (): void => {
+    longPressFiredRef.current = false;
+    cancelSendLongPress();
+    if (!canQueueDraft) {
+      return;
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      longPressFiredRef.current = true;
+      queueCurrentDraft();
+    }, SESSION_CHAT_QUEUE_LONG_PRESS_MS);
+  };
+
+  const handleSendClick = (): void => {
+    cancelSendLongPress();
+    if (longPressFiredRef.current) {
+      // The press already queued; the click that closes the same gesture must
+      // not also send. (The composer is empty by now, so send() would bail
+      // anyway — but a tap after a failed queue restore would not.)
+      longPressFiredRef.current = false;
+      return;
+    }
+    send();
+  };
+
+  useEffect(() => cancelSendLongPress, []);
+
+  // --- Cross-client draft sync -------------------------------------------------
+  // Pushed on blur / session switch / unmount / backgrounding, never per
+  // keystroke. The per-client localStorage cache above is untouched: gxserver
+  // is a sync channel, not a replacement for it.
+  const pushDraftIfChanged = (): void => {
+    const controller = draftSync;
+    if (!controller?.canSync) {
+      return;
+    }
+    const content = getInputApi()?.getValue() ?? draftRef.current;
+    if (content === lastPushedDraftRef.current) {
+      return;
+    }
+    lastPushedDraftRef.current = content;
+    void controller.push(content).catch(() => {
+      // Let the next blur retry rather than silently swallowing the draft.
+      lastPushedDraftRef.current = null;
+    });
+  };
+  const pushDraftRef = useRef(pushDraftIfChanged);
+  pushDraftRef.current = pushDraftIfChanged;
+
+  useEffect(() => {
+    const flush = (): void => {
+      if (document.visibilityState === "hidden") {
+        pushDraftRef.current();
+      }
+    };
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      // Unmount covers both closing the chat and switching sessions: the view
+      // keys this composer on sessionKey, so a switch remounts it.
+      pushDraftRef.current();
+    };
+  }, []);
+
+  /*
+  "Newer draft from another device": offered, never applied. The three
+  conditions live in shouldOfferSessionChatDraft; the important half is here —
+  a draft that is NOT offered still marks its stamp handled, so a later
+  keystroke cannot make an old draft look new again and pop the bar.
+  */
+  const syncedDraft = draftSync?.synced ?? null;
+  const draftClientId = draftSync?.clientId ?? "";
+  useEffect(() => {
+    if (!syncedDraft) {
+      return;
+    }
+    const composerText = getInputApi()?.getValue() ?? draftRef.current;
+    if (
+      shouldOfferSessionChatDraft({
+        clientId: draftClientId,
+        composerText,
+        incoming: syncedDraft,
+        lastHandledUpdatedAt: lastHandledDraftAtRef.current,
+      })
+    ) {
+      setIncomingDraft(syncedDraft);
+      return;
+    }
+    if (
+      isNewerSessionChatDraftStamp(syncedDraft.updatedAt, lastHandledDraftAtRef.current)
+    ) {
+      lastHandledDraftAtRef.current = syncedDraft.updatedAt;
+    }
+    // getInputApi is resolved lazily and draftRef is a ref; the draft this
+    // reads is deliberately the live one, not a render-scoped copy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftClientId, syncedDraft]);
+
+  const acceptIncomingDraft = (): void => {
+    if (!incomingDraft) {
+      return;
+    }
+    lastHandledDraftAtRef.current = incomingDraft.updatedAt;
+    // Only ever reached by pressing Use: nothing above writes the composer.
+    loadComposerText(incomingDraft.content);
+    setIncomingDraft(null);
+  };
+
+  const dismissIncomingDraft = (): void => {
+    if (incomingDraft) {
+      lastHandledDraftAtRef.current = incomingDraft.updatedAt;
+    }
+    setIncomingDraft(null);
   };
 
   const insertReference = (reference: string): void => {
@@ -1144,6 +1386,26 @@ export const SessionChatComposer = forwardRef<
     ) {
       return;
     }
+    /*
+    Tab queues (plan 016 §1). It reaches here only after the three picker
+    handlers above have declined it, so completing a slash command, a $skill or
+    an @file still wins — that is the whole reason this sits below them and not
+    in its own branch further up. Modified Tab (Shift/Cmd/Ctrl/Alt) is left to
+    the platform so focus traversal and Monaco's own bindings survive; the
+    accepted cost of taking plain Tab is losing tab-indent in the composer.
+    */
+    if (
+      event.key === "Tab" &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      canQueueDraft
+    ) {
+      event.preventDefault();
+      queueCurrentDraft();
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       // Maximize is an overlay, so Escape closes it first; the next Escape
@@ -1183,7 +1445,15 @@ export const SessionChatComposer = forwardRef<
     }
   };
 
-  const sendDisabled = isWorking ? false : disabled || draft.trim() === "";
+  /*
+  While the agent is working the footer button becomes Send as soon as the
+  composer holds non-whitespace text; an empty composer keeps Stop (plan 016
+  §1). Send is therefore only ever rendered with something to send, which
+  collapses the old isWorking-specific enablement into one condition.
+  */
+  const hasSendableDraft = draft.trim() !== "";
+  const showStopButton = isWorking && !hasSendableDraft;
+  const sendDisabled = disabled || !hasSendableDraft;
 
   return (
     <>
@@ -1371,12 +1641,42 @@ export const SessionChatComposer = forwardRef<
           </div>
         ) : null}
         {sendError ? <FieldError className="px-2">{sendError}</FieldError> : null}
+        {incomingDraft ? (
+          <div className="ghostex-chat-draft-conflict" role="status">
+            <IconDeviceMobileMessage aria-hidden="true" size={14} stroke={1.8} />
+            <span className="ghostex-chat-draft-conflict-text">
+              Newer draft from another device
+            </span>
+            <button
+              className="ghostex-chat-draft-conflict-action"
+              onClick={acceptIncomingDraft}
+              type="button"
+            >
+              Use
+            </button>
+            <button
+              className="ghostex-chat-draft-conflict-action"
+              onClick={dismissIncomingDraft}
+              type="button"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         <div
           className={cn(
             "ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20",
             disabled && "opacity-60",
           )}
           data-disabled={disabled ? "true" : undefined}
+          onBlur={(event) => {
+            // focusout bubbles from both input backends. Only a focus move that
+            // LEAVES the composer is a "the user stopped typing" moment.
+            if (event.currentTarget.contains(event.relatedTarget)) {
+              return;
+            }
+            pushDraftIfChanged();
+          }}
         >
           {pastedImages.length > 0 || pendingImagePastes > 0 ? (
             <div className="flex flex-wrap items-center gap-2 pb-2">
@@ -1424,6 +1724,44 @@ export const SessionChatComposer = forwardRef<
                 </div>
               ) : null}
             </div>
+          ) : null}
+          {/* Queued prompts sit directly above the input, inside this
+              container. Never in the transcript — that lane belongs to the
+              agent CLI's own queue (SessionChatMessage.queued). */}
+          {queueCapabilities?.supported && queue ? (
+            <SessionChatQueueRows
+              disabled={disabled}
+              prompts={queue.prompts}
+              {...(queueCapabilities.canEdit ? { onEdit: editQueuedPrompt } : {})}
+              {...(queueCapabilities.canRemove
+                ? {
+                    onDelete: (prompt: SessionChatQueuedPrompt) => {
+                      void queue.removePrompt(prompt.id);
+                    },
+                  }
+                : {})}
+              {...(queueCapabilities.canSendNow
+                ? {
+                    onSendNow: (prompt: SessionChatQueuedPrompt) => {
+                      void queue.sendNow(prompt.id);
+                    },
+                  }
+                : {})}
+              {...(queueCapabilities.canRetry
+                ? {
+                    onRetry: (prompt: SessionChatQueuedPrompt) => {
+                      void queue.retryPrompt(prompt.id);
+                    },
+                  }
+                : {})}
+              {...(queueCapabilities.canReorder
+                ? {
+                    onReorder: (promptIds: string[]) => {
+                      void queue.reorder(promptIds);
+                    },
+                  }
+                : {})}
+            />
           ) : null}
           <ContextMenu
             onOpenChange={(open) => {
@@ -1631,7 +1969,7 @@ export const SessionChatComposer = forwardRef<
                   </Button>
                 </span>
               </AppTooltip>
-              {isWorking ? (
+              {showStopButton ? (
                 <Button
                   aria-label="Stop the agent"
                   className="size-8 rounded-full"
@@ -1649,10 +1987,21 @@ export const SessionChatComposer = forwardRef<
                 </Button>
               ) : (
                 <Button
-                  aria-label="Send"
+                  aria-label={canQueueDraft ? "Send (hold to queue)" : "Send"}
                   className="ghostex-chat-send-button size-8 rounded-full"
                   disabled={sendDisabled}
-                  onClick={() => send()}
+                  onClick={handleSendClick}
+                  onContextMenu={(event) => {
+                    // A touch long-press otherwise raises the platform callout
+                    // menu on top of the queue gesture.
+                    if (canQueueDraft) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onPointerCancel={cancelSendLongPress}
+                  onPointerDown={beginSendLongPress}
+                  onPointerLeave={cancelSendLongPress}
+                  onPointerUp={cancelSendLongPress}
                   size="icon"
                 >
                   <IconArrowUp aria-hidden="true" className="size-4" stroke={2.2} />

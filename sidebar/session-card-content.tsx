@@ -861,6 +861,17 @@ type SessionAgentIconProps = {
   sessionTag?: SidebarSessionTag;
   isGeneratingFirstPromptTitle?: boolean;
   isReloading?: boolean;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21:
+   * How many Ghostex-owned chat prompts are waiting for this session. Rendered
+   * as a decoration over the leading icon, never in place of it.
+   */
+  queuedPromptCount?: number;
+  /**
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * How many of those rows failed to deliver. Non-zero paints the badge red.
+   */
+  queuedPromptFailedCount?: number;
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: SidebarSessionItem["sessionPersistenceProvider"];
   showTerminalIcon?: boolean;
@@ -983,6 +994,8 @@ export function SessionFloatingAgentIcon({
   onCloseAfterDoneClick,
   onDelayedSendClick,
   onPinnedClick,
+  queuedPromptCount,
+  queuedPromptFailedCount,
   sessionTag,
   sessionPersistenceName,
   sessionPersistenceProvider,
@@ -993,6 +1006,22 @@ export function SessionFloatingAgentIcon({
   onPinnedClick?: (pinned: boolean) => void;
 }) {
   const effectiveSessionTag = getEffectiveSessionTag({ isFavorite, sessionTag });
+  /*
+  CDXC:SessionChatPromptQueue 2026-08-21:
+  The queued-prompt badge is a decoration on the leading icon slot, not a
+  competitor for it: whatever owns the slot (agent logo, Delayed Send clock,
+  Close After Done clock) keeps rendering underneath. It is a SIBLING of that
+  icon, never a wrapper around it, and it carries its own anchor element in the
+  timer branches, which do not render the shared one. Wrapping the icon would
+  create a second flow box in the row — the exact mistake that once pushed the
+  Delayed Send clock above the session card.
+  */
+  const queuedPromptBadge = (
+    <SessionQueuedPromptBadge
+      count={queuedPromptCount}
+      failedCount={queuedPromptFailedCount}
+    />
+  );
   const hasActiveDelayedSend = Boolean(delayedSendRemainingLabel || delayedSendDeadlineAt);
   const hasActiveCloseAfterDone = Boolean(
     closeAfterDone || closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt,
@@ -1007,11 +1036,15 @@ export function SessionFloatingAgentIcon({
     An active Delayed Send timer always owns the leading session icon slot, even when the session is tagged, pinned, or has a visible agent icon. The deadline alone is enough to show the yellow clock so a missing countdown label cannot hide the active timer state.
     */
     return (
-      <DelayedSendSidebarIcon
-        className="session-floating-agent-tabler-icon session-delayed-send-agent-icon"
-        onClick={onDelayedSendClick}
-        remainingLabel={delayedSendRemainingLabel}
-      />
+      <>
+        <span aria-hidden="true" className="session-floating-icon-anchor" />
+        <DelayedSendSidebarIcon
+          className="session-floating-agent-tabler-icon session-delayed-send-agent-icon"
+          onClick={onDelayedSendClick}
+          remainingLabel={delayedSendRemainingLabel}
+        />
+        {queuedPromptBadge}
+      </>
     );
   }
 
@@ -1024,13 +1057,17 @@ export function SessionFloatingAgentIcon({
     session is Done and the close countdown is active.
     */
     return (
-      <CloseAfterDoneSidebarIcon
-        className={`session-floating-agent-tabler-icon session-close-after-done-agent-icon${
-          isCloseAfterDoneCountingDown ? " session-close-after-done-agent-icon-countdown" : ""
-        }`}
-        onClick={onCloseAfterDoneClick}
-        remainingLabel={closeAfterDoneRemainingLabel}
-      />
+      <>
+        <span aria-hidden="true" className="session-floating-icon-anchor" />
+        <CloseAfterDoneSidebarIcon
+          className={`session-floating-agent-tabler-icon session-close-after-done-agent-icon${
+            isCloseAfterDoneCountingDown ? " session-close-after-done-agent-icon-countdown" : ""
+          }`}
+          onClick={onCloseAfterDoneClick}
+          remainingLabel={closeAfterDoneRemainingLabel}
+        />
+        {queuedPromptBadge}
+      </>
     );
   }
 
@@ -1057,7 +1094,55 @@ export function SessionFloatingAgentIcon({
         sessionPersistenceProvider={sessionPersistenceProvider}
         slot="floating"
       />
+      {queuedPromptBadge}
     </>
+  );
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+An absolutely positioned, pointer-transparent circle carrying the number of
+prompts waiting for this session. It renders nothing at all below one, so a
+drained queue leaves no empty dot behind, and counts above 99 collapse to "99+"
+rather than widening the badge into the session title.
+*/
+const SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT = 99;
+
+function SessionQueuedPromptBadge({
+  count,
+  failedCount,
+}: {
+  count?: number;
+  failedCount?: number;
+}) {
+  if (typeof count !== "number" || !Number.isFinite(count) || count < 1) {
+    return null;
+  }
+
+  const roundedCount = Math.floor(count);
+  /*
+  CDXC:SessionChatPromptQueue 2026-08-21-b:
+  A row that failed to deliver holds the whole queue until the user retries or
+  deletes it, so the badge switches from the yellow "waiting" colour to the
+  sidebar's own error red. The colour is the ONLY thing that changes: the box is
+  driven entirely by `--session-queued-prompt-badge-*`, so a red badge and a
+  yellow badge of the same digit count are the same geometry and cannot reflow
+  the icon slot.
+  */
+  const hasFailed =
+    typeof failedCount === "number" && Number.isFinite(failedCount) && failedCount > 0;
+
+  return (
+    <span
+      aria-hidden="true"
+      className="session-queued-prompt-badge"
+      data-queued-prompt-count={String(roundedCount)}
+      data-queued-prompt-failed={hasFailed ? "true" : undefined}
+    >
+      {roundedCount > SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT
+        ? `${SESSION_QUEUED_PROMPT_BADGE_MAX_COUNT}+`
+        : String(roundedCount)}
+    </span>
   );
 }
 

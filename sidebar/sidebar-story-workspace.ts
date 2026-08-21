@@ -105,6 +105,15 @@ type SidebarSessionDecoration = Pick<
   | "lifecycleState"
   | "isRunning"
   | "lastInteractionAt"
+  /*
+   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * The queued-prompt badge's two inputs. The snapshot rebuild below keeps only
+   * fields named here, so without them no story can ever put a badge on a card
+   * — neither the yellow waiting badge nor the red failed one — and a layout
+   * check against the real component is impossible.
+   */
+  | "queuedPromptCount"
+  | "queuedPromptFailedCount"
   | "terminalTitle"
   | "workingStartedAt"
 > &
@@ -216,6 +225,8 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               lifecycleState: session.lifecycleState,
               isRunning: session.isRunning,
               lastInteractionAt: session.lastInteractionAt,
+              queuedPromptCount: session.queuedPromptCount,
+              queuedPromptFailedCount: session.queuedPromptFailedCount,
               settledAt: v2Session.settledAt,
               settledOverride: v2Session.settledOverride,
               snoozedAt: v2Session.snoozedAt,

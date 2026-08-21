@@ -2695,6 +2695,8 @@ export function SortableSessionCard({
                 onCloseAfterDoneClick={requestToggleCloseAfterDone}
                 onDelayedSendClick={requestDelayedSend}
                 onPinnedClick={requestSetPinned}
+                queuedPromptCount={session.queuedPromptCount}
+                queuedPromptFailedCount={session.queuedPromptFailedCount}
                 sessionTag={session.sessionTag}
                 sessionPersistenceName={session.sessionPersistenceName}
                 sessionPersistenceProvider={session.sessionPersistenceProvider}

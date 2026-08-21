@@ -14,10 +14,13 @@ import type {
   GxserverReadSessionChatResult,
   GxserverSessionChatEvent,
   SessionChatDetectedOptions,
+  SessionChatDraft,
   SessionChatInteractivePrompt,
   SessionChatMessage,
+  SessionChatQueuedPrompt,
   SessionChatSendKey,
   SessionChatStatus,
+  SessionChatTerminalActivity,
   SessionChatTerminalNotice,
   SessionChatTurnLifecycle,
 } from "../../shared/session-chat";
@@ -63,6 +66,12 @@ import {
   sessionChatStreamingMessage,
 } from "./session-chat-streaming";
 import { surfaceSkillInvocationUserTurns } from "./session-chat-command-envelope";
+import {
+  moveSessionChatQueueRow,
+  sessionChatDraftClientId,
+  sessionChatQueueCapabilities,
+  type SessionChatQueueCapabilities,
+} from "./session-chat-queue";
 import type { SessionChatTransport } from "./session-chat-transport";
 import {
   selectSessionChatViewState,
@@ -118,6 +127,47 @@ export interface UseSessionChatOptions {
   initialLimit?: number;
 }
 
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+Ghostex's own prompt queue (plan 016) and the cross-client composer draft. The
+hook owns both because both arrive on the same frames the transcript does.
+
+`capabilities.supported` is false until a read result or a snapshot/replaced/
+state frame CARRIES a `queue` field — that presence, even as an empty array, is
+the daemon capability probe. Every mutation below is a no-op while its
+capability is false, and the UI hides the matching control instead of calling
+an endpoint that would 404.
+*/
+export interface SessionChatQueueController {
+  capabilities: SessionChatQueueCapabilities;
+  /** Authoritative queue, head first. Empty while supported but nothing waits. */
+  prompts: readonly SessionChatQueuedPrompt[];
+  /** Appends text at the end of the queue (Tab / long-press on Send). */
+  queuePrompt: (text: string) => Promise<void>;
+  /** Moves a failed row back to queued and clears its error. */
+  retryPrompt: (promptId: string) => Promise<void>;
+  /** Deletes a row and resolves with it, so Edit can reuse the text. */
+  removePrompt: (promptId: string) => Promise<SessionChatQueuedPrompt | null>;
+  /** Commits a drag with the full id list, head first (applied optimistically). */
+  reorder: (promptIds: string[]) => Promise<void>;
+  /** Delivers one row immediately, exactly like pressing Enter. */
+  sendNow: (promptId: string) => Promise<void>;
+}
+
+export interface SessionChatDraftController {
+  /** This client's opaque id, echoed back as a draft's originClientId. */
+  clientId: string;
+  /** Whether this host can push at all; false means local-only drafts. */
+  canSync: boolean;
+  /** Latest draft gxserver reported, from any device. Null ⇒ none seen. */
+  synced: SessionChatDraft | null;
+  /**
+   * Pushes the unsent composer text. Called on blur / session switch /
+   * unmount / backgrounding — never per keystroke. An empty string clears.
+   */
+  push: (content: string) => Promise<void>;
+}
+
 export interface UseSessionChatResult {
   view: SessionChatViewState;
   status: SessionChatStatus;
@@ -139,6 +189,11 @@ export interface UseSessionChatResult {
   does not means CLEARED, so this drops back to null on its own.
   */
   terminalNotice: SessionChatTerminalNotice | null;
+  /**
+   * Live on-screen progress (compaction). Follows `terminalNotice` semantics:
+   * a frame that can carry it and does not has CLEARED it.
+   */
+  terminalActivity: SessionChatTerminalActivity | null;
   agent: string | null;
   agentSessionId: string | null;
   error: string | null;
@@ -156,6 +211,10 @@ export interface UseSessionChatResult {
     params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
   ) => Promise<void>;
   interrupt: () => Promise<void>;
+  /** Ghostex prompt queue: rows the agent has never seen (plan 016). */
+  queue: SessionChatQueueController;
+  /** Cross-client composer draft sync. */
+  draft: SessionChatDraftController;
 }
 
 export function useSessionChat(options: UseSessionChatOptions): UseSessionChatResult {
@@ -193,6 +252,29 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [terminalNotice, setTerminalNotice] = useState<SessionChatTerminalNotice | null>(
     null,
   );
+  /*
+  CDXC:SessionChatTerminalActivity 2026-08-22: on-screen progress (compaction),
+  carried and cleared exactly like the notice above. It is separate state
+  because it is a different thing to the user — work in flight, not a problem
+  to act on — and it renders in the transcript rather than the notice stack.
+  */
+  const [terminalActivity, setTerminalActivity] =
+    useState<SessionChatTerminalActivity | null>(null);
+  /*
+  Ghostex prompt queue. `null` means NO frame has carried a `queue` field yet,
+  which is the "old daemon / not supported" state and hides every queue
+  control. An empty array means supported-and-empty. Once present it is
+  authoritative and replaces the list wholesale.
+  */
+  const [queuePrompts, setQueuePrompts] = useState<readonly SessionChatQueuedPrompt[] | null>(
+    null,
+  );
+  /*
+  Latest synced composer draft. An OMITTED draft means unchanged, NOT cleared
+  (see CDXC:SessionChatQueueCarriage) — so this only ever moves forward, and a
+  clear arrives as an explicit empty `content`.
+  */
+  const [syncedDraft, setSyncedDraft] = useState<SessionChatDraft | null>(null);
 
   const mergerRef = useRef<SessionChatMerger>(createSessionChatMerger());
   const assemblerRef = useRef(createIncrementalSessionChatAssembler());
@@ -217,6 +299,24 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const workingRef = useRef(false);
   const workingStartedAtRef = useRef<number | null>(null);
 
+  /**
+   * Folds the two queue-carriage fields with their DIFFERENT omission rules:
+   * an absent `queue` leaves the capability (and the list) exactly as it was,
+   * an absent `draft` means unchanged. Neither one ever clears anything —
+   * clearing a draft is an explicit empty `content` from the server.
+   */
+  const applyQueueCarriage = useCallback(
+    (carrier: { queue?: SessionChatQueuedPrompt[]; draft?: SessionChatDraft }): void => {
+      if (carrier.queue !== undefined) {
+        setQueuePrompts(carrier.queue);
+      }
+      if (carrier.draft !== undefined) {
+        setSyncedDraft(carrier.draft);
+      }
+    },
+    [],
+  );
+
   const applyAuthoritative = useCallback(
     (result: {
       messages: SessionChatMessage[];
@@ -234,6 +334,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       selectedOptions?: SessionChatDetectedOptions;
       /** Blocking/failed terminal state; omitted ⇒ cleared. */
       terminalNotice?: SessionChatTerminalNotice;
+      /** Live on-screen progress; omitted ⇒ cleared. */
+      terminalActivity?: SessionChatTerminalActivity;
+      /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
+      queue?: SessionChatQueuedPrompt[];
+      /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
+      draft?: SessionChatDraft;
     }): void => {
       replaceSessionChatMergerList(mergerRef.current, result.messages);
       setTranscript(mergerRef.current.list);
@@ -251,12 +357,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setSelectedOptions(result.selectedOptions);
       }
       setTerminalNotice(result.terminalNotice ?? null);
+      setTerminalActivity(result.terminalActivity ?? null);
+      applyQueueCarriage(result);
       setError(result.status === "error" ? (result.error ?? "Conversation could not be loaded.") : null);
       // A fresh authoritative generation cancels an in-flight older page.
       loadEarlierEpochRef.current = null;
       setLoadingEarlier(false);
     },
-    [],
+    [applyQueueCarriage],
   );
 
   const requestResync = useCallback((): void => {
@@ -357,6 +465,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setInterrupted(false);
     // A different session's detection must never leak into this one.
     setSelectedOptions(null);
+    // Nor its queue or its draft: both are per-session, and re-probing the
+    // capability from scratch is what keeps a mixed old/new daemon honest.
+    setQueuePrompts(null);
+    setSyncedDraft(null);
 
     const acceptSequencedFrame = (event: {
       epoch: number;
@@ -440,6 +552,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setSelectedOptions(event.selectedOptions);
       }
       setTerminalNotice(event.terminalNotice ?? null);
+      setTerminalActivity(event.terminalActivity ?? null);
+      applyQueueCarriage(event);
       if (event.agentSessionId !== undefined) {
         setAgentSessionId(event.agentSessionId);
       }
@@ -512,7 +626,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       unsubscribe();
     };
-  }, [applyAuthoritative, initialLimit, requestResync, transport]);
+  }, [applyAuthoritative, applyQueueCarriage, initialLimit, requestResync, transport]);
 
   // --- Assembly (suffix-extension fast path, §6.4) ---------------------------
   const assembled = useMemo(() => {
@@ -753,6 +867,143 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     [transport],
   );
 
+  // --- Ghostex prompt queue + synced draft ------------------------------------
+  const queueCapabilities = useMemo(
+    () =>
+      sessionChatQueueCapabilities({
+        daemonSupportsQueue: queuePrompts !== null,
+        transport,
+      }),
+    [queuePrompts, transport],
+  );
+  const clientId = useMemo(() => sessionChatDraftClientId(), []);
+  // Every mutation answers with the whole authoritative queue, so an optimistic
+  // step that lost a race self-corrects on the next line instead of needing a
+  // rollback path.
+  const queueMutation = useCallback(
+    async (
+      run: (() => Promise<{ queue: SessionChatQueuedPrompt[] }>) | undefined,
+    ): Promise<void> => {
+      if (!run) {
+        return;
+      }
+      const result = await run();
+      if (!closedRef.current) {
+        setQueuePrompts(result.queue);
+      }
+    },
+    [],
+  );
+  const queuePrompt = useCallback(
+    async (text: string): Promise<void> => {
+      const call = transport.queuePrompt?.bind(transport);
+      if (!queueCapabilities.canQueue || !call) {
+        return;
+      }
+      await queueMutation(() => call({ text }));
+    },
+    [queueCapabilities.canQueue, queueMutation, transport],
+  );
+  const retryPrompt = useCallback(
+    async (promptId: string): Promise<void> => {
+      const call = transport.updateQueuedPrompt?.bind(transport);
+      if (!queueCapabilities.canRetry || !call) {
+        return;
+      }
+      await queueMutation(() => call({ promptId, retry: true }));
+    },
+    [queueCapabilities.canRetry, queueMutation, transport],
+  );
+  const removePrompt = useCallback(
+    async (promptId: string): Promise<SessionChatQueuedPrompt | null> => {
+      const call = transport.removeQueuedPrompt?.bind(transport);
+      if (!queueCapabilities.canRemove || !call) {
+        return null;
+      }
+      const result = await call({ promptId });
+      if (!closedRef.current) {
+        setQueuePrompts(result.queue);
+      }
+      // The removed row rides back on the answer so Edit can pull its text into
+      // the composer without having cached it across the round trip.
+      return result.prompt;
+    },
+    [queueCapabilities.canRemove, transport],
+  );
+  const reorder = useCallback(
+    async (promptIds: string[]): Promise<void> => {
+      const call = transport.reorderQueue?.bind(transport);
+      if (!queueCapabilities.canReorder || !call) {
+        return;
+      }
+      // Optimistic: the strip must settle into the dropped order immediately.
+      setQueuePrompts((current) => {
+        if (current === null) {
+          return current;
+        }
+        let next = [...current];
+        promptIds.forEach((id, target) => {
+          const from = next.findIndex((prompt) => prompt.id === id);
+          if (from >= 0) {
+            next = moveSessionChatQueueRow(next, from, target);
+          }
+        });
+        return next;
+      });
+      await queueMutation(() => call({ promptIds }));
+    },
+    [queueCapabilities.canReorder, queueMutation, transport],
+  );
+  const sendNow = useCallback(
+    async (promptId: string): Promise<void> => {
+      const call = transport.sendQueuedPrompt?.bind(transport);
+      if (!queueCapabilities.canSendNow || !call) {
+        return;
+      }
+      await queueMutation(() => call({ promptId }));
+    },
+    [queueCapabilities.canSendNow, queueMutation, transport],
+  );
+  const pushDraft = useCallback(
+    async (content: string): Promise<void> => {
+      const call = transport.setDraft?.bind(transport);
+      if (!call) {
+        return;
+      }
+      await call({ clientId, content });
+    },
+    [clientId, transport],
+  );
+  const queue = useMemo<SessionChatQueueController>(
+    () => ({
+      capabilities: queueCapabilities,
+      prompts: queuePrompts ?? [],
+      queuePrompt,
+      removePrompt,
+      reorder,
+      retryPrompt,
+      sendNow,
+    }),
+    [
+      queueCapabilities,
+      queuePrompt,
+      queuePrompts,
+      removePrompt,
+      reorder,
+      retryPrompt,
+      sendNow,
+    ],
+  );
+  const draft = useMemo<SessionChatDraftController>(
+    () => ({
+      canSync: queueCapabilities.canSyncDraft,
+      clientId,
+      push: pushDraft,
+      synced: syncedDraft,
+    }),
+    [clientId, pushDraft, queueCapabilities.canSyncDraft, syncedDraft],
+  );
+
   const interrupt = useCallback(async (): Promise<void> => {
     if (workingRef.current) {
       // Stop: suppress the spinner and drop optimistic echoes — the delayed
@@ -767,6 +1018,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     agent,
     agentSessionId,
     answerPrompt,
+    draft,
     error,
     hasMore,
     interrupt,
@@ -775,10 +1027,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     loadingEarlier,
     messages,
     prompt,
+    queue,
     selectedOptions,
     send,
     status,
     terminalNotice,
+    terminalActivity,
     view,
     working,
     ...(transportSendKey ? { sendKey } : {}),

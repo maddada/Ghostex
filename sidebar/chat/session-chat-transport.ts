@@ -6,13 +6,17 @@
 
 import type {
   GxserverAnswerSessionChatPromptParams,
+  GxserverQueueSessionChatPromptResult,
   GxserverReadSessionChatFilesResult,
   GxserverReadSessionChatImageResult,
   GxserverReadSessionChatResult,
   GxserverReadSessionChatSkillsResult,
   GxserverSaveSessionChatAttachmentResult,
   GxserverSaveSessionChatImageResult,
+  GxserverSendSessionChatQueuedPromptResult,
   GxserverSessionChatEvent,
+  GxserverSessionChatQueueResult,
+  GxserverSessionChatRemoveQueuedPromptResult,
   SessionChatSendKey,
 } from "../../shared/session-chat";
 
@@ -88,4 +92,59 @@ export interface SessionChatTransport {
     params: Omit<GxserverAnswerSessionChatPromptParams, "projectId" | "sessionId">,
   ): Promise<void>;
   interrupt(): Promise<void>;
+  /*
+  Ghostex prompt queue + synced composer draft (plan 016). Every method here is
+  optional because a host may have no route to the endpoint yet. Two separate
+  gates decide whether a queue control is shown, and BOTH must pass:
+    1. the read result / frame carries a `queue` array (the daemon supports it);
+    2. the transport implements the method (this host can reach it).
+  When either is missing the shared UI hides that control entirely rather than
+  offering a button that 404s or silently does nothing.
+  */
+  /**
+   * Appends `text` at the end of the queue (Tab in the composer, or a
+   * long-press on Send). Hosts without it lose queueing altogether: Tab falls
+   * back to its normal behaviour and long-press just sends.
+   */
+  queuePrompt?(params: { text: string }): Promise<GxserverQueueSessionChatPromptResult>;
+  /**
+   * Edits a row's text and/or retries it. `retry: true` moves a `failed` row
+   * back to `queued` and clears its error so draining can resume. Hosts
+   * without it hide Retry and make rows read-only.
+   */
+  updateQueuedPrompt?(params: {
+    promptId: string;
+    text?: string;
+    retry?: boolean;
+  }): Promise<GxserverSessionChatQueueResult>;
+  /**
+   * Deletes a row and returns it, so Edit can pull the removed text into the
+   * composer in the same round trip. Hosts without it hide Delete and Edit.
+   */
+  removeQueuedPrompt?(params: {
+    promptId: string;
+  }): Promise<GxserverSessionChatRemoveQueuedPromptResult>;
+  /**
+   * Commits a drag-to-reorder with the full id list, head first. Hosts without
+   * it render the rows without drag handles instead of animating a reorder
+   * that the server would never persist.
+   */
+  reorderQueue?(params: { promptIds: string[] }): Promise<GxserverSessionChatQueueResult>;
+  /**
+   * "Send now": delivers one row immediately regardless of agent state, exactly
+   * like pressing Enter. Hosts without it hide the per-row Send now control;
+   * the row still drains on its own at the next idle window.
+   */
+  sendQueuedPrompt?(params: {
+    promptId: string;
+  }): Promise<GxserverSendSessionChatQueuedPromptResult>;
+  /**
+   * Pushes the unsent composer text to gxserver so other devices see it.
+   * Called on blur / session switch / unmount / backgrounding, never per
+   * keystroke, and an empty `content` is how a draft is cleared. `clientId` is
+   * this client's opaque id, echoed back as the draft's `originClientId` so it
+   * can ignore its own broadcast. Hosts without it keep their local draft
+   * cache and simply never sync — nothing in the UI is hidden.
+   */
+  setDraft?(params: { content: string; clientId: string }): Promise<void>;
 }
