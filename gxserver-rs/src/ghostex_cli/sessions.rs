@@ -993,6 +993,21 @@ fn to_cli_session(
         "delayedSendRemainingLabel",
         &[p("delayedSendRemainingLabel")],
     );
+    /*
+     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * The phone's session-list badge reads these two off the mobile summary, so
+     * the inventory has to forward them from the presentation snapshot the same
+     * way it forwards the Delayed Send countdown above. Without this the badge
+     * is wired end to end on the mobile side and can never light up. Absent
+     * means "no queue" / "nothing failed", which is also what a daemon that
+     * predates the queue publishes.
+     */
+    insert_js(&mut map, "queuedPromptCount", &[p("queuedPromptCount")]);
+    insert_js(
+        &mut map,
+        "queuedPromptFailedCount",
+        &[p("queuedPromptFailedCount")],
+    );
     insert_js(
         &mut map,
         "sendWhenAllProjectSessionsStopActive",
@@ -1777,6 +1792,20 @@ fn to_mobile_session_summary(session: &Value) -> Value {
      * round trip or a git binary of its own.
      */
     insert_js(&mut map, "gitStatus", &[s("gitStatus")]);
+    /*
+     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * The phone's session-row queue badge reads these two. This compactor is a
+     * SECOND whitelist after `to_cli_session`'s: forwarding them there only is
+     * not enough, because everything not named here is dropped again before the
+     * summary reaches the phone. `queuedPromptCount` includes `failed` rows and
+     * `queuedPromptFailedCount` turns the badge red; both absent means no badge.
+     */
+    insert_js(&mut map, "queuedPromptCount", &[s("queuedPromptCount")]);
+    insert_js(
+        &mut map,
+        "queuedPromptFailedCount",
+        &[s("queuedPromptFailedCount")],
+    );
     insert_js(&mut map, "sortOrder", &[s("sortOrder")]);
     insert_js(&mut map, "status", &[s("status")]);
     insert_js(&mut map, "surface", &[s("surface")]);

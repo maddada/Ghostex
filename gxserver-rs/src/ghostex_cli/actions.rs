@@ -91,6 +91,18 @@ pub enum Parser {
     /// session selector plus `--answer-json` for answerSessionChatPrompt.
     SessionChatAnswer,
     /*
+    CDXC:SessionChatPromptQueue 2026-08-21:
+    Queue rows are addressed by the `--prompt-id` the daemon handed out, never
+    by a list position, so a phone acting on a row minutes after it rendered
+    still lands on the prompt it displayed.
+    */
+    /// session selector plus `--prompt-id` (and `--text` / `--retry` for edits).
+    SessionChatQueuedPrompt,
+    /// session selector plus `--prompt-ids` as the new head-first row order.
+    SessionChatQueueOrder,
+    /// session selector plus `--content` and `--client-id` for the synced draft.
+    SessionChatDraft,
+    /*
     CDXC:MobileKeepAwake 2026-08-19:
     `--sessions-json` carries the whole attached-tab set in one exec so a phone
     renewing several holds costs one SSH round trip, not one per tab.
@@ -319,6 +331,34 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
                 flags.insert_text("timeoutMs", "30000");
             }
             rpc::call_gxserver_rpc("/api/handoffSessionChatDraft", &params, &flags)
+        }
+        "readSessionChatQueue" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/readSessionChatQueue", &params, flags)
+        }
+        "queueSessionChatPrompt" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/queueSessionChatPrompt", &params, flags)
+        }
+        "updateSessionChatQueuedPrompt" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/updateSessionChatQueuedPrompt", &params, flags)
+        }
+        "removeSessionChatQueuedPrompt" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/removeSessionChatQueuedPrompt", &params, flags)
+        }
+        "reorderSessionChatQueue" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/reorderSessionChatQueue", &params, flags)
+        }
+        "sendSessionChatQueuedPrompt" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/sendSessionChatQueuedPrompt", &params, flags)
+        }
+        "setSessionChatDraft" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/setSessionChatDraft", &params, flags)
         }
         "exportSessionTranscript" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -1048,6 +1088,9 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
         Parser::AgentPromptLaunch => parse_agent_prompt_launch(flags)?,
         Parser::SessionChatAnswer => parse_session_chat_answer(rest, flags)?,
+        Parser::SessionChatQueuedPrompt => parse_session_chat_queued_prompt(rest, flags)?,
+        Parser::SessionChatQueueOrder => parse_session_chat_queue_order(rest, flags)?,
+        Parser::SessionChatDraft => parse_session_chat_draft(rest, flags)?,
         Parser::KeepSessionsAwake => parse_keep_sessions_awake(flags)?,
     })
 }
@@ -1174,7 +1217,7 @@ fn parse_session_chat_answer(rest: &[String], flags: &Flags) -> CliResult<Value>
         .unwrap_or_default();
     if answer_text.trim().is_empty() {
         return Err(CliError::Other(
-            "answer-session-chat-prompt requires --answer-json '<json>' with kind plus selections or approvalSend.".to_string(),
+            "answer-session-chat-prompt requires --answer-json '<json>' with kind plus selections, approvalSend or choiceIndex.".to_string(),
         ));
     }
     let answer: Value = serde_json::from_str(&answer_text)
@@ -1187,6 +1230,65 @@ fn parse_session_chat_answer(rest: &[String], flags: &Flags) -> CliResult<Value>
     for (key, value) in answer {
         map.insert(key.clone(), value.clone());
     }
+    Ok(Value::Object(map))
+}
+
+fn parse_session_chat_queued_prompt(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(prompt_id) = flags.text("promptId").filter(|value| !value.trim().is_empty()) else {
+        return Err(CliError::Other(
+            "This verb requires --prompt-id <id> from read-session-chat-queue.".to_string(),
+        ));
+    };
+    map.insert("promptId".to_string(), Value::String(prompt_id));
+    if let Some(text) = flags.text("text") {
+        map.insert("text".to_string(), Value::String(text));
+    }
+    if flags.truthy("retry") {
+        map.insert("retry".to_string(), Value::Bool(true));
+    }
+    Ok(Value::Object(map))
+}
+
+fn parse_session_chat_queue_order(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let ids = flags
+        .text("promptIds")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| Value::String(value.to_string()))
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return Err(CliError::Other(
+            "reorder-session-chat-queue requires --prompt-ids <id,id,…> head first.".to_string(),
+        ));
+    }
+    map.insert("promptIds".to_string(), Value::Array(ids));
+    Ok(Value::Object(map))
+}
+
+/*
+An EMPTY --content is how a draft is cleared, so it is valid input: the flag
+must be present, but its value may be the empty string.
+*/
+fn parse_session_chat_draft(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(content) = flags.text("content") else {
+        return Err(CliError::Other(
+            "set-session-chat-draft requires --content '<text>' (empty clears the draft)."
+                .to_string(),
+        ));
+    };
+    let Some(client_id) = flags.text("clientId").filter(|value| !value.trim().is_empty()) else {
+        return Err(CliError::Other(
+            "set-session-chat-draft requires --client-id <id> so this device ignores its own echo."
+                .to_string(),
+        ));
+    };
+    map.insert("content".to_string(), Value::String(content));
+    map.insert("clientId".to_string(), Value::String(client_id));
     Ok(Value::Object(map))
 }
 

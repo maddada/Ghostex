@@ -227,6 +227,13 @@ fn is_known_command(name: &str) -> bool {
         "answer-session-chat-prompt",
         "interrupt-session-chat",
         "handoff-session-chat-draft",
+        "read-session-chat-queue",
+        "queue-session-chat-prompt",
+        "update-session-chat-queued-prompt",
+        "remove-session-chat-queued-prompt",
+        "reorder-session-chat-queue",
+        "send-session-chat-queued-prompt",
+        "set-session-chat-draft",
         "export-transcript",
         "wait-for-text",
         "rename-command",
@@ -543,6 +550,56 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "handoff-session-chat-draft" => run_bridge_action(
             "handoffSessionChatDraft",
             Parser::SessionSelector,
+            fail_on_not_ok,
+            args,
+        ),
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-21:
+        Ghostex mobile has no HTTP path to gxserver, so the queue and draft
+        endpoints are CLI verbs the phone SSH-execs, exactly like the rest of
+        Session Chat. Rows are always addressed by the `--prompt-id` the daemon
+        handed out, never by a list position, so a phone acting on a row minutes
+        later still lands on the prompt it displayed.
+        */
+        "read-session-chat-queue" => run_bridge_action(
+            "readSessionChatQueue",
+            Parser::SessionSelector,
+            plain,
+            args,
+        ),
+        "queue-session-chat-prompt" => run_bridge_action(
+            "queueSessionChatPrompt",
+            Parser::SendText,
+            fail_on_not_ok,
+            args,
+        ),
+        "update-session-chat-queued-prompt" => run_bridge_action(
+            "updateSessionChatQueuedPrompt",
+            Parser::SessionChatQueuedPrompt,
+            fail_on_not_ok,
+            args,
+        ),
+        "remove-session-chat-queued-prompt" => run_bridge_action(
+            "removeSessionChatQueuedPrompt",
+            Parser::SessionChatQueuedPrompt,
+            fail_on_not_ok,
+            args,
+        ),
+        "reorder-session-chat-queue" => run_bridge_action(
+            "reorderSessionChatQueue",
+            Parser::SessionChatQueueOrder,
+            fail_on_not_ok,
+            args,
+        ),
+        "send-session-chat-queued-prompt" => run_bridge_action(
+            "sendSessionChatQueuedPrompt",
+            Parser::SessionChatQueuedPrompt,
+            fail_on_not_ok,
+            args,
+        ),
+        "set-session-chat-draft" => run_bridge_action(
+            "setSessionChatDraft",
+            Parser::SessionChatDraft,
             fail_on_not_ok,
             args,
         ),
