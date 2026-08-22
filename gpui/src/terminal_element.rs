@@ -1247,6 +1247,33 @@ impl TerminalView {
             }
         }
 
+        /*
+        CDXC:GPUITerminalClearScreen 2026-08-22:
+        Cmd-K is ghostty's default `clear_screen` binding on macOS. Ghostty
+        marks it `performable`, so it is only consumed when it actually
+        clears: on the alternate screen the clear is a no-op and the key
+        reaches the running program instead.
+        */
+        if cfg!(target_os = "macos")
+            && modifiers.platform
+            && !modifiers.shift
+            && !modifiers.control
+            && !modifiers.alt
+            && !modifiers.function
+            && keystroke.key == "k"
+            && self.model.clear_screen()
+        {
+            // Ghostty drops the selection as part of the clear, and with the
+            // scrollback gone there is no history left to stay scrolled into.
+            self.selection = None;
+            self.drag = None;
+            self.model.scroll_viewport(VtScrollViewport::Bottom);
+            self.refresh_snapshot();
+            cx.notify();
+            cx.stop_propagation();
+            return;
+        }
+
         // Ctrl-V remains literal terminal input for text clipboards, but the
         // app must first get a chance to convert an image-only clipboard into
         // the same Markdown reference used by Cmd-V and contextual Paste.

@@ -678,6 +678,46 @@ export const DEFAULT_ghostex_HOTKEYS: ghostexHotkeySettings = Object.fromEntries
   GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition.defaultKey]),
 );
 
+/**
+ * CDXC:Hotkeys 2026-08-22:
+ * Cmd+K clears the terminal, matching the `clear_screen` binding Ghostty
+ * ships by default, so the focused terminal owns that chord outright and no
+ * command may take it over. Reserved chords cannot be recorded in Settings,
+ * and a binding persisted before the reservation is migrated back to its
+ * action's default by `normalizeghostexHotkeySettings`.
+ *
+ * The reservation is macOS-only because that is the only platform Ghostty
+ * binds `clear_screen` on. On Windows and Linux "cmd+k" is how this model
+ * spells Ctrl+K, which the terminal still passes through as its control
+ * code, so reserving it there would strip working bindings for nothing.
+ */
+const GHOSTEX_RESERVED_HOTKEY_CHORDS: Readonly<
+  Record<ghostexHotkeyPlatform, readonly string[]>
+> = {
+  linux: [],
+  mac: ["cmd+k"],
+  windows: [],
+};
+
+export function getReservedghostexHotkeyChords(
+  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform(),
+): readonly string[] {
+  return GHOSTEX_RESERVED_HOTKEY_CHORDS[platform];
+}
+
+/**
+ * Whether a binding is blocked because the terminal owns its opening chord.
+ * A chord sequence is judged by its first chord: the terminal consumes that
+ * keystroke, so the rest of the sequence can never be reached.
+ */
+export function isReservedghostexHotkeyText(
+  value: string,
+  platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform(),
+): boolean {
+  const [openingChord] = normalizeHotkeyText(value).split(" ");
+  return Boolean(openingChord) && getReservedghostexHotkeyChords(platform).includes(openingChord);
+}
+
 export function normalizeghostexHotkeySettings(candidate: unknown): ghostexHotkeySettings {
   const source = isRecord(candidate) ? candidate : {};
   const platform = detectghostexHotkeyPlatform();
@@ -696,11 +736,15 @@ export function normalizeghostexHotkeySettings(candidate: unknown): ghostexHotke
        * command is intentionally unassigned.
        */
       const hotkeyText = value.trim() ? normalizeHotkeyText(value) : "";
-      normalized[definition.id] = definition.retiredDefaultKeys?.includes(hotkeyText)
-        ? platformDefaultKey
-        : platform !== "mac" &&
-            definition.windowsLinuxDefaultKey &&
-            hotkeyText === definition.defaultKey
+      const isRetiredDefault = definition.retiredDefaultKeys?.includes(hotkeyText) ?? false;
+      const isMacDefaultOnOtherPlatform =
+        platform !== "mac"
+        && Boolean(definition.windowsLinuxDefaultKey)
+        && hotkeyText === definition.defaultKey;
+      normalized[definition.id] =
+        isRetiredDefault
+        || isMacDefaultOnOtherPlatform
+        || isReservedghostexHotkeyText(hotkeyText, platform)
           ? platformDefaultKey
           : hotkeyText;
       continue;

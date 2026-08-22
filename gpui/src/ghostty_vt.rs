@@ -1312,22 +1312,7 @@ impl VtTerminal {
         if self.alternate_screen_active()? {
             return Ok(false);
         }
-        let mut cursor_x: u16 = 0;
-        let mut cursor_y: u16 = 0;
-        check(unsafe {
-            ffi::ghostty_terminal_get(
-                self.raw,
-                ffi::GHOSTTY_TERMINAL_DATA_CURSOR_X,
-                (&raw mut cursor_x).cast::<c_void>(),
-            )
-        })?;
-        check(unsafe {
-            ffi::ghostty_terminal_get(
-                self.raw,
-                ffi::GHOSTTY_TERMINAL_DATA_CURSOR_Y,
-                (&raw mut cursor_y).cast::<c_void>(),
-            )
-        })?;
+        let (cursor_x, cursor_y) = self.cursor_position()?;
         let mut grid_ref = ffi::GhosttyGridRef::init_sized();
         let point = ffi::GhosttyPoint {
             tag: ffi::GHOSTTY_POINT_TAG_ACTIVE,
@@ -1369,6 +1354,85 @@ impl VtTerminal {
             ffi::GHOSTTY_CELL_SEMANTIC_INPUT | ffi::GHOSTTY_CELL_SEMANTIC_PROMPT
         ))
     }
+
+    /// Cursor position on the active screen, in zero-based cells.
+    fn cursor_position(&mut self) -> Result<(u16, u16), VtError> {
+        let mut cursor_x: u16 = 0;
+        let mut cursor_y: u16 = 0;
+        check(unsafe {
+            ffi::ghostty_terminal_get(
+                self.raw,
+                ffi::GHOSTTY_TERMINAL_DATA_CURSOR_X,
+                (&raw mut cursor_x).cast::<c_void>(),
+            )
+        })?;
+        check(unsafe {
+            ffi::ghostty_terminal_get(
+                self.raw,
+                ffi::GHOSTTY_TERMINAL_DATA_CURSOR_Y,
+                (&raw mut cursor_y).cast::<c_void>(),
+            )
+        })?;
+        Ok((cursor_x, cursor_y))
+    }
+
+    /// Ghostty's `clear_screen` binding action (Cmd-K on macOS), mirroring
+    /// `termio.clearScreen` with history:
+    ///
+    /// - The alternate screen is never cleared. An emulator-level clear
+    ///   desynchronizes the running program's idea of where the cursor is,
+    ///   so ghostty leaves that binding unconsumed and so do we.
+    /// - The scrollback goes first.
+    /// - Away from a prompt the rows above the cursor are dropped, lifting
+    ///   the cursor row to the top with its content (the half-typed command
+    ///   line) intact.
+    /// - At an OSC 133 prompt the whole screen is erased and the shell owes
+    ///   a repaint, which the caller triggers with a form feed.
+    ///
+    /// libghostty-vt exposes no erase entry point, so these go through the
+    /// parser the same way the PTY's own bytes do.
+    pub fn clear_screen(&mut self, history: bool) -> Result<VtClearScreen, VtError> {
+        if self.alternate_screen_active()? {
+            return Ok(VtClearScreen::NotCleared);
+        }
+        if history {
+            self.feed(b"\x1b[3J");
+        }
+        if self.cursor_at_prompt()? {
+            self.feed(b"\x1b[2J");
+            return Ok(VtClearScreen::ClearedAtPrompt);
+        }
+        let (cursor_x, cursor_y) = self.cursor_position()?;
+        if cursor_y > 0 {
+            // DL is the only way to drop rows off the top of the active
+            // area from out here. DECSC/DECRC carry the pen (SGR, charset,
+            // origin mode) across it, and the pen is reset in between so the
+            // rows DL opens at the bottom are blank in the default
+            // background instead of whatever the program was painting with.
+            // DL parks the cursor at the start of the row it began on, which
+            // is now row 0, so the trailing CUP only restores the column.
+            // A program that set a scrolling region while on the primary
+            // screen keeps its rows: DL declines outside the region.
+            let mut bytes = Vec::from(b"\x1b7\x1b[m\x1b[H".as_slice());
+            bytes.extend_from_slice(format!("\x1b[{cursor_y}M").as_bytes());
+            bytes.extend_from_slice(b"\x1b8");
+            bytes.extend_from_slice(format!("\x1b[1;{}H", u32::from(cursor_x) + 1).as_bytes());
+            self.feed(&bytes);
+        }
+        Ok(VtClearScreen::Cleared)
+    }
+}
+
+/// Outcome of [`VtTerminal::clear_screen`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VtClearScreen {
+    /// Nothing was cleared, so the key belongs to the running program.
+    NotCleared,
+    /// The screen was cleared.
+    Cleared,
+    /// The screen was cleared at a shell prompt: the shell has to repaint
+    /// it, so the caller writes a form feed (0x0C) to the PTY.
+    ClearedAtPrompt,
 }
 
 /// Scrollbar state for the terminal viewport, in rows.

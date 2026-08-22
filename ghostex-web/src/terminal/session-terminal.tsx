@@ -10,6 +10,7 @@ import {
   useRef,
   type HTMLAttributes,
 } from "react";
+import { detectghostexHotkeyPlatform } from "@/shared/ghostex-hotkeys";
 import type {
   GxserverProjectId,
   GxserverSessionId,
@@ -61,6 +62,53 @@ function withSearchDecorations(options?: ISearchOptions): ISearchOptions {
     ...options,
     decorations: options?.decorations ?? SEARCH_DECORATIONS,
   };
+}
+
+/*
+Ghostty binds Cmd+K to `clear_screen`, and only on macOS, so the web
+terminal answers the same chord the same way the desktop app does.
+*/
+const CLEAR_SCREEN_CHORD_IS_AVAILABLE = detectghostexHotkeyPlatform() === "mac";
+
+function isClearScreenChord(event: KeyboardEvent): boolean {
+  return (
+    CLEAR_SCREEN_CHORD_IS_AVAILABLE
+    && event.metaKey
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.shiftKey
+    && event.key.toLowerCase() === "k"
+  );
+}
+
+/**
+ * Ghostty's `clear_screen`: erase the scrollback, then drop the rows above
+ * the cursor so a half-typed command line lifts to the top with its column
+ * intact. Returns false on the alternate screen, which Ghostty never clears
+ * because an emulator-level clear desynchronizes the running program's idea
+ * of where the cursor is; Ghostty leaves the key to the program there.
+ */
+function clearScreen(terminal: Terminal): boolean {
+  const buffer = terminal.buffer.active;
+  if (buffer.type === "alternate") {
+    return false;
+  }
+  // Neither xterm.js nor libghostty exposes an erase that drops rows off
+  // the top of the screen, so this writes the sequence the desktop app
+  // feeds its own parser. DECSC/DECRC carry the pen across the delete and
+  // the pen is reset in between, so the rows DL opens at the bottom are
+  // blank in the default background rather than in whatever the program was
+  // painting with; DL parks the cursor in column 0, so the trailing CUP puts
+  // it back on the content that just moved to the top.
+  const rowsAboveCursor = buffer.cursorY;
+  terminal.write(
+    rowsAboveCursor > 0
+      ? `\u001b[3J\u001b7\u001b[m\u001b[H\u001b[${rowsAboveCursor}M\u001b8\u001b[1;${buffer.cursorX + 1}H`
+      : "\u001b[3J",
+  );
+  terminal.clearSelection();
+  terminal.scrollToBottom();
+  return true;
 }
 
 function enableWebgl(terminal: Terminal): (() => void) | undefined {
@@ -165,9 +213,21 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
       terminal.loadAddon(searchAddon);
       terminal.open(container);
       const disposeWebgl = enableWebgl(terminal);
-      terminal.attachCustomKeyEventHandler(
-        (event) => callbacksRef.current.customKeyEventHandler?.(event) ?? true,
-      );
+      terminal.attachCustomKeyEventHandler((event) => {
+        if (callbacksRef.current.customKeyEventHandler?.(event) === false) {
+          return false;
+        }
+        if (!isClearScreenChord(event)) {
+          return true;
+        }
+        if (event.type === "keydown" && !clearScreen(terminal)) {
+          // Alternate screen: Ghostty leaves the binding unconsumed.
+          return true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      });
       terminalRef.current = terminal;
       searchAddonRef.current = searchAddon;
 

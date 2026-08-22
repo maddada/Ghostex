@@ -55,8 +55,9 @@ use std::{
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::ghostty_vt::{
-    self, VtCellWide, VtDirty, VtError, VtHostCallbacks, VtKeyEncoder, VtKeyInput, VtMouseEncoder,
-    VtMouseInput, VtOptionAsAlt, VtRenderState, VtScrollViewport, VtScrollbar, VtTerminal, ffi,
+    self, VtCellWide, VtClearScreen, VtDirty, VtError, VtHostCallbacks, VtKeyEncoder, VtKeyInput,
+    VtMouseEncoder, VtMouseInput, VtOptionAsAlt, VtRenderState, VtScrollViewport, VtScrollbar,
+    VtTerminal, ffi,
 };
 
 /// Wakeup coalescing window: bytes arriving within this span of the first
@@ -601,6 +602,28 @@ impl TerminalModel {
         }
         let _ = self.write_input(&bytes);
         true
+    }
+
+    /// Clear the screen and scrollback the way ghostty's `clear_screen`
+    /// binding does, sending the shell a form feed when the clear happened
+    /// at a prompt so it repaints. Returns false when nothing was cleared
+    /// (the alternate screen is left alone): ghostty marks that binding
+    /// `performable`, so the caller lets the key reach the program instead.
+    pub fn clear_screen(&mut self) -> bool {
+        let outcome = self
+            .terminal
+            .lock()
+            .expect("terminal lock poisoned")
+            .clear_screen(true)
+            .unwrap_or(VtClearScreen::NotCleared);
+        match outcome {
+            VtClearScreen::NotCleared => false,
+            VtClearScreen::Cleared => true,
+            VtClearScreen::ClearedAtPrompt => {
+                let _ = self.write_input(&[0x0c]);
+                true
+            }
+        }
     }
 
     /// Active Kitty keyboard-protocol flags used by the next encoded key.

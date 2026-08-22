@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { AppTooltip } from "./app-tooltip";
 import {
   ghostexHotkeyTextFromKeyboardEvent,
+  isReservedghostexHotkeyText,
   normalizeHotkeyText,
 } from "../shared/ghostex-hotkeys";
 import { formatSidebarHotkeyLabel } from "./hotkey-label";
@@ -27,16 +28,19 @@ export function HotkeyRecorderField({
   originalHotkey,
 }: HotkeyRecorderFieldProps) {
   const [isRecording, setIsRecording] = useState(false);
+  const [reservedHotkey, setReservedHotkey] = useState("");
   const normalizedHotkey = normalizeHotkeyText(hotkey);
   const normalizedOriginalHotkey = normalizeHotkeyText(originalHotkey);
   const originalHotkeyLabel = formatSidebarHotkeyLabel(normalizedOriginalHotkey) || "Unassigned";
   const isModified = normalizedHotkey !== normalizedOriginalHotkey;
-  const label = isRecording
-    ? "Press Shortcut"
-    : formatSidebarHotkeyLabel(normalizedHotkey);
+  const recordingLabel = reservedHotkey
+    ? `${formatSidebarHotkeyLabel(reservedHotkey)} is reserved`
+    : "Press Shortcut";
+  const label = isRecording ? recordingLabel : formatSidebarHotkeyLabel(normalizedHotkey);
 
   useEffect(() => {
     if (!isRecording) {
+      setReservedHotkey("");
       return;
     }
     const recordPhysicalHotkey = (event: KeyboardEvent) => {
@@ -59,6 +63,16 @@ export function HotkeyRecorderField({
       }
       const recordedHotkey = ghostexHotkeyTextFromKeyboardEvent(event);
       if (!recordedHotkey) {
+        return;
+      }
+      /**
+       * CDXC:Hotkeys 2026-08-22:
+       * The focused terminal owns Cmd+K for Ghostty's clear-screen binding,
+       * so it cannot be handed to a command. Keep recording and name the
+       * chord that was refused instead of silently swallowing the press.
+       */
+      if (isReservedghostexHotkeyText(recordedHotkey)) {
+        setReservedHotkey(recordedHotkey);
         return;
       }
       /**
