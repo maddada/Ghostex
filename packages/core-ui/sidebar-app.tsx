@@ -1,8 +1,6 @@
 import { Cursor, KeyboardSensor, PointerSensor } from "@dnd-kit/dom";
-import { move } from "@dnd-kit/helpers";
-import { DragDropProvider, type DragDropEventHandlers } from "@dnd-kit/react";
+import { DragDropProvider } from "@dnd-kit/react";
 import {
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -15,12 +13,10 @@ import {
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import {
-  type SidebarActiveSessionsSortMode,
   type ExtensionToSidebarMessage,
   type SidebarPreviousSessionItem,
 } from "../shared/session-grid-contract";
 import {
-  getWorkspaceThemeForeground,
   normalizeWorkspaceThemeColor,
 } from "../shared/workspace-project-appearance";
 import { playCompletionSound, prepareCompletionSoundPlayback } from "./completion-sound-player";
@@ -38,7 +34,6 @@ import {
   isSidebarSessionSearchSelectionMatch,
   type SidebarSessionSearchSelection,
 } from "./sidebar-session-search";
-import { logSidebarDebug } from "./sidebar-debug";
 import {
   createSidebarRefreshDebugInstanceId,
   postSidebarRefreshDebugLog,
@@ -46,19 +41,14 @@ import {
 } from "./sidebar-refresh-debug-log";
 import {
   hashSidebarCollapseDebugId,
-  SIDEBAR_COLLAPSE_STATE_DEBUG_EVENT_PREFIX,
-  summarizeSidebarCollapseDebugGroupIds,
 } from "./sidebar-collapse-state-debug";
 import { postSidebarOrderReproLog } from "./sidebar-order-repro-log";
 import { getSidebarReorderActivationConstraints } from "./sidebar-reorder-activation";
 import { scrollElementIntoViewIfNeeded } from "./scroll-into-view-if-needed";
 import { resetSidebarStore, useSidebarStore } from "./sidebar-store";
 import {
-  getClientPoint,
-  getSidebarDropData,
   type SidebarGroupDropTarget,
   type SidebarSessionDropTarget,
-  moveSessionIdsByDropTarget,
 } from "./sidebar-dnd";
 import {
   getAutoCollapseGroupIds,
@@ -74,8 +64,6 @@ import {
   parseSidebarProjectCollectionsFromGxserver,
   readSidebarProjectCollections,
   removeSidebarProjectCollection,
-  reorderSidebarProjectCollectionDefinitions,
-  reorderSidebarProjectCollections,
   serializeSidebarProjectCollectionsForGxserver,
   updateSidebarProjectCollection,
   writeSidebarProjectCollections,
@@ -92,8 +80,6 @@ import { useScrollGlowState } from "./use-scroll-glow-state";
 import type { WebviewApi } from "./webview-api";
 import { createDisplaySessionLayout } from "../shared/active-sessions-sort";
 import {
-  moveSidebarV2GroupRows,
-  projectSidebarV2GroupOrderByMachine,
   type SidebarV2GroupOrderRow,
 } from "../shared/sidebar-v2-group-order";
 import {
@@ -106,20 +92,14 @@ import {
   normalizeSidebarSessionTagListItems,
 } from "../shared/session-tags";
 import { isEmptySidebarDoubleClick } from "./empty-sidebar-double-click";
-import { closeAppModal, openAppModal, openQuickAccess } from "./app-modal-host-bridge";
+import { closeAppModal, openAppModal } from "./app-modal-host-bridge";
 import {
   getghostexHotkeyActionById,
   normalizeghostexHotkeySettings,
 } from "../shared/ghostex-hotkeys";
 import {
   DEFAULT_ghostex_SETTINGS,
-  getSidebarTitlebarForegroundForBackground,
-  getSidebarTitlebarGradientColors,
   isDiagnosticLoggingScenarioEnabled,
-  type DiagnosticLoggingScenarioId,
-  type KeepAwakeDurationMinutes,
-  type SidebarNewSessionEnvMode,
-  type SidebarProjectGroupingMode,
   type SidebarV2Layout,
   type SidebarVersion,
 } from "../shared/ghostex-settings";
@@ -128,7 +108,6 @@ import {
   SIDEBAR_PROJECT_JUMP_EVENT,
   type SidebarProjectJumpEventDetail,
 } from "../shared/sidebar-project-jump";
-import type { SidebarAgentButton } from "../shared/sidebar-agents";
 import {
   readRenderedSidebarSessionSlotIds,
   readRenderedSidebarSessionSlots,
@@ -140,7 +119,6 @@ import {
 import {
   PRIMARY_AGENT_LAUNCHER_CHANGED_EVENT,
   readPrimaryAgentLauncherId,
-  writePrimaryAgentLauncherId,
   type PrimaryAgentLauncherChangedEvent,
 } from "./primary-agent-launcher";
 import { type ProjectSessionListCollapsedState } from "./project-session-list-toggle";
@@ -152,48 +130,23 @@ import {
   normalizeSidebarWindowScopeId,
   readSidebarKeepAwakeRuntime,
   readSidebarUiCollapseState,
-  summarizeSidebarUiCollapseRead,
   summarizeSidebarUiCollapseState,
   writeSidebarUiCollapseState,
 } from "./sidebar-app/collapse-state";
 import {
-  areSameGroupDropTarget,
-  areSameRemoteMachineDropTarget,
-  areSameSessionDropTarget,
   createPinnedSessionDomDebugState,
-  createPinnedSessionDropResolutionDebugState,
-  createPinnedSessionDropTargetLogKey,
   createPinnedSessionReorderDebugState,
   createProjectCollectionIdByProjectId,
-  createProjectGroupOrderItems,
-  createRemoteProjectListScopeId,
-  createSessionPointerDragState,
   findCreatedGroupId,
-  getDragNativeEvent,
-  getProjectCollectionDragMetrics,
   getProjectCollectionFamilyProjectIds,
-  getProjectGroupDragHeaderMetrics,
-  getRemoteMachineDragHeaderMetrics,
   getRemoteProjectCollectionFamilyProjectIds,
   LOCAL_PROJECT_LIST_SCOPE_ID,
-  moveCollectionIdToDropTarget,
-  moveGroupIdsByProjectDropTarget,
-  movePinnedSessionIdsByDropTarget,
-  moveProjectGroupFamilyToEnd,
   moveRemoteMachineIdToDropTarget,
-  resolveGroupDropTargetFromPoint,
-  resolvePinnedSessionDropTargetFromPoint,
-  resolveProjectCollectionDropTargetFromPoint,
-  resolveProjectUngroupDropScopeFromPoint,
-  resolveRemoteMachineDropTargetFromPoint,
-  resolveSessionDropTargetFromPoint,
   SIDEBAR_V2_LOCAL_GROUP_ORDER_KEY,
   summarizePointerEventForPinnedReorder,
   summarizeSidebarWakeScrollGeometry,
   summarizeSidebarWakeScrollOrderState,
   summarizeSidebarWakeScrollRenderedSlots,
-  updateGroupDragPreviewFromEvent,
-  updateSessionPointerDragState,
   type SidebarPointerDownSessionTarget,
   type SidebarProjectCollectionDropTarget,
   type SidebarRemoteMachineDropTarget,
@@ -215,7 +168,6 @@ import {
   countSidebarSessions,
   createDisplayedGroupIds,
   createDisplayedSessionIdsByGroup,
-  createPinnedFirstSessionOrder,
   createWorkspaceSessionIdsByGroup,
   findSessionGroupId,
   getCommandPaletteHotkeyActionId,
@@ -224,25 +176,37 @@ import {
   getSidebarStartupElapsedMs,
   getSidebarStartupNow,
   hasActiveSidebarHotkeyRecorder,
-  haveSameSessionOrder,
-  haveSameSessionSet,
   isEditableSidebarKeyboardTarget,
   isSidebarSessionSearchNavigationKey,
   postSidebarAgentIconBoundaryLog,
   summarizeSidebarAgentIconsFromGroups,
   summarizeSidebarAgentIconsFromStore,
 } from "./sidebar-app/session-ordering";
+import { useSidebarCollapseActions } from "./sidebar-app/collapse-actions";
+import {
+  SIDEBAR_STARTUP_REPRO_WINDOW_MS,
+  useSidebarDiagnosticLogs,
+} from "./sidebar-app/diagnostic-logs";
+import { useSidebarDragHandlers } from "./sidebar-app/drag-handlers";
+import {
+  useSidebarDocumentChromeEffects,
+  useSidebarHostMessageListeners,
+  useSidebarStartupDiagnosticEffects,
+  useSidebarStartupInteractionBlock,
+  useSidebarTimeoutCleanup,
+} from "./sidebar-app/lifecycle-effects";
+import { useSidebarOverlayActions } from "./sidebar-app/overlay-actions";
+import { useSidebarActions } from "./sidebar-app/sidebar-actions";
 import type {
   ReferenceSidebarSectionId,
   RemoteMachineRuntimeStatus,
   RemoteMachineRuntimeStatuses,
   RemoteMachineStatusMessages,
   SessionIdsByGroup,
+  SidebarEventSource,
   SidebarProjectCollectionRenderItem,
   SidebarSectionSessionSummary,
 } from "./sidebar-app/types";
-
-type SidebarEventSource = Pick<Window, "addEventListener" | "removeEventListener">;
 
 export type SidebarAppProps = {
   enableProjectCollections?: boolean;
@@ -292,8 +256,6 @@ const sensors = [
 ];
 
 
-const SIDEBAR_STARTUP_INTERACTION_BLOCK_MS = 1500;
-const SIDEBAR_STARTUP_REPRO_WINDOW_MS = 15_000;
 const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID = "gxserver-unavailable";
 const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;
 const MIN_SESSION_SEARCH_QUERY_LENGTH = 4;
@@ -780,104 +742,23 @@ export function SidebarApp({
     };
   }, []);
 
-  const postSidebarDebugLog = useEffectEvent((
-    scenarioId: DiagnosticLoggingScenarioId,
-    event: string,
-    details: unknown,
-  ) => {
-    if (!debuggingMode) {
-      return;
-    }
-
-    logSidebarDebug(debuggingMode, event, details);
-    vscode.postMessage({
-      details,
-      event,
-      scenarioId,
-      type: "sidebarDebugLog",
-    });
+  const {
+    postPinnedSessionReorderLog,
+    postSidebarCollapseStateLog,
+    postSidebarDebugLog,
+    postSidebarRefreshLifecycleLog,
+    postSidebarStartupReproLog,
+  } = useSidebarDiagnosticLogs({
+    debuggingMode,
+    firstHydrateRevisionRef,
+    hasAppliedHydrateRef,
+    hasEstablishedStartupGroupCollapseBaselineRef,
+    refreshDebugInstanceIdRef,
+    revision,
+    sidebarCollapseDiagnosticLoggingEnabled,
+    sidebarStartupStartedAtRef,
+    vscode,
   });
-
-  const postSidebarCollapseStateLog = useEffectEvent(
-    (
-      event: string,
-      details: Record<string, unknown>,
-      options: { enabled?: boolean; } = {},
-    ) => {
-      /*
-       * CDXC:SidebarCollapseDiagnostics 2026-06-02-23:52:
-       * Sidebar restart repros need a dedicated low-volume trace for localStorage
-       * collapse-state reads, writes, hydrate timing, and user toggles. Keep the
-       * payload privacy-safe by recording counts, booleans, revisions, elapsed
-       * timings, and hashed group identifiers instead of project names or paths.
-       */
-      if (!(options.enabled ?? sidebarCollapseDiagnosticLoggingEnabled)) {
-        return;
-      }
-
-      vscode.postMessage({
-        details: {
-          ...details,
-          elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-          firstHydrateRevision: firstHydrateRevisionRef.current,
-          hasEstablishedStartupGroupCollapseBaseline:
-            hasEstablishedStartupGroupCollapseBaselineRef.current,
-          hasHydrate: hasAppliedHydrateRef.current,
-          instanceId: refreshDebugInstanceIdRef.current,
-          revision,
-        },
-        event: `${SIDEBAR_COLLAPSE_STATE_DEBUG_EVENT_PREFIX}${event}`,
-        scenarioId: "native.sidebar.collapse",
-        type: "sidebarDebugLog",
-      });
-    },
-  );
-
-  const postPinnedSessionReorderLog = useEffectEvent((event: string, details: unknown) => {
-    /*
-     * CDXC:PinnedSessions 2026-05-28-15:33:
-     * Pinned reorder failures need click-scoped repro breadcrumbs even when
-     * broad Debugging Mode is off. Keep these events low-volume and explicit
-     * so a user drag can reveal which guard prevented syncSessionOrder.
-     */
-    vscode.postMessage({
-      details,
-      event: `repro.pinnedSessionReorder.${event}`,
-      scenarioId: "native.pane.reorder",
-      type: "sidebarDebugLog",
-    });
-  });
-
-  const postSidebarStartupReproLog = useEffectEvent((event: string, details: unknown) => {
-    if (
-      getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current) >
-      SIDEBAR_STARTUP_REPRO_WINDOW_MS
-    ) {
-      return;
-    }
-
-    vscode.postMessage({
-      details,
-      event: `repro.sidebarStartup.${event}`,
-      scenarioId: "native.sidebar.refresh",
-      type: "sidebarDebugLog",
-    });
-  });
-
-  const postSidebarRefreshLifecycleLog = useEffectEvent(
-    (event: string, details: Record<string, unknown>) => {
-      const currentSettings = useSidebarStore.getState().hud.settings ?? DEFAULT_ghostex_SETTINGS;
-      postSidebarRefreshDebugLog(
-        isDiagnosticLoggingScenarioEnabled(
-          currentSettings.diagnosticLogging,
-          "native.sidebar.refresh",
-        ),
-        vscode,
-        event,
-        details,
-      );
-    },
-  );
 
   useLayoutEffect(() => {
     if (!hasAppliedHydrateRef.current) {
@@ -981,143 +862,22 @@ export function SidebarApp({
 
   const isSidebarInteractionBlocked = isStartupInteractionBlocked;
 
-  const setGroupCollapsed = (groupId: string, collapsed: boolean) => {
-    const wasCollapsed = collapsedGroupsById[ groupId ] === true;
-    const collapsedGroupCountBefore = Object.keys(collapsedGroupsById).length;
-    postSidebarCollapseStateLog("groupToggle", {
-      changed: wasCollapsed !== collapsed,
-      collapsed,
-      collapsedGroupCountBefore,
-      collapsedGroupCountExpectedAfter:
-        collapsedGroupCountBefore + (wasCollapsed === collapsed ? 0 : collapsed ? 1 : -1),
-      groupHash: hashSidebarCollapseDebugId(groupId),
-      groupIndex: groupOrder.indexOf(groupId),
-      wasCollapsed,
-    });
-    setCollapsedGroupsById((previous) => {
-      if (collapsed) {
-        if (previous[ groupId ]) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          [ groupId ]: true,
-        };
-      }
-
-      if (!previous[ groupId ]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[ groupId ];
-      return next;
-    });
-  };
-
-  const setGroupsCollapsed = (groupIds: readonly string[], collapsed: boolean) => {
-    const targetGroupSet = new Set(groupIds);
-    const collapsedGroupCountBefore = Object.keys(collapsedGroupsById).length;
-    const changedGroupCount = groupIds.filter(
-      (groupId) => collapsedGroupsById[ groupId ] !== (collapsed ? true : undefined),
-    ).length;
-    postSidebarCollapseStateLog("groupsBulkToggle", {
-      changedGroupCount,
-      collapsed,
-      collapsedGroupCountBefore,
-      collapsedGroupCountExpectedAfter:
-        collapsedGroupCountBefore + (collapsed ? changedGroupCount : -changedGroupCount),
-      groupHashes: summarizeSidebarCollapseDebugGroupIds(groupIds),
-      targetGroupCount: targetGroupSet.size,
-    });
-    setCollapsedGroupsById((previous) => {
-      if (collapsed) {
-        const next = { ...previous };
-        let changed = false;
-        for (const groupId of groupIds) {
-          if (!next[ groupId ]) {
-            next[ groupId ] = true;
-            changed = true;
-          }
-        }
-        return changed ? next : previous;
-      }
-
-      let next: Record<string, true> | undefined;
-      for (const groupId of groupIds) {
-        if (previous[ groupId ]) {
-          next ??= { ...previous };
-          delete next[ groupId ];
-        }
-      }
-      return next ?? previous;
-    });
-  };
-
-  const setProjectCollectionCollapsed = (collectionKey: string, collapsed: boolean) => {
-    setCollapsedProjectCollectionsByKey((previous) => {
-      if (collapsed) {
-        return previous[ collectionKey ] ? previous : { ...previous, [ collectionKey ]: true };
-      }
-      if (!previous[ collectionKey ]) {
-        return previous;
-      }
-      const next = { ...previous };
-      delete next[ collectionKey ];
-      return next;
-    });
-  };
-
-  const setProjectSessionListCollapsed = (projectId: string, collapsed: boolean) => {
-    setCollapsedProjectSessionListsById((previous) => {
-      if (collapsed) {
-        return previous[ projectId ] ? previous : { ...previous, [ projectId ]: true };
-      }
-      if (!previous[ projectId ]) {
-        return previous;
-      }
-      const next = { ...previous };
-      delete next[ projectId ];
-      return next;
-    });
-  };
-
-  const setRemoteMachineSectionCollapsed = (machineId: string, collapsed: boolean) => {
-    const wasCollapsed = collapsedRemoteMachineSectionsById[ machineId ] === true;
-    postSidebarCollapseStateLog("remoteMachineSectionToggle", {
-      changed: wasCollapsed !== collapsed,
-      collapsed,
-      machineHash: hashSidebarCollapseDebugId(machineId),
-      wasCollapsed,
-    });
-    /*
-     * CDXC:RemoteMachines 2026-06-09-19:02:
-     * Remote machine sections are peers of Quick and Projects in the reference
-     * sidebar. Persist their collapsed state by saved machine id so each machine
-     * can collapse independently without affecting local project groups.
-     */
-    setCollapsedRemoteMachineSectionsById((previous) => {
-      if (collapsed) {
-        if (previous[ machineId ]) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          [ machineId ]: true,
-        };
-      }
-
-      if (!previous[ machineId ]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[ machineId ];
-      return next;
-    });
-  };
+  const {
+    setGroupCollapsed,
+    setGroupsCollapsed,
+    setProjectCollectionCollapsed,
+    setProjectSessionListCollapsed,
+    setRemoteMachineSectionCollapsed,
+  } = useSidebarCollapseActions({
+    collapsedGroupsById,
+    collapsedRemoteMachineSectionsById,
+    groupOrder,
+    postSidebarCollapseStateLog,
+    setCollapsedGroupsById,
+    setCollapsedProjectCollectionsByKey,
+    setCollapsedProjectSessionListsById,
+    setCollapsedRemoteMachineSectionsById,
+  });
 
   const dismissAppModalForSidebarNavigation = (area: string) => {
     /*
@@ -1562,275 +1322,51 @@ export function SidebarApp({
     });
   });
 
-  useEffect(() => {
-    /*
-    CDXC:SidebarRefreshDiagnostics 2026-06-06-23:18:
-    The mount/unmount diagnostic must describe the React app lifetime only. Including effect-event callbacks in this dependency list made every hydrate render look like an app remount in persistent logs, hiding the real refresh cadence and adding avoidable Debugging Mode noise.
-    */
-    const instanceId = refreshDebugInstanceIdRef.current;
-    postSidebarStartupReproLog("appMounted", {
-      elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-      startupInteractionBlockMs: SIDEBAR_STARTUP_INTERACTION_BLOCK_MS,
-    });
-    postSidebarRefreshLifecycleLog("appMounted", {
-      elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-      instanceId,
-      revision: useSidebarStore.getState().revision,
-      sessionCount: Object.keys(useSidebarStore.getState().sessionsById).length,
-    });
-
-    return () => {
-      postSidebarStartupReproLog("appUnmounted", {
-        elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-        finalRevision: useSidebarStore.getState().revision,
-      });
-      postSidebarRefreshLifecycleLog("appUnmounted", {
-        elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-        finalRevision: useSidebarStore.getState().revision,
-        instanceId,
-        sessionCount: Object.keys(useSidebarStore.getState().sessionsById).length,
-      });
-    };
-  }, []);
-
-  useEffect(() => {
-    if (
-      !sidebarCollapseDiagnosticLoggingEnabled ||
-      didLogInitialUiCollapseStateReadRef.current
-    ) {
-      return;
-    }
-
-    didLogInitialUiCollapseStateReadRef.current = true;
-    postSidebarCollapseStateLog("initialRead", {
-      ...summarizeSidebarUiCollapseRead(initialUiCollapseStateRead),
-      currentCollapsedGroupCount: Object.keys(collapsedGroupsById).length,
-      groupCount: groupOrder.length,
-      sessionCount: Object.keys(sessionsById).length,
-      workspaceGroupCount: workspaceGroupIds.length,
-    });
-  }, [
+  useSidebarStartupDiagnosticEffects({
     collapsedGroupsById,
+    didLogInitialUiCollapseStateReadRef,
+    firstHydrateRevisionRef,
     groupOrder,
+    hasAppliedHydrateRef,
     initialUiCollapseStateRead,
-    sidebarCollapseDiagnosticLoggingEnabled,
-    sessionsById,
-    workspaceGroupIds,
-  ]);
-
-  useEffect(() => {
-    const renderState = {
-      elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-      firstHydrateRevision: firstHydrateRevisionRef.current,
-      groupCount: groupOrder.length,
-      hasHydrate: hasAppliedHydrateRef.current,
-      revision,
-      sessionCount: Object.keys(sessionsById).length,
-      startupInteractionBlocked: isStartupInteractionBlocked,
-      workspaceGroupCount: workspaceGroupIds.length,
-    };
-    const renderStateKey = JSON.stringify(renderState);
-    if (lastSidebarStartupRenderStateKeyRef.current === renderStateKey) {
-      return;
-    }
-
-    lastSidebarStartupRenderStateKeyRef.current = renderStateKey;
-    postSidebarStartupReproLog("renderState", renderState);
-    postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, "renderStateChanged", {
-      ...renderState,
-      instanceId: refreshDebugInstanceIdRef.current,
-    });
-    if (hasAppliedHydrateRef.current && renderState.sessionCount === 0) {
-      postSidebarStartupReproLog("emptyStateAfterHydrate", renderState);
-      postSidebarRefreshDebugLog(sidebarRefreshDiagnosticLoggingEnabled, vscode, "emptyStateAfterHydrate", {
-        ...renderState,
-        instanceId: refreshDebugInstanceIdRef.current,
-      });
-    }
-  }, [
-    groupOrder,
     isStartupInteractionBlocked,
+    lastSidebarStartupRenderStateKeyRef,
+    postSidebarCollapseStateLog,
+    postSidebarRefreshLifecycleLog,
     postSidebarStartupReproLog,
+    refreshDebugInstanceIdRef,
     revision,
-    sidebarRefreshDiagnosticLoggingEnabled,
     sessionsById,
+    sidebarCollapseDiagnosticLoggingEnabled,
+    sidebarRefreshDiagnosticLoggingEnabled,
+    sidebarStartupStartedAtRef,
     vscode,
     workspaceGroupIds,
-  ]);
+  });
 
-  useEffect(() => {
-    const handleMessage = (event: Event) => {
-      if (event instanceof MessageEvent) {
-        handleWindowMessage(event);
-      }
-    };
+  useSidebarHostMessageListeners({
+    handleWindowMessage,
+    messageSource,
+    nativeHostEventSource,
+  });
 
-    messageSource.addEventListener("message", handleMessage);
+  useSidebarTimeoutCleanup({
+    completionFlashTimeoutBySessionIdRef,
+    referenceSectionAnimationTimeoutsRef,
+  });
 
-    return () => {
-      messageSource.removeEventListener("message", handleMessage);
-    };
-  }, [ handleWindowMessage, messageSource ]);
+  useSidebarStartupInteractionBlock({
+    postSidebarStartupReproLog,
+    setIsStartupInteractionBlocked,
+    sidebarStartupStartedAtRef,
+  });
 
-  useEffect(() => {
-    if (!nativeHostEventSource) {
-      return;
-    }
-
-    const handleNativeHostEvent = (event: Event) => {
-      if (!(event instanceof CustomEvent)) {
-        return;
-      }
-
-      handleWindowMessage(
-        new MessageEvent<ExtensionToSidebarMessage>("message", {
-          data: event.detail,
-        }),
-      );
-    };
-
-    /**
-     * CDXC:Hotkeys 2026-06-05-21:17:
-     * Native macOS shortcuts arrive through the Ghostex host custom event, while extension-style traffic arrives through postMessage. Route both into the same sidebar action handler so Cmd+number uses the visible-row slot resolver consistently.
-     *
-     * CDXC:Hotkeys 2026-06-12-12:33:
-     * The native sidebar wrapper owns typed nativeHotkey host events. Allow that wrapper to disable this shared listener so Cmd+T creates one terminal tab instead of running both the wrapper action and the shared SidebarApp createSession bridge.
-     */
-    nativeHostEventSource.addEventListener("ghostex-native-host-event", handleNativeHostEvent);
-
-    return () => {
-      nativeHostEventSource.removeEventListener("ghostex-native-host-event", handleNativeHostEvent);
-    };
-  }, [ handleWindowMessage, nativeHostEventSource ]);
-
-  useEffect(() => {
-    return () => {
-      for (const timeout of completionFlashTimeoutBySessionIdRef.current.values()) {
-        window.clearTimeout(timeout);
-      }
-      completionFlashTimeoutBySessionIdRef.current.clear();
-
-      for (const timeoutId of Object.values(referenceSectionAnimationTimeoutsRef.current)) {
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
-      }
-      referenceSectionAnimationTimeoutsRef.current = {};
-    };
-  }, []);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      postSidebarStartupReproLog("interactionBlockReleased", {
-        elapsedMs: getSidebarStartupElapsedMs(sidebarStartupStartedAtRef.current),
-        revision: useSidebarStore.getState().revision,
-      });
-      setIsStartupInteractionBlocked(false);
-    }, SIDEBAR_STARTUP_INTERACTION_BLOCK_MS);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, []);
-
-  useEffect(() => {
-    document.body.dataset.sidebarTheme = theme;
-    const normalizedThemeColor = normalizeWorkspaceThemeColor(customThemeColor);
-    const customSidebarTitlebarColorsEnabled =
-      effectiveSettings.customSidebarTitlebarColorsEnabled === true;
-    const customSidebarTitlebarForegroundColor = getSidebarTitlebarForegroundForBackground(
-      effectiveSettings.customSidebarTitlebarBackgroundColor,
-    );
-    const customSidebarTitlebarGradientColors = getSidebarTitlebarGradientColors(
-      effectiveSettings.customSidebarTitlebarBackgroundColor,
-    );
-    if (normalizedThemeColor) {
-      /**
-       * CDXC:WorkspaceTheme 2026-05-05-02:58
-       * Custom workspace colors are active-project sidebar theme overrides:
-       * keep the preset data-sidebar-theme as fallback, but publish validated
-       * CSS variables so the app-level theme surfaces derive from the color.
-       */
-      document.body.dataset.sidebarCustomTheme = "true";
-      document.body.style.setProperty("--workspace-sidebar-theme-color", normalizedThemeColor);
-      document.body.style.setProperty(
-        "--workspace-sidebar-theme-foreground",
-        getWorkspaceThemeForeground(normalizedThemeColor),
-      );
-    } else {
-      delete document.body.dataset.sidebarCustomTheme;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
-    }
-
-    if (customSidebarTitlebarColorsEnabled) {
-      /**
-       * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
-       * Custom sidebar/titlebar colors are an experimental chrome override.
-       * Publish dedicated CSS variables instead of mutating app theme tokens so
-       * Settings modals, sidebar dropdowns, and other overlay surfaces continue
-       * to resolve their normal Dark Gray/Dark 2 colors.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
-       * The foreground is derived from the selected background at apply time.
-       * Do not preserve older stored foreground choices in the sidebar DOM.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
-       * The sidebar custom chrome background is a fixed-strength vertical
-       * gradient derived from the selected tint-adjusted background. Publish
-       * explicit gradient stop variables while keeping the solid background
-       * token for row/card contrast calculations.
-       */
-      document.body.dataset.customSidebarTitlebarColors = "true";
-      document.body.style.setProperty(
-        "--custom-sidebar-titlebar-foreground-color",
-        customSidebarTitlebarForegroundColor,
-      );
-      document.body.style.setProperty(
-        "--custom-sidebar-titlebar-background-color",
-        effectiveSettings.customSidebarTitlebarBackgroundColor,
-      );
-      document.body.style.setProperty(
-        "--custom-sidebar-titlebar-gradient-top-color",
-        customSidebarTitlebarGradientColors.sidebarTop,
-      );
-      document.body.style.setProperty(
-        "--custom-sidebar-titlebar-gradient-bottom-color",
-        customSidebarTitlebarGradientColors.sidebarBottom,
-      );
-    } else {
-      delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-top-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-bottom-color");
-    }
-
-    return () => {
-      delete document.body.dataset.sidebarTheme;
-      delete document.body.dataset.sidebarCustomTheme;
-      delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty("--workspace-sidebar-theme-color");
-      document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-top-color");
-      document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-bottom-color");
-    };
-  }, [
+  useSidebarDocumentChromeEffects({
+    agentManagerZoomPercent,
     customThemeColor,
-    effectiveSettings.customSidebarTitlebarBackgroundColor,
-    effectiveSettings.customSidebarTitlebarColorsEnabled,
+    effectiveSettings,
     theme,
-  ]);
-
-  useEffect(() => {
-    document.body.style.setProperty("--ghostex-agent-manager-zoom", `${agentManagerZoomPercent}%`);
-
-    return () => {
-      document.body.style.removeProperty("--ghostex-agent-manager-zoom");
-    };
-  }, [ agentManagerZoomPercent ]);
+  });
 
   const closeGitCommitModal = useEffectEvent((requestId: string) => {
     setGitCommitDraft(undefined);
@@ -3342,1063 +2878,71 @@ export function SidebarApp({
     };
   }, [ recordPointerDownSessionTarget, unlockCompletionSoundPlayback ]);
 
-  /*
-   * CDXC:RemoteGroupReorder 2026-07-12:
-   * Remote machine project groups reorder among their own machine's rows only.
-   * Resolve drag candidates from the source group's scope so a remote drag
-   * cannot target local Projects rows (and vice versa), while local project
-   * drags keep using the collection-ordered id list.
-   */
-  const groupDragCandidateIdsForSource = (sourceGroupId: string): readonly string[] => {
-    /*
-     * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-     * Grouped V2 does not have per-machine sections to scope a drag to. Its rows
-     * ARE logical projects that may span machines, so every rendered row is a
-     * candidate and the machine split moves to the other end of the operation:
-     * the drop is projected back onto each machine's own list on release.
-     */
-    if (isSidebarV2GroupedActive) {
-      return sidebarV2GroupOrderRowsRef.current.map((row) => row.groupId);
-    }
-    const machineId = groupsById[ sourceGroupId ]?.remoteMachineContext?.machineId;
-    if (machineId) {
-      return remoteProjectGroupIdsByMachineId[ machineId ] ?? [];
-    }
-    return groupIdsRef.current;
-  };
+  const {
+    handleDragEnd,
+    handleDragMove,
+    handleDragOver,
+    handleDragStart,
+    setSidebarV2GroupOrderRows,
+  } = useSidebarDragHandlers({
+    authoritativeSessionIdsByGroup,
+    collapsedGroupsById,
+    collapsedRemoteMachineSectionsById,
+    displayedProjectCollectionItems,
+    effectiveSessionIdsByGroup,
+    enableProjectCollections,
+    groupIdsRef,
+    groupsById,
+    isManualActiveSessionsSort,
+    isSidebarV2GroupedActive,
+    moveRemoteMachineSection,
+    pinnedSessionDropTargetLogKeyRef,
+    pointerDownSessionTargetRef,
+    postPinnedSessionReorderLog,
+    postSidebarDebugLog,
+    projectCollectionIdByProjectId,
+    projectCollections,
+    remoteMachines,
+    remoteProjectGroupIdsByMachineId,
+    sessionIdsByGroupRef,
+    sessionPointerDragStateRef,
+    sessionsById,
+    setGroupDragPreview,
+    setGroupDropIndicator,
+    setIsProjectReorderDragActive,
+    setPinnedSessionDropIndicator,
+    setProjectCollectionDragPreview,
+    setProjectCollectionDropIndicator,
+    setProjectCollections,
+    setProjectUngroupDropIndicatorScopeId,
+    setRemoteMachineDragPreview,
+    setRemoteMachineDropIndicator,
+    setSessionDropIndicator,
+    sidebarV2GroupIdsByMachineId,
+    sidebarV2GroupOrderRowsRef,
+    vscode,
+  });
 
-  /*
-   * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-   * Written from V2's own render, read only inside a drag. It is a ref rather
-   * than state on purpose: the rendered row list changes on every session
-   * update, and mirroring it into state would re-render the whole sidebar for
-   * information nothing paints. The identity is stable so V2's reporting effect
-   * fires on row changes, not on every SidebarApp render.
-   */
-  const setSidebarV2GroupOrderRows = useCallback((rows: readonly SidebarV2GroupOrderRow[]) => {
-    sidebarV2GroupOrderRowsRef.current = rows;
-  }, []);
-
-  /*
-   * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-   * Grouped V2's no-op answer, supplied to the shared pointer resolver so the
-   * drop line appears exactly where a release would actually reorder something.
-   */
-  const sidebarV2GroupNoOpTargetForSource = (sourceGroupId: string) =>
-    isSidebarV2GroupedActive
-      ? (target: SidebarGroupDropTarget) =>
-        moveSidebarV2GroupRows(sidebarV2GroupOrderRowsRef.current, sourceGroupId, target) ===
-        undefined
-      : undefined;
-
-  const updateSessionDropIndicator = useEffectEvent(
-    (event: Parameters<NonNullable<DragDropEventHandlers[ "onDragOver" ]>>[ 0 ]) => {
-      const sourceData = getSidebarDropData(event.operation.source);
-      if (sourceData?.kind === "remote-machine") {
-        setGroupDropIndicator(undefined);
-        setPinnedSessionDropIndicator(undefined);
-        setProjectCollectionDropIndicator(undefined);
-        setProjectUngroupDropIndicatorScopeId(undefined);
-        setSessionDropIndicator(undefined);
-        const resolvedRemoteMachineDropTarget = resolveRemoteMachineDropTargetFromPoint(
-          getDragNativeEvent(event),
-          remoteMachines.map((machine) => machine.id),
-          sourceData.remoteMachineId,
-          getSidebarDropData(event.operation.target),
-        );
-        setRemoteMachineDropIndicator((previous) =>
-          areSameRemoteMachineDropTarget(previous, resolvedRemoteMachineDropTarget)
-            ? previous
-            : resolvedRemoteMachineDropTarget,
-        );
-        return;
-      }
-
-      setRemoteMachineDropIndicator(undefined);
-      if (sourceData?.kind === "group") {
-        setPinnedSessionDropIndicator(undefined);
-        setSessionDropIndicator(undefined);
-        const nativeEvent = getDragNativeEvent(event);
-        const sourceProjectId =
-          groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
-        const resolvedUngroupDropScopeId =
-          sourceProjectId && projectCollectionIdByProjectId.has(sourceProjectId)
-            ? resolveProjectUngroupDropScopeFromPoint(
-              nativeEvent,
-              sourceData.groupId,
-              groupsById,
-            )
-            : undefined;
-        const resolvedGroupDropTarget = resolvedUngroupDropScopeId
-          ? undefined
-          : resolveGroupDropTargetFromPoint(
-            nativeEvent,
-            groupDragCandidateIdsForSource(sourceData.groupId),
-            groupsById,
-            getSidebarDropData(event.operation.target),
-            sourceData,
-            sidebarV2GroupNoOpTargetForSource(sourceData.groupId),
-          );
-        setProjectUngroupDropIndicatorScopeId((previous) =>
-          previous === resolvedUngroupDropScopeId ? previous : resolvedUngroupDropScopeId,
-        );
-        setGroupDropIndicator((previous) =>
-          areSameGroupDropTarget(previous, resolvedGroupDropTarget)
-            ? previous
-            : resolvedGroupDropTarget,
-        );
-        return;
-      }
-
-      setGroupDropIndicator(undefined);
-      setProjectUngroupDropIndicatorScopeId(undefined);
-      if (sourceData?.kind === "project-collection") {
-        setPinnedSessionDropIndicator(undefined);
-        setSessionDropIndicator(undefined);
-        const resolvedCollectionDropTarget = resolveProjectCollectionDropTargetFromPoint(
-          getDragNativeEvent(event),
-          displayedProjectCollectionItems.flatMap((item) =>
-            item.kind === "collection" ? [item.collection.collectionId] : [],
-          ),
-          sourceData.collectionId,
-          getSidebarDropData(event.operation.target),
-        );
-        setProjectCollectionDropIndicator((previous) =>
-          previous?.collectionId === resolvedCollectionDropTarget?.collectionId &&
-          previous?.position === resolvedCollectionDropTarget?.position
-            ? previous
-            : resolvedCollectionDropTarget,
-        );
-        return;
-      }
-
-      setProjectCollectionDropIndicator(undefined);
-      if (sourceData?.kind !== "session") {
-        setPinnedSessionDropIndicator(undefined);
-        setSessionDropIndicator(undefined);
-        return;
-      }
-
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        setSessionDropIndicator(undefined);
-        const resolvedPinnedSessionDropTarget = resolvePinnedSessionDropTargetFromPoint(
-          getDragNativeEvent(event),
-          sourceData,
-          sessionIdsByGroupRef.current,
-          sessionsById,
-        );
-        const pinnedTargetLogKey = createPinnedSessionDropTargetLogKey(
-          sourceData,
-          resolvedPinnedSessionDropTarget,
-        );
-        if (pinnedSessionDropTargetLogKeyRef.current !== pinnedTargetLogKey) {
-          pinnedSessionDropTargetLogKeyRef.current = pinnedTargetLogKey;
-          postPinnedSessionReorderLog("targetChanged", {
-            point: getClientPoint(getDragNativeEvent(event)),
-            resolvedPinnedSessionDropTarget,
-            sourceData,
-            state: createPinnedSessionReorderDebugState(
-              sourceData,
-              sessionIdsByGroupRef.current,
-              effectiveSessionIdsByGroup,
-              authoritativeSessionIdsByGroup,
-              sessionsById,
-            ),
-          });
-        }
-        setPinnedSessionDropIndicator((previous) =>
-          areSameSessionDropTarget(previous, resolvedPinnedSessionDropTarget)
-            ? previous
-            : resolvedPinnedSessionDropTarget,
-        );
-        return;
-      }
-
-      setPinnedSessionDropIndicator(undefined);
-      const resolvedSessionDropTarget = resolveSessionDropTargetFromPoint(
-        getDragNativeEvent(event),
-        sessionIdsByGroupRef.current,
-        getSidebarDropData(event.operation.target),
-        sourceData,
-      );
-
-      /*
-       * CDXC:SidebarDragDrop 2026-06-19-11:12:
-       * Manual session sorting should always show an insertion line while the
-       * pointer is over another session row: above the row midpoint means
-       * before, below the midpoint means after. Store the resolved drop target
-       * directly instead of only highlighting a target project so the visual
-       * indicator does not disappear when dnd-kit reports the broader group.
-       */
-      setSessionDropIndicator((previous) =>
-        areSameSessionDropTarget(previous, resolvedSessionDropTarget ?? undefined)
-          ? previous
-          : resolvedSessionDropTarget ?? undefined,
-      );
-    },
-  );
-
-  const handleDragStart = ((event) => {
-    setSidebarTooltipsSuppressedForDrag(true);
-    const nativeEvent = getDragNativeEvent(event);
-    const sourceData = getSidebarDropData(event.operation.source);
-    const pointerDownSessionTarget = pointerDownSessionTargetRef.current;
-    setIsProjectReorderDragActive(
-      sourceData?.kind === "group" ||
-        sourceData?.kind === "project-collection" ||
-        sourceData?.kind === "remote-machine",
-    );
-    if (sourceData?.kind === "group") {
-      const point = getClientPoint(nativeEvent);
-      const group = groupsById[ sourceData.groupId ];
-      const headerMetrics = point
-        ? getProjectGroupDragHeaderMetrics(sourceData.groupId, point)
-        : undefined;
-      /**
-       * CDXC:ProjectDragPreview 2026-05-21-11:45:
-       * Project drag ghosts should be anchored to the live cursor and should
-       * render only the project header, even when the source project is expanded.
-       * Keep the source row in the list as the faint placeholder instead of
-       * cloning the whole expanded project into the moving preview.
-       *
-       * CDXC:ProjectDragPreview 2026-05-28-12:35:
-       * The project drag ghost should preserve the grabbed header button's
-       * exact left edge and width, then move only on the vertical axis. Capture
-       * the header row bounds at drag start and keep the pointer's initial
-       * vertical offset so horizontal pointer drift never shifts the ghost.
-       */
-      setGroupDragPreview(
-        point && headerMetrics && group?.projectContext
-          ? {
-            groupId: sourceData.groupId,
-            isCollapsed: collapsedGroupsById[ sourceData.groupId ] === true,
-            left: headerMetrics.left,
-            pointerOffsetY: headerMetrics.pointerOffsetY,
-            themeColor: group.projectContext.themeColor,
-            title: group.title,
-            top: headerMetrics.top,
-            width: headerMetrics.width,
-          }
-          : undefined,
-      );
-    } else {
-      setGroupDragPreview(undefined);
-    }
-    if (sourceData?.kind === "project-collection") {
-      const point = getClientPoint(nativeEvent);
-      const collection = projectCollections.collections.find(
-        (candidate) => candidate.collectionId === sourceData.collectionId,
-      );
-      const metrics = point
-        ? getProjectCollectionDragMetrics(event.operation.source, sourceData.collectionId)
-        : undefined;
-      setProjectCollectionDragPreview(
-        point && metrics && collection
-          ? {
-            collectionId: sourceData.collectionId,
-            color: collection.color,
-            left: metrics.left,
-            pointerOffsetY: point.y - metrics.top,
-            title: collection.title,
-            top: metrics.top,
-            width: metrics.width,
-          }
-          : undefined,
-      );
-    } else {
-      setProjectCollectionDragPreview(undefined);
-    }
-    if (sourceData?.kind === "remote-machine") {
-      const point = getClientPoint(nativeEvent);
-      const machine = remoteMachines.find(
-        (candidate) => candidate.id === sourceData.remoteMachineId,
-      );
-      const metrics = point
-        ? getRemoteMachineDragHeaderMetrics(sourceData.remoteMachineId, point)
-        : undefined;
-      setRemoteMachineDragPreview(
-        point && metrics && machine
-          ? {
-            collapsed:
-              collapsedRemoteMachineSectionsById[sourceData.remoteMachineId] === true,
-            left: metrics.left,
-            machineId: sourceData.remoteMachineId,
-            pointerOffsetY: metrics.pointerOffsetY,
-            title: machine.name,
-            top: metrics.top,
-            width: metrics.width,
-          }
-          : undefined,
-      );
-    } else {
-      setRemoteMachineDragPreview(undefined);
-    }
-    sessionPointerDragStateRef.current =
-      sourceData?.kind === "session"
-        ? createSessionPointerDragState(sourceData, pointerDownSessionTarget, nativeEvent)
-        : undefined;
-    pinnedSessionDropTargetLogKeyRef.current = undefined;
-    setGroupDropIndicator(undefined);
-    setPinnedSessionDropIndicator(undefined);
-    setProjectCollectionDropIndicator(undefined);
-    setProjectUngroupDropIndicatorScopeId(undefined);
-    setRemoteMachineDropIndicator(undefined);
-    setSessionDropIndicator(undefined);
-    if (
-      pointerDownSessionTarget &&
-      sessionsById[ pointerDownSessionTarget.sessionId ]?.isPinned === true &&
-      !(
-        sourceData?.kind === "session" &&
-        sourceData.groupId === pointerDownSessionTarget.groupId &&
-        sourceData.sessionId === pointerDownSessionTarget.sessionId
-      )
-    ) {
-      postPinnedSessionReorderLog("dragStartSourceMismatch", {
-        point: getClientPoint(nativeEvent),
-        pointerDownSessionTarget,
-        sourceData,
-        sourceKind: sourceData?.kind,
-        state: createPinnedSessionReorderDebugState(
-          {
-            groupId: pointerDownSessionTarget.groupId,
-            kind: "session",
-            sessionId: pointerDownSessionTarget.sessionId,
-          },
-          sessionIdsByGroupRef.current,
-          effectiveSessionIdsByGroup,
-          authoritativeSessionIdsByGroup,
-          sessionsById,
-        ),
-        targetData: getSidebarDropData(event.operation.target),
-      });
-    }
-    if (sourceData?.kind === "session" && sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-      postPinnedSessionReorderLog("dragStart", {
-        point: getClientPoint(nativeEvent),
-        pointerDownSessionTarget,
-        sourceData,
-        state: createPinnedSessionReorderDebugState(
-          sourceData,
-          sessionIdsByGroupRef.current,
-          effectiveSessionIdsByGroup,
-          authoritativeSessionIdsByGroup,
-          sessionsById,
-        ),
-        targetData: getSidebarDropData(event.operation.target),
-      });
-    }
-    postSidebarDebugLog("native.pane.reorder", "session.dragStart", {
-      nativeEventType: nativeEvent?.type,
-      pointerDragState: sessionPointerDragStateRef.current,
-      point: getClientPoint(nativeEvent),
-      sourceData,
-      targetData: getSidebarDropData(event.operation.target),
-    });
-  }) satisfies DragDropEventHandlers[ "onDragStart" ];
-
-  const handleDragMove = ((event) => {
-    const nativeEvent = getDragNativeEvent(event);
-    updateGroupDragPreviewFromEvent(setGroupDragPreview, nativeEvent);
-    updateGroupDragPreviewFromEvent(setProjectCollectionDragPreview, nativeEvent);
-    updateGroupDragPreviewFromEvent(setRemoteMachineDragPreview, nativeEvent);
-    updateSessionPointerDragState(sessionPointerDragStateRef.current, nativeEvent);
-    updateSessionDropIndicator(event);
-  }) satisfies DragDropEventHandlers[ "onDragMove" ];
-
-  const handleDragOver = ((event) => {
-    const nativeEvent = getDragNativeEvent(event);
-    updateGroupDragPreviewFromEvent(setGroupDragPreview, nativeEvent);
-    updateGroupDragPreviewFromEvent(setProjectCollectionDragPreview, nativeEvent);
-    updateGroupDragPreviewFromEvent(setRemoteMachineDragPreview, nativeEvent);
-    updateSessionPointerDragState(sessionPointerDragStateRef.current, nativeEvent);
-    updateSessionDropIndicator(event);
-  }) satisfies DragDropEventHandlers[ "onDragOver" ];
-
-  const handleDragEnd = ((event) => {
-    setSidebarTooltipsSuppressedForDrag(false);
-    setGroupDropIndicator(undefined);
-    setGroupDragPreview(undefined);
-    setProjectCollectionDragPreview(undefined);
-    setRemoteMachineDragPreview(undefined);
-    setIsProjectReorderDragActive(false);
-    setPinnedSessionDropIndicator(undefined);
-    setProjectCollectionDropIndicator(undefined);
-    setProjectUngroupDropIndicatorScopeId(undefined);
-    setRemoteMachineDropIndicator(undefined);
-    setSessionDropIndicator(undefined);
-    const currentGroupIds = groupIdsRef.current;
-    const currentSessionIdsByGroup = sessionIdsByGroupRef.current;
-    const previousSessionIdsByGroup = effectiveSessionIdsByGroup;
-
-    const nativeEvent = getDragNativeEvent(event);
-    const sourceData = getSidebarDropData(event.operation.source);
-    const targetData = getSidebarDropData(event.operation.target);
-    const sessionPointerDragState = sessionPointerDragStateRef.current;
-    updateSessionPointerDragState(sessionPointerDragState, nativeEvent);
-    sessionPointerDragStateRef.current = undefined;
-    const resolvedSessionDropTarget =
-      sourceData?.kind === "session"
-        ? resolveSessionDropTargetFromPoint(
-          nativeEvent,
-          currentSessionIdsByGroup,
-          targetData,
-          sourceData,
-        )
-        : undefined;
-    postSidebarDebugLog("native.pane.reorder", "session.dragEnd", {
-      canceled: event.canceled,
-      nativeEventType: nativeEvent?.type,
-      pointerDragState: sessionPointerDragState,
-      point: getClientPoint(nativeEvent),
-      resolvedSessionDropTarget,
-      sourceData,
-      targetData,
-    });
-    if (!sourceData) {
-      return;
-    }
-
-    if (sourceData.kind === "project-collection") {
-      setProjectCollectionDropIndicator(undefined);
-      if (event.canceled) {
-        return;
-      }
-
-      /*
-       * A collection drag moves its complete visible project block between the
-       * existing collection slots. Ungrouped projects keep their slots, child
-       * project order stays intact, and the resulting flat project order is
-       * persisted through the same sync contract as ordinary project drags.
-       *
-       * CDXC:CollectionReorder 2026-07-21:
-       * Collections drag with feedback "none" (like project cards), so dnd-kit
-       * never reports a rect-overlap target for them: the source shape stays at
-       * its resting position for the whole drag. Resolve the insertion boundary
-       * from the pointer position against the visible collection panels — the
-       * same pattern project rows use via resolveGroupDropTargetFromPoint.
-       */
-      const collectionItems = displayedProjectCollectionItems.filter(
-        (item): item is Extract<SidebarProjectCollectionRenderItem, { kind: "collection" }> =>
-          item.kind === "collection",
-      );
-      const collectionIds = collectionItems.map((item) => item.collection.collectionId);
-      const resolvedCollectionDropTarget = resolveProjectCollectionDropTargetFromPoint(
-        nativeEvent,
-        collectionIds,
-        sourceData.collectionId,
-        targetData,
-      );
-      if (!resolvedCollectionDropTarget) {
-        return;
-      }
-      const nextCollectionIds = moveCollectionIdToDropTarget(
-        collectionIds,
-        sourceData.collectionId,
-        resolvedCollectionDropTarget,
-      );
-      if (!nextCollectionIds) {
-        return;
-      }
-
-      const collectionItemById = new Map(
-        collectionItems.map((item) => [item.collection.collectionId, item]),
-      );
-      let nextCollectionIndex = 0;
-      const nextRenderItems = displayedProjectCollectionItems.map((item) => {
-        if (item.kind !== "collection") {
-          return item;
-        }
-        const collectionId = nextCollectionIds[nextCollectionIndex];
-        nextCollectionIndex += 1;
-        return collectionId ? collectionItemById.get(collectionId) ?? item : item;
-      });
-      const nextGroupIds = nextRenderItems.flatMap((item) =>
-        item.kind === "collection" ? item.groupIds : [item.groupId],
-      );
-      if (haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
-        return;
-      }
-
-      const nextProjectIds = nextGroupIds.flatMap((groupId) => {
-        const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
-        return projectId ? [projectId] : [];
-      });
-      setProjectCollections((previous) =>
-        reorderSidebarProjectCollections(
-          reorderSidebarProjectCollectionDefinitions(previous, nextCollectionIds),
-          nextProjectIds,
-        ),
-      );
-      vscode.postMessage({
-        groupIds: nextGroupIds,
-        type: "syncGroupOrder",
-      });
-      return;
-    }
-
-    if (sourceData.kind === "remote-machine") {
-      if (event.canceled) {
-        return;
-      }
-      const resolvedRemoteMachineDropTarget = resolveRemoteMachineDropTargetFromPoint(
-        nativeEvent,
-        remoteMachines.map((machine) => machine.id),
-        sourceData.remoteMachineId,
-        targetData,
-      );
-      if (!resolvedRemoteMachineDropTarget) {
-        return;
-      }
-      moveRemoteMachineSection(sourceData.remoteMachineId, resolvedRemoteMachineDropTarget);
-      return;
-    }
-
-    if (sourceData.kind === "group") {
-      if (event.canceled) {
-        return;
-      }
-
-      /*
-       * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-       * A grouped V2 row is a LOGICAL project: one header can stand for several
-       * physical checkouts, on several machines. So the drop cannot be one
-       * reordered id list — `syncGroupOrder` rejects a mixed local/remote or
-       * cross-machine list, because each machine owns its own project order.
-       *
-       * Instead the row's new index among the LOGICAL rows is projected onto each
-       * participating machine's own list, and one `syncGroupOrder` goes out per
-       * machine that actually changed. The projection itself is pure and unit
-       * tested (`packages/shared/sidebar-v2-group-order.ts`); everything DOM-dependent —
-       * which boundary the pointer is over — stays in the shared resolver above,
-       * so the committed reorder is the same boundary the drop line drew.
-       *
-       * This branch also bypasses V1's collection/ungroup handling below on
-       * purpose: grouped V2 renders neither collections nor per-machine sections,
-       * so there is no collection to drop out of and no machine list to leave.
-       */
-      if (isSidebarV2GroupedActive) {
-        const rows = sidebarV2GroupOrderRowsRef.current;
-        const resolvedTarget = resolveGroupDropTargetFromPoint(
-          nativeEvent,
-          rows.map((row) => row.groupId),
-          groupsById,
-          targetData,
-          sourceData,
-          sidebarV2GroupNoOpTargetForSource(sourceData.groupId),
-        );
-        if (!resolvedTarget) {
-          return;
-        }
-        const projectedOrders = projectSidebarV2GroupOrderByMachine({
-          groupIdsByMachineId: sidebarV2GroupIdsByMachineId,
-          rows,
-          sourceGroupId: sourceData.groupId,
-          target: resolvedTarget,
-        });
-        for (const machineGroupIds of Object.values(projectedOrders)) {
-          vscode.postMessage({
-            groupIds: machineGroupIds,
-            type: "syncGroupOrder",
-          });
-        }
-        return;
-      }
-
-      /*
-       * CDXC:RemoteGroupReorder 2026-07-12:
-       * Remote machine groups reorder within their machine section and post the
-       * machine-scoped id order through the same syncGroupOrder contract; the
-       * host persists the per-machine order. Collections apply to local
-       * projects only.
-       */
-      const remoteMachineId = groupsById[ sourceData.groupId ]?.remoteMachineContext?.machineId;
-      if (remoteMachineId) {
-        const machineGroupIds = remoteProjectGroupIdsByMachineId[ remoteMachineId ] ?? [];
-        const sourceProjectId =
-          groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
-        const resolvedUngroupDropScopeId = resolveProjectUngroupDropScopeFromPoint(
-          nativeEvent,
-          sourceData.groupId,
-          groupsById,
-        );
-        if (
-          sourceProjectId &&
-          projectCollectionIdByProjectId.has(sourceProjectId) &&
-          resolvedUngroupDropScopeId === createRemoteProjectListScopeId(remoteMachineId)
-        ) {
-          const nextMachineGroupIds = moveProjectGroupFamilyToEnd(
-            machineGroupIds,
-            sourceData.groupId,
-            groupsById,
-          );
-          setProjectCollections((previous) =>
-            moveProjectsToSidebarCollection(
-              previous,
-              getProjectCollectionFamilyProjectIds(
-                sourceProjectId,
-                machineGroupIds,
-                groupsById,
-              ),
-              undefined,
-            ),
-          );
-          if (!haveSameSessionOrder(machineGroupIds, nextMachineGroupIds)) {
-            vscode.postMessage({
-              groupIds: nextMachineGroupIds,
-              type: "syncGroupOrder",
-            });
-          }
-          return;
-        }
-        const resolvedRemoteDropTarget = resolveGroupDropTargetFromPoint(
-          nativeEvent,
-          machineGroupIds,
-          groupsById,
-          targetData,
-          sourceData,
-        );
-        if (!resolvedRemoteDropTarget) {
-          return;
-        }
-        const nextMachineGroupIds = moveGroupIdsByProjectDropTarget(
-          machineGroupIds,
-          sourceData.groupId,
-          resolvedRemoteDropTarget,
-          groupsById,
-        );
-        if (haveSameSessionOrder(machineGroupIds, nextMachineGroupIds)) {
-          return;
-        }
-        vscode.postMessage({
-          groupIds: nextMachineGroupIds,
-          type: "syncGroupOrder",
-        });
-        return;
-      }
-
-      const sourceProjectId =
-        groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
-      const resolvedUngroupDropScopeId = resolveProjectUngroupDropScopeFromPoint(
-        nativeEvent,
-        sourceData.groupId,
-        groupsById,
-      );
-      if (
-        sourceProjectId &&
-        projectCollectionIdByProjectId.has(sourceProjectId) &&
-        resolvedUngroupDropScopeId === LOCAL_PROJECT_LIST_SCOPE_ID
-      ) {
-        const nextGroupIds = moveProjectGroupFamilyToEnd(
-          currentGroupIds,
-          sourceData.groupId,
-          groupsById,
-        );
-        setProjectCollections((previous) =>
-          moveProjectsToSidebarCollection(
-            previous,
-            getProjectCollectionFamilyProjectIds(
-              sourceProjectId,
-              currentGroupIds,
-              groupsById,
-            ),
-            undefined,
-          ),
-        );
-        if (!haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
-          vscode.postMessage({
-            groupIds: nextGroupIds,
-            type: "syncGroupOrder",
-          });
-        }
-        return;
-      }
-      const resolvedGroupDropTarget = resolveGroupDropTargetFromPoint(
-        nativeEvent,
-        currentGroupIds,
-        groupsById,
-        targetData,
-        sourceData,
-      );
-      const isProjectGroupOrder =
-        createProjectGroupOrderItems(currentGroupIds, groupsById).length === currentGroupIds.length;
-      const nextGroupIds = resolvedGroupDropTarget
-        ? moveGroupIdsByProjectDropTarget(
-          currentGroupIds,
-          sourceData.groupId,
-          resolvedGroupDropTarget,
-          groupsById,
-        )
-        : targetData?.kind === "group" && !isProjectGroupOrder
-          ? move(currentGroupIds, event)
-          : currentGroupIds;
-      if (haveSameSessionOrder(currentGroupIds, nextGroupIds)) {
-        return;
-      }
-
-      if (enableProjectCollections && resolvedGroupDropTarget) {
-        const sourceProjectId = groupsById[sourceData.groupId]?.projectContext?.editor.projectId;
-        const targetProjectId =
-          groupsById[resolvedGroupDropTarget.groupId]?.projectContext?.editor.projectId;
-        if (sourceProjectId && targetProjectId) {
-          const targetCollectionId = projectCollectionIdByProjectId.get(targetProjectId);
-          const sourceFamilyProjectIds = getProjectCollectionFamilyProjectIds(
-            sourceProjectId,
-            currentGroupIds,
-            groupsById,
-          );
-          const nextProjectIds = nextGroupIds.flatMap((groupId) => {
-            const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
-            return projectId ? [projectId] : [];
-          });
-          setProjectCollections((previous) =>
-            reorderSidebarProjectCollections(
-              moveProjectsToSidebarCollection(
-                previous,
-                sourceFamilyProjectIds,
-                targetCollectionId,
-              ),
-              nextProjectIds,
-            ),
-          );
-        }
-      }
-
-      vscode.postMessage({
-        groupIds: nextGroupIds,
-        type: "syncGroupOrder",
-      });
-      return;
-    }
-
-    if (sourceData.kind !== "session") {
-      return;
-    }
-
-    if (sessionPointerDragState?.startPoint && !sessionPointerDragState.didMove) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        postPinnedSessionReorderLog("dragEndIgnoredWithoutPointerMovement", {
-          point: getClientPoint(nativeEvent),
-          pointerDragState: sessionPointerDragState,
-          sourceData,
-        });
-      }
-      postSidebarDebugLog("native.pane.reorder", "session.dragEndIgnoredWithoutPointerMovement", {
-        point: getClientPoint(nativeEvent),
-        sourceData,
-      });
-      return;
-    }
-
-    if (event.canceled) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        postPinnedSessionReorderLog("dragEndCanceled", {
-          point: getClientPoint(nativeEvent),
-          sourceData,
-          targetData,
-        });
-      }
-      return;
-    }
-
-    if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-      const resolvedPinnedSessionDropTarget = resolvePinnedSessionDropTargetFromPoint(
-        nativeEvent,
-        sourceData,
-        currentSessionIdsByGroup,
-        sessionsById,
-      );
-      postPinnedSessionReorderLog("dragEndResolved", {
-        point: getClientPoint(nativeEvent),
-        resolution: createPinnedSessionDropResolutionDebugState(
-          nativeEvent,
-          sourceData,
-          currentSessionIdsByGroup,
-          sessionsById,
-        ),
-        resolvedPinnedSessionDropTarget,
-        resolvedSessionDropTarget,
-        sourceData,
-        state: createPinnedSessionReorderDebugState(
-          sourceData,
-          currentSessionIdsByGroup,
-          previousSessionIdsByGroup,
-          authoritativeSessionIdsByGroup,
-          sessionsById,
-        ),
-        targetData,
-      });
-      if (!resolvedPinnedSessionDropTarget) {
-        postPinnedSessionReorderLog("dragEndSkipped", {
-          reason: "noPinnedDropTarget",
-          sourceData,
-          targetData,
-        });
-        return;
-      }
-
-      const previousPinnedSessionIds = (previousSessionIdsByGroup[ sourceData.groupId ] ?? []).filter(
-        (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-      );
-      const nextPinnedSessionIds = movePinnedSessionIdsByDropTarget(
-        previousPinnedSessionIds,
-        sourceData.sessionId,
-        resolvedPinnedSessionDropTarget,
-      );
-      if (
-        haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds) ||
-        !haveSameSessionSet(previousPinnedSessionIds, nextPinnedSessionIds)
-      ) {
-        postPinnedSessionReorderLog("dragEndSkipped", {
-          nextPinnedSessionIds,
-          previousPinnedSessionIds,
-          reason: haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds)
-            ? "samePinnedOrder"
-            : "pinnedSetMismatch",
-          resolvedPinnedSessionDropTarget,
-          sourceData,
-        });
-        return;
-      }
-
-      /**
-       * CDXC:PinnedSessions 2026-05-28-14:29:
-       * Dropping a pinned project session must persist exactly the row slot
-       * indicated during drag. Resolve pinned drops from pointer position
-       * against the pinned partition, then save pinned rows first while leaving
-       * non-pinned project sessions in their authoritative order.
-       */
-      const nextSessionIds = createPinnedFirstSessionOrder(
-        (authoritativeSessionIdsByGroup[ sourceData.groupId ] ?? []).length > 0
-          ? (authoritativeSessionIdsByGroup[ sourceData.groupId ] ?? [])
-          : (previousSessionIdsByGroup[ sourceData.groupId ] ?? []),
-        nextPinnedSessionIds,
-        sessionsById,
-      );
-      vscode.postMessage({
-        groupId: sourceData.groupId,
-        sessionIds: nextSessionIds,
-        type: "syncSessionOrder",
-      });
-      postPinnedSessionReorderLog("syncSessionOrderPosted", {
-        nextPinnedSessionIds,
-        nextSessionIds,
-        previousPinnedSessionIds,
-        resolvedPinnedSessionDropTarget,
-        sourceData,
-      });
-      return;
-    }
-
-    if (resolvedSessionDropTarget === null) {
-      return;
-    }
-
-    if (!targetData && resolvedSessionDropTarget === undefined) {
-      return;
-    }
-
-    const nextSessionIdsByGroup =
-      resolvedSessionDropTarget !== undefined
-        ? moveSessionIdsByDropTarget(
-          currentSessionIdsByGroup,
-          sourceData.sessionId,
-          resolvedSessionDropTarget,
-        )
-        : move(currentSessionIdsByGroup, event);
-    const nextListedSessionIds = new Set(Object.values(nextSessionIdsByGroup).flat());
-    const omittedSessionIds = Object.values(currentSessionIdsByGroup)
-      .flat()
-      .filter((sessionId) => !nextListedSessionIds.has(sessionId));
-    postSidebarDebugLog("native.pane.reorder", "session.dragComputedOrder", {
-      currentSessionIdsByGroup,
-      nextSessionIdsByGroup,
-      omittedSessionIds,
-      resolvedSessionDropTarget,
-      sourceData,
-      targetData,
-    });
-    const previousGroupId = findSessionGroupId(previousSessionIdsByGroup, sourceData.sessionId);
-    const nextGroupId = findSessionGroupId(nextSessionIdsByGroup, sourceData.sessionId);
-    if (!previousGroupId || !nextGroupId) {
-      return;
-    }
-
-    if (previousGroupId !== nextGroupId) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        /**
-         * CDXC:PinnedSessions 2026-05-28-12:04:
-         * Project pinned sessions are only reorderable inside their owning
-         * project. A pinned drag that lands over another project must not turn
-         * into a cross-project move just because pinned cards are draggable in
-         * the reference sidebar.
-         */
-        return;
-      }
-
-      const targetIndex = nextSessionIdsByGroup[ nextGroupId ]?.indexOf(sourceData.sessionId);
-      if (targetIndex == null || targetIndex < 0) {
-        return;
-      }
-
-      vscode.postMessage({
-        groupId: nextGroupId,
-        sessionId: sourceData.sessionId,
-        targetIndex,
-        type: "moveSessionToGroup",
-      });
-      return;
-    }
-
-    if (!isManualActiveSessionsSort) {
-      if (sessionsById[ sourceData.sessionId ]?.isPinned === true) {
-        const authoritativeSessionIds = authoritativeSessionIdsByGroup[ nextGroupId ] ?? [];
-        const previousSessionIds = previousSessionIdsByGroup[ nextGroupId ] ?? [];
-        const nextDisplaySessionIds = nextSessionIdsByGroup[ nextGroupId ] ?? [];
-        const nextPinnedSessionIds = nextDisplaySessionIds.filter(
-          (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-        );
-        const previousPinnedSessionIds = previousSessionIds.filter(
-          (sessionId) => sessionsById[ sessionId ]?.isPinned === true,
-        );
-        if (
-          !haveSameSessionOrder(previousPinnedSessionIds, nextPinnedSessionIds) &&
-          haveSameSessionSet(previousPinnedSessionIds, nextPinnedSessionIds)
-        ) {
-          /**
-           * CDXC:PinnedSessions 2026-05-28-12:04:
-           * Last-activity mode still needs pinned rows to be manually
-           * rearrangeable within a project. Persist only the pinned partition
-           * order, then keep non-pinned sessions in their authoritative order
-           * so activity sorting remains display-only for the rest of the group.
-           */
-          vscode.postMessage({
-            groupId: nextGroupId,
-            sessionIds: createPinnedFirstSessionOrder(
-              authoritativeSessionIds.length > 0 ? authoritativeSessionIds : previousSessionIds,
-              nextPinnedSessionIds,
-              sessionsById,
-            ),
-            type: "syncSessionOrder",
-          });
-        }
-      }
-      return;
-    }
-
-    const previousSessionIds = previousSessionIdsByGroup[ nextGroupId ] ?? [];
-    const nextSessionIds = nextSessionIdsByGroup[ nextGroupId ] ?? [];
-    if (haveSameSessionOrder(previousSessionIds, nextSessionIds)) {
-      return;
-    }
-
-    vscode.postMessage({
-      groupId: nextGroupId,
-      sessionIds: nextSessionIds,
-      type: "syncSessionOrder",
-    });
-  }) satisfies DragDropEventHandlers[ "onDragEnd" ];
-
-  const openSidebarSettings = () => {
-    setIsPinnedPromptsOpen(false);
-    if (!settings) {
-      vscode.postMessage({ type: "openSettings" });
-      return;
-    }
-    setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "settings", type: "open" });
-  };
-
-  const openHotkeys = () => {
-    /*
-     * CDXC:SidebarTopChrome 2026-06-29-01:43:
-     * Cmd+. is advertised in the sidebar Settings dropdown after the menu moved out of the titlebar. Route it to the same full-window app-modal host as Settings and Command Palette, closing transient sidebar drawers first so the shortcut opens one focused Hotkeys surface.
-     */
-    setIsPinnedPromptsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "hotkeys", type: "open" });
-  };
-
-  const openCommandPalette = () => {
-    /**
-     * CDXC:CommandPalette 2026-06-13-10:26:
-     * Cmd+Shift+P should open the full-window app-modal command palette,
-     * matching Settings instead of rendering a dialog inside the narrow
-     * sidebar. Close transient sidebar drawers first so the centered palette is
-     * the only active command surface.
-     *
-     * CDXC:CommandPalette 2026-06-13-22:18:
-     * Ghostex Quick Access gives Commands and Sessions separate tabs.
-     * This launcher opens Commands; Cmd+P routes to the Sessions modal
-     * id instead of encoding a mode in this input query.
-     *
-   */
-    setIsPinnedPromptsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openQuickAccess("commands");
-  };
-
-  const openKeepAwakePowerSettings = () => {
-    setIsPinnedPromptsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({
-      initialSearchQuery: "Keep awake",
-      modal: "settings",
-      type: "open",
-    });
-  };
-
-  const startSidebarKeepAwake = (durationMinutes: KeepAwakeDurationMinutes) => {
-    /*
-     * CDXC:SidebarTopChrome 2026-06-29-01:43:
-     * Keep Awake moved from the macOS titlebar into the sidebar shortcut row, but the titlebar host remains the caffeinate runtime owner. Optimistically reflect the chosen duration in sidebar UI while native forwards the command to the existing titlebar start path.
-     */
-    setSidebarKeepAwakeRuntime({ durationMinutes });
-    vscode.postMessage({
-      action: "start",
-      durationMinutes,
-      type: "runTitlebarKeepAwakeCommand",
-    });
-    window.setTimeout(() => {
-      setSidebarKeepAwakeRuntime(readSidebarKeepAwakeRuntime() ?? { durationMinutes });
-    }, 250);
-  };
-
-  const stopSidebarKeepAwake = () => {
-    setSidebarKeepAwakeRuntime(undefined);
-    vscode.postMessage({
-      action: "stop",
-      type: "runTitlebarKeepAwakeCommand",
-    });
-    window.setTimeout(() => {
-      setSidebarKeepAwakeRuntime(readSidebarKeepAwakeRuntime());
-    }, 250);
-  };
-
-  const closeSessionSearch = () => {
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-  };
+  const {
+    closeSessionSearch,
+    openCommandPalette,
+    openHotkeys,
+    openKeepAwakePowerSettings,
+    openSidebarSettings,
+    startSidebarKeepAwake,
+    stopSidebarKeepAwake,
+  } = useSidebarOverlayActions({
+    setIsDaemonSessionsOpen,
+    setIsPinnedPromptsOpen,
+    setIsPreviousSessionsOpen,
+    setIsScratchPadOpen,
+    setIsSessionSearchOpen,
+    setIsSessionSearchSelectionVisible,
+    setSessionSearchQuery,
+    setSidebarKeepAwakeRuntime,
+    settings,
+    vscode,
+  });
 
   const closeTopmostSidebarOverlay = useEffectEvent(() => {
     if (gitCommitDraft) {
@@ -4619,244 +3163,48 @@ export function SidebarApp({
     sidebarSessionSearchResults,
   ]);
 
-  const setActiveSessionsSortMode = (sortMode: SidebarActiveSessionsSortMode) => {
-    vscode.postMessage({
-      manualSessionIdsByGroup:
-        sortMode === "manual" && activeSessionsSortMode !== "manual"
-          ? Object.fromEntries(
-            workspaceGroupIds.map((groupId) => [
-              groupId,
-              [ ...(effectiveSessionIdsByGroup[ groupId ] ?? []) ],
-            ]),
-          )
-          : undefined,
-      sortMode,
-      type: "setActiveSessionsSortMode",
-    });
-  };
-
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Sidebar version and its Group by Project sub-mode are persisted settings,
-   * not sidebar-local view state. Write them through the same settings patch
-   * channel the Settings modal uses so gpui persists them and hydrates every
-   * surface back, instead of the sort-mode channel that gpui does not handle.
-   */
-  const updateSidebarVersionSettings = (patch: {
-    sidebarV2Layout?: SidebarV2Layout;
-    sidebarVersion?: SidebarVersion;
-  }) => {
-    vscode.postMessage({
-      baseRevision: revision,
-      patch,
-      source: "sidebar:sidebarVersion",
-      type: "updateSettingsPatch",
-    });
-  };
-
-  const setSidebarVersion = (nextSidebarVersion: SidebarVersion) => {
-    if (nextSidebarVersion === sidebarVersion) {
-      return;
-    }
-    updateSidebarVersionSettings({ sidebarVersion: nextSidebarVersion });
-  };
-
-  const setSidebarV2Layout = (nextLayout: SidebarV2Layout) => {
-    if (nextLayout === sidebarV2Layout) {
-      return;
-    }
-    updateSidebarVersionSettings({ sidebarV2Layout: nextLayout });
-  };
-
-  const toggleActiveSessionsSortMode = () => {
-    setActiveSessionsSortMode(
-      activeSessionsSortMode === "manual" ? "lastActivity" : "manual",
-    );
-  };
-
-  const toggleSessionTagFilter = (sessionTag: SidebarSessionTagFilter) => {
-    if (!enabledVisibleSidebarSessionTagSet.has(sessionTag)) {
-      return;
-    }
-    setSelectedSessionTagFilters((current) =>
-      current.includes(sessionTag)
-        ? current.filter((tag) => tag !== sessionTag)
-        : [ ...current, sessionTag ],
-    );
-  };
-
-  const moveSidebar = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:moveSidebar");
-    vscode.postMessage({ type: "moveSidebarToOtherSide" });
-  };
-
-  const toggleSidebarCollapsed = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:toggleSidebar");
-    /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
-     * Sidebar collapse is native chrome state. React requests the toggle, while
-     * AppKit owns hiding the sidebar WebView, divider, and workspace border.
-     */
-    vscode.postMessage({ type: "toggleSidebarCollapsed" });
-  };
-
-  /*
-   * CDXC:AddProject 2026-07-30:
-   * Add Project opens the shared add-project dialog in the app-modal host for
-   * every entry point. The local header sends no machine (the dialog resolves
-   * the machine list itself and skips its machine step when there is only one),
-   * while a remote machine header preselects its own machine so the flow can
-   * never silently browse this computer's filesystem instead of that machine's.
-   */
-  const openAddProjectModal = (machineId?: string) => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:addProject");
-    openAppModal({ ...(machineId ? { machineId } : {}), modal: "addProject", type: "open" });
-  };
-
-  const createReferenceAgentChat = (agent: SidebarAgentButton) => {
-    const quickGroupId = displayedReferenceChatGroupIds[ 0 ];
-    if (!quickGroupId) {
-      return;
-    }
-
-    dismissAppModalForSidebarNavigation("SettingsDismissal:createQuickAgent");
-    /**
-     * CDXC:QuickAgents 2026-06-08-18:25:
-     * The Quick section header should expose the same selected-agent split picker as project headers. Launch through runSidebarAgent with the synthetic Quick group id so native creates a new projectless agent chat instead of targeting the active code project.
-     */
-    setPrimaryAgentLauncherId(agent.agentId);
-    writePrimaryAgentLauncherId(agent.agentId);
-    vscode.postMessage({
-      agentId: agent.agentId,
-      groupId: quickGroupId,
-      type: "runSidebarAgent",
-    });
-  };
-
-  /*
-   * CDXC:SidebarV2Worktree 2026-07-29:
-   * Sidebar V2's "+" launches through THIS function so the instant path stays
-   * byte-identical to the classic sidebar's: a project click posts the same
-   * `runSidebarAgent` the project header posts.
-   *
-   * CDXC:SidebarV2SingleCreateControl 2026-07-30:
-   * V2 no longer reaches the `!groupId` branch from any ordinary create path.
-   * Its header "+" and its agent picker both resolve a REAL project first (V2's
-   * own `headerCreateGroupId`: scoped project, then active project, then the
-   * first project), so a session can no longer silently land in Quick just
-   * because the click came from the header rather than from a project row.
-   *
-   * The branch stays because `groupId` is genuinely optional in one case: a
-   * workspace with ZERO project groups, where V2's resolution has nothing to
-   * return. Quick is then the only place a session can go, so falling through to
-   * the Quick launcher is the correct answer rather than a downgrade. Quick
-   * creation ON PURPOSE happens through the chevron's explicitly-labelled
-   * "Quick Terminal" / "Quick Browser Tab" items, which never come here.
-   */
-  const runSidebarV2Agent = (agent: SidebarAgentButton, groupId?: string) => {
-    if (!groupId) {
-      createReferenceAgentChat(agent);
-      return;
-    }
-    dismissAppModalForSidebarNavigation("SettingsDismissal:createSidebarV2Agent");
-    setPrimaryAgentLauncherId(agent.agentId);
-    writePrimaryAgentLauncherId(agent.agentId);
-    vscode.postMessage({
-      agentId: agent.agentId,
-      groupId,
-      type: "runSidebarAgent",
-    });
-  };
-
-  /*
-   * CDXC:SidebarV2Worktree 2026-07-29:
-   * The "default new sessions to worktree" preference is GLOBAL and rides the
-   * same settings patch channel as the sidebar version switch, so gpui persists
-   * it and every surface hydrates it back.
-   */
-  const setNewSessionsDefaultEnvMode = (mode: SidebarNewSessionEnvMode) => {
-    if (mode === effectiveSettings.newSessionsDefaultEnvMode) {
-      return;
-    }
-    vscode.postMessage({
-      baseRevision: revision,
-      patch: { newSessionsDefaultEnvMode: mode },
-      source: "sidebar:newSessionsDefaultEnvMode",
-      type: "updateSettingsPatch",
-    });
-  };
-
-  /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * Cross-machine grouping overrides ride the SAME settings patch channel as
-   * the sidebar version switch, under their own source so a grouping change can
-   * never be mistaken for a remote-machine-capable save. V2 hands over the
-   * whole record, so the patch is a straight replacement rather than a merge
-   * the settings pipeline would have to interpret.
-   */
-  const setSidebarProjectGroupingOverrides = (
-    overrides: Readonly<Record<string, SidebarProjectGroupingMode>>,
-  ) => {
-    vscode.postMessage({
-      baseRevision: revision,
-      patch: { sidebarProjectGroupingOverrides: overrides },
-      source: "sidebar:projectGrouping",
-      type: "updateSettingsPatch",
-    });
-  };
-
-  const openConfigureAgentsModal = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:configureAgents");
-    openAppModal({ modal: "configureAgents", type: "open" });
-  };
-
-  const openReferenceAutomations = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:automations");
-    vscode.postMessage({ type: "openAutomationsPage" });
-  };
-
-  const openReferenceMobile = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:mobile");
-    vscode.postMessage({ type: "openMobileBrowserChat" });
-  };
-
-  const openReferenceAgentsHub = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:agentsHub");
-    openAppModal({ modal: "agentsHub", type: "open" });
-  };
-
-  const togglePinnedPrompts = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:pinnedPrompts");
-    setIsDaemonSessionsOpen(false);
-    setIsPreviousSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openAppModal({ modal: "pinnedPrompts", type: "open" });
-  };
-
-  const openPreviousSessions = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:previousSessions");
-    setIsPinnedPromptsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    openQuickAccess("recentSessions");
-  };
-
-  const searchPreviousSessionsByPrompt = () => {
-    dismissAppModalForSidebarNavigation("SettingsDismissal:previousSessionsPromptSearch");
-    setIsPinnedPromptsOpen(false);
-    setIsDaemonSessionsOpen(false);
-    setIsScratchPadOpen(false);
-    setIsSessionSearchSelectionVisible(false);
-    setIsSessionSearchOpen(false);
-    setSessionSearchQuery("");
-    vscode.postMessage({ type: "searchPreviousSessionsByText" });
-  };
+  const {
+    createReferenceAgentChat,
+    moveSidebar,
+    openAddProjectModal,
+    openConfigureAgentsModal,
+    openPreviousSessions,
+    openReferenceAgentsHub,
+    openReferenceAutomations,
+    openReferenceMobile,
+    runSidebarV2Agent,
+    searchPreviousSessionsByPrompt,
+    setActiveSessionsSortMode,
+    setNewSessionsDefaultEnvMode,
+    setSidebarProjectGroupingOverrides,
+    setSidebarV2Layout,
+    setSidebarVersion,
+    toggleActiveSessionsSortMode,
+    togglePinnedPrompts,
+    toggleSessionTagFilter,
+    toggleSidebarCollapsed,
+  } = useSidebarActions({
+    activeSessionsSortMode,
+    dismissAppModalForSidebarNavigation,
+    displayedReferenceChatGroupIds,
+    effectiveSessionIdsByGroup,
+    effectiveSettings,
+    enabledVisibleSidebarSessionTagSet,
+    revision,
+    setIsDaemonSessionsOpen,
+    setIsPinnedPromptsOpen,
+    setIsPreviousSessionsOpen,
+    setIsScratchPadOpen,
+    setIsSessionSearchOpen,
+    setIsSessionSearchSelectionVisible,
+    setPrimaryAgentLauncherId,
+    setSelectedSessionTagFilters,
+    setSessionSearchQuery,
+    sidebarV2Layout,
+    sidebarVersion,
+    vscode,
+    workspaceGroupIds,
+  });
 
   const renderReferenceProjectGroup = (groupId: string) => {
     const projectId = groupsById[ groupId ]?.projectContext?.editor.projectId;

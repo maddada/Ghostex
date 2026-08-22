@@ -4,6 +4,7 @@ import type { SidebarProjectCollection } from "../project-collections";
 import type { getGroupSessionSummary } from "../group-session-summary";
 import type { useSidebarStore } from "../sidebar-store";
 
+export type SidebarEventSource = Pick<Window, "addEventListener" | "removeEventListener">;
 export type SessionIdsByGroup = Record<string, string[]>;
 export type SidebarStoreState = ReturnType<typeof useSidebarStore.getState>;
 export type SidebarGroupsById = SidebarStoreState[ "groupsById" ];
