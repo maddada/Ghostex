@@ -14,7 +14,7 @@ import { describe, expect, test } from "vitest";
  */
 
 const gpuiMainSource = readFileSync(
-  new URL("../../apps/desktop/src/main.rs", import.meta.url),
+  new URL("../../apps/desktop/src/app/helpers/agents_hub.rs", import.meta.url),
   "utf8",
 );
 

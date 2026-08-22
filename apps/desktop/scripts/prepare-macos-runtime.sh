@@ -1151,8 +1151,8 @@ stage_gxserver_protocol_exports() {
 	local target_dir="$1"
 	local protocol_stage_dir="$BUILD_CACHE_DIR/gxserver-protocol"
 	local tsc_bin="$REPO_ROOT/node_modules/typescript/bin/tsc"
-	if [[ ! -f "$REPO_ROOT/shared/gxserver-protocol.ts" ]]; then
-		echo "shared gxserver protocol source is missing: $REPO_ROOT/shared/gxserver-protocol.ts" >&2
+	if [[ ! -f "$REPO_ROOT/packages/shared/gxserver-protocol.ts" ]]; then
+		echo "shared gxserver protocol source is missing: $REPO_ROOT/packages/shared/gxserver-protocol.ts" >&2
 		exit 1
 	fi
 	if [[ ! -f "$tsc_bin" ]]; then
@@ -1161,12 +1161,12 @@ stage_gxserver_protocol_exports() {
 	fi
 	rm -rf "$protocol_stage_dir"
 	mkdir -p "$protocol_stage_dir/src" "$protocol_stage_dir/types" "$target_dir/dist/protocol"
-	cp "$REPO_ROOT/shared/gxserver-protocol.ts" "$protocol_stage_dir/src/index.ts"
+	cp "$REPO_ROOT/packages/shared/gxserver-protocol.ts" "$protocol_stage_dir/src/index.ts"
 	# CDXC:GxserverProtocolStaging 2026-08-21-12:10: packages/shared/gxserver-protocol.ts pulls in
 	# sibling shared modules (session-chat.ts, which now pulls session-chat-queue.ts).
 	# Stage the whole relative-import closure instead of a hand-kept file list so adding a
 	# shared module never breaks packaging with a TS2307 "cannot find module" failure.
-	GXSERVER_PROTOCOL_SHARED_DIR="$REPO_ROOT/shared" \
+	GXSERVER_PROTOCOL_SHARED_DIR="$REPO_ROOT/packages/shared" \
 		GXSERVER_PROTOCOL_STAGE_SRC_DIR="$protocol_stage_dir/src" \
 		"$GXSERVER_NODE_BIN" <<'JS'
 const fs = require("node:fs");
@@ -1687,7 +1687,7 @@ package_gxserver_if_needed() {
 			--value "version=$package_version" \
 			--value "rust=$(path_identity "$rust_bin")" \
 			--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
-			--path "$REPO_ROOT/shared/gxserver-protocol.ts" \
+			--path "$REPO_ROOT/packages/shared/gxserver-protocol.ts" \
 			--path "$GXSERVER_RS_ROOT/src" \
 			--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 			--path "$GXSERVER_RS_ROOT/Cargo.lock" \
