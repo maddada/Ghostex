@@ -21,7 +21,7 @@ import {
   nodeDefinition,
 } from "./product-inputs.mjs";
 
-export const FINGERPRINT_ALGORITHM_REVISION = "fp2";
+export const FINGERPRINT_ALGORITHM_REVISION = "fp3";
 
 const EXCLUDE_PREFIX = ":(exclude)";
 const PROJECTIONS = new Set(["package-json"]);

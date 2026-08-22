@@ -161,7 +161,8 @@ describe("release product input map", () => {
       expect(specs(desktop)).toContain("packages/shared/**");
       expect(specs(desktop)).toContain("packages/core-ui/**");
       expect(specs(desktop)).toContain("packages/components/**");
-      expect(specs(desktop)).toContain("apps/desktop/views/**");
+      /* apps/desktop/** already covers apps/desktop/views/**, so it is not declared separately. */
+      expect(specs(desktop)).toContain("apps/desktop/**");
       /* Rule 4: patched dependency gitlinks. */
       expect(specs(desktop)).toContain(".dependencies/cef-rs");
       /* Rule 10: the graph and manifest definitions invalidate everything. */

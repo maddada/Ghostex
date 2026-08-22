@@ -132,7 +132,6 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "packages/core-ui/**" },
   { pathspec: "packages/components/**" },
   { pathspec: "components.json" },
-  { pathspec: "apps/desktop/views/**" },
   { pathspec: ".dependencies/ghostty/**" },
   { pathspec: ":(exclude).dependencies/ghostty/.zig-cache" },
   { pathspec: ":(exclude).dependencies/ghostty/zig-out" },

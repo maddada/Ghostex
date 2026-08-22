@@ -1431,75 +1431,26 @@ async function updatePackageJson(version) {
   await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 
-async function updateProjectYml(version, buildVersion, options) {
-  const projectPath = path.join(repoRoot, "native/macos/ghostexHost/project.yml");
-  const timestamp = timestampForComment();
-  let text = await readFile(projectPath, "utf8");
-
-  /*
-   CDXC:ReleaseAutomation 2026-05-23-03:27:
-   The local release script owns only deterministic release metadata after the agent has already split feature commits and written user-facing notes.
-   Keep Sparkle's numeric build value monotonic and update the adjacent CDXC release comments so future agents can audit why the version fields changed.
-   */
-  const distributionComment = options.skipSparkle
-    ? `# CDXC:BetaDistribution ${timestamp}: GitHub and Homebrew beta release v${version} must`
-    : `# CDXC:Distribution ${timestamp}: GitHub and Sparkle release v${version} must`;
-  const distributionContinuationLines = options.skipSparkle
-    ? [
-        "# publish a notarized Developer ID Ghostex app whose bundle metadata",
-        "# matches GitHub release assets while Sparkle appcasts remain on the",
-        "# current public update so existing Sparkle users are not offered the beta.",
-      ]
-    : [
-        "# publish a notarized Developer ID Ghostex app whose bundle metadata",
-        "# matches the GitHub arm64 release asset, Sparkle appcast, and the",
-        "# Apple Silicon Ghostex update feed.",
-      ];
-  const distributionContinuation = distributionContinuationLines.join("\n    ");
-
-  text = text
-    .replace(/# CDXC:AutoUpdate \d{4}-\d{2}-\d{2}-\d{2}:\d{2}:/, `# CDXC:AutoUpdate ${timestamp}:`)
-    .replace(/CURRENT_PROJECT_VERSION:\s*\d+/, `CURRENT_PROJECT_VERSION: ${buildVersion}`)
-    .replace(
-      /# CDXC:(?:Distribution|BetaDistribution) \d{4}-\d{2}-\d{2}-\d{2}:\d{2}: .*release v[\w.-]+ must\n\s*# publish a notarized Developer ID Ghostex app whose bundle metadata\n\s*# matches .*\n\s*# .*/,
-      `${distributionComment}\n    ${distributionContinuation}`,
-    )
-    .replace(/MARKETING_VERSION:\s*"[^"]+"/, `MARKETING_VERSION: "${version}"`);
-
-  await writeFile(projectPath, text);
-}
-
 async function bumpReleaseMetadata(version, buildVersion, options) {
   logStep(`Bump release metadata to ${version} (${buildVersion})`);
   await updatePackageJson(version);
-  await updateProjectYml(version, buildVersion, options);
-  await run(`rg 'CURRENT_PROJECT_VERSION: ${buildVersion}|MARKETING_VERSION: "${version}"' native/macos/ghostexHost/project.yml -g '!node_modules/**' -g '!dist/**' -g '!build/**' -g '!coverage/**' -g '!.git/**'`);
 }
 
+/*
+ * CDXC:ReleaseAutomation 2026-08-22:
+ * buildArch used to invoke native/macos/ghostexHost/build-ghostex-host.sh, the
+ * Xcode build for the Swift/AppKit macOS app. That app (and its ghostexHost
+ * Xcode project) was removed on 2026-08-20; this legacy pipeline has no
+ * successor in this file. macOS builds now run through scripts/release-gpui/macos.sh.
+ * Fail fast and explicitly instead of leaving a stale path that would only
+ * surface as an opaque "no such file" error from the shell.
+ */
 async function buildArch(version, entry) {
-  const derivedData = path.join(repoRoot, "build", entry.arch);
-  const env = {
-    CONFIGURATION: "Release",
-    GHOSTEX_MACOS_ARCH: entry.arch,
-    DERIVED_DATA: derivedData,
-    GHOSTEX_CODE_SIGN_IDENTITY: releaseSigningIdentity(),
-    GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG: "--timestamp",
-    GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES: "1",
-    GHOSTEX_ON_DEMAND_ASSETS: "1",
-  };
-
-  logStep(`Build ${entry.arch}`);
-  await run("/bin/bash native/macos/ghostexHost/build-ghostex-host.sh", {
-    env,
-    timeoutMs: releaseTimeouts.buildArchMs,
-  });
-
-  const appPathFile = `/tmp/ghostex-${version}-${entry.arch}-app-path`;
-  const appPath = await readFile(appPathFile, "utf8").then((value) => value.trim());
-  if (!existsSync(appPath)) {
-    throw new ReleaseError(`Build did not produce app path for ${entry.arch}: ${appPath}`);
-  }
-  return { ...entry, appPath };
+  throw new ReleaseError(
+    `buildArch(${entry.arch}) for ${version} is unreachable: it built the deprecated Swift macOS app via ` +
+      "native/macos/ghostexHost/build-ghostex-host.sh, removed with that app on 2026-08-20. " +
+      "This script's macOS build pipeline has no successor here; macOS builds run through scripts/release-gpui/macos.sh.",
+  );
 }
 
 async function validateBuiltApp(version, buildVersion, entry) {
@@ -2034,7 +1985,7 @@ async function updateSparkleFeeds(version, buildVersion, sparkleBinDir, artifact
 
 async function commitReleaseMetadata(version, options) {
   logStep("Commit release metadata");
-  const metadataFiles = ["package.json", "native/macos/ghostexHost/project.yml"];
+  const metadataFiles = ["package.json"];
   if (!options.skipSparkle) {
     metadataFiles.push(config.armFeed);
     if (options.gpui) {

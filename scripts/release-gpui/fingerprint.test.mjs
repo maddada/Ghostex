@@ -48,7 +48,7 @@ describe("release fingerprint algorithm", () => {
     };
     const first = computeNodeFingerprint({ ...shared, nodeId: "alpha" });
     const second = computeNodeFingerprint({ ...shared, nodeId: "beta" });
-    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp2");
+    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp3");
     expect(first.fingerprint).not.toBe(second.fingerprint);
     expect(first.inputs.paths).toEqual([
       { digest: expect.stringMatching(/^[0-9a-f]{64}$/u), entryCount: 1, pathspec: "package.json" },
@@ -218,9 +218,12 @@ describe("release fingerprint algorithm", () => {
 
 describe("fingerprint helpers", () => {
   test("normalizes pathspec sugar and refuses unsupported globs", () => {
-    expect(normalizePathspec("gpui/**")).toEqual({ negative: false, prefix: "gpui" });
-    expect(normalizePathspec(":(exclude)gpui/target")).toEqual({ negative: true, prefix: "gpui/target" });
-    expect(() => normalizePathspec("gpui/**/*.rs")).toThrow(/Unsupported glob/u);
+    expect(normalizePathspec("apps/desktop/**")).toEqual({ negative: false, prefix: "apps/desktop" });
+    expect(normalizePathspec(":(exclude)apps/desktop/target")).toEqual({
+      negative: true,
+      prefix: "apps/desktop/target",
+    });
+    expect(() => normalizePathspec("apps/desktop/**/*.rs")).toThrow(/Unsupported glob/u);
   });
 
   test("parses ls-tree records including gitlinks", () => {
@@ -243,23 +246,27 @@ describe("fingerprint helpers", () => {
     const current = {
       composed: { "gxserver-linux-x64": "aa" },
       paths: [
-        { digest: "1", entryCount: 1, pathspec: "gpui/**" },
-        { digest: "2", entryCount: 1, pathspec: "shared/**" },
+        { digest: "1", entryCount: 1, pathspec: "apps/desktop/**" },
+        { digest: "2", entryCount: 1, pathspec: "packages/shared/**" },
       ],
       values: { zig015: "0.15.2" },
     };
     const baseline = {
       composed: { "gxserver-linux-x64": "bb" },
       paths: [
-        { digest: "1", entryCount: 1, pathspec: "gpui/**" },
-        { digest: "9", entryCount: 1, pathspec: "shared/**" },
+        { digest: "1", entryCount: 1, pathspec: "apps/desktop/**" },
+        { digest: "9", entryCount: 1, pathspec: "packages/shared/**" },
       ],
       values: { zig015: "0.15.1" },
     };
     const difference = explainFingerprintDifference(current, baseline);
-    expect(difference).toEqual({ composed: ["gxserver-linux-x64"], paths: ["shared/**"], values: ["zig015"] });
+    expect(difference).toEqual({
+      composed: ["gxserver-linux-x64"],
+      paths: ["packages/shared/**"],
+      values: ["zig015"],
+    });
     expect(describeFingerprintDifference(difference)).toBe(
-      "shared/**; values zig015; embedded gxserver-linux-x64",
+      "packages/shared/**; values zig015; embedded gxserver-linux-x64",
     );
   });
 });
