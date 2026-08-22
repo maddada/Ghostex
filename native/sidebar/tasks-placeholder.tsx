@@ -2882,22 +2882,18 @@ function ProjectBoardApp() {
               ))}
             </SelectContent>
           </Select>
-          <Select
-            items={tagFilterSelectItems}
-            onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
+          <select
+            aria-label="Filter by tag"
+            className="project-board-filter-select project-board-native-filter-select"
+            onChange={(event) => setTagFilter(event.currentTarget.value as BoardTagFilter)}
             value={activeTagFilter}
           >
-            <SelectTrigger aria-label="Filter by tag" className="project-board-filter-select" size="sm">
-              <SelectValue placeholder="All tags" />
-            </SelectTrigger>
-            <SelectContent>
-              {tagFilterSelectItems.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {tagFilterSelectItems.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <select
             aria-label="Sort tickets"
             className="project-board-filter-select project-board-native-filter-select"
