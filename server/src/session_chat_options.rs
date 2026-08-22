@@ -33,6 +33,14 @@ use std::{
 use serde_json::{json, Map, Value};
 
 use crate::domain::DomainRepository;
+use crate::constants::GXSERVER_PROTOCOL_VERSION;
+use crate::events::GxserverEventHub;
+use crate::paths::GxserverPaths;
+use crate::server::{AppState, SessionChatFollowerEntry, read_runtime_text, session_observer_key};
+use crate::session_chat_follower::{is_session_chat_followable_session, session_chat_hook_working};
+use crate::storage::open_gxserver_database;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 /// Tail window scanned for a statusline/footer. The real dumps put the signal
 /// within the last ~6 lines; 15 leaves headroom for an on-screen picker.
@@ -1289,4 +1297,495 @@ mod tests {
         assert!(first.same_selection(Some(&second)));
         assert!(!first.same_selection(None));
     }
+}
+
+/*
+CDXC:SessionChatDetectedOptions 2026-08-01:
+Model/effort detection reads structured transcript metadata plus the session's
+zmx scrollback. The latter costs one short-lived process, so the combined read
+is NEVER done per frame or per long-poll tick.
+Every trigger goes through this 5s-TTL per-session cache: chat reads, the
++2s/+6s probes after a dispatched `/model`//`/effort`//`/fast`, and the
+follower's ~30s piggyback. A miss is cached too — a session whose agent prints
+no statusline must not re-spawn `zmx history` on every read. Detection is
+deliberately absent from resolve_session_chat_read_state's fingerprint: hashing
+it would make each 500ms long-poll tick spawn a process.
+
+CDXC:SessionChatTerminalNotices 2026-08-19: the SAME capture is classified for
+terminal-state notices (login expired, trust dialog, usage limit, a crashed
+CLI), so the cache entry carries both readings and neither costs an extra spawn.
+*/
+pub(crate) struct SessionChatOptionCacheEntry {
+    pub(crate) fetched_at: std::time::Instant,
+    pub(crate) value: crate::session_chat_options::SessionChatTerminalDetection,
+}
+
+#[derive(Clone)]
+pub(crate) struct SessionChatOptionDetector {
+    cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
+    paths: GxserverPaths,
+    server_id: String,
+}
+
+impl SessionChatOptionDetector {
+    pub(crate) fn new(state: &AppState) -> Self {
+        Self {
+            cache: state.session_chat_option_cache.clone(),
+            paths: state.paths.clone(),
+            server_id: state.metadata.server_id.clone(),
+        }
+    }
+
+    /// Last known value with no process spawn. Used by frames that must stay
+    /// free (snapshot/replaced).
+    pub(crate) fn cached(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
+        let key = session_observer_key(project_id, session_id);
+        self.cache
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&key).map(|entry| entry.value.clone()))
+            .unwrap_or_default()
+    }
+
+    /// BLOCKING: refreshes through the TTL (`force` bypasses it).
+    pub(crate) fn detect_blocking(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        agent: Option<&str>,
+        force: bool,
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
+        if crate::session_chat_options::session_chat_option_agent(agent).is_none() {
+            return crate::session_chat_options::SessionChatTerminalDetection::default();
+        }
+        let key = session_observer_key(project_id, session_id);
+        if !force {
+            if let Ok(cache) = self.cache.lock() {
+                if let Some(entry) = cache.get(&key) {
+                    if entry.fetched_at.elapsed()
+                        < crate::session_chat_options::SESSION_CHAT_OPTION_CACHE_TTL
+                    {
+                        return entry.value.clone();
+                    }
+                }
+            }
+        }
+        let mut detected = open_gxserver_database(&self.paths)
+            .ok()
+            .map(|db| {
+                let repository = DomainRepository::new(&db, self.server_id.as_str());
+                crate::session_chat_options::detect_session_chat_terminal_state(
+                    &repository,
+                    project_id,
+                    session_id,
+                    agent,
+                )
+            })
+            .unwrap_or_default();
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        This is the ONE funnel every fresh capture goes through (the follower's
+        probe, a read-triggered detect, the post-dispatch redetect), so it owns
+        the two rules a single detection cannot state on its own:
+
+        1. A capture that succeeded WHOLE and classified to nothing proves the
+           screen is clean, which retires a watchdog verdict about screen state.
+           `deliveryFailed` is exempt inside the store — it describes a lost
+           message, not the current screen.
+        2. A re-classification that says the same thing as the cached one is the
+           SAME notice instance and keeps its `detectedAt`; see
+           `SessionChatTerminalNotice::carry_forward_detected_at`.
+
+        Neither publishes anything itself: every consumer already re-reads this
+        cache (plus the watchdog store) and emits on change.
+        */
+        if detected.captured && detected.notice.is_none() {
+            crate::session_chat_notice::retire_session_chat_watchdog_notice_on_clean_screen(
+                project_id, session_id,
+            );
+        }
+        if let Ok(mut cache) = self.cache.lock() {
+            if let Some(notice) = detected.notice.as_mut() {
+                notice.carry_forward_detected_at(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.value.notice.as_ref()),
+                );
+            }
+            /*
+            CDXC:SessionChatTerminalActivity 2026-08-22: same instance-not-sample
+            rule, and load-bearing here — the client anchors its elapsed clock to
+            `detectedAt`, so re-minting it on every probe would peg the timer at
+            zero for the whole run.
+            */
+            if let Some(activity) = detected.activity.as_mut() {
+                activity.carry_forward_detected_at(
+                    cache
+                        .get(&key)
+                        .and_then(|entry| entry.value.activity.as_ref()),
+                );
+            }
+            cache.insert(
+                key,
+                SessionChatOptionCacheEntry {
+                    fetched_at: std::time::Instant::now(),
+                    value: detected.clone(),
+                },
+            );
+        }
+        detected
+    }
+
+    /// Async handlers must not block the executor on a process spawn.
+    pub(crate) async fn detect(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        agent: Option<&str>,
+        force: bool,
+    ) -> crate::session_chat_options::SessionChatTerminalDetection {
+        let detector = self.clone();
+        let project_id = project_id.to_string();
+        let session_id = session_id.to_string();
+        let agent = agent.map(str::to_string);
+        tokio::task::spawn_blocking(move || {
+            detector.detect_blocking(&project_id, &session_id, agent.as_deref(), force)
+        })
+        .await
+        .unwrap_or_default()
+    }
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+The notice a session should be showing RIGHT NOW, with no detection of its own:
+the last classification the shared 5s cache holds, overridden by a watchdog
+notice when one is pending. Every path that must stay spawn-free — the 500ms
+long-poll fingerprint, prompt-driven state frames — reads it through here.
+*/
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+The whole screen-derived half of a session's state, owned, from the shared 5s
+cache and the watchdog store. Every spawn-free publisher reads it through here
+so the notice and the progress row are always taken from the SAME cache read
+and can never be published one frame apart.
+*/
+#[derive(Default)]
+pub(crate) struct CachedSessionChatScreenState {
+    pub(crate) notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
+    pub(crate) activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    /// CDXC:SessionChatScreenProbed 2026-08-22: whether the cache entry these
+    /// came from was backed by a whole capture at all.
+    pub(crate) probed: bool,
+}
+
+impl CachedSessionChatScreenState {
+    pub(crate) fn borrow(&self) -> crate::session_chat::SessionChatScreenState<'_> {
+        crate::session_chat::SessionChatScreenState {
+            notice: self.notice.as_ref(),
+            activity: self.activity.as_ref(),
+            probed: self.probed,
+        }
+    }
+}
+
+pub(crate) fn cached_session_chat_screen_state(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> CachedSessionChatScreenState {
+    let (screen_notice, activity, probed) = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| {
+            cache.get(&session_observer_key(project_id, session_id)).map(|entry| {
+                (
+                    entry.value.notice.clone(),
+                    entry.value.activity.clone(),
+                    entry.value.attempted,
+                )
+            })
+        })
+        .unwrap_or_default();
+    CachedSessionChatScreenState {
+        notice: crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            project_id,
+            session_id,
+            screen_notice,
+        ),
+        activity,
+        probed,
+    }
+}
+
+pub(crate) fn cached_session_chat_terminal_notice(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<crate::session_chat_notice::SessionChatTerminalNotice> {
+    let screen = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| {
+            cache
+                .get(&session_observer_key(project_id, session_id))
+                .and_then(|entry| entry.value.notice.clone())
+        });
+    crate::session_chat_notice::resolve_session_chat_terminal_notice(project_id, session_id, screen)
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+The send watchdog owns no frames and no database: it mutates the watchdog notice
+store and then calls this, which republishes whatever the session should be
+showing now — the cached model/effort pills included, so a notice frame can
+never blank them.
+*/
+pub(crate) fn session_chat_terminal_notice_publisher(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_watchdog::SessionChatWatchdogPublisher {
+    let followers = state.session_chat_followers.clone();
+    let event_hub = state.event_hub.clone();
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let option_cache = state.session_chat_option_cache.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move || {
+        let key = session_observer_key(&project_id, &session_id);
+        let (options, screen_notice, activity, captured) = option_cache
+            .lock()
+            .ok()
+            .and_then(|cache| {
+                cache.get(&key).map(|entry| {
+                    (
+                        entry.value.options.clone(),
+                        entry.value.notice.clone(),
+                        entry.value.activity.clone(),
+                        entry.value.attempted,
+                    )
+                })
+            })
+            .unwrap_or_default();
+        let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &project_id,
+            &session_id,
+            screen_notice,
+        );
+        emit_session_chat_options_state_frame(
+            &followers,
+            &event_hub,
+            &paths,
+            &server_id,
+            &project_id,
+            &session_id,
+            options.as_ref(),
+            crate::session_chat::SessionChatScreenState {
+                notice: notice.as_ref(),
+                activity: activity.as_ref(),
+                probed: captured,
+            },
+        );
+    })
+}
+
+/// Fresh lifecycle/working truth for the watchdog's timeout decision. Blocking
+/// (SQLite), so the watchdog calls it from a blocking task.
+pub(crate) fn session_chat_watchdog_state_reader(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_watchdog::SessionChatWatchdogStateReader {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move || {
+        let read = || -> Option<crate::session_chat_watchdog::SessionChatWatchdogLiveState> {
+            let db = open_gxserver_database(&paths).ok()?;
+            let repository = DomainRepository::new(&db, server_id.as_str());
+            let session = repository.get_session(&project_id, &session_id).ok()??;
+            Some(crate::session_chat_watchdog::SessionChatWatchdogLiveState {
+                running: is_session_chat_followable_session(&session),
+                working: session_chat_hook_working(&session),
+            })
+        };
+        read().unwrap_or_default()
+    })
+}
+
+pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, session_id: &str) {
+    if let Ok(mut cache) = state.session_chat_option_cache.lock() {
+        cache.remove(&session_observer_key(project_id, session_id));
+    }
+}
+
+/*
+CDXC:SessionChatDetectedOptions 2026-08-01:
+Post-dispatch confirmation. After the chat surface types `/model`, `/effort` or
+`/fast`, the pill shows an unconfirmed value; these two probes read the
+statusline back (+2s for the TUI repaint, +6s to catch a Codex overlay the user
+had to finish) and push the real value through the live follower stream. A
+probe that finds the SAME value emits nothing, and with no follower/no
+subscribers nothing is emitted at all — the next readSessionChat still carries
+it.
+*/
+pub(crate) fn schedule_session_chat_option_redetect(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    agent: Option<&str>,
+) {
+    if crate::session_chat_options::session_chat_option_agent(agent).is_none() {
+        return;
+    }
+    let detector = SessionChatOptionDetector::new(state);
+    let followers = state.session_chat_followers.clone();
+    let event_hub = state.event_hub.clone();
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    let agent = agent.map(str::to_string);
+    tokio::spawn(async move {
+        let cached = detector.cached(&project_id, &session_id);
+        let mut published = cached.options;
+        // CDXC:SessionChatTerminalNotices 2026-08-19: this probe re-reads the
+        // screen anyway, so a notice that appeared or cleared with the dispatch
+        // rides the same frame instead of waiting for the ~30s follower probe.
+        let mut published_notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &project_id,
+            &session_id,
+            cached.notice,
+        );
+        let mut published_activity = cached.activity;
+        for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
+            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            let detection = detector
+                .detect(&project_id, &session_id, agent.as_deref(), true)
+                .await;
+            let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+                &project_id,
+                &session_id,
+                detection.notice,
+            );
+            let notice_changed = detection.captured
+                && !crate::session_chat_notice::same_session_chat_terminal_notice(
+                    notice.as_ref(),
+                    published_notice.as_ref(),
+                );
+            let options_changed = detection
+                .options
+                .as_ref()
+                .is_some_and(|detected| !detected.same_selection(published.as_ref()));
+            let activity_changed = detection.captured
+                && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                    detection.activity.as_ref(),
+                    published_activity.as_ref(),
+                );
+            if !options_changed && !notice_changed && !activity_changed {
+                continue;
+            }
+            if options_changed {
+                published = detection.options;
+            }
+            if notice_changed {
+                published_notice = notice;
+            }
+            if activity_changed {
+                published_activity = detection.activity;
+            }
+            emit_session_chat_options_state_frame(
+                &followers,
+                &event_hub,
+                &paths,
+                &server_id,
+                &project_id,
+                &session_id,
+                published.as_ref(),
+                crate::session_chat::SessionChatScreenState {
+                    notice: published_notice.as_ref(),
+                    activity: published_activity.as_ref(),
+                    probed: detection.attempted,
+                },
+            );
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn emit_session_chat_options_state_frame(
+    followers: &Arc<Mutex<HashMap<String, SessionChatFollowerEntry>>>,
+    event_hub: &GxserverEventHub,
+    paths: &GxserverPaths,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    detected: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    screen: crate::session_chat::SessionChatScreenState<'_>,
+) {
+    let stream = {
+        let Ok(followers) = followers.lock() else {
+            return;
+        };
+        let Some(entry) = followers.get(&session_observer_key(project_id, session_id)) else {
+            return;
+        };
+        let follower_active =
+            entry.subscribers > 0 && entry.task.as_ref().is_some_and(|task| !task.is_finished());
+        if !follower_active {
+            return;
+        }
+        entry.stream.clone()
+    };
+    let Ok(db) = open_gxserver_database(paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, server_id);
+    let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
+        return;
+    };
+    let prompt = crate::agents::session_chat_prompt_setting(&session)
+        .as_deref()
+        .and_then(crate::session_chat::parse_stored_session_chat_prompt);
+    let working = session_chat_hook_working(&session);
+    let status = if working {
+        crate::session_chat::SessionChatStatus::Working
+    } else {
+        crate::session_chat::SessionChatStatus::Ready
+    };
+    let agent_session_id = read_runtime_text(&session, "agentSessionId");
+    let queue =
+        crate::session_chat_queue::read_session_chat_queue_snapshot(paths, project_id, session_id);
+    let (epoch, _) = stream.current();
+    // Same seq discipline as the prompt frame: take the seq and publish as one
+    // step, because the follower task publishes into the SAME counter.
+    stream.emit_sequenced(
+        |seq| {
+            crate::session_chat::build_session_chat_prompt_state_frame(
+                project_id,
+                session_id,
+                epoch,
+                seq,
+                status,
+                prompt.as_ref(),
+                agent_session_id.as_deref(),
+                GXSERVER_PROTOCOL_VERSION,
+                server_id,
+                working,
+                detected,
+                screen,
+                Some(&queue),
+            )
+        },
+        |frame| event_hub.broadcast(frame),
+    );
 }

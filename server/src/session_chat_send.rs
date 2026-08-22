@@ -13,6 +13,21 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::protocol::rpc_success;
+use crate::server::{
+    AppState,
+    RoutedResponse,
+    domain_error_response,
+    read_runtime_text,
+    routed_json,
+};
+use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::session_chat_options::schedule_session_chat_option_redetect;
+use crate::session_chat_queue_runtime::send_session_chat_message_internal;
+use crate::storage::open_gxserver_database;
+use serde_json::{Map, Value, json};
+use axum::http::StatusCode;
 
 /*
 CDXC:SessionChatSend 2026-07-31:
@@ -1199,4 +1214,570 @@ mod tests {
         );
         assert!(build_ask_answer_steps(&[]).is_empty());
     }
+}
+
+/*
+CDXC:SessionChatSend 2026-07-31:
+Send-side endpoints. Every write goes through the per-session async send
+queue in session_chat_send.rs (upstream chat spec §7 pacing: clear burst → bracketed-paste
+body → separate delayed Enter; answer keystroke groups 1000ms apart), so the
+HTTP handlers only validate, build steps, enqueue, and return — they never
+hold the connection across the pacing delays.
+*/
+pub(crate) struct SessionChatSendTarget {
+    pub(crate) project_id: String,
+    pub(crate) session_id: String,
+    pub(crate) zmx_name: String,
+    pub(crate) session: Value,
+}
+
+pub(crate) fn resolve_session_chat_send_target(
+    state: &AppState,
+    params: &Map<String, Value>,
+    operation: &str,
+) -> std::result::Result<SessionChatSendTarget, DomainStateError> {
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    if project_id.is_empty() || session_id.is_empty() {
+        return Err(DomainStateError {
+            code: "invalidParams",
+            message: format!("{operation} requires projectId and sessionId."),
+        });
+    }
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let session = repository
+        .get_session(&project_id, &session_id)?
+        .ok_or_else(|| DomainStateError {
+            code: "notFound",
+            message: "The session no longer exists.".to_string(),
+        })?;
+    let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
+    Ok(SessionChatSendTarget {
+        project_id,
+        session_id,
+        zmx_name,
+        session,
+    })
+}
+
+pub(crate) async fn handle_send_session_chat_message_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let target = match resolve_session_chat_send_target(state, &params, "sendSessionChatMessage") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let text = params
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    /*
+    Raw-key mode: `key` carries a keystroke that has no text form (Claude
+    Code's Shift+Tab permission-mode cycle or Codex's shifted effort arrows).
+    It is mutually exclusive with a message body — the key writes one verbatim
+    burst with none of the message pacing (no clear, no paste framing, no
+    delayed Enter).
+    */
+    if let Some(key) = params.get("key").and_then(Value::as_str) {
+        if !text.trim().is_empty() || params.get("imagePaths").is_some() {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message:
+                        "sendSessionChatMessage key cannot be combined with text or imagePaths."
+                            .to_string(),
+                },
+            );
+        }
+        let Some(steps) = crate::session_chat_send::build_session_chat_key_steps(key) else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: format!("sendSessionChatMessage does not know the key \"{key}\"."),
+                },
+            );
+        };
+        crate::session_chat_send::enqueue_session_chat_send(
+            &target.project_id,
+            &target.session_id,
+            &target.zmx_name,
+            "session-chat-key",
+            steps,
+        );
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "queued": true, "textBytes": 0 })),
+        );
+    }
+    let image_paths: Vec<String> = params
+        .get("imagePaths")
+        .and_then(Value::as_array)
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if text.trim().is_empty() && image_paths.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "sendSessionChatMessage requires text or imagePaths.".to_string(),
+            },
+        );
+    }
+    if text.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: format!(
+                    "sendSessionChatMessage text exceeds the {}-byte zmx send limit.",
+                    crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
+                ),
+            },
+        );
+    }
+    match send_session_chat_message_internal(
+        state,
+        &target.project_id,
+        &target.session_id,
+        &text,
+        &image_paths,
+    )
+    .await
+    {
+        Ok(text_bytes) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "queued": true, "textBytes": text_bytes })),
+        ),
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+/*
+CDXC:SessionChatCore 2026-08-01:
+Second source for the question card, used when agent hooks never reported one:
+re-read the session's transcript tail and look for an AskUserQuestion tool call
+that has no tool result yet. Bounded to a short window and only reached on an
+explicit answer action, so the directory scan cost is paid once per answer.
+*/
+pub(crate) const SESSION_CHAT_PROMPT_SCAN_LIMIT: usize = 60;
+
+pub(crate) fn transcript_pending_question_prompt(
+    session: &Value,
+) -> Option<crate::session_chat::SessionChatInteractivePrompt> {
+    let transcript_agent = crate::session_chat::resolve_session_chat_transcript_agent(
+        session_chat_agent_for_session(session).as_deref(),
+    )?;
+    let path = crate::session_chat::resolve_session_chat_transcript_path(
+        transcript_agent,
+        read_runtime_text(session, "agentSessionId").as_deref(),
+        read_runtime_text(session, "agentSessionPath").as_deref(),
+    )?;
+    let crate::session_chat::SessionChatTailPage::Page { messages, .. } =
+        crate::session_chat::read_session_chat_tail_page(
+            transcript_agent,
+            &path,
+            SESSION_CHAT_PROMPT_SCAN_LIMIT,
+            None,
+        )
+        .ok()?
+    else {
+        return None;
+    };
+    crate::session_chat::scan_transcript_prompt_state(&messages)
+        .pending()
+        .cloned()
+}
+
+pub(crate) async fn handle_answer_session_chat_prompt_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let target = match resolve_session_chat_send_target(state, &params, "answerSessionChatPrompt") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let kind = params
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let steps = match kind {
+        "approval" => {
+            // Allow → the option's raw send byte ("1"); Deny/empty → ESC.
+            // Raw, no bracketed paste, no delayed Enter (upstream chat spec §8.3).
+            let approval_send = params
+                .get("approvalSend")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let payload = if approval_send.is_empty() {
+                crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string()
+            } else {
+                approval_send.to_string()
+            };
+            vec![crate::session_chat_send::SessionChatSendStep::Write(
+                payload,
+            )]
+        }
+        "question" => {
+            let stored_prompt = crate::agents::session_chat_prompt_setting(&target.session)
+                .as_deref()
+                .and_then(crate::session_chat::parse_stored_session_chat_prompt)
+                // A card the transcript produced (hooks that never forwarded
+                // toolInput) must be answerable too, or the user gets a card
+                // that rejects every answer.
+                .or_else(|| transcript_pending_question_prompt(&target.session));
+            let Some(crate::session_chat::SessionChatInteractivePrompt::Question { questions }) =
+                stored_prompt
+            else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidParams",
+                        message: "The session has no pending question prompt.".to_string(),
+                    },
+                );
+            };
+            let selections: Vec<crate::session_chat::SessionChatQuestionSelection> =
+                match params.get("selections").cloned() {
+                    None => Vec::new(),
+                    Some(value) => match serde_json::from_value(value) {
+                        Ok(selections) => selections,
+                        Err(error) => {
+                            return domain_error_response(
+                                endpoint_path,
+                                request_id,
+                                DomainStateError {
+                                    code: "invalidParams",
+                                    message: format!(
+                                        "answerSessionChatPrompt selections are malformed: {error}"
+                                    ),
+                                },
+                            );
+                        }
+                    },
+                };
+            let agent = session_chat_agent_for_session(&target.session);
+            match agent.as_deref() {
+                Some("claude" | "openclaude") => crate::session_chat_send::build_ask_answer_steps(
+                    &crate::session_chat_send::build_claude_ask_answer_keys(
+                        &questions,
+                        &selections,
+                    ),
+                ),
+                Some("codex") => crate::session_chat_send::build_ask_answer_steps(
+                    &crate::session_chat_send::build_codex_ask_answer_keys(&questions, &selections),
+                ),
+                _ => {
+                    // Non-stepping agents (Grok): the formatted answer text
+                    // goes through the normal send path (upstream chat spec §8.6).
+                    if !crate::session_chat_send::has_ask_answer(&selections) {
+                        Vec::new()
+                    } else {
+                        crate::session_chat_send::build_session_chat_message_steps(
+                            &crate::session_chat_send::format_ask_answer(&questions, &selections),
+                            &[],
+                        )
+                    }
+                }
+            }
+        }
+        /*
+        CDXC:SessionChatTerminalPicker 2026-08-21:
+        A row of an on-screen picker (Claude Code's resume-usage chooser), which
+        the chat surface renders from the `choices` its terminal notice carries.
+
+        The keystroke is derived from a capture taken RIGHT NOW rather than from
+        the detection that painted the card: the notice can be seconds old, and
+        the picker may have been answered in the terminal — or repainted with
+        different rows — in between. A picker that is no longer on screen is an
+        error, never a blind keystroke into whatever replaced it.
+        */
+        "terminalChoice" => {
+            let Some(choice_index) = params
+                .get("choiceIndex")
+                .and_then(Value::as_u64)
+                .map(|index| index as usize)
+            else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidParams",
+                        message: "answerSessionChatPrompt kind \"terminalChoice\" requires choiceIndex."
+                            .to_string(),
+                    },
+                );
+            };
+            let picker = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
+                .await
+                .as_deref()
+                .and_then(crate::session_chat_resume_prompt::detect_session_chat_terminal_picker);
+            let Some(picker) = picker else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidState",
+                        message: "That picker is no longer on the session's screen.".to_string(),
+                    },
+                );
+            };
+            let Some(answer_key) = picker.answer_key(choice_index) else {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "invalidState",
+                        message: "The picker on screen no longer offers that option.".to_string(),
+                    },
+                );
+            };
+            crate::session_chat_send::build_terminal_picker_answer_steps(&answer_key)
+        }
+        _ => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message:
+                        "answerSessionChatPrompt kind must be \"question\", \"approval\" or \"terminalChoice\"."
+                            .to_string(),
+                },
+            );
+        }
+    };
+    let queued = !steps.is_empty();
+    if queued {
+        crate::session_chat_send::enqueue_session_chat_send(
+            &target.project_id,
+            &target.session_id,
+            &target.zmx_name,
+            "session-chat-answer",
+            steps,
+        );
+    }
+    /*
+    CDXC:SessionChatTerminalPicker 2026-08-21:
+    The card the user just answered is a TERMINAL NOTICE, and notices only
+    retire when a fresh capture proves the screen is clean. Left to the
+    follower's ~30s probe the answered picker would stay on screen in chat for
+    half a minute, so borrow the post-dispatch redetect: it re-reads the screen
+    at +2s and +6s and republishes, which is exactly the window the picker
+    needs to tear down.
+    */
+    if kind == "terminalChoice" {
+        let agent = session_chat_agent_for_session(&target.session);
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+    }
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, json!({ "queued": queued })),
+    )
+}
+
+/*
+CDXC:SessionChatDraftHandoff 2026-08-18:
+Terminal → chat draft transfer for every host. A user who typed into the agent
+CLI and then lands on the chat surface — by tapping the toggle, or because the
+app auto-switched a terminal-started agent into Chat — must find that text in
+the chat composer instead of stranded behind the parked terminal. The capture
+is the Ctrl+G prompt-editor handshake, which parks the draft in Saved Prompts;
+this reads that row back and (when this capture created it) removes it again,
+so a transfer leaves no residue in the user's Saved Prompts list.
+
+Grok Build binds Ctrl+G to its Tasks pane and can never answer the handshake,
+so its sessions are rejected up front rather than made to wait out the timeout.
+*/
+pub(crate) async fn handle_handoff_session_chat_draft_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let target = match resolve_session_chat_send_target(state, &params, "handoffSessionChatDraft") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("grok") {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "unsupported",
+                message: "Grok Build cannot transfer its composer draft.".to_string(),
+            },
+        );
+    }
+    let captured = match crate::session_chat_send::capture_session_chat_terminal_draft(
+        &state.paths.app_state_dir,
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+    )
+    .await
+    {
+        Ok(captured) => captured,
+        Err(message) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message,
+                },
+            );
+        }
+    };
+    let Some(prompt_id) = captured.prompt_id else {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "content": "", "transferred": false })),
+        );
+    };
+    let content = match read_and_release_stashed_prompt(
+        state,
+        &target.project_id,
+        &prompt_id,
+        captured.created,
+    ) {
+        Ok(content) => content,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({ "content": content, "transferred": !content.is_empty() }),
+        ),
+    )
+}
+
+/// Reads back the Saved Prompt the draft capture just wrote and, when the
+/// capture created that row, deletes it — the text is moving to a composer, not
+/// into the user's stash. An update of a pre-existing row is left alone.
+pub(crate) fn read_and_release_stashed_prompt(
+    state: &AppState,
+    project_id: &str,
+    prompt_id: &str,
+    created: bool,
+) -> std::result::Result<String, DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let mut list_params = Map::new();
+    list_params.insert("projectId".to_string(), json!(project_id));
+    let listed = repository.list_stashed_prompts(&list_params)?;
+    let content = listed
+        .get("prompts")
+        .and_then(Value::as_array)
+        .and_then(|prompts| {
+            prompts
+                .iter()
+                .find(|prompt| prompt.get("promptId").and_then(Value::as_str) == Some(prompt_id))
+        })
+        .and_then(|prompt| prompt.get("content"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| DomainStateError {
+            code: "notFound",
+            message: "The transferred draft could not be recalled.".to_string(),
+        })?
+        .to_string();
+    if created {
+        let mut delete_params = Map::new();
+        delete_params.insert("promptId".to_string(), json!(prompt_id));
+        let _ = repository.delete_stashed_prompt(&delete_params);
+    }
+    Ok(content)
+}
+
+pub(crate) fn handle_interrupt_session_chat_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let target = match resolve_session_chat_send_target(state, &params, "interruptSessionChat") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    // Cancel first so queued sends (and an in-flight sequence's remaining
+    // steps) drop, then deliver ESC through the queue's new generation.
+    crate::session_chat_send::cancel_session_chat_sends(&target.project_id, &target.session_id);
+    crate::session_chat_send::enqueue_session_chat_send(
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+        "session-chat-interrupt",
+        vec![crate::session_chat_send::SessionChatSendStep::Write(
+            crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string(),
+        )],
+    );
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, json!({ "interrupted": true })),
+    )
 }

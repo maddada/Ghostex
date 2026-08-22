@@ -59,6 +59,30 @@ use crate::{
     },
     storage::open_gxserver_database,
 };
+use crate::domain::{DomainStateError, read_domain_rpc_params};
+use crate::protocol::rpc_success;
+use crate::server::{
+    AppState,
+    RoutedResponse,
+    domain_error_response,
+    read_runtime_text,
+    routed_json,
+    schedule_presentation_session_delta,
+    session_observer_key,
+};
+use crate::session_chat_follower::{session_chat_agent_for_session, session_chat_hook_working};
+use crate::session_chat_options::{
+    SessionChatOptionDetector,
+    cached_session_chat_screen_state,
+    cached_session_chat_terminal_notice,
+    emit_session_chat_options_state_frame,
+    schedule_session_chat_option_redetect,
+    session_chat_terminal_notice_publisher,
+    session_chat_watchdog_state_reader,
+};
+use crate::session_chat_send::resolve_session_chat_send_target;
+use serde_json::{Map, json};
+use axum::http::StatusCode;
 
 const SESSION_CHAT_QUEUE_TICK_SECONDS: u64 = 1;
 
@@ -459,4 +483,409 @@ fn runtime_text(session: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+THE internal chat-message send. `/api/sendSessionChatMessage` is one caller;
+the prompt queue ("Send now" and the scheduler) is the other, which is why it
+lives here instead of inside the HTTP handler. Everything a chat send needs
+travels with it — the per-session send mutex in session_chat_send.rs, the
+answerable-picker refusal, the Ctrl+G draft-preservation handshake, the delivery
+watchdog and the option re-detect — so a queued prompt is indistinguishable from
+one the user typed and can never interleave with a Delayed Send.
+Returns the number of text bytes handed to zmx.
+*/
+pub(crate) async fn send_session_chat_message_internal(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    image_paths: &[String],
+) -> std::result::Result<usize, DomainStateError> {
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
+    let agent = session_chat_agent_for_session(&target.session);
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    Sample where the transcript ends BEFORE the message is enqueued: everything
+    written past this offset is a candidate for "the agent recorded it". Sampling
+    afterwards would race the agent's own write. This is the only work the
+    watchdog puts in front of a send — a path resolve plus one `metadata()`, both
+    on a blocking thread — and it is skipped entirely for agents the watchdog
+    does not cover.
+    */
+    /*
+    CDXC:SessionChatTerminalPicker 2026-08-21:
+    Claude Code's resume-usage picker owns the input line when a large session
+    is resumed. This send used to answer it automatically ("Resume full session
+    as-is") before typing, which was wrong twice over: the summary-vs-full
+    trade-off is the user's to make, and whenever the walk missed, the message's
+    own trailing Enter confirmed the HIGHLIGHTED row instead — silently
+    compacting the conversation the user was continuing, with nothing to show
+    for it but a delivery-failed banner.
+
+    So the send refuses instead. The same capture that proves the picker is up
+    caches the notice carrying its rows, and publishing it puts the answer
+    picker in front of the user on every subscribed client. Only an ANSWERABLE
+    state stops a send here: the catalog's other blocking dialogs still go
+    through to the delivery watchdog, which is the only thing that can explain
+    them.
+    */
+    if let Some(blocking) = SessionChatOptionDetector::new(state)
+        .detect(&target.project_id, &target.session_id, agent.as_deref(), true)
+        .await
+        .notice
+        .filter(crate::session_chat_notice::SessionChatTerminalNotice::is_answerable)
+    {
+        session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id)();
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: format!("{}. Answer it in chat before sending.", blocking.title),
+        });
+    }
+    let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+        agent.as_deref(),
+        read_runtime_text(&target.session, "agentSessionId").as_deref(),
+        read_runtime_text(&target.session, "agentSessionPath").as_deref(),
+        session_chat_hook_working(&target.session),
+        text,
+    )
+    .await;
+    let mut steps = crate::session_chat_send::build_session_chat_message_steps(text, image_paths);
+    /*
+    Grok Build fullscreen maps Ctrl+G to its Tasks pane rather than its
+    external editor. Its terminal-to-chat transition therefore leaves any
+    draft in the CLI and warns the user to copy it manually; chat sends must
+    skip the same impossible preservation handshake before taking ownership
+    of the terminal input line.
+    */
+    if agent.as_deref() != Some("grok") {
+        steps.insert(
+            0,
+            crate::session_chat_send::SessionChatSendStep::PreserveTerminalDraft {
+                state_dir: state.paths.app_state_dir.clone(),
+            },
+        );
+    }
+    if let Err(error) = crate::session_chat_send::execute_session_chat_send(
+        &target.project_id,
+        &target.session_id,
+        &target.zmx_name,
+        "session-chat-message",
+        steps,
+    )
+    .await
+    {
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        The case this feature exists for — the agent CLI in this pane is dead —
+        fails HERE, not at the delivery watchdog: the Ctrl+G draft handshake
+        never gets an answer, so the send errors out long before any watchdog is
+        started, and the user would see only a generic toast. When the TERMINAL
+        is what refused the message (as opposed to the send being superseded or
+        cancelled), escalate once with the same one-capture verdict the watchdog
+        takes at its deadline. It runs as its own task so the error response is
+        not made to wait for the capture, it never retries the send, and the
+        response below is unchanged.
+        */
+        if error.terminal_refused() {
+            if let Some(send_probe) = send_probe {
+                crate::session_chat_watchdog::escalate_failed_session_chat_send(
+                    send_probe,
+                    session_chat_terminal_notice_publisher(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    ),
+                    session_chat_watchdog_state_reader(
+                        state,
+                        &target.project_id,
+                        &target.session_id,
+                    ),
+                );
+            }
+        }
+        return Err(DomainStateError {
+            code: "dependencyUnavailable",
+            message: error.message,
+        });
+    }
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    The bytes reached zmx, which says nothing about the agent having received
+    them: a message typed into a login screen, a trust dialog or a shell where
+    the CLI already exited is accepted and lost. The watchdog verifies delivery
+    against the transcript and surfaces the terminal's own explanation when it
+    cannot. It never retries and never writes to the terminal.
+    */
+    if let Some(send_probe) = send_probe {
+        crate::session_chat_watchdog::start_session_chat_send_watchdog(
+            send_probe,
+            session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id),
+            session_chat_watchdog_state_reader(state, &target.project_id, &target.session_id),
+        );
+    }
+    // An option command changes what the statusline reports: read it back.
+    if crate::session_chat_options::is_session_chat_option_command_text(agent.as_deref(), text)
+        || crate::session_chat_options::is_session_chat_activity_command_text(
+            agent.as_deref(),
+            text,
+        )
+    {
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+    }
+    Ok(text.len())
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+Dispatch-only glue for the Ghostex chat prompt queue. Storage, validation and
+the endpoint bodies live in session_chat_queue.rs; server.rs supplies only the
+three things that module deliberately does not know about — the state-database
+path, the delivery path, and the live follower stream a state frame rides.
+*/
+pub(crate) async fn handle_session_chat_queue_http(
+    state: &Arc<AppState>,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if endpoint_path == "/api/sendSessionChatQueuedPrompt" {
+        return handle_send_session_chat_queued_prompt_http(
+            state,
+            endpoint_path,
+            request_id,
+            &params,
+        )
+        .await;
+    }
+    match crate::session_chat_queue::handle_session_chat_queue_endpoint(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        &endpoint_path,
+        &params,
+    ) {
+        Ok(result) => {
+            /*
+            Every mutation restates the queue to the session's other followers,
+            so a row queued on the phone appears in the desktop composer without
+            anyone re-reading.
+            */
+            if result.broadcast {
+                broadcast_session_chat_queue_state(state, &result.project_id, &result.session_id);
+            }
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result.value),
+            )
+        }
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+/*
+"Send now" delivers immediately regardless of agent state, exactly like pressing
+Enter. `sent: false` therefore means the send itself FAILED and the row is now
+`failed` with an errorMessage — it never means "deferred".
+*/
+pub(crate) async fn handle_send_session_chat_queued_prompt_http(
+    state: &Arc<AppState>,
+    endpoint_path: String,
+    request_id: String,
+    params: &Map<String, Value>,
+) -> RoutedResponse {
+    let (project_id, session_id, prompt_id) = match session_chat_queue_prompt_target(params) {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let sender = session_chat_queue_sender(state, &project_id, &session_id);
+    match crate::session_chat_queue::deliver_session_chat_queued_prompt(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        &project_id,
+        &session_id,
+        &prompt_id,
+        &sender,
+    )
+    .await
+    {
+        Ok(delivery) => {
+            broadcast_session_chat_queue_state(state, &project_id, &session_id);
+            let mut result = Map::new();
+            delivery.snapshot.insert_into(&mut result);
+            result.insert("sent".to_string(), json!(delivery.sent));
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, Value::Object(result)),
+            )
+        }
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
+pub(crate) fn session_chat_queue_prompt_target(
+    params: &Map<String, Value>,
+) -> std::result::Result<(String, String, String), DomainStateError> {
+    let read = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    match (read("projectId"), read("sessionId"), read("promptId")) {
+        (Some(project_id), Some(session_id), Some(prompt_id)) => {
+            Ok((project_id, session_id, prompt_id))
+        }
+        _ => Err(DomainStateError {
+            code: "invalidParams",
+            message: "sendSessionChatQueuedPrompt requires projectId, sessionId and promptId."
+                .to_string(),
+        }),
+    }
+}
+
+/*
+Publishes the session's current queue + draft on a `sessionChatState` frame.
+Same restating discipline as the terminal-notice publisher: a state frame
+REPLACES the client's prompt card, notice, pills and queue, so it must carry all
+of them, which is exactly what emit_session_chat_options_state_frame builds.
+No live follower ⇒ nothing is emitted and clients pick the change up from their
+next readSessionChat (or, on mobile, from the long-poll fingerprint).
+*/
+pub(crate) fn broadcast_session_chat_queue_state(state: &AppState, project_id: &str, session_id: &str) {
+    let key = session_observer_key(project_id, session_id);
+    let options = state
+        .session_chat_option_cache
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(&key).map(|entry| entry.value.options.clone()))
+        .unwrap_or_default();
+    let screen = cached_session_chat_screen_state(state, project_id, session_id);
+    emit_session_chat_options_state_frame(
+        &state.session_chat_followers,
+        &state.event_hub,
+        &state.paths,
+        &state.metadata.server_id,
+        project_id,
+        session_id,
+        options.as_ref(),
+        screen.borrow(),
+    );
+    publish_session_chat_queue_presentation_delta(state, project_id, session_id);
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The sidebar's queued-prompt badge reads `queuedPromptCount` off the presentation
+projection, NOT off the chat frame — the sidebar renders every session from that
+snapshot and holds no per-session chat subscription. A queue change on an
+otherwise idle session produces no other delta, so without this publish the badge
+would only appear whenever some unrelated event happened to fire.
+
+Every queue mutation and every scheduler delivery already funnels through
+`broadcast_session_chat_queue_state`, so the delta is published there rather than
+at each call site. Same shape as `delayed_sends::publish_session_change`: one
+short sequencer-locked section that projects, allocates the revision and
+broadcasts, so revision order and broadcast order stay identical.
+*/
+pub(crate) fn publish_session_chat_queue_presentation_delta(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let _ = schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The delivery handle the queue module (and the scheduler in
+session_chat_queue_runtime.rs) holds. It closes over the daemon state so those
+modules never learn about AppState, zmx names, or the send watchdog, and every
+queued prompt still travels the same internals /api/sendSessionChatMessage uses.
+*/
+pub(crate) fn session_chat_queue_sender(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+) -> crate::session_chat_queue::SessionChatQueueSender {
+    let state = state.clone();
+    let project_id = project_id.to_string();
+    let session_id = session_id.to_string();
+    Arc::new(move |text: String| {
+        let state = state.clone();
+        let project_id = project_id.clone();
+        let session_id = session_id.clone();
+        Box::pin(async move {
+            send_session_chat_message_internal(&state, &project_id, &session_id, &text, &[])
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message)
+        })
+    })
+}
+
+/// Per-session sender factory for the scheduler, which delivers for whichever
+/// session becomes ready rather than one it was built for.
+pub(crate) fn session_chat_queue_sender_factory(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue::SessionChatQueueSenderFactory {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        session_chat_queue_sender(&state, project_id, session_id)
+    })
+}
+
+/// Per-session state-frame publisher for the scheduler, so a row it delivers or
+/// fails reaches the same clients an endpoint mutation would.
+pub(crate) fn session_chat_queue_publisher_factory(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue::SessionChatQueuePublisherFactory {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        let state = state.clone();
+        let project_id = project_id.to_string();
+        let session_id = session_id.to_string();
+        let publisher: crate::session_chat_queue::SessionChatQueuePublisher =
+            Arc::new(move || broadcast_session_chat_queue_state(&state, &project_id, &session_id));
+        publisher
+    })
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-21:
+The scheduler's view of "is this terminal able to take a prompt at all". It
+reads the SAME resolved notice the chat card shows — the cached screen
+classification merged with the send watchdog's verdict — and never triggers a
+detection itself, so a tick can never spawn a `zmx history` capture.
+*/
+pub(crate) fn session_chat_queue_notice_reader(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueNoticeReader {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str| {
+        cached_session_chat_terminal_notice(&state, project_id, session_id)
+    })
 }

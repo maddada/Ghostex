@@ -7,6 +7,12 @@ use std::{
 use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::protocol::rpc_success;
+use crate::server::{AppState, RoutedResponse, domain_error_response, routed_json};
+use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::storage::open_gxserver_database;
+use axum::http::StatusCode;
 
 const SESSION_CHAT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
 
@@ -330,4 +336,91 @@ mod tests {
             ]
         );
     }
+}
+
+pub(crate) async fn handle_read_session_chat_skills_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    if project_id.is_empty() || session_id.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "readSessionChatSkills requires projectId and sessionId.".to_string(),
+            },
+        );
+    }
+
+    let resolved = (|| {
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let session = repository
+            .get_session(project_id, session_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        let project = repository
+            .get_project(project_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The project no longer exists.".to_string(),
+            })?;
+        let agent_id = session_chat_agent_for_session(&session).unwrap_or_default();
+        let project_path = project
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from);
+        Ok::<_, DomainStateError>((agent_id, project_path))
+    })();
+    let (agent_id, project_path) = match resolved {
+        Ok(resolved) => resolved,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let paths = state.paths.clone();
+    let result = match tokio::task::spawn_blocking(move || {
+        read_session_chat_skills(&paths, &agent_id, project_path.as_deref())
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Session chat skills could not be read.".to_string(),
+                },
+            )
+        }
+    };
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, result),
+    )
 }

@@ -32,6 +32,20 @@ use crate::session_chat::{
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
     SessionChatSuccessorOutcome, SessionChatTranscriptAgent,
 };
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::protocol::rpc_success;
+use crate::server::{
+    AppState,
+    RoutedResponse,
+    domain_error_response,
+    read_runtime_text,
+    read_session_text,
+    routed_json,
+};
+use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::storage::open_gxserver_database;
+use serde_json::json;
+use axum::http::StatusCode;
 
 // ---------------------------------------------------------------------------
 // Section taxonomy
@@ -2501,4 +2515,143 @@ fn export_session_prefix(session_id: &str) -> String {
         .take(EXPORT_SESSION_ID_PREFIX_CHARS)
         .collect::<String>()
         .to_ascii_lowercase()
+}
+
+/*
+CDXC:ExportTranscript 2026-08-20:
+exportSessionTranscript renders a session's agent transcript into a markdown
+file under `<app data dir>/exports` and answers with its absolute path on THIS
+machine. The transcript only exists where the agent runs, so every client
+(gpui, web, mobile, the CLI) calls this over its per-machine RPC and a remote
+session's export lands on the remote machine next to the transcript it came
+from.
+
+Failures stay structured and never degrade into a partial file: an unsupported
+agent, a session that has not reported an agent session id yet, and a
+transcript with nothing to render each surface their own error code, because a
+half transcript handed to the next agent is worse than a clear refusal.
+*/
+pub(crate) async fn handle_export_session_transcript_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    if project_id.is_empty() || session_id.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "exportSessionTranscript requires projectId and sessionId.".to_string(),
+            },
+        );
+    }
+
+    let resolved = (|| {
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let session = repository
+            .get_session(&project_id, &session_id)?
+            .ok_or_else(|| DomainStateError {
+                code: "notFound",
+                message: "The session no longer exists.".to_string(),
+            })?;
+        Ok::<_, DomainStateError>((
+            session_chat_agent_for_session(&session),
+            read_runtime_text(&session, "agentSessionId"),
+            read_runtime_text(&session, "agentSessionPath"),
+            read_session_text(&session, "title"),
+        ))
+    })();
+    let (agent, agent_session_id, agent_session_path, title) = match resolved {
+        Ok(resolved) => resolved,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+
+    // Parsing a long transcript and writing the export are both blocking file
+    // work, exactly like the readSessionChat tail read.
+    let response_agent = agent.clone();
+    let exports_dir = state.paths.app_data_dir.join("exports");
+    let export_session_id = session_id.clone();
+    let exported = match tokio::task::spawn_blocking(move || {
+        crate::session_transcript_export::export_session_transcript(
+            &crate::session_transcript_export::SessionTranscriptExportRequest {
+                agent: agent.as_deref(),
+                agent_session_id: agent_session_id.as_deref(),
+                agent_session_path: agent_session_path.as_deref(),
+                session_id: &export_session_id,
+                session_title: title.as_deref(),
+                exports_dir: &exports_dir,
+                selection: None,
+            },
+        )
+    })
+    .await
+    {
+        Ok(exported) => exported,
+        Err(_) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "The transcript export did not finish.".to_string(),
+                },
+            )
+        }
+    };
+    let outcome = match exported {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: error.code(),
+                    message: error.to_string(),
+                },
+            )
+        }
+    };
+
+    let mut result = Map::new();
+    result.insert("path".to_string(), json!(outcome.path.to_string_lossy()));
+    result.insert("bytes".to_string(), json!(outcome.bytes));
+    result.insert(
+        "sourcePath".to_string(),
+        json!(outcome.source_path.to_string_lossy()),
+    );
+    result.insert(
+        "renderedEntries".to_string(),
+        json!(outcome.rendered_entries),
+    );
+    result.insert("parsedEntries".to_string(), json!(outcome.parsed_entries));
+    if let Some(agent) = response_agent.as_deref() {
+        result.insert("agent".to_string(), json!(agent));
+    }
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, Value::Object(result)),
+    )
 }

@@ -3,6 +3,9 @@ use serde_json::{json, Map, Value};
 
 use crate::session_chat::*;
 use crate::session_chat_follower::{insert_optional_selected_options, insert_screen_state};
+use crate::constants::GXSERVER_PROTOCOL_VERSION;
+use crate::server::{AppState, read_runtime_text, read_session_text, session_observer_key};
+use crate::session_chat_options::cached_session_chat_screen_state;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SessionChatQuestionOption {
@@ -416,3 +419,90 @@ pub fn build_session_chat_prompt_state_frame(
 // Inline sanity tests (real transcript files are skipped when absent)
 // ---------------------------------------------------------------------------
 
+
+/*
+CDXC:SessionChatSend 2026-07-31:
+Prompt changes ride the LIVE follower stream: hook ingest reports
+sessionChatPromptChanged, and this emits a sessionChatState frame through the
+session's SessionChatStream (same epoch, next seq) so subscribed clients
+show/clear the interactive card without waiting for a transcript drain. No
+follower/no subscribers → nothing to emit; the prompt still reaches clients
+via readSessionChat and the next authoritative snapshot.
+*/
+pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &Value) {
+    let (Some(project_id), Some(session_id)) = (
+        read_session_text(session, "projectId"),
+        read_session_text(session, "sessionId"),
+    ) else {
+        return;
+    };
+    let stream = {
+        let Ok(followers) = state.session_chat_followers.lock() else {
+            return;
+        };
+        let Some(entry) = followers.get(&session_observer_key(&project_id, &session_id)) else {
+            return;
+        };
+        let follower_active =
+            entry.subscribers > 0 && entry.task.as_ref().is_some_and(|task| !task.is_finished());
+        if !follower_active {
+            return;
+        }
+        entry.stream.clone()
+    };
+    let prompt = crate::agents::session_chat_prompt_setting(session)
+        .as_deref()
+        .and_then(crate::session_chat::parse_stored_session_chat_prompt);
+    let working = session_chat_hook_working(session);
+    let status = if working {
+        crate::session_chat::SessionChatStatus::Working
+    } else {
+        crate::session_chat::SessionChatStatus::Ready
+    };
+    let (epoch, _) = stream.current();
+    let agent_session_id = read_runtime_text(session, "agentSessionId");
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-19:
+    Clients treat an OMITTED `terminalNotice` on a state frame as "cleared"
+    (prompt semantics), so a prompt-driven frame has to re-state the notice the
+    session is currently showing or the card would blink away on every hook
+    event. Cached read only — this runs on the hook-ingest thread.
+    */
+    let screen = cached_session_chat_screen_state(state, &project_id, &session_id);
+    /*
+    CDXC:SessionChatQueueCarriage 2026-08-21: a state frame REPLACES the
+    client's queue, so every producer of one restates the current rows rather
+    than leaving them out.
+    */
+    let queue = crate::session_chat_queue::read_session_chat_queue_snapshot(
+        &state.paths,
+        &project_id,
+        &session_id,
+    );
+    /*
+    The seq must be taken and the frame published as one step: this runs on a
+    hook-ingest thread while the follower task publishes into the SAME counter,
+    and a frame that reaches the hub out of seq order makes every client treat
+    it as a gap and force a resync.
+    */
+    stream.emit_sequenced(
+        |seq| {
+            crate::session_chat::build_session_chat_prompt_state_frame(
+                &project_id,
+                &session_id,
+                epoch,
+                seq,
+                status,
+                prompt.as_ref(),
+                agent_session_id.as_deref(),
+                GXSERVER_PROTOCOL_VERSION,
+                &state.metadata.server_id,
+                working,
+                None,
+                screen.borrow(),
+                Some(&queue),
+            )
+        },
+        |frame| state.event_hub.broadcast(frame),
+    );
+}

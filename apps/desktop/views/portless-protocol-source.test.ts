@@ -30,10 +30,16 @@ const protocolRustSource = readFileSync(
   new URL("../../../server/src/protocol.rs", import.meta.url),
   "utf8",
 );
-const serverRustSource = readFileSync(
-  new URL("../../../server/src/server.rs", import.meta.url),
-  "utf8",
-);
+// server/src/server.rs was split into server/src/server/{mod,http_endpoints,
+// http_infra,...}.rs. The assertions below cover the dispatch match and the
+// health payload (mod.rs, http_infra.rs) plus the Portless state handler
+// (http_endpoints.rs), so concatenate just those three to keep checking the
+// same content.
+const serverRustSource = [
+  readFileSync(new URL("../../../server/src/server/mod.rs", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../server/src/server/http_endpoints.rs", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../server/src/server/http_infra.rs", import.meta.url), "utf8"),
+].join("\n");
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
