@@ -2177,12 +2177,23 @@ fn normalize_issue_id(input: Option<&Value>) -> Result<String, TypedOperationErr
     ))
 }
 
+/*
+CDXC:ProjectBoardCustomColumns 2026-08-21:
+Beads owns the set of valid statuses: a board can define its own through
+`bd config set status.custom`, so a fixed list here was rejecting real statuses
+before bd ever saw them and made custom board columns undraggable. Validate the
+shape only and let bd be the authority on which statuses exist — it already
+returns a clear error for a name it does not know, and args are passed to the
+process without a shell, so this is a well-formedness check, not a safety gate.
+*/
 fn normalize_beads_status(input: Option<&Value>) -> Result<String, TypedOperationError> {
     let status = normalize_required_text(input, "status")?;
-    if matches!(
-        status.as_str(),
-        "backlog" | "closed" | "in_progress" | "open" | "review" | "test"
-    ) {
+    if status.len() <= 64
+        && status.chars().enumerate().all(|(index, ch)| {
+            (index == 0 && ch.is_ascii_alphabetic())
+                || (index > 0 && (ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-')))
+        })
+    {
         Ok(status)
     } else {
         Err(TypedOperationError::bad_request(format!(

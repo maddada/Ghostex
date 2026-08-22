@@ -472,7 +472,10 @@ describe("settings modal source", () => {
   test("keeps dev-server controls in the Terminal settings flow", () => {
     /*
      * CDXC:TerminalDevServers 2026-06-23-19:22:
-     * Dev-server detection, one system-default/internal-browser launch choice, and ignored ports should live in a dedicated Terminal settings section rather than the generic Browser section or a per-browser checklist.
+     * Dev-server detection and ignored ports should live in a dedicated Terminal settings section rather than the generic Browser section or a per-browser checklist.
+     *
+     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * The launch choice moved the other way: it is now the Browser section's single web-link target, shared with terminal and session chat links.
      */
     const sectionKeys = sourceBetween(
       settingsModalSource,
@@ -491,12 +494,12 @@ describe("settings modal source", () => {
     );
 
     expect(sectionKeys).toContain("terminalDevServerDetectionEnabled");
-    expect(sectionKeys).toContain("terminalDevServerOpenTarget");
+    expect(sectionKeys).not.toContain("terminalDevServerOpenTarget");
     expect(sectionKeys).toContain("terminalDevServerIgnoredPortRules");
     expect(settingsNavigation).toContain('id: "tools"');
     expect(settingsNavigation).toContain("mainSettingsGroupSearch.tools");
     expect(settingsModalSource).toContain('"terminalDevServers"');
-    expect(devServersSection).toContain("TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS");
+    expect(devServersSection).not.toContain("WEB_LINK_OPEN_TARGET_OPTIONS");
     expect(devServersSection).not.toContain("TerminalDevServerBrowserTargetsField");
     expect(devServersSection).toContain("TerminalDevServerIgnoredPortsField");
   });

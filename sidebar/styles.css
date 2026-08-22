@@ -2947,6 +2947,24 @@ body {
   font-weight: 500;
 }
 
+/*
+ * CDXC:SettingsNavigation 2026-08-19:
+ * Section headers grouped inside a General category (Browser under Tools, Power
+ * under System) expand one level deeper than their group row. Repeat the 14px
+ * step so the nesting reads by inset alone, and keep the rule list separate so
+ * the third level can gain its own treatment without disturbing the second.
+ */
+.ghostex-settings-shadcn .settings-sidebar-nested-subsection-list {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .settings-sidebar-nested-subsection-button {
+  font-size: 0.75rem;
+  padding-left: calc(0.625rem + 28px) !important;
+}
+
 .ghostex-settings-shadcn .settings-section-anchor {
   scroll-margin-top: 1rem;
 }

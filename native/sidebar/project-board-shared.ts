@@ -7,7 +7,17 @@ import type { ProjectBoardConversationLinkView } from "../../shared/bead-convers
   Shared Beads board helpers keep display-id formatting, t-shirt estimate mapping, and filter logic consistent between the Project WKWebView surface and future Storybook coverage.
 */
 
-export type BoardStatusKey = "backlog" | "todo" | "in_progress" | "test" | "review" | "done";
+export type BoardBuiltinStatusKey = "backlog" | "todo" | "in_progress" | "test" | "review" | "done";
+
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  A board's lanes are whatever statuses bd is configured with, not a fixed six, so a bead parked in
+  a project's own status (for example needs_input) is drawn where it actually is instead of being
+  folded into Todo and read as fresh work.
+  An extra lane's key is the raw bd status name, so BoardStatusKey stays open to any string while
+  still offering the six built-in keys for completion.
+*/
+export type BoardStatusKey = BoardBuiltinStatusKey | (string & {});
 
 export type BeadsComment = {
   author?: string;
@@ -125,12 +135,14 @@ export type BeadsBridgeResponse = {
   stdout: string;
 };
 
-export const BOARD_COLUMNS: Array<{
+export type BoardColumn = {
   key: BoardStatusKey;
   label: string;
   beadsStatus: string;
   tone: string;
-}> = [
+};
+
+const BUILTIN_BOARD_COLUMNS: ReadonlyArray<BoardColumn> = [
   /*
     CDXC:ProjectBoard 2026-05-30-08:58:
     The Kanban Project view needs a Backlog swim lane positioned before Todo, persisted as the Beads custom status `backlog` so drag/drop, edit-status selects, and reloads all share the same workflow state.
@@ -143,6 +155,169 @@ export const BOARD_COLUMNS: Array<{
   { key: "review", label: "Review", beadsStatus: "review", tone: "violet" },
   { key: "done", label: "Done", beadsStatus: "closed", tone: "green" },
 ];
+
+const BUILTIN_BOARD_STATUS_NAMES = new Set(
+  BUILTIN_BOARD_COLUMNS.flatMap((column) => [column.key, column.beadsStatus]),
+);
+
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Columns are derived from the board's `status.custom` config (the same comma list ensureWorkflowStatuses reconciles, entries optionally suffixed with `:<bd category>`) rather than being a constant, so every surface that renders, drags, or edits a status works from the lanes the board actually has.
+  The six built-in lanes always come first and unchanged; each additional configured status becomes one muted lane whose key and Beads value are the raw status name, so no mapping table has to be kept in sync with a user's board.
+  Creating, renaming, and reordering columns stays a bd concern: this only draws what bd already knows.
+*/
+export function buildBoardColumns(customStatusConfig: string): BoardColumn[] {
+  const extraColumns: BoardColumn[] = [];
+  const seenNames = new Set<string>();
+  for (const entry of customStatusConfig.split(",")) {
+    const name = entry.split(":")[0].trim();
+    if (!name || BUILTIN_BOARD_STATUS_NAMES.has(name) || seenNames.has(name)) {
+      continue;
+    }
+    seenNames.add(name);
+    extraColumns.push({
+      key: name,
+      label: boardStatusNameToLabel(name),
+      beadsStatus: name,
+      tone: "muted",
+    });
+  }
+  return [...BUILTIN_BOARD_COLUMNS, ...extraColumns];
+}
+
+function boardStatusNameToLabel(name: string): string {
+  return name
+    .split(/[\s_-]+/u)
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Column management edits the same `status.custom` comma list that buildBoardColumns reads, so both directions share one parse.
+  An entry's optional `:<bd category>` suffix is bd's own concern: this module never sets one, and every write preserves whatever bd already put there, because dropping a category silently changes how bd treats that status.
+  Only entries that are not built-in lanes are manageable. The required entries (backlog, test, review) back real Ghostex lanes and are reconciled by ensureWorkflowStatuses, so offering them for rename or delete would just fight that reconciliation on the next load.
+*/
+export type BoardColumnConfigEntry = {
+  name: string;
+  suffix: string;
+};
+
+export function parseBoardColumnConfig(config: string): BoardColumnConfigEntry[] {
+  const entries: BoardColumnConfigEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of config.split(",")) {
+    const entry = raw.trim();
+    if (!entry) {
+      continue;
+    }
+    const separatorIndex = entry.indexOf(":");
+    const name = (separatorIndex === -1 ? entry : entry.slice(0, separatorIndex)).trim();
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    entries.push({ name, suffix: separatorIndex === -1 ? "" : entry.slice(separatorIndex) });
+  }
+  return entries;
+}
+
+export function serializeBoardColumnConfig(entries: ReadonlyArray<BoardColumnConfigEntry>): string {
+  return entries.map((entry) => `${entry.name}${entry.suffix}`).join(",");
+}
+
+export function isManagedBoardColumnName(name: string): boolean {
+  return !BUILTIN_BOARD_STATUS_NAMES.has(name);
+}
+
+export function managedBoardColumnNames(config: string): string[] {
+  return parseBoardColumnConfig(config)
+    .map((entry) => entry.name)
+    .filter(isManagedBoardColumnName);
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  The name rule matches what gxserver accepts for a status value, so a name that passes here can never be rejected later by the transport that has to carry it.
+*/
+export function boardColumnNameError(name: string, config: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "Enter a column name.";
+  }
+  if (trimmed.length > 64) {
+    return "Column names are limited to 64 characters.";
+  }
+  if (
+    !trimmed.split("").every((ch, index) =>
+      index === 0 ? /[A-Za-z]/u.test(ch) : /[A-Za-z0-9_-]/u.test(ch),
+    )
+  ) {
+    return "Use letters, numbers, hyphens and underscores, starting with a letter.";
+  }
+  if (!isManagedBoardColumnName(trimmed)) {
+    return `${boardStatusNameToLabel(trimmed)} is a built-in lane.`;
+  }
+  if (parseBoardColumnConfig(config).some((entry) => entry.name === trimmed)) {
+    return "That column already exists.";
+  }
+  return "";
+}
+
+export function addBoardColumn(config: string, name: string): string {
+  const entries = parseBoardColumnConfig(config);
+  entries.push({ name: name.trim(), suffix: "" });
+  return serializeBoardColumnConfig(entries);
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Renaming cannot be one config write. A bead may not hold a status the config does not list, so the
+  new name has to exist alongside the old one while the beads move across, and only then can the old
+  entry go. This builds that intermediate config, carrying the old entry's bd category onto the new
+  name — an earlier version appended the new name with no suffix and silently dropped a `:wip`
+  category off a real board, which is what this comment exists to stop happening again.
+*/
+export function beginBoardColumnRename(config: string, from: string, to: string): string {
+  const entries = parseBoardColumnConfig(config);
+  const source = entries.find((entry) => entry.name === from);
+  if (!source || !isManagedBoardColumnName(from)) {
+    return serializeBoardColumnConfig(entries);
+  }
+  entries.push({ name: to.trim(), suffix: source.suffix });
+  return serializeBoardColumnConfig(entries);
+}
+
+export function removeBoardColumn(config: string, name: string): string {
+  return serializeBoardColumnConfig(
+    parseBoardColumnConfig(config).filter(
+      (entry) => !(entry.name === name && isManagedBoardColumnName(entry.name)),
+    ),
+  );
+}
+
+/*
+  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  Reordering swaps a column with its neighbour among the managed entries only, then writes the whole list back in place.
+  Built-in entries keep their positions in the config because they are not part of the swap, which matters because the six built-in lanes always render first regardless of config order and moving them would change nothing on screen while still churning the stored value.
+*/
+export function moveBoardColumn(config: string, name: string, delta: -1 | 1): string {
+  const entries = parseBoardColumnConfig(config);
+  const managedIndexes = entries
+    .map((entry, index) => (isManagedBoardColumnName(entry.name) ? index : -1))
+    .filter((index) => index !== -1);
+  const position = managedIndexes.findIndex((index) => entries[index].name === name);
+  const target = position + delta;
+  if (position === -1 || target < 0 || target >= managedIndexes.length) {
+    return serializeBoardColumnConfig(entries);
+  }
+  const left = managedIndexes[position];
+  const right = managedIndexes[target];
+  const swapped = [...entries];
+  [swapped[left], swapped[right]] = [swapped[right], swapped[left]];
+  return serializeBoardColumnConfig(swapped);
+}
 
 export const PRIORITY_OPTIONS = [
   /*
@@ -166,6 +341,7 @@ export const TSHIRT_OPTIONS = [
 export type TshirtSize = (typeof TSHIRT_OPTIONS)[number]["label"];
 export type BoardPriorityFilter = "all" | (typeof PRIORITY_OPTIONS)[number]["value"];
 export type BoardEstimateFilter = "all" | "none" | TshirtSize;
+export type BoardTagFilter = string;
 export type BoardSortDirection = "asc" | "desc";
 export type BoardSortKey = "created" | "priority" | "updated";
 export type BoardSortOption = "default" | `${BoardSortKey}-${BoardSortDirection}`;
@@ -189,6 +365,7 @@ export type ProjectBoardViewPreferences = {
   estimateFilter: BoardEstimateFilter;
   priorityFilter: BoardPriorityFilter;
   sortOption: BoardSortOption;
+  tagFilter: BoardTagFilter;
 };
 
 /*
@@ -196,11 +373,17 @@ export type ProjectBoardViewPreferences = {
   The Kanban is its own web surface, so leaving the board tears it down and every toolbar selection dies with it. Priority, estimate, and sort are durable view settings and are restored on the next mount; ticket search stays ephemeral because a restored query would hide most of the board without an obvious cause.
   The three selections describe how the user wants to read a board rather than anything about a particular project, so one app-wide set follows them into every project instead of each board keeping its own.
   Stored values outlive the option lists that produced them, so a preference that no longer matches a current option falls back to its default instead of leaving the toolbar showing a value the board cannot filter or sort by.
+
+  CDXC:ProjectBoardTagFilter 2026-08-21:
+  Tags are the only ticket metadata the board could write but never read back, so a board of mixed work had to be scrolled rather than narrowed. The tag selection joins the other three under the same storage key and the same app-wide scope.
+  Unlike priority, estimate, and sort, the tag options are not a fixed list: they are the labels the loaded tickets actually carry, so validity is only knowable once a board has loaded. Normalisation therefore only rejects values that could never be a tag, and a stored tag that the loaded board does not offer is resolved to "all" at read time by resolveBoardTagFilter rather than being written over, so returning to the board that has the tag restores the selection.
+  The tag filter only ever includes: there is no hide-by-tag mode, because a board silently omitting cards the user never asked to hide is the failure this control exists to fix.
 */
 export const DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES: ProjectBoardViewPreferences = {
   estimateFilter: "all",
   priorityFilter: "all",
   sortOption: "default",
+  tagFilter: "all",
 };
 
 export const PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY = "ghostex-project-board-view";
@@ -222,29 +405,29 @@ const PROJECT_BOARD_COMMENT_METADATA_SEPARATOR = "---";
 const PROJECT_BOARD_COMMENT_AGENT_PREFIX = "Agent:";
 const PROJECT_BOARD_COMMENT_SESSION_PREFIX = "Session:";
 
-export function beadsStatusToBoardStatus(status: string): BoardStatusKey {
-  switch (status) {
-    case "backlog":
-      return "backlog";
-    case "closed":
-      return "done";
-    case "in_progress":
-      return "in_progress";
-    case "review":
-      return "review";
-    case "test":
-      return "test";
-    default:
-      return "todo";
-  }
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Status resolution reads the caller's column list instead of a fixed table so a bead sitting in one of the board's own statuses lands in that lane. Todo remains the home for a status with no lane at all — a bead whose status was removed from the board config still has to be visible somewhere.
+*/
+export function beadsStatusToBoardStatus(
+  status: string,
+  columns: ReadonlyArray<BoardColumn>,
+): BoardStatusKey {
+  return columns.find((column) => column.beadsStatus === status)?.key ?? "todo";
 }
 
-export function boardStatusLabel(status: BoardStatusKey): string {
-  return BOARD_COLUMNS.find((column) => column.key === status)?.label ?? "Todo";
+export function boardStatusLabel(
+  status: BoardStatusKey,
+  columns: ReadonlyArray<BoardColumn>,
+): string {
+  return columns.find((column) => column.key === status)?.label ?? "Todo";
 }
 
-export function boardStatusBeadsValue(status: BoardStatusKey): string {
-  return BOARD_COLUMNS.find((column) => column.key === status)?.beadsStatus ?? "open";
+export function boardStatusBeadsValue(
+  status: BoardStatusKey,
+  columns: ReadonlyArray<BoardColumn>,
+): string {
+  return columns.find((column) => column.key === status)?.beadsStatus ?? "open";
 }
 
 export function normalizeIssuePrefix(value: string | undefined): string {
@@ -319,13 +502,14 @@ export function formatTicketDisplayId(
 export function toBoardTickets(
   issues: BeadsIssue[],
   displayKey: string,
+  columns: ReadonlyArray<BoardColumn>,
 ): BoardTicket[] {
   const serialByIssueId = buildDisplayIdMap(issues);
   return issues
     .filter((issue) => issue && typeof issue.id === "string")
     .map((issue) => ({
       ...issue,
-      boardStatus: beadsStatusToBoardStatus(issue.status),
+      boardStatus: beadsStatusToBoardStatus(issue.status, columns),
       displayId: formatTicketDisplayId(issue, displayKey, serialByIssueId),
     }));
 }
@@ -622,6 +806,10 @@ export function normalizeProjectBoardViewPreferences(
       BOARD_SORT_OPTION_VALUES,
       DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.sortOption,
     ),
+    tagFilter:
+      typeof stored.tagFilter === "string" && stored.tagFilter.trim().length > 0
+        ? stored.tagFilter
+        : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter,
   };
 }
 
@@ -633,11 +821,23 @@ function normalizeBoardViewPreference<TValue extends string>(
   return allowedValues.includes(candidate as TValue) ? (candidate as TValue) : fallback;
 }
 
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Status reads return the board's full list, extra statuses included, for buildBoardColumns.
+  Background refreshes use this read-only helper so polling cannot overwrite a concurrent config edit;
+  initial and manual loads call ensureWorkflowStatuses to reconcile Ghostex's required lanes.
+*/
+export async function readWorkflowStatuses(
+  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
+): Promise<string> {
+  const payload = await runBeads({ action: "configGet" });
+  return normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+}
+
 export async function ensureWorkflowStatuses(
   runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
-): Promise<void> {
-  const payload = await runBeads({ action: "configGet" });
-  const currentValue = normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+): Promise<string> {
+  const currentValue = await readWorkflowStatuses(runBeads);
   const requiredEntries = REQUIRED_CUSTOM_STATUS_CONFIG.split(",");
   const requiredNames = new Set(requiredEntries.map((entry) => entry.split(":")[0]));
   const currentEntries = currentValue
@@ -659,6 +859,28 @@ export async function ensureWorkflowStatuses(
   if (nextValue !== currentValue) {
     await runBeads({ action: "configSet", value: nextValue });
   }
+  return nextValue;
+}
+
+/*
+  CDXC:ProjectBoardTagFilter 2026-08-21:
+  The tag dropdown offers the labels the loaded tickets actually carry rather than every label the project has ever defined, so selecting one can never produce an empty board and the list shrinks as retired tags stop being used.
+*/
+export function boardTagFilterOptions(tickets: BoardTicket[]): BoardTagFilter[] {
+  const tags = new Set<string>();
+  for (const ticket of tickets) {
+    for (const label of ticket.labels ?? []) {
+      tags.add(label);
+    }
+  }
+  return ["all", ...Array.from(tags).sort((left, right) => left.localeCompare(right))];
+}
+
+export function resolveBoardTagFilter(
+  tagFilter: BoardTagFilter,
+  options: ReadonlyArray<BoardTagFilter>,
+): BoardTagFilter {
+  return options.includes(tagFilter) ? tagFilter : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter;
 }
 
 export function filterBoardTickets(
@@ -666,6 +888,7 @@ export function filterBoardTickets(
   query: string,
   priorityFilter: BoardPriorityFilter,
   estimateFilter: BoardEstimateFilter,
+  tagFilter: BoardTagFilter,
 ): BoardTicket[] {
   const normalizedQuery = query.trim();
   /*
@@ -684,6 +907,10 @@ export function filterBoardTickets(
           const ticketEstimate = estimateToTshirt(ticket.estimate);
           return estimateFilter === "none" ? ticketEstimate === undefined : ticketEstimate === estimateFilter;
         });
+  filtered =
+    tagFilter === "all"
+      ? filtered
+      : filtered.filter((ticket) => ticket.labels?.includes(tagFilter) ?? false);
   if (!normalizedQuery) {
     return filtered;
   }

@@ -1,11 +1,21 @@
 import { describe, expect, test } from "vitest";
 import {
   appendImageMarkdownToDescription,
-  BOARD_COLUMNS,
   BOARD_SORT_OPTIONS,
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
+  boardStatusLabel,
+  addBoardColumn,
+  boardColumnNameError,
+  boardTagFilterOptions,
   buildAgentWorkPrompt,
+  buildBoardColumns,
+  managedBoardColumnNames,
+  moveBoardColumn,
+  parseBoardColumnConfig,
+  removeBoardColumn,
+  beginBoardColumnRename,
+  serializeBoardColumnConfig,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   extractDescriptionImagePreviews,
   extractDescriptionImageReferences,
@@ -20,6 +30,7 @@ import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
+  resolveBoardTagFilter,
   sortBoardTickets,
   ticketCreatorName,
   type BoardTicket,
@@ -115,6 +126,7 @@ describe("project board filters", () => {
       displayId: "ZMX-1",
       estimate: 15,
       id: "urgent-xs",
+      labels: ["docs", "needs:review"],
       priority: 0,
       status: "open",
       title: "Urgent XS task",
@@ -124,6 +136,7 @@ describe("project board filters", () => {
       displayId: "ZMX-2",
       estimate: null,
       id: "medium-none",
+      labels: ["backend", "docs"],
       priority: 2,
       status: "in_progress",
       title: "Medium unestimated task",
@@ -140,15 +153,57 @@ describe("project board filters", () => {
   ];
 
   test("filters by normalized priority and estimate without changing lane status", () => {
-    expect(filterBoardTickets(tickets, "", "3", "all").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "3", "all", "all").map((ticket) => ticket.id)).toEqual([
       "legacy-low",
     ]);
-    expect(filterBoardTickets(tickets, "", "all", "none").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "all", "none", "all").map((ticket) => ticket.id)).toEqual([
       "medium-none",
     ]);
-    expect(filterBoardTickets(tickets, "", "0", "XS").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "0", "XS", "all").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
     ]);
+  });
+
+  test("filters by tag alongside the other toolbar selections", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * The tag control only ever includes, so a selected tag narrows the board to the tickets that
+     * carry it and stacks with priority and estimate instead of replacing them. Tickets with no
+     * labels are simply not in that set rather than being treated as a selectable state of their
+     * own, because an untagged bead is untriaged rather than a kind of work.
+     */
+    expect(filterBoardTickets(tickets, "", "all", "all", "docs").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+      "medium-none",
+    ]);
+    expect(filterBoardTickets(tickets, "", "all", "all", "backend").map((ticket) => ticket.id)).toEqual([
+      "medium-none",
+    ]);
+    expect(filterBoardTickets(tickets, "", "0", "all", "docs").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+    ]);
+    expect(filterBoardTickets(tickets, "", "0", "all", "backend")).toEqual([]);
+    expect(filterBoardTickets(tickets, "", "all", "all", "all").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+      "medium-none",
+      "legacy-low",
+    ]);
+  });
+
+  test("offers the loaded tickets' own labels, sorted, with all first", () => {
+    expect(boardTagFilterOptions(tickets)).toEqual(["all", "backend", "docs", "needs:review"]);
+    expect(boardTagFilterOptions([])).toEqual(["all"]);
+  });
+
+  test("resolves a tag the loaded board does not offer back to all", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * A stored tag outlives the board that produced it, so opening a project that never used it
+     * must show the whole board rather than an empty one under a tag nothing carries.
+     */
+    expect(resolveBoardTagFilter("frontend", boardTagFilterOptions(tickets))).toBe("all");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions(tickets))).toBe("docs");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions([]))).toBe("all");
   });
 });
 
@@ -428,8 +483,10 @@ describe("project board comment metadata", () => {
 });
 
 describe("project board statuses", () => {
+  const builtinColumns = buildBoardColumns("");
+
   test("places Backlog before Todo and persists it as a Beads custom status", () => {
-    expect(BOARD_COLUMNS.map((column) => column.key)).toEqual([
+    expect(builtinColumns.map((column) => column.key)).toEqual([
       "backlog",
       "todo",
       "in_progress",
@@ -437,8 +494,42 @@ describe("project board statuses", () => {
       "review",
       "done",
     ]);
-    expect(beadsStatusToBoardStatus("backlog")).toBe("backlog");
-    expect(boardStatusBeadsValue("backlog")).toBe("backlog");
+    expect(beadsStatusToBoardStatus("backlog", builtinColumns)).toBe("backlog");
+    expect(boardStatusBeadsValue("backlog", builtinColumns)).toBe("backlog");
+  });
+
+  test("adds the board's own extra statuses as columns after the built-in lanes", () => {
+    const columns = buildBoardColumns("backlog,review,test,needs_input:wip");
+
+    expect(columns.map((column) => column.key)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "test",
+      "review",
+      "done",
+      "needs_input",
+    ]);
+    expect(columns[columns.length - 1]).toEqual({
+      key: "needs_input",
+      label: "Needs Input",
+      beadsStatus: "needs_input",
+      tone: "muted",
+    });
+  });
+
+  test("shows a bead parked in an extra status in that status's own lane", () => {
+    const columns = buildBoardColumns("backlog,review,test,needs_input:wip");
+
+    expect(beadsStatusToBoardStatus("needs_input", columns)).toBe("needs_input");
+    expect(boardStatusLabel("needs_input", columns)).toBe("Needs Input");
+    expect(boardStatusBeadsValue("needs_input", columns)).toBe("needs_input");
+  });
+
+  test("keeps a bead whose status has no lane visible in Todo", () => {
+    expect(beadsStatusToBoardStatus("needs_input", builtinColumns)).toBe("todo");
+    expect(boardStatusLabel("needs_input", builtinColumns)).toBe("Todo");
+    expect(boardStatusBeadsValue("needs_input", builtinColumns)).toBe("open");
   });
 });
 
@@ -452,17 +543,19 @@ describe("project board view preferences", () => {
     expect(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY).toBe("ghostex-project-board-view");
   });
 
-  test("restores stored priority, estimate, and sort selections", () => {
+  test("restores stored priority, estimate, sort, and tag selections", () => {
     expect(
       normalizeProjectBoardViewPreferences({
         estimateFilter: "M",
         priorityFilter: "1",
         sortOption: "created-asc",
+        tagFilter: "docs",
       }),
     ).toEqual({
       estimateFilter: "M",
       priorityFilter: "1",
       sortOption: "created-asc",
+      tagFilter: "docs",
     });
     expect(normalizeProjectBoardViewPreferences({ estimateFilter: "none" }).estimateFilter).toBe(
       "none",
@@ -484,8 +577,26 @@ describe("project board view preferences", () => {
         estimateFilter: "XXL",
         priorityFilter: 1,
         sortOption: "closed-desc",
+        tagFilter: 7,
       }),
     ).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+  });
+
+  test("keeps a stored tag the current board may no longer offer", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * Tag options are the labels the loaded tickets carry, so nothing at storage-read time can say
+     * whether a tag is still real. Normalisation therefore rejects only values that could never be
+     * a tag and leaves a stale-looking one intact, so a board that still has it restores the
+     * selection instead of the first tagless project erasing it. resolveBoardTagFilter is what
+     * lands an unavailable tag on "all" once a board has actually loaded.
+     */
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "docs" }).tagFilter).toBe("docs");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "retired-lane-tag" }).tagFilter).toBe(
+      "retired-lane-tag",
+    );
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "   " }).tagFilter).toBe("all");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: ["docs"] }).tagFilter).toBe("all");
   });
 
   test("keeps every offered toolbar option restorable", () => {
@@ -636,5 +747,97 @@ describe("project board assigned agent resolution", () => {
         { agentId: "custom-mf1k2j-77c1aa", label: "codex" },
       ]),
     ).toBe("codex");
+  });
+});
+
+describe("board column management", () => {
+  const config = "backlog,test,review,needs_input:wip,parked";
+
+  test("parses entries and keeps each bd category suffix", () => {
+    expect(parseBoardColumnConfig(config)).toEqual([
+      { name: "backlog", suffix: "" },
+      { name: "test", suffix: "" },
+      { name: "review", suffix: "" },
+      { name: "needs_input", suffix: ":wip" },
+      { name: "parked", suffix: "" },
+    ]);
+    expect(serializeBoardColumnConfig(parseBoardColumnConfig(config))).toBe(config);
+  });
+
+  test("ignores blanks and duplicate names", () => {
+    expect(parseBoardColumnConfig(" a , ,a, b ")).toEqual([
+      { name: "a", suffix: "" },
+      { name: "b", suffix: "" },
+    ]);
+  });
+
+  test("only non built-in statuses are manageable", () => {
+    expect(managedBoardColumnNames(config)).toEqual(["needs_input", "parked"]);
+  });
+
+  test("adds a column at the end", () => {
+    expect(addBoardColumn(config, " blocked ")).toBe(`${config},blocked`);
+  });
+
+  test("renaming keeps both names live and carries the category onto the new one", () => {
+    // the old entry must survive this step: a bead may not hold a status the config does not list
+    expect(beginBoardColumnRename(config, "needs_input", "waiting")).toBe(
+      "backlog,test,review,needs_input:wip,parked,waiting:wip",
+    );
+  });
+
+  test("renaming refuses to touch a built-in entry", () => {
+    expect(beginBoardColumnRename(config, "review", "nope")).toBe(config);
+  });
+
+  test("renaming an absent column changes nothing", () => {
+    expect(beginBoardColumnRename(config, "ghost", "nope")).toBe(config);
+  });
+
+  test("the finished rename drops the old entry and keeps the category", () => {
+    const both = beginBoardColumnRename(config, "needs_input", "waiting");
+    expect(removeBoardColumn(both, "needs_input")).toBe("backlog,test,review,parked,waiting:wip");
+  });
+
+  test("removing drops only the named managed entry", () => {
+    expect(removeBoardColumn(config, "needs_input")).toBe("backlog,test,review,parked");
+    expect(removeBoardColumn(config, "backlog")).toBe(config);
+  });
+
+  test("reordering swaps managed columns without disturbing built-ins", () => {
+    expect(moveBoardColumn(config, "parked", -1)).toBe("backlog,test,review,parked,needs_input:wip");
+    expect(moveBoardColumn(config, "needs_input", 1)).toBe("backlog,test,review,parked,needs_input:wip");
+  });
+
+  test("reordering past either end is a no-op", () => {
+    expect(moveBoardColumn(config, "needs_input", -1)).toBe(config);
+    expect(moveBoardColumn(config, "parked", 1)).toBe(config);
+    expect(moveBoardColumn(config, "absent", -1)).toBe(config);
+  });
+
+  test("name validation covers empty, shape, built-ins and duplicates", () => {
+    expect(boardColumnNameError("", config)).toBe("Enter a column name.");
+    expect(boardColumnNameError("9lives", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("has space", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("with:colon", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("review", config)).toContain("built-in lane");
+    expect(boardColumnNameError("parked", config)).toBe("That column already exists.");
+    expect(boardColumnNameError("a".repeat(65), config)).toContain("64 characters");
+    expect(boardColumnNameError("waiting_on_ci", config)).toBe("");
+  });
+
+  test("a new column becomes a real lane", () => {
+    const next = addBoardColumn(config, "waiting");
+    expect(buildBoardColumns(next).map((column) => column.key)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "test",
+      "review",
+      "done",
+      "needs_input",
+      "parked",
+      "waiting",
+    ]);
   });
 });
