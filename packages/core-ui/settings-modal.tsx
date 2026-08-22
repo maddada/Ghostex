@@ -3,11 +3,9 @@ import {
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
   type UIEvent as ReactUIEvent,
 } from "react";
 import { cn } from "@/packages/components/utils";
@@ -49,24 +47,12 @@ import {
 } from "./settings-modal-tabs";
 import {
   IconAlertTriangle,
-  IconCashEdit,
   IconChevronDown,
   IconChevronRight,
-  IconCloud,
-  IconCodeDots,
-  IconDeviceDesktop,
-  IconExternalLink,
   IconFolderOpen,
   IconInfoCircle,
-  IconKeyboard,
-  IconPlayerPlay,
-  IconSettings,
-  IconTools,
 } from "@tabler/icons-react";
-import {
-  COMPLETION_SOUND_OPTIONS,
-  type CompletionSoundSetting,
-} from "../shared/completion-sound";
+import { type CompletionSoundSetting } from "../shared/completion-sound";
 import { GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES } from "../shared/ghostty-config-actions";
 import {
   resolveSidebarTheme,
@@ -89,13 +75,11 @@ import {
   MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   MAX_TERMINAL_PANE_PADDING_PX,
   MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-  DIAGNOSTIC_LOGGING_SCENARIOS,
   GHOSTTY_CONFIRM_CLOSE_SURFACE_OPTIONS,
   GHOSTTY_COPY_ON_SELECT_OPTIONS,
   GHOSTTY_SCROLLBAR_OPTIONS,
   GHOSTTY_THEME_SETTING_OPTIONS,
   KEEP_AWAKE_DURATION_OPTIONS,
-  PREFERRED_AGENT_INTERFACE_OPTIONS,
   MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
   MIN_TERMINAL_PANE_PADDING_PX,
   MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
@@ -104,16 +88,10 @@ import {
   WINDOWS_TERMINAL_BACKEND_OPTIONS,
   type PromptEditorBackend,
   SESSION_PERSISTENCE_PROVIDER_OPTIONS,
-  SESSION_CHAT_THEME_OPTIONS,
   SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
-  SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
-  SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SIDE_OPTIONS,
-  SIDEBAR_VERSION_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
-  applySidebarSettingsPreset,
   areDiagnosticLoggingSettingsEqual,
-  getSidebarSettingsPresetId,
   COMMANDS_PANEL_SIDE_OPTIONS,
   MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
   MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
@@ -125,17 +103,14 @@ import {
   SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP,
   normalizeghostexSettings,
   parseSidebarAutoSettleAfterDaysSelectValue,
-  setDiagnosticLoggingScenario,
   sidebarAutoSettleAfterDaysSelectValue,
   type AutoSleepIdleMinutes,
-  type DiagnosticLoggingScenarioId,
   type GhosttyConfirmCloseSurface,
   type GhosttyCopyOnSelect,
   type GhosttyScrollbar,
   type KeepAwakeDurationMinutes,
   type SessionPersistenceProvider,
   type SettingsModalNavigationState,
-  type SidebarSettingsPresetId,
   type CommandsPanelSide,
   type SidebarSide,
   type TerminalBackgroundImageFit,
@@ -147,19 +122,13 @@ import {
 } from "../shared/ghostex-settings";
 import { type BundledGhostexAgentSkillId } from "../shared/ghostex-agent-skills";
 import {
-  FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS,
-  isFirstLaunchSetupMainSettingVisible,
   type FirstLaunchSetupMainSettingKey,
 } from "../shared/first-launch-setup-settings";
-import { GHOSTEX_HOTKEY_DEFINITIONS } from "../shared/ghostex-hotkeys";
 import {
   PET_CONTROLS_VISIBLE,
-  PET_OPTIONS,
 } from "../shared/pets";
 import {
   areSidebarSessionTagListItemsEqual,
-  DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
-  getSidebarSessionTagListItemLabel,
 } from "../shared/session-tags";
 import { type WebviewApi } from "./webview-api";
 import {
@@ -188,27 +157,16 @@ import {
   TextField,
   ToggleField,
   WebColorPickerField,
-  getDiagnosticLoggingScenarioStateForDuration,
 } from "./settings-modal/fields";
 import {
-  areSettingsModalNavigationStatesEqual,
-  getRememberedSettingsModalNavigationState,
   getRememberedSettingsModalScrollTop,
   getRememberedSettingsModalTab,
   rememberSettingsModalScrollTop,
   rememberSettingsModalTab,
 } from "./settings-modal/navigation-memory";
 import {
-  SearchableExtraSettingsTabId,
-  getExtraSettingsTabSearches,
-  getGroupedSettingsSectionSearch,
-  getHotkeySettingsSectionSearches,
   getMostlyVisibleSettingsSectionId,
-  getSettingsSectionSearch,
   isAdvancedMainSetting,
-  settingsTabSearchHasMatches,
-  shouldShowSetting,
-  shouldShowSettingsSection,
 } from "./settings-modal/search";
 import { AboutSettingsTab } from "./settings-modal/tabs/about";
 import { ActionsSettingsTab } from "./settings-modal/tabs/actions";
@@ -221,41 +179,39 @@ import { PluginsSettingsTab } from "./settings-modal/tabs/plugins";
 import { ProjectsSettingsPanel } from "./settings-modal/tabs/projects";
 import { RemoteSettingsTab } from "./settings-modal/tabs/remote";
 import {
-  DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET,
-  DiagnosticLoggingDurationValue,
-  HOTKEY_SETTINGS_SECTIONS,
-  HotkeySettingsDefinitionById,
   HotkeySettingsSectionId,
-  HotkeySettingsSectionRefs,
-  HotkeySettingsSectionSearches,
-  MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS,
-  MAIN_SETTINGS_SECTION_SETTING_KEYS,
-  MAIN_SETTINGS_SUBSECTION_NAVIGATION,
   MainSettingsScrollTargetId,
-  MainSettingsSectionId,
   MainSettingsSectionRefs,
-  MainSettingsSubsectionNavigationItem,
   RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL,
   RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_SUBTITLE,
-  SettingModificationProps,
-  SettingsSectionMeasurementItem,
-  SettingsSectionNavigationItem,
-  SettingsSectionSearchResult,
   SettingsSidebarPage,
-  getMainSettingsSectionGroupId,
 } from "./settings-modal/types";
+import {
+  IS_WINDOWS_HOST,
+  PASTE_PREVIEWABLE_IMAGES_DESCRIPTION,
+  getMainSettingsGroupSearch,
+  getMainSettingsSectionNavigation,
+  getSettingsSearchSections,
+} from "./settings-modal/search-catalog";
+import {
+  createMainSettingsVisibility,
+  createVisibleMainSettingsNavigation,
+} from "./settings-modal/main-settings-visibility";
+import { useHotkeySettings } from "./settings-modal/use-hotkey-settings";
+import { createSettingsSidebarPages } from "./settings-modal/sidebar-pages";
+import { useSettingsModalEffects } from "./settings-modal/use-settings-modal-effects";
+import { createSettingsPersistence } from "./settings-modal/settings-persistence";
+import { useAppIconSettings } from "./settings-modal/use-app-icon-settings";
+import {
+  createSettingsActions,
+  type GhosttySettingsAction,
+} from "./settings-modal/settings-actions";
+import { getActiveSettingsModalScrollViewport } from "./settings-modal/scroll-targets";
 
 export type { SettingsModalTab } from "./settings-modal-tabs";
 
 
-const IS_WINDOWS_HOST =
-  typeof navigator !== "undefined" && /Windows/iu.test(navigator.userAgent);
-const NUMERIC_SETTINGS_DEBOUNCE_MS = 180;
-const SETTINGS_MODAL_NAVIGATION_SCROLL_DEBOUNCE_MS = 220;
 const GHOSTTY_THEME_UNMANAGED_VALUE = "__ghostex_ghostty_theme_unmanaged__";
-
-const PASTE_PREVIEWABLE_IMAGES_DESCRIPTION =
-  "Paste clipboard images as previewable Markdown links with Cmd+V or Ctrl+V. Hold Cmd over the linked path to preview it in the terminal, and see the same image preview in the Ctrl+G Rich Prompt Editor.";
 
 
 export type MainSettingsInitialSectionId = MainSettingsScrollTargetId;
@@ -307,39 +263,7 @@ function isEditableSettingsModalElement(element: Element | null): boolean {
   return Boolean(element.closest("input, textarea, select, [contenteditable='true']"));
 }
 
-function getActiveSettingsModalScrollViewport(dialogElement: HTMLElement | null): HTMLElement | null {
-  return (
-    dialogElement
-      ?.querySelector<HTMLElement>("[role='tabpanel'][data-state='active']")
-      ?.querySelector<HTMLElement>("[data-slot='scroll-area-viewport']") ?? null
-  );
-}
-
-function getMainSettingsSectionRef(
-  sectionId: MainSettingsScrollTargetId,
-  refs: MainSettingsSectionRefs,
-): RefObject<HTMLDivElement | null> {
-  return refs[sectionId];
-}
-
-
-function createNormalizedSettingsPatch(
-  normalizedSettings: ghostexSettings,
-  patch: ghostexSettingsPatch,
-): ghostexSettingsPatch {
-  return Object.fromEntries(
-    (Object.keys(patch) as Array<keyof ghostexSettings>).map((key) => [
-      key,
-      normalizedSettings[key],
-    ]),
-  ) as ghostexSettingsPatch;
-}
-
-export type GhosttySettingsAction =
-  | "applyRecommendedGhosttySettings"
-  | "openGhosttyConfigFile"
-  | "openGhosttySettingsDocs"
-  | "resetGhosttySettingsToDefault";
+export type { GhosttySettingsAction };
 
 export type SettingsModalPresentation = "default" | "firstLaunchSetup";
 
@@ -812,993 +736,20 @@ export function SettingsModal({
     }
   }, [activeTab, ghostexCliStatus, ghostexCliStatusLoading, isOpen, onRequestGhostexCliStatus]);
 
-  /**
-   * CDXC:SettingsSearch 2026-05-04-02:30
-   * Settings search must be fuzzy and cover section titles, setting subtitles,
-   * and selectable option text so users can find controls by the value they
-   * want to choose, not only by the visible setting label.
-   */
-  const settingsSearch = {
-    // CDXC:AppIconPicker 2026-06-25-21:50: Make the App Icon section findable by Settings search.
-    appIcon: getSettingsSectionSearch(settingsSearchQuery, "App Icon", [
-      {
-        key: "appIconSourceId",
-        subtitle:
-          "Choose the macOS Dock and app-switcher icon. The app file icon may also change when macOS allows it.",
-        title: "App Icon",
-      },
-    ]),
-    builtInFeatures: getSettingsSectionSearch(
+  const settingsSearch = getSettingsSearchSections(settingsSearchQuery, draft);
+  const mainSettingsGroupSearch = getMainSettingsGroupSearch(settingsSearchQuery, settingsSearch);
+  const mainSettingsSectionNavigation = getMainSettingsSectionNavigation(mainSettingsGroupSearch);
+  const { debuggingSettingVisible, mainSectionVisible, mainSettingVisible, mainSubsectionVisible } =
+    createMainSettingsVisibility({
+      appIconPickerUnavailable,
+      draft,
+      firstLaunchSetupVisibleSettings,
+      isFirstLaunchSetup,
+      mainSettingsGroupSearch,
+      settingsSearch,
       settingsSearchQuery,
-      "Built-in feature switches",
-      [
-        {
-          key: "codeViewTabHidden",
-          subtitle: "Show or hide Code in the title bar without disabling its runtime.",
-          title: "Code",
-        },
-        {
-          key: "kanbanViewTabHidden",
-          subtitle: "Show or hide Kanban in the title bar without disabling its runtime.",
-          title: "Kanban",
-        },
-        {
-          key: "automateViewTabHidden",
-          subtitle: "Show or hide Automate in the title bar without disabling its runtime.",
-          title: "Automate",
-        },
-        {
-          key: "docsViewTabHidden",
-          subtitle: "Show or hide Docs in the title bar without disabling its runtime.",
-          title: "Docs",
-        },
-      ],
-    ),
-    browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", [
-      {
-        key: "webLinkOpenTarget",
-        options: WEB_LINK_OPEN_TARGET_OPTIONS,
-        subtitle:
-          "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
-        title: "Open links in",
-      },
-    ]),
-    editor: getSettingsSectionSearch(settingsSearchQuery, "Editor", [
-      {
-        key: "codeServerLinkVscodeUserConfig",
-        subtitle: "Use the VS Code settings from the local VS Code install.",
-        title: "Use VS Code settings",
-      },
-      {
-        key: "codeServerUseVscodeInsidersUserConfig",
-        subtitle: "Use the VS Code Insiders user settings directory.",
-        title: "Use VS Code Insiders settings",
-      },
-      {
-        key: "showUntrackedProjectDiffWhenNoTrackedChanges",
-        subtitle:
-          "When tracked git diff is +0 -0, show untracked line counts in project headers (Starship-style prompts ignore untracked lines).",
-        title: "Show untracked lines without tracked changes",
-      },
-    ]),
-    autoSleep: getSettingsSectionSearch(settingsSearchQuery, "Auto Sleep", [
-      {
-        key: "autoSleepCodeEditorEnabled",
-        subtitle: "Sleep inactive VS Code panes after the selected idle period.",
-        title: "Sleep inactive VS Code panes",
-      },
-      {
-        key: "autoSleepCodeEditorIdleMinutes",
-        options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Idle time before inactive VS Code panes sleep.",
-        title: "VS Code idle time",
-      },
-      {
-        key: "autoSleepGitEditorEnabled",
-        subtitle: "Sleep inactive Git panes after the selected idle period.",
-        title: "Sleep inactive Git panes",
-      },
-      {
-        key: "autoSleepGitEditorIdleMinutes",
-        options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Idle time before inactive Git panes sleep.",
-        title: "Git idle time",
-      },
-      {
-        key: "autoSleepProjectEditorEnabled",
-        subtitle: "Sleep inactive Project panes after the selected idle period.",
-        title: "Sleep inactive Project panes",
-      },
-      {
-        key: "autoSleepProjectEditorIdleMinutes",
-        options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Idle time before inactive Project panes sleep.",
-        title: "Project idle time",
-      },
-      {
-        key: "autoSleepBrowserSessionsEnabled",
-        subtitle: "Sleep inactive browser panes after the selected idle period.",
-        title: "Sleep inactive browser panes",
-      },
-      {
-        key: "autoSleepBrowserIdleMinutes",
-        options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Idle time before inactive browser panes sleep.",
-        title: "Browser idle time",
-      },
-      {
-        key: "autoSleepAgentSessionsEnabled",
-        subtitle: "Sleep idle agent terminal sessions automatically.",
-        title: "Sleep idle agent sessions",
-      },
-      {
-        key: "autoSleepAgentIdleMinutes",
-        options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Idle time before eligible agent terminals sleep.",
-        title: "Agent idle time",
-      },
-      {
-        key: "autoSleepRequireAgentResumeCommand",
-        subtitle: "Only auto-sleep agent sessions Ghostex can wake with a resume command.",
-        title: "Require resume command",
-      },
-      {
-        key: "autoSleepFavoriteAgentSessions",
-        subtitle: "Allow favorite agent sessions to auto-sleep.",
-        title: "Include favorite agents",
-      },
-    ]),
-    power: getSettingsSectionSearch(settingsSearchQuery, "Power", [
-      {
-        key: "hideKeepAwakeTitlebarControl",
-        subtitle: "Hide the keep-awake control from the title bar.",
-        title: "Hide title-bar keep-awake control",
-      },
-      {
-        key: "keepAwakeDefaultDurationMinutes",
-        options: KEEP_AWAKE_DURATION_OPTIONS.map((option) => ({
-          label: option.label,
-          value: String(option.value),
-        })),
-        subtitle: "Choose the duration used by the title-bar keep-awake button.",
-        title: "Default keep-awake duration",
-      },
-      {
-        key: "keepAwakeAllowDisplaySleep",
-        subtitle: "Keep the Mac awake but allow the display to turn off.",
-        title: "Allow display sleep",
-      },
-      {
-        key: "keepAwakePreventLidSleep",
-        subtitle:
-          "Optional. When Keep Awake is on, Ghostex can install a small privileged helper once so closing the lid stays awake only for that active keep-awake session.",
-        title: "Prevent lid-close sleep",
-      },
-      {
-        key: "keepAwakeActivateOnLaunch",
-        subtitle: "Start preventing sleep when Ghostex launches.",
-        title: "Activate on launch",
-      },
-      {
-        key: "keepAwakeActivateOnExternalDisplay",
-        subtitle: "Start preventing sleep when an external display is connected.",
-        title: "Activate on external display",
-      },
-      {
-        key: "keepAwakeWhileWorkingSessions",
-        subtitle: "Keep the Mac awake while sessions are working and for 20 minutes after.",
-        title: "Keep awake for working sessions",
-      },
-      {
-        key: "keepAwakeDeactivateBelowBatteryThreshold",
-        subtitle: "Stop preventing sleep when battery capacity drops below the threshold.",
-        title: "Deactivate below battery threshold",
-      },
-      {
-        key: "keepAwakeBatteryThresholdPercent",
-        subtitle: "Battery percentage used by the threshold rule.",
-        title: "Battery threshold",
-      },
-      {
-        key: "keepAwakeDeactivateOnLowPowerMode",
-        subtitle: "Stop preventing sleep when macOS Low Power Mode is enabled.",
-        title: "Deactivate in Low Power Mode",
-      },
-      {
-        key: "keepAwakeDeactivateOnUserSwitch",
-        subtitle: "Stop preventing sleep when this user session is no longer active.",
-        title: "Deactivate on user switch",
-      },
-    ]),
-    sessionCards: getSettingsSectionSearch(settingsSearchQuery, "Session Cards", [
-      {
-        key: "useColoredSessionAgentIcons",
-        subtitle: "Render session and selected-agent logos with colored brand artwork instead of monochrome masks.",
-        title: "Use colored agent icons",
-      },
-      /*
-       * CDXC:SidebarSessions 2026-05-15-19:46:
-       * Settings must not expose the card-hotkey visibility row; session-card shortcut visibility is no longer configurable from the modal.
-       */
-      {
-        key: "showSessionCloseContextMenuAction",
-        subtitle: "Show the Close item in session context menus.",
-        title: "Show Close option in context menu",
-      },
-    ]),
-    statusIndicators: getSettingsSectionSearch(
-      settingsSearchQuery,
-      "Status Indicators",
-      PET_CONTROLS_VISIBLE
-        ? [
-            /*
-             * CDXC:StatusIndicators 2026-05-20-12:00:
-             * Status Indicators groups session presence surfaces that communicate
-             * status at a glance.
-             *
-             * CDXC:StatusIndicators 2026-06-27-20:11:
-             * The removed floating session badge and its size selector must not
-             * appear in macOS or GPUI Settings.
-             *
-             * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
-             * The menu bar session indicator now lives under Sidebar because sidebar
-             * presets mutate it.
-             */
-            {
-              key: "petOverlayEnabled",
-              subtitle: "Show the draggable animated pet in the native sidebar.",
-              title: "Wake Pet",
-            },
-            {
-              key: "selectedPetId",
-              options: PET_OPTIONS.map((option) => ({
-                label: option.displayName,
-                value: option.id,
-              })),
-              subtitle: "Choose the pet sprite.",
-              title: "Pet",
-            },
-          ]
-        : [],
-    ),
-    sidebar: getSettingsSectionSearch(settingsSearchQuery, "Sidebar", [
-      /*
-       * CDXC:SidebarV2 2026-07-29:
-       * Sidebar version must be findable by searching for the new Inbox
-       * sidebar, its Classic alternative, or the Group by Project sub-mode.
-       */
-      {
-        key: "sidebarVersion",
-        options: SIDEBAR_VERSION_OPTIONS,
-        subtitle:
-          "Choose the classic sidebar or the new Inbox sidebar, a flat list of sessions across all projects.",
-        title: "Sidebar version",
-      },
-      {
-        key: "sidebarV2Layout",
-        subtitle: "Group Inbox sidebar sessions into collapsible project groups.",
-        title: "Group by project",
-      },
-      /*
-       * CDXC:SidebarV2Lifecycle 2026-07-29:
-       * Auto-settle must be findable by searching for "settle", "snooze", or
-       * "inactive", because the visible symptom is a session leaving the inbox.
-       */
-      {
-        key: "sidebarAutoSettleAfterDays",
-        options: SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
-        subtitle:
-          "Move inactive Inbox sidebar sessions to the Settled shelf after this many days. Working and blocked sessions never settle.",
-        title: "Auto-settle inactive sessions",
-      },
-      {
-        key: "sidebarSettingsPreset",
-        options: [
-          ...SIDEBAR_SETTINGS_PRESETS.map((preset) => ({
-            label: preset.label,
-            value: preset.id,
-          })),
-          { label: "Custom", value: "custom" },
-        ],
-        subtitle: "Apply a sidebar UI preset or show Custom when controlled settings diverge.",
-        title: "Preset",
-      },
-      {
-        key: "sidebarProjectGroupStyle",
-        options: SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
-        subtitle: "Choose how project groups are marked in the sidebar.",
-        title: "Project group style",
-      },
-      {
-        key: "showProjectIcons",
-        subtitle: "Show project artwork or a folder or worktree icon beside project names.",
-        title: "Show project icons",
-      },
-      /*
-       * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
-       * Search metadata follows the visible row order: preset-controlled rows
-       * sit immediately after Preset, before independent sidebar sizing and
-       * placement controls.
-       */
-      {
-        key: "hideSessionAgentIconUntilHover",
-        subtitle: "Hide session agent icons until a session row is hovered.",
-        title: "Hide agent icon until hover",
-      },
-      {
-        key: "hideBrowserFaviconUntilHover",
-        subtitle: "Hide browser page favicons until a session row is hovered.",
-        title: "Hide browser favicon until hover",
-      },
-      {
-        key: "showCloseButtonOnSessionCards",
-        subtitle: "Reveal the close control when hovering a card.",
-        title: "Show close button on hover",
-      },
-      {
-        key: "hideLastActiveTimeOnSessionCards",
-        subtitle: "Hide Last Active timestamps from session-card title rows.",
-        title: "Hide last active time",
-      },
-      {
-        key: "hideProjectHeaderDiffStats",
-        subtitle: "Hide +added/-removed line counts in sidebar project rows.",
-        title: "Hide project git stats",
-      },
-      {
-        key: "showProjectEditorDiffFileCount",
-        subtitle: "Show changed-file counts in sidebar project row git stats.",
-        title: "Show changed-file count",
-      },
-      {
-        key: "hideMenuBarSessionStatusIndicators",
-        subtitle: "Show the menu bar session status badges.",
-        title: "Show Menu Bar Session Indicators",
-      },
-      {
-        key: "sidebarSide",
-        options: SIDEBAR_SIDE_OPTIONS,
-        subtitle: "Choose which side of the screen holds the sidebar.",
-        title: "Side",
-      },
-      {
-        key: "sidebarCollapseAnimationDurationMs",
-        subtitle: "Set how quickly sidebar sections, groups, and projects expand or collapse. Set to 0 for no animation.",
-        title: "Collapse animation speed",
-      },
-      {
-        key: "sidebarDefaultWidthPx",
-        subtitle: "Width restored when double-clicking the sidebar resize handle.",
-        title: "Default Width",
-      },
-      {
-        key: "commandsPanelDefaultHeightPx",
-        subtitle: "Height used when opening the command pane and when double-clicking its top resize rail.",
-        title: "Command Pane Default Height",
-      },
-      {
-        key: "commandsPanelSide",
-        options: COMMANDS_PANEL_SIDE_OPTIONS,
-        subtitle: "Dock the command pane below the workspace or to its right.",
-        title: "Command Pane Side",
-      },
-      {
-        key: "projectSessionListCollapsedCount",
-        subtitle: "Number of project sessions kept visible after Show less.",
-        title: "Show Less Count",
-      },
-      {
-        key: "agentManagerZoomPercent",
-        subtitle: "Scale the sidebar interface.",
-        title: "Sidebar Interface Size",
-      },
-      {
-        key: "createSessionOnSidebarDoubleClick",
-        subtitle: "Create a session from empty sidebar space.",
-        title: "Double-click empty sidebar space to create a session",
-      },
-      {
-        key: "renameSessionOnDoubleClick",
-        subtitle: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_SUBTITLE,
-        title: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL,
-      },
-    ]),
-    theming: getSettingsSectionSearch(settingsSearchQuery, "Theming", [
-      {
-        key: "sidebarTheme",
-        subtitle: "Light theme coming soon.",
-        title: "Theme",
-      },
-      {
-        key: "customSidebarTitlebarBackgroundDarknessPercent",
-        subtitle: "Contrast level for the sidebar and titlebar background.",
-        title: "Background Contrast",
-      },
-      {
-        key: "customSidebarTitlebarBackgroundTintColor",
-        subtitle: "Subtle tint color for the sidebar and titlebar background.",
-        title: "Background Tint",
-      },
-      {
-        key: "workspaceActivePaneBorderColor",
-        subtitle: "CSS color for the focused pane border.",
-        title: "Active Pane Border",
-      },
-    ]),
-    chat: getSettingsSectionSearch(settingsSearchQuery, "Chat", [
-      {
-        key: "preferredAgentInterface",
-        options: PREFERRED_AGENT_INTERFACE_OPTIONS,
-        subtitle:
-          "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.",
-        title: "Default view for compatible agents",
-      },
-      {
-        key: "sessionChatTheme",
-        options: SESSION_CHAT_THEME_OPTIONS,
-        subtitle: "Choose the palette used by chat messages, thinking, tools, edits, and Markdown.",
-        title: "Chat appearance",
-      },
-      {
-        key: "sessionChatFontFamily",
-        subtitle: "Use any installed font in chat messages and the prompt composer.",
-        title: "Chat font family",
-      },
-      {
-        key: "sessionChatTranscriptWidthPercent",
-        subtitle: "Set the width of the message transcript without changing the prompt composer.",
-        title: "Chat message width",
-      },
-      {
-        key: "sessionChatVerboseMode",
-        subtitle:
-          "Expand thinking blocks to show their tool calls by default. Each chat can override it from its composer.",
-        title: "Verbose mode",
-      },
-    ]),
-    sidebarTags: getSettingsSectionSearch(settingsSearchQuery, "Sidebar Tags", [
-      {
-        key: "sidebarSessionTagListItems",
-        options: [
-          ...DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS.map((item) => ({
-            label: getSidebarSessionTagListItemLabel(item),
-            value: item.id,
-          })),
-          { label: "Hide tag", value: "hide" },
-          { label: "Disable tag", value: "disable" },
-          { label: "Reorder tags", value: "reorder" },
-        ],
-        subtitle:
-          "Reorder, hide, or disable sidebar tag filters and their separators.",
-        title: "Tag Filter List",
-      },
-    ]),
-    sounds: getSettingsSectionSearch(settingsSearchQuery, "Sounds", [
-      {
-        key: "completionBellEnabled",
-        subtitle: "Play a completion sound when work finishes.",
-        title: "Enable completion bell",
-      },
-      {
-        key: "completionSound",
-        options: COMPLETION_SOUND_OPTIONS,
-        subtitle: "Sound for terminal completions.",
-        title: "Completion Sound",
-      },
-      {
-        key: "showMacOSAttentionNotifications",
-        subtitle: "Show a macOS banner when a session needs attention.",
-        title: "macOS Attention Notifications",
-      },
-      {
-        key: "attentionNotificationActions",
-        subtitle: "Test the current completion alert settings or open macOS Notification Settings.",
-        title: "Agent Completion Alert Test",
-      },
-      {
-        key: "actionCompletionSound",
-        options: COMPLETION_SOUND_OPTIONS,
-        subtitle: "Sound for action completions.",
-        title: "Action Completion Sound",
-      },
-    ]),
-    storage: getSettingsSectionSearch(settingsSearchQuery, "Storage", [
-      {
-        key: "ghostexFolderStats",
-        options: [
-          { label: "Open Ghostex folder", value: "openGhostexFolder" },
-          { label: "Folder sizes", value: "folderSizes" },
-          { label: "Disk usage", value: "diskUsage" },
-        ],
-        subtitle: "Show Ghostex data-folder sizes and open the resolved storage folder.",
-        title: "Ghostex folder",
-      },
-    ]),
-    terminal: getSettingsSectionSearch(settingsSearchQuery, "Terminal", [
-      ...(IS_WINDOWS_HOST
-        ? [
-            {
-              key: "windowsTerminalBackend",
-              options: WINDOWS_TERMINAL_BACKEND_OPTIONS,
-              subtitle: "Windows terminals currently run through WSL2.",
-              title: "Windows terminal backend",
-            },
-            {
-              key: "windowsWslDistribution",
-              subtitle:
-                "Optional exact distro name from `wsl.exe --list --verbose`; blank uses automatic WSL2 discovery.",
-              title: "WSL distribution",
-            },
-          ]
-        : []),
-      {
-        key: "ghosttySettingsActions",
-        options: [
-          { label: "Apply recommended", value: "applyRecommendedGhosttySettings" },
-          { label: "Open Ghostty config", value: "openGhosttyConfigFile" },
-          { label: "Open Ghostty docs", value: "openGhosttySettingsDocs" },
-          { label: "Reset Ghostty defaults", value: "resetGhosttySettingsToDefault" },
-        ],
-        subtitle:
-          "Recommended Ghostty settings, Ghostty config file, Ghostty docs, and Ghostty defaults.",
-        title: "Ghostty settings actions",
-      },
-      {
-        key: "terminalGhosttyTheme",
-        options: GHOSTTY_THEME_SETTING_OPTIONS,
-        subtitle: "Choose a bundled Ghostty theme or leave the config unmanaged.",
-        title: "Theme",
-      },
-      {
-        key: "workspaceBackgroundColor",
-        subtitle: "Color shown behind terminal panes.",
-        title: "Terminal Background",
-      },
-      {
-        key: "terminalBackgroundImage",
-        subtitle: "Absolute path to an image drawn behind terminal panes.",
-        title: "Background Image",
-      },
-      {
-        key: "terminalBackgroundImageOpacity",
-        subtitle: "Blend the background image toward the terminal background color.",
-        title: "Background Image Opacity",
-      },
-      {
-        key: "terminalBackgroundImageFit",
-        options: [
-          { label: "Cover", value: "cover" },
-          { label: "Contain", value: "contain" },
-          { label: "Stretch", value: "stretch" },
-          { label: "Natural size", value: "natural" },
-        ],
-        subtitle: "How the background image is scaled inside each pane.",
-        title: "Background Image Fit",
-      },
-      {
-        key: "terminalFontFamily",
-        subtitle: "Type a Ghostty font-family name.",
-        title: "Font Family",
-      },
-      {
-        key: "terminalFontSize",
-        subtitle: "Set terminal text size.",
-        title: "Font Size",
-      },
-      {
-        key: "terminalFontWeight",
-        subtitle: "Set terminal text weight.",
-        title: "Font Weight",
-      },
-      {
-        key: "terminalLineHeight",
-        subtitle: "Adjust terminal row height.",
-        title: "Line Height",
-      },
-      {
-        key: "terminalLetterSpacing",
-        subtitle: "Adjust spacing between glyphs.",
-        title: "Letter Spacing",
-      },
-      {
-        key: "terminalPaneHorizontalPaddingPx",
-        subtitle: "Add left and right inner padding inside every terminal pane.",
-        title: "Horizontal Padding",
-      },
-      {
-        key: "terminalPaneVerticalPaddingPx",
-        subtitle: "Add top and bottom inner padding inside every terminal pane.",
-        title: "Vertical Padding",
-      },
-      {
-        key: "terminalCursorStyle",
-        options: [
-          { label: "Line", value: "bar" },
-          { label: "Block", value: "block" },
-          { label: "Underline", value: "underline" },
-        ],
-        subtitle: "Choose the cursor shape.",
-        title: "Cursor Style",
-      },
-      {
-        key: "terminalCursorStyleBlink",
-        subtitle: "Blink the terminal cursor.",
-        title: "Cursor blink",
-      },
-      {
-        key: "sessionPersistenceProvider",
-        options: SESSION_PERSISTENCE_PROVIDER_OPTIONS,
-        subtitle:
-          "Choose whether new terminal and agent sessions should use zmx persistence.",
-        title: "Session Persistence",
-      },
-      {
-        key: "clickToWakeSleepingSessions",
-        subtitle: "Select sleeping pane tabs without waking them until the empty pane is clicked.",
-        title: "Click to Wake Sleeping Panes",
-      },
-      ...(draft.sessionPersistenceProvider === "off"
-        ? []
-        : [
-            {
-              key: "showSessionIdInTerminalPanes",
-              subtitle: "Show the provider session id in the top-right corner of terminal panes.",
-              title: "Show session id in terminal panes",
-            },
-          ]),
-      {
-        key: "showNotificationOnTerminalBell",
-        subtitle: "Treat terminal bell events as session attention.",
-        title: "Show notification on terminal bell",
-      },
-      {
-        key: "promptEditorBackend",
-        options: PROMPT_EDITOR_BACKEND_OPTIONS,
-        subtitle:
-          "Choose which editor Ctrl+G uses when a terminal prompt asks for $EDITOR.",
-        title: "Ctrl+G prompt editor",
-      },
-    ]),
-    terminalBehavior: getSettingsSectionSearch(settingsSearchQuery, "Terminal Behavior", [
-      {
-        key: "terminalScrollbackLimitMb",
-        subtitle: "Set scrollback memory per terminal surface.",
-        title: "Scrollback limit",
-      },
-      {
-        key: "terminalCopyOnSelect",
-        options: GHOSTTY_COPY_ON_SELECT_OPTIONS,
-        subtitle: "Copy selected terminal text automatically.",
-        title: "Copy on select",
-      },
-      {
-        key: "terminalConfirmCloseSurface",
-        options: GHOSTTY_CONFIRM_CLOSE_SURFACE_OPTIONS,
-        subtitle: "Confirm before closing terminal surfaces.",
-        title: "Confirm close",
-      },
-      {
-        key: "terminalClipboardTrimTrailingSpaces",
-        subtitle: "Trim trailing whitespace when copying terminal text.",
-        title: "Trim trailing spaces on copy",
-      },
-      {
-        key: "terminalClipboardPasteProtection",
-        subtitle: "Ask before pasting text Ghostty considers unsafe.",
-        title: "Paste protection",
-      },
-      {
-        key: "terminalPastePreviewableImages",
-        subtitle: PASTE_PREVIEWABLE_IMAGES_DESCRIPTION,
-        title: "Paste previewable images",
-      },
-      {
-        key: "terminalMouseHideWhileTyping",
-        subtitle: "Hide the pointer while typing in the terminal.",
-        title: "Hide mouse while typing",
-      },
-      {
-        key: "terminalScrollbar",
-        options: GHOSTTY_SCROLLBAR_OPTIONS,
-        subtitle: "Control whether Ghostty shows its native scrollback scrollbar.",
-        title: "Scrollbar",
-      },
-    ]),
-    terminalScrolling: getSettingsSectionSearch(settingsSearchQuery, "Terminal Scrolling", [
-      {
-        key: "terminalMouseScrollMultiplierPrecision",
-        subtitle: "Trackpads and high-resolution scroll wheels. Ghostty default is 1.",
-        title: "Precision scroll multiplier",
-      },
-      {
-        key: "terminalMouseScrollMultiplierDiscrete",
-        subtitle: "Traditional notched mouse wheels. Ghostty default is 3.",
-        title: "Discrete scroll multiplier",
-      },
-      {
-        key: "terminalScrollToBottomWhenTyping",
-        subtitle: "Keep the prompt visible while typing.",
-        title: "Scroll to bottom when typing",
-      },
-    ]),
-    terminalDevServers: getSettingsSectionSearch(settingsSearchQuery, "Dev Servers", [
-      {
-        key: "terminalDevServerDetectionEnabled",
-        subtitle: "Detect localhost dev server URLs from terminal output.",
-        title: "Detect running servers in terminals",
-      },
-      {
-        key: "terminalDevServerIgnoredPortRules",
-        options: [
-          { label: "9229", value: "9229" },
-          { label: "24678-24680", value: "24678-24680" },
-        ],
-        subtitle: "Hide detected servers on specific ports or inclusive port ranges.",
-        title: "Ignored ports",
-      },
-    ]),
-    beta: getSettingsSectionSearch(settingsSearchQuery, "Experimental", [
-      /*
-       * CDXC:ExperimentalFeatures 2026-06-28-07:41:
-       * Settings search should find the advanced experimental gate by label and
-       * by the concrete surfaces it enables so the required inventory stays
-       * discoverable without tying Agents Hub to this gate.
-       */
-      {
-        key: "showBetaFeatures",
-        subtitle:
-          "Show experimental surfaces: OS Integration settings, Browser color scheme, and Keep Awake.",
-        title: "Enable Experimental Features",
-      },
-    ]),
-    debugging: getSettingsSectionSearch(settingsSearchQuery, "Debugging", [
-      /*
-       * CDXC:DiagnosticsSettings 2026-06-06-07:09:
-       * Show debug UI controls is the global gate for routine diagnostic disk
-       * logging as well as debug-only UI. Scenario controls narrow which
-       * routine log area writes while the global gate is on; important
-       * warnings, errors, and crashes remain available independently.
-       *
-       * CDXC:DebuggingSettings 2026-06-15-21:34:
-       * The Debugging section owns support and diagnostic toggles at the bottom of Settings, including command copy actions and Copy details, so users can find debug-only context-menu features together.
-       *
-       * CDXC:DiagnosticsSettings 2026-06-27-22:07:
-       * Disk logging needs exact scenario controls. Search should match both
-       * the scenario labels and their support-bundle file names so a user can
-       * enable only the requested repro log without browsing every Debugging row.
-       */
-      {
-        key: "debuggingMode",
-        subtitle: "Show debug-only UI controls and allow enabled routine diagnostic logs.",
-        title: "Show debug UI controls",
-      },
-      {
-        key: "diagnosticLogging",
-        options: DIAGNOSTIC_LOGGING_SCENARIOS.flatMap((scenario) => [
-          { label: scenario.label, value: scenario.id },
-          ...scenario.logFiles.map((logFile) => ({ label: logFile, value: logFile })),
-        ]),
-        subtitle: "Choose routine repro log areas while Show debug UI controls is on. Important warnings, errors, and crashes remain captured when it is off.",
-        title: "Diagnostic disk logging scenarios",
-      },
-      {
-        key: "showSessionCommandCopyActions",
-        subtitle: "Show Copy resume and Copy attach command in session context menus.",
-        title: "Show command copy actions",
-      },
-      {
-        key: "showSessionDetailsCopyAction",
-        subtitle: "Show Copy details in session context menus.",
-        title: "Show Copy details option",
-      },
-    ]),
-  };
-  const mainSettingsGroupSearch = {
-    appearance: getGroupedSettingsSectionSearch(settingsSearchQuery, "Appearance", [
-      settingsSearch.theming,
-      settingsSearch.appIcon,
-    ]),
-    chat: settingsSearch.chat,
-    sidebar: getGroupedSettingsSectionSearch(settingsSearchQuery, "Sidebar", [
-      settingsSearch.sidebar,
-      settingsSearch.sessionCards,
-      settingsSearch.sidebarTags,
-    ]),
-    terminal: getGroupedSettingsSectionSearch(settingsSearchQuery, "Terminal", [
-      settingsSearch.terminal,
-      settingsSearch.terminalBehavior,
-      settingsSearch.terminalScrolling,
-    ]),
-    tools: getGroupedSettingsSectionSearch(settingsSearchQuery, "Tools", [
-      settingsSearch.browser,
-      settingsSearch.editor,
-      settingsSearch.terminalDevServers,
-    ]),
-    statusIndicators: settingsSearch.statusIndicators,
-    notifications: getGroupedSettingsSectionSearch(settingsSearchQuery, "Notifications", [
-      settingsSearch.sounds,
-    ]),
-    system: getGroupedSettingsSectionSearch(settingsSearchQuery, "System", [
-      settingsSearch.autoSleep,
-      settingsSearch.power,
-      settingsSearch.storage,
-    ]),
-    advanced: getGroupedSettingsSectionSearch(settingsSearchQuery, "Advanced", [
-      settingsSearch.beta,
-      settingsSearch.debugging,
-    ]),
-  };
-  const mainSettingsSectionNavigation: Array<{
-    id: MainSettingsSectionId;
-    searchResult: SettingsSectionSearchResult;
-    title: string;
-  }> = [
-    /*
-     * Keep these destinations in the same order as their first rendered
-     * section anchors below. The grouped pages intentionally collect related
-     * subsections, but clicking down this rail should always move down the
-     * Settings page instead of jumping above an earlier-looking destination.
-     */
-    { id: "sidebar", searchResult: mainSettingsGroupSearch.sidebar, title: "Sidebar" },
-    {
-      id: "appearance",
-      searchResult: mainSettingsGroupSearch.appearance,
-      title: "Appearance",
-    },
-    { id: "chat", searchResult: mainSettingsGroupSearch.chat, title: "Chat" },
-    ...(PET_CONTROLS_VISIBLE
-      ? [
-          {
-            id: "statusIndicators" as const,
-            searchResult: mainSettingsGroupSearch.statusIndicators,
-            title: "Status Indicators",
-          },
-        ]
-      : []),
-    {
-      id: "tools",
-      searchResult: mainSettingsGroupSearch.tools,
-      title: "Tools",
-    },
-    /*
-     * CDXC:SettingsNavigation 2026-06-12-04:13:
-     * Ghostty terminal controls belong on the main Settings page so one search query can find app settings and terminal settings together.
-     */
-    { id: "terminal", searchResult: mainSettingsGroupSearch.terminal, title: "Terminal" },
-    {
-      id: "system",
-      searchResult: mainSettingsGroupSearch.system,
-      title: "System",
-    },
-    {
-      id: "notifications",
-      searchResult: mainSettingsGroupSearch.notifications,
-      title: "Notifications",
-    },
-    { id: "advanced", searchResult: mainSettingsGroupSearch.advanced, title: "Advanced" },
-  ];
-  const settingMatchesGroupedSectionTitle = (settingKey: string) =>
-    (Object.entries(MAIN_SETTINGS_SECTION_SETTING_KEYS) as Array<
-      [MainSettingsSectionId, readonly string[]]
-    >).some(([sectionId, settingKeys]) => {
-      if (sectionId === "agents") {
-        return false;
-      }
-      return (
-        mainSettingsGroupSearch[sectionId].groupTitleMatches === true &&
-        settingKeys.includes(settingKey)
-      );
+      showAdvancedSettings,
     });
-  const subsectionMatchesGroupedSectionTitle = (sectionId: MainSettingsScrollTargetId) =>
-    MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS[sectionId].some((settingKey) =>
-      settingMatchesGroupedSectionTitle(settingKey),
-    );
-  const visibleFirstLaunchMainSettings =
-    firstLaunchSetupVisibleSettings ?? FIRST_LAUNCH_SETUP_VISIBLE_MAIN_SETTINGS;
-  const keepAwakeSettingsVisible = isFirstLaunchSetup || draft.showBetaFeatures;
-  const debuggingModeDependentSettingsVisible = draft.debuggingMode;
-  const mainSettingVisible = (
-    sectionResult: SettingsSectionSearchResult,
-    settingKey: string,
-  ) => {
-    if (isFirstLaunchSetup) {
-      return isFirstLaunchSetupMainSettingVisible(
-        settingKey as FirstLaunchSetupMainSettingKey,
-        visibleFirstLaunchMainSettings,
-      );
-    }
-    if (settingsSearchQuery.trim() && settingMatchesGroupedSectionTitle(settingKey)) {
-      return true;
-    }
-    return shouldShowSetting(sectionResult, settingKey, showAdvancedSettings);
-  };
-  const debuggingSettingVisible = (settingKey: string) => {
-    if (
-      !debuggingModeDependentSettingsVisible &&
-      DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET.has(settingKey)
-    ) {
-      return false;
-    }
-    return mainSettingVisible(settingsSearch.debugging, settingKey);
-  };
-  const mainSectionVisible = (
-    sectionId: MainSettingsSectionId,
-    sectionResult: SettingsSectionSearchResult,
-  ) => {
-    /*
-     * CDXC:TitlebarKeepAwake 2026-06-19-13:13:
-     * Keep Awake is experimental-only in the regular macOS Settings UI. Hide
-     * the Power section until Enable Experimental Features is enabled, while
-     * preserving the first-launch lid-close preference required by onboarding.
-     */
-    if (
-      sectionId === "advanced" &&
-      !isFirstLaunchSetup &&
-      !debuggingModeDependentSettingsVisible
-    ) {
-      return (
-        shouldShowSettingsSection(settingsSearch.beta, showAdvancedSettings) ||
-        shouldShowSetting(settingsSearch.debugging, "debuggingMode", showAdvancedSettings)
-      );
-    }
-    if (isFirstLaunchSetup) {
-      return MAIN_SETTINGS_SECTION_SETTING_KEYS[sectionId].some((settingKey) =>
-        isFirstLaunchSetupMainSettingVisible(
-          settingKey as FirstLaunchSetupMainSettingKey,
-          visibleFirstLaunchMainSettings,
-        ),
-      );
-    }
-    return shouldShowSettingsSection(sectionResult, showAdvancedSettings);
-  };
-  const mainSubsectionVisible = (
-    sectionId: MainSettingsScrollTargetId,
-    sectionResult: SettingsSectionSearchResult,
-  ) => {
-    if (sectionId === "power" && !keepAwakeSettingsVisible) {
-      return false;
-    }
-    if (sectionId === "appIcon" && appIconPickerUnavailable) {
-      return false;
-    }
-    if (
-      sectionId === "debugging" &&
-      !isFirstLaunchSetup &&
-      !debuggingModeDependentSettingsVisible
-    ) {
-      return (
-        subsectionMatchesGroupedSectionTitle(sectionId) ||
-        shouldShowSetting(sectionResult, "debuggingMode", showAdvancedSettings)
-      );
-    }
-    if (isFirstLaunchSetup) {
-      return MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS[sectionId].some((settingKey) =>
-        isFirstLaunchSetupMainSettingVisible(
-          settingKey as FirstLaunchSetupMainSettingKey,
-          visibleFirstLaunchMainSettings,
-        ),
-      );
-    }
-    if (settingsSearchQuery.trim() && subsectionMatchesGroupedSectionTitle(sectionId)) {
-      return true;
-    }
-    return shouldShowSettingsSection(sectionResult, showAdvancedSettings);
-  };
   const mainSettingsSectionRefs: MainSettingsSectionRefs = {
     agents: agentsOnboardingSectionRef,
     advanced: betaSectionRef,
@@ -1827,751 +778,164 @@ export function SettingsModal({
     terminalScrolling: ghosttyScrollingSectionRef,
     theming: themingSectionRef,
   };
-  const scrollMainSettingsSectionIntoView = (sectionId: MainSettingsScrollTargetId) => {
-    getMainSettingsSectionRef(sectionId, mainSettingsSectionRefs).current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  };
-  const visibleMainSettingsSectionNavigation: Array<
-    SettingsSectionNavigationItem<MainSettingsSectionId> & {
-      searchResult: SettingsSectionSearchResult;
-      subsections: readonly MainSettingsSubsectionNavigationItem[];
-    }
-  > =
-    (isFirstLaunchSetup
-      ? [
-          {
-            id: "agents" as const,
-            searchResult: settingsSearch.sidebar,
-            title: "Agents",
-          },
-          ...mainSettingsSectionNavigation,
-        ]
-      : mainSettingsSectionNavigation
-    )
-      .filter((section) =>
-        section.id === "agents"
-          ? mainSectionVisible("agents", settingsSearch.sidebar)
-          : mainSectionVisible(section.id, section.searchResult),
-      )
-      .map((section) => ({
-        ...section,
-        /*
-         * CDXC:SettingsNavigation 2026-08-19:
-         * A nested row must not outlive the section it points at, so hide the
-         * ones a search query, Show Advanced, or an unavailable capability
-         * (Power without experimental features, App Icon off macOS) already
-         * removed from the page.
-         */
-        subsections: (MAIN_SETTINGS_SUBSECTION_NAVIGATION[section.id] ?? []).filter((subsection) =>
-          mainSubsectionVisible(subsection.id, settingsSearch[subsection.id]),
-        ),
-      }));
-  const getMainSettingsSectionMeasurementItems = (): SettingsSectionMeasurementItem<MainSettingsScrollTargetId>[] =>
-    visibleMainSettingsSectionNavigation.flatMap((section) =>
-      (section.subsections.length > 0
-        ? section.subsections.map((subsection) => subsection.id)
-        : [section.id as MainSettingsScrollTargetId]
-      ).map((scrollTargetId) => ({
-        id: scrollTargetId,
-        ref: getMainSettingsSectionRef(scrollTargetId, mainSettingsSectionRefs),
-      })),
-    );
-  const activeMainSettingsGroupId = getMainSettingsSectionGroupId(activeMainSettingsSectionId);
-  const hasVisibleMainSettings = visibleMainSettingsSectionNavigation.length > 0;
-  const visibleMainSettingsSectionIds = visibleMainSettingsSectionNavigation
-    .map((section) =>
-      [section.id, ...section.subsections.map((subsection) => subsection.id)].join(">"),
-    )
-    .join("|");
-  const hotkeyDefinitionsById = useMemo<HotkeySettingsDefinitionById>(
-    () => new Map(GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition])),
-    [],
-  );
-  const hotkeySectionSearches = useMemo(() => {
-    const sectionSearches = getHotkeySettingsSectionSearches({
-      definitionsById: hotkeyDefinitionsById,
-      expandCollapsedProjectsOnJump: draft.expandCollapsedProjectsOnJump,
-      searchQuery: settingsSearchQuery,
-    });
-    /*
-     * CDXC:SettingsSearch 2026-07-22-00:00:
-     * A query matching the Hotkeys page title (e.g. "hotkeys") should reveal
-     * the whole page, mirroring how section-title matches reveal their rows.
-     */
-    if (!getSettingsSectionSearch(settingsSearchQuery, "Hotkeys", []).sectionMatches) {
-      return sectionSearches;
-    }
-    return Object.fromEntries(
-      Object.entries(sectionSearches).map(([sectionId, sectionResult]) => [
-        sectionId,
-        { ...sectionResult, sectionMatches: true },
-      ]),
-    ) as HotkeySettingsSectionSearches;
-  }, [draft.expandCollapsedProjectsOnJump, hotkeyDefinitionsById, settingsSearchQuery]);
-  const extraSettingsTabSearches = useMemo(
-    () => getExtraSettingsTabSearches(settingsSearchQuery),
-    [settingsSearchQuery],
-  );
-  const isSettingsSearching = !isFirstLaunchSetup && settingsSearchQuery.trim().length > 0;
-  const hotkeySectionRefs: HotkeySettingsSectionRefs = {
-    actions: hotkeyActionsSectionRef,
-    general: hotkeyGeneralSectionRef,
-    navigation: hotkeyNavigationSectionRef,
-    paneActions: hotkeyPaneActionsSectionRef,
-    projects: hotkeyProjectsSectionRef,
-    sessionSlots: hotkeySessionSlotsSectionRef,
-  };
-  const visibleHotkeySections = HOTKEY_SETTINGS_SECTIONS.filter((section) =>
-    shouldShowSettingsSection(hotkeySectionSearches[section.id]),
-  );
-  const visibleHotkeySectionNavigation: SettingsSectionNavigationItem<HotkeySettingsSectionId>[] =
-    visibleHotkeySections.map((section) => ({
-      id: section.id,
-      title: section.title,
-    }));
-  const scrollHotkeySettingsSectionIntoView = (sectionId: HotkeySettingsSectionId) => {
-    hotkeySectionRefs[sectionId].current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-  /*
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
-   * Settings no longer has a top tab bar. Keep top-level Settings pages in the
-   * left sidebar and let section-rich pages expand there so navigation, section
-   * jumps, search results, and the Show Advanced footer share one rail.
-   *
-   * CDXC:SettingsNavigation 2026-06-25-17:12:
-   * Top-level Settings categories need Tabler icons in the left sidebar, while
-   * nested section rows stay text-only so expandable sections do not read as
-   * separate main categories.
-   */
-  const settingsSidebarPageHasSearchMatches = (pageId: SettingsModalTab): boolean => {
-    if (!isSettingsSearching) {
-      return true;
-    }
-    if (pageId === "settings") {
-      return (
-        hasVisibleMainSettings ||
-        getSettingsSectionSearch(settingsSearchQuery, "General", []).sectionMatches
-      );
-    }
-    if (pageId === "hotkeys") {
-      return visibleHotkeySections.length > 0;
-    }
-    return settingsTabSearchHasMatches(
-      extraSettingsTabSearches[pageId as SearchableExtraSettingsTabId],
-    );
-  };
-  /*
-   * CDXC:SettingsSearch 2026-07-22-00:00:
-   * While searching, the sidebar rail keeps only the Settings pages that have
-   * matches so one query locates settings across every page, not just the
-   * page currently open.
-   */
-  const allSettingsSidebarPages: SettingsSidebarPage[] = [
-    {
-      icon: IconSettings,
-      id: "settings",
-      sections: visibleMainSettingsSectionNavigation.map((section) => ({
-        active: activeTab === "settings" && activeMainSettingsGroupId === section.id,
-        id: section.id,
-        onSelect: () => {
-          setActiveMainSettingsSectionId(section.id);
-          setActiveTab("settings");
-          requestAnimationFrame(() => scrollMainSettingsSectionIntoView(section.id));
-        },
-        /*
-         * CDXC:SettingsNavigation 2026-08-19:
-         * A group whose first anchor carries the group's own name (Sidebar,
-         * Terminal) would otherwise render "Sidebar > Sidebar". Drop that row
-         * from the rail only: scroll tracking still measures the anchor, so
-         * reading that header keeps the group row highlighted.
-         */
-        subsections: section.subsections
-          .filter((subsection) => subsection.title !== section.title)
-          .map((subsection) => ({
-            active: activeTab === "settings" && activeMainSettingsSectionId === subsection.id,
-            id: subsection.id,
-            onSelect: () => {
-              setActiveMainSettingsSectionId(subsection.id);
-              setActiveTab("settings");
-              requestAnimationFrame(() => scrollMainSettingsSectionIntoView(subsection.id));
-            },
-            title: subsection.title,
-          })),
-        title: section.title,
-      })),
-      title: "General",
-    },
-    { icon: IconCodeDots, id: "agents", title: "Agents" },
-    { icon: IconTools, id: "integrations", title: "Integrations" },
-    { icon: IconCashEdit, id: "plugins", title: "Customize" },
-    { icon: IconCloud, id: "remote", title: "Remote" },
-    { icon: IconFolderOpen, id: "projects", title: "Projects" },
-    {
-      icon: IconKeyboard,
-      id: "hotkeys",
-      sections: visibleHotkeySectionNavigation.map((section) => ({
-        active: activeTab === "hotkeys" && activeHotkeySettingsSectionId === section.id,
-        id: section.id,
-        onSelect: () => {
-          setActiveHotkeySettingsSectionId(section.id);
-          setActiveTab("hotkeys");
-          requestAnimationFrame(() => scrollHotkeySettingsSectionIntoView(section.id));
-        },
-        title: section.title,
-      })),
-      title: "Hotkeys",
-    },
-    { icon: IconPlayerPlay, id: "actions", title: "Actions" },
-    { icon: IconExternalLink, id: "openTargets", title: "Open In" },
-    ...(showOSIntegrationSettingsTab
-      ? [{ icon: IconDeviceDesktop, id: "osIntegration" as const, title: "OS Integration" }]
-      : []),
-    { icon: IconInfoCircle, id: "about", title: "About" },
-  ];
-  const settingsSidebarPages: SettingsSidebarPage[] = allSettingsSidebarPages.filter((page) =>
-    settingsSidebarPageHasSearchMatches(page.id),
-  );
-  const settingsSearchMatchingPages = isSettingsSearching ? settingsSidebarPages : [];
-
-  useEffect(() => {
-    if (!isOpen || activeTab !== "settings" || initialSection === undefined) {
-      return;
-    }
-    /**
-     * CDXC:SettingsNavigation 2026-05-27-07:32:
-     * Titlebar entry points such as Power Settings should land on the matching
-     * Settings section, not only open the modal at the previously remembered
-     * scroll position.
-     */
-    const targetSectionRef = getMainSettingsSectionRef(initialSection, {
-      advanced: betaSectionRef,
-      appearance: themingSectionRef,
-      autoSleep: autoSleepSectionRef,
-      builtInFeatures: browserSectionRef,
-      browser: browserSectionRef,
-      chat: chatSectionRef,
-      editor: editorSectionRef,
-      notifications: soundsSectionRef,
-      power: powerSectionRef,
-      sessionCards: sessionCardsSectionRef,
-      sidebar: sidebarSectionRef,
-      sounds: soundsSectionRef,
-      beta: betaSectionRef,
-      statusIndicators: statusIndicatorsSectionRef,
-      storage: storageSectionRef,
-      system: powerSectionRef,
-      sidebarTags: sidebarTagsSectionRef,
-      debugging: debuggingSectionRef,
-      tools: browserSectionRef,
-      terminal: ghosttyTerminalSectionRef,
-      terminalBehavior: ghosttyBehaviorSectionRef,
-      terminalScrolling: ghosttyScrollingSectionRef,
-      terminalDevServers: terminalDevServersSectionRef,
-      theming: themingSectionRef,
-      // CDXC:AppIconPicker 2026-06-25-21:50: Allow titlebar/deep-link navigation to scroll to App Icon.
-      appIcon: appIconSectionRef,
-      agents: agentsOnboardingSectionRef,
-    });
-    const animationFrame = requestAnimationFrame(() => {
-      targetSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    return () => cancelAnimationFrame(animationFrame);
-  }, [activeTab, initialSection, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || activeTab !== "settings") {
-      return;
-    }
-
-    const animationFrame = requestAnimationFrame(() => {
-      const viewport = getActiveSettingsModalScrollViewport(dialogContentRef.current);
-      if (!viewport) {
-        return;
-      }
-      const mostlyVisibleSectionId = getMostlyVisibleSettingsSectionId(
-        viewport,
-        getMainSettingsSectionMeasurementItems(),
-      );
-      if (mostlyVisibleSectionId) {
-        setActiveMainSettingsSectionId((currentSectionId) =>
-          currentSectionId === mostlyVisibleSectionId ? currentSectionId : mostlyVisibleSectionId,
-        );
-      }
-    });
-    return () => cancelAnimationFrame(animationFrame);
-  }, [activeTab, isOpen, settingsSearchQuery, visibleMainSettingsSectionIds]);
-  useEffect(() => {
-    if (!isOpen) {
-      hasRequestedStorageStatsRef.current = false;
-      return;
-    }
-    if (isFirstLaunchSetup) {
-      setActiveTabState("settings");
-    }
-    /**
-     * CDXC:SettingsTabs 2026-05-13-16:05
-     * Saving a control in Hotkeys, Agents, Actions, or Open In updates
-     * the incoming settings prop. That prop sync must not reset the selected
-     * tab; tab changes are owned by explicit navigation and initial open state.
-     *
-     * CDXC:SettingsNavigation 2026-06-12-04:13:
-     * Ghostty terminal controls now save from the main Settings tab, so the tab
-     * sync rule no longer treats Ghostty as a separate navigation target.
-     */
-    setDraft(normalizeghostexSettings(settings));
-  }, [isFirstLaunchSetup, isOpen, settings]);
-
-  useEffect(() => {
-    if (
-      !isOpen ||
-      activeTab !== "settings" ||
-      ghostexFolderStats ||
-      ghostexFolderStatsLoading ||
-      !onRequestGhostexFolderStats ||
-      hasRequestedStorageStatsRef.current
-    ) {
-      return;
-    }
-    const sectionElement = storageSectionRef.current;
-    if (!sectionElement) {
-      return;
-    }
-
-    const requestStats = () => {
-      hasRequestedStorageStatsRef.current = true;
-      onRequestGhostexFolderStats();
-    };
-
-    /**
-     * CDXC:SettingsStorage 2026-05-09-15:25
-     * Folder-size scans can touch many files, so Settings waits until the
-     * bottom storage card is near the viewport before asking native for stats.
-     */
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          requestStats();
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "96px 0px" },
-    );
-    observer.observe(sectionElement);
-    return () => observer.disconnect();
-  }, [
-    activeTab,
-    isOpen,
-    onRequestGhostexFolderStats,
+  const {
+    activeMainSettingsGroupId,
+    getMainSettingsSectionMeasurementItems,
+    hasVisibleMainSettings,
+    scrollMainSettingsSectionIntoView,
+    visibleMainSettingsSectionIds,
+    visibleMainSettingsSectionNavigation,
+  } = createVisibleMainSettingsNavigation({
+    activeMainSettingsSectionId,
+    isFirstLaunchSetup,
+    mainSectionVisible,
+    mainSettingsSectionNavigation,
+    mainSettingsSectionRefs,
+    mainSubsectionVisible,
+    settingsSearch,
+  });
+  const {
+    extraSettingsTabSearches,
+    hotkeyDefinitionsById,
+    hotkeySectionRefs,
+    hotkeySectionSearches,
+    isSettingsSearching,
+    scrollHotkeySettingsSectionIntoView,
+    visibleHotkeySectionNavigation,
+    visibleHotkeySections,
+  } = useHotkeySettings({
+    draft,
+    hotkeyActionsSectionRef,
+    hotkeyGeneralSectionRef,
+    hotkeyNavigationSectionRef,
+    hotkeyPaneActionsSectionRef,
+    hotkeyProjectsSectionRef,
+    hotkeySessionSlotsSectionRef,
+    isFirstLaunchSetup,
     settingsSearchQuery,
-    ghostexFolderStats,
-    ghostexFolderStatsLoading,
-  ]);
-
-  /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
-   * Request the current icon list once whenever the App Icon settings surface
-   * opens, mirroring the lazy native-data requests used elsewhere in Settings.
-   * Native answers through the appIconState prop (relayed via the modal host).
-   */
-  useEffect(() => {
-    if (!isOpen || activeTab !== "settings" || !vscode || appIconPickerUnavailable) {
-      hasRequestedAppIconsRef.current = false;
-      return;
-    }
-    if (hasRequestedAppIconsRef.current) {
-      return;
-    }
-    hasRequestedAppIconsRef.current = true;
-    vscode.postMessage({ type: "listAppIcons" });
-  }, [activeTab, appIconPickerUnavailable, isOpen, vscode]);
-
-  useEffect(() => {
-    return () => {
-      if (pendingTimeoutRef.current) {
-        clearTimeout(pendingTimeoutRef.current);
-      }
-      if (pendingNavigationPersistTimeoutRef.current) {
-        clearTimeout(pendingNavigationPersistTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const clearPendingSettings = () => {
-    if (pendingTimeoutRef.current) {
-      clearTimeout(pendingTimeoutRef.current);
-      pendingTimeoutRef.current = undefined;
-    }
-  };
-
-  const clearPendingNavigationPersist = () => {
-    if (pendingNavigationPersistTimeoutRef.current) {
-      clearTimeout(pendingNavigationPersistTimeoutRef.current);
-      pendingNavigationPersistTimeoutRef.current = undefined;
-    }
-  };
-
-  const postSettingsPatch = (
-    patch: ghostexSettingsPatch,
-    source: ghostexSettingsUpdateSource,
-    fallbackSettings: ghostexSettings,
-  ) => {
-    if (Object.keys(patch).length === 0) {
-      return;
-    }
-    if (onPatch) {
-      onPatch(patch, source);
-      return;
-    }
-    onChange(fallbackSettings, source);
-  };
-
-  const persistSettingsModalNavigation = (navigationActiveTab: SettingsModalTab = activeTab) => {
-    rememberActiveScrollPosition();
-    const pendingSettings = pendingSettingsRef.current;
-    const pendingPatch = pendingSettingsPatchRef.current;
-    const baseSettings = pendingSettings ?? draft;
-    const nextSettings = isFirstLaunchSetup
-      ? baseSettings
-      : normalizeghostexSettings({
-          ...baseSettings,
-          settingsModalNavigation: getRememberedSettingsModalNavigationState(
-            navigationActiveTab,
-            baseSettings.settingsModalNavigation,
-          ),
-        });
-    const shouldPersistNavigation =
-      !isFirstLaunchSetup &&
-      !areSettingsModalNavigationStatesEqual(
-        baseSettings.settingsModalNavigation,
-        nextSettings.settingsModalNavigation,
-      );
-    /*
-     * CDXC:SettingsNavigation 2026-06-30-04:47:
-     * Native Settings is an AppKit child window, so closing it with native
-     * chrome can bypass the React Dialog close callback. Persist page changes
-     * immediately and scroll changes after they settle; close remains a final
-     * flush for pending numeric edits and any unsaved navigation state.
-     *
-     * CDXC:RemoteMachines 2026-06-30-15:18:
-     * Navigation persistence is a patch-only write. Opening or scrolling Settings
-     * must never post a full draft that could overwrite unrelated domains such as
-     * remoteMachines from stale modal state.
-     */
-    clearPendingNavigationPersist();
-    clearPendingSettings();
-    pendingSettingsRef.current = undefined;
-    pendingSettingsPatchRef.current = undefined;
-    if (pendingSettings || shouldPersistNavigation) {
-      setDraft(nextSettings);
-      postSettingsPatch(
-        {
-          ...(pendingPatch ?? {}),
-          ...(shouldPersistNavigation
-            ? { settingsModalNavigation: nextSettings.settingsModalNavigation }
-            : {}),
-        },
-        pendingPatch ? "settings:control" : "settings:navigation",
-        nextSettings,
-      );
-    }
-  };
-
-  const scheduleSettingsModalNavigationPersist = (
-    navigationActiveTab: SettingsModalTab = activeTab,
-  ) => {
-    if (isFirstLaunchSetup) {
-      return;
-    }
-    clearPendingNavigationPersist();
-    pendingNavigationPersistTimeoutRef.current = setTimeout(() => {
-      pendingNavigationPersistTimeoutRef.current = undefined;
-      persistSettingsModalNavigation(navigationActiveTab);
-    }, SETTINGS_MODAL_NAVIGATION_SCROLL_DEBOUNCE_MS);
-  };
-
-  const closeSettingsModal = () => {
-    persistSettingsModalNavigation(activeTab);
-    onClose();
-  };
-
-  const applySettings = (
-    nextSettings: ghostexSettings,
-    source: ghostexSettingsUpdateSource = "settings:bulk",
-  ) => {
-    const normalizedSettings = normalizeghostexSettings(nextSettings);
-    clearPendingSettings();
-    pendingSettingsRef.current = undefined;
-    pendingSettingsPatchRef.current = undefined;
-    setDraft(normalizedSettings);
-    onChange(normalizedSettings, source);
-  };
-
-  const applySettingsPatch = (
-    patch: ghostexSettingsPatch,
-    source: ghostexSettingsUpdateSource = "settings:control",
-  ) => {
-    const normalizedSettings = normalizeghostexSettings({
-      ...(pendingSettingsRef.current ?? draft),
-      ...patch,
-    });
-    const normalizedPatch = createNormalizedSettingsPatch(normalizedSettings, patch);
-    clearPendingSettings();
-    pendingSettingsRef.current = undefined;
-    pendingSettingsPatchRef.current = undefined;
-    setDraft(normalizedSettings);
-    postSettingsPatch(normalizedPatch, source, normalizedSettings);
-  };
-
-  /**
-   * CDXC:Settings 2026-04-26-11:13: Numeric settings use sliders with adjacent
-   * number boxes. Dragging or typing updates the visible value immediately, but
-   * persists through a short trailing debounce to avoid flooding settings writes.
-   * Number boxes keep local edit text so partial values can be typed cleanly.
-   */
-  const applySettingsPatchDebounced = (
-    patch: ghostexSettingsPatch,
-    source: ghostexSettingsUpdateSource = "settings:control",
-  ) => {
-    const normalizedSettings = normalizeghostexSettings({
-      ...(pendingSettingsRef.current ?? draft),
-      ...patch,
-    });
-    const normalizedPatch = createNormalizedSettingsPatch(normalizedSettings, patch);
-    pendingSettingsRef.current = normalizedSettings;
-    pendingSettingsPatchRef.current = {
-      ...(pendingSettingsPatchRef.current ?? {}),
-      ...normalizedPatch,
-    };
-    setDraft(normalizedSettings);
-    clearPendingSettings();
-    pendingTimeoutRef.current = setTimeout(() => {
-      const pendingSettings = pendingSettingsRef.current;
-      const pendingPatch = pendingSettingsPatchRef.current;
-      pendingSettingsRef.current = undefined;
-      pendingSettingsPatchRef.current = undefined;
-      pendingTimeoutRef.current = undefined;
-      if (pendingSettings) {
-        postSettingsPatch(pendingPatch ?? {}, source, pendingSettings);
-      }
-    }, NUMERIC_SETTINGS_DEBOUNCE_MS);
-  };
-
-  /**
-   * CDXC:Settings 2026-04-26-10:12: Settings changes must apply immediately.
-   * The settings dialog keeps local state only for responsive controls, then
-   * posts every normalized change instead of waiting for Save/Cancel actions.
-   */
-  const updateDraft = <Key extends keyof ghostexSettings>(key: Key, value: ghostexSettings[Key]) => {
-    applySettingsPatch({ [key]: value } as Pick<ghostexSettings, Key>);
-  };
-  const updateShowAdvancedSettings = (checked: boolean) => {
-    /*
-     * CDXC:SettingsAdvanced 2026-06-28-08:01:
-     * Show Advanced is settings chrome, but it still needs immediate durable
-     * persistence so restart hydration reopens Settings with the same advanced
-     * row visibility the user explicitly chose.
-     */
-    applySettingsPatch({ showAdvancedSettings: checked });
-  };
-  const updateDiagnosticLoggingScenario = (
-    scenarioId: DiagnosticLoggingScenarioId,
-    duration: DiagnosticLoggingDurationValue,
-  ) => {
-    updateDraft(
-      "diagnosticLogging",
-      setDiagnosticLoggingScenario(
-        (pendingSettingsRef.current ?? draft).diagnosticLogging,
-        scenarioId,
-        getDiagnosticLoggingScenarioStateForDuration(duration),
-      ),
-    );
-  };
-  const updateDraftDebounced = <Key extends keyof ghostexSettings>(
-    key: Key,
-    value: ghostexSettings[Key],
-  ) => {
-    applySettingsPatchDebounced({ [key]: value } as Pick<ghostexSettings, Key>);
-  };
-  /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
-   * Confirm-before-persist is prop-driven: native relays appIconState into this
-   * component through the modal-state plumbing (exactly like osIntegrationStatus),
-   * so react to each new prop value. On an ok state, persist the in-flight
-   * pending selection (falling back to native's selectedId) and clear any error;
-   * on a failed state, drop the pending id and surface the error without writing
-   * appIconSourceId.
-   *
-   * CDXC:SettingsPerformance 2026-06-29-00:40:
-   * Process each native appIconState once inside this effect instead of updating
-   * a closure ref during render, because SettingsModal needs React Compiler
-   * coverage to reduce large settings-page rerenders during scroll navigation.
-   */
-  useEffect(() => {
-    if (!appIconState) {
-      return;
-    }
-    if (handledAppIconStateRef.current === appIconState) {
-      return;
-    }
-    handledAppIconStateRef.current = appIconState;
-    if (appIconState.ok) {
-      setAppIconError(undefined);
-      const pendingSourceId = pendingAppIconSourceIdRef.current;
-      const confirmedSourceId =
-        pendingSourceId !== undefined ? pendingSourceId : appIconState.selectedId;
-      pendingAppIconSourceIdRef.current = undefined;
-      const currentSettings = pendingSettingsRef.current ?? draft;
-      if (currentSettings.appIconSourceId !== confirmedSourceId) {
-        updateDraft("appIconSourceId", confirmedSourceId);
-      }
-      return;
-    }
-    pendingAppIconSourceIdRef.current = undefined;
-    setAppIconError(
-      typeof appIconState.error === "string" && appIconState.error.trim()
-        ? appIconState.error.trim()
-        : "Could not update the app icon.",
-    );
-  }, [appIconState, draft]);
-  /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
-   * Selecting, choosing a file, revealing the folder, and resetting all post the
-   * exact wire-contract messages to native. The selection messages record the
-   * pending source id and clear any prior error; the sidebar persists nothing
-   * until the matching ok: true appIconState arrives.
-   */
-  const selectAppIcon = (sourceId: string) => {
-    if (!vscode) {
-      return;
-    }
-    pendingAppIconSourceIdRef.current = sourceId;
-    setAppIconError(undefined);
-    vscode.postMessage({ type: "setAppIcon", sourceId });
-  };
-  const chooseAppIconFile = () => {
-    if (!vscode) {
-      return;
-    }
-    setAppIconError(undefined);
-    vscode.postMessage({ type: "pickAppIconFile" });
-  };
-  /**
-   * CDXC:TerminalBackgroundImage 2026-08-01:
-   * The Browse button next to Settings -> Terminal -> Background Image opens a
-   * native file dialog host-side; the picked absolute path comes back as a
-   * terminalBackgroundImageFilePicked host message and lands in the draft like
-   * a typed path. Native pickers only exist in the desktop app, so web hosts
-   * (which set appIconPickerUnavailable) render the plain text field instead.
-   */
-  const nativeFilePickerAvailable = Boolean(vscode) && !appIconPickerUnavailable;
-  const chooseTerminalBackgroundImageFile = () => {
-    if (!vscode) {
-      return;
-    }
-    vscode.postMessage({ type: "pickTerminalBackgroundImageFile" });
-  };
-  useEffect(() => {
-    if (!isOpen || !nativeFilePickerAvailable) {
-      return;
-    }
-    const handlePickedBackgroundImage = (event: Event) => {
-      const message = (event as CustomEvent<unknown>).detail;
-      if (
-        !message ||
-        typeof message !== "object" ||
-        !("type" in message) ||
-        message.type !== "terminalBackgroundImageFilePicked"
-      ) {
-        return;
-      }
-      const path = "path" in message && typeof message.path === "string" ? message.path.trim() : "";
-      if (!path) {
-        return;
-      }
-      updateDraft("terminalBackgroundImage", path);
-    };
-    window.addEventListener("ghostex-app-modal-host-message", handlePickedBackgroundImage);
-    return () => {
-      window.removeEventListener("ghostex-app-modal-host-message", handlePickedBackgroundImage);
-    };
-  }, [isOpen, nativeFilePickerAvailable]);
-  const activeSidebarSettingsPresetId = getSidebarSettingsPresetId(draft);
-  const updateSidebarSettingsPreset = (presetId: SidebarSettingsPresetId) => {
-    applySettings(applySidebarSettingsPreset(pendingSettingsRef.current ?? draft, presetId));
-  };
-
-  const resetSettings = () => {
-    /*
-     * CDXC:AppIconPicker 2026-06-26-23:42:
-     * Reset to defaults must update the runtime Dock/app-switcher icon as well
-     * as persisted settings. Post the default source id to native before writing
-     * defaults so the current app session does not keep showing a stale custom
-     * icon until restart.
-     */
-    pendingAppIconSourceIdRef.current = "";
-    setAppIconError(undefined);
-    vscode?.postMessage({ type: "setAppIcon", sourceId: "" });
-    applySettings({
-      ...DEFAULT_ghostex_SETTINGS,
-      remoteMachines: (pendingSettingsRef.current ?? draft).remoteMachines,
-    });
-  };
-  const resetSetting = <Key extends keyof ghostexSettings>(key: Key) => {
-    applySettingsPatch({ [key]: DEFAULT_ghostex_SETTINGS[key] } as Pick<ghostexSettings, Key>);
-  };
-  const getSettingModificationProps = <Key extends keyof ghostexSettings>(
-    key: Key,
-  ): Required<SettingModificationProps> => ({
-    advanced: isAdvancedMainSetting(String(key)),
-    isModified: !Object.is(draft[key], DEFAULT_ghostex_SETTINGS[key]),
-    onResetToDefault: () => resetSetting(key),
+  });
+  const { settingsSearchMatchingPages, settingsSidebarPages } = createSettingsSidebarPages({
+    activeHotkeySettingsSectionId,
+    activeMainSettingsGroupId,
+    activeMainSettingsSectionId,
+    activeTab,
+    extraSettingsTabSearches,
+    hasVisibleMainSettings,
+    isSettingsSearching,
+    scrollHotkeySettingsSectionIntoView,
+    scrollMainSettingsSectionIntoView,
+    setActiveHotkeySettingsSectionId,
+    setActiveMainSettingsSectionId,
+    setActiveTab,
+    settingsSearchQuery,
+    showOSIntegrationSettingsTab,
+    visibleHotkeySectionNavigation,
+    visibleHotkeySections,
+    visibleMainSettingsSectionNavigation,
   });
 
-  const applyRecommendedGhosttySettings = () => {
-    /**
-     * CDXC:GhosttySettings 2026-04-30-01:48
-     * The recommended Ghostty button must update both the visible ghostex controls
-     * and the real Ghostty config keys that are not modeled in ghostex settings.
-     */
-    applySettings({
-      ...draft,
-      terminalCursorStyle: "bar",
-      terminalFontFamily: "JetBrains Mono",
-      terminalFontSize: 13,
-      terminalFontWeight: 400,
-      terminalLetterSpacing: 0,
-      terminalLineHeight: 1.2,
-      terminalMouseScrollMultiplierDiscrete: 1,
-      terminalMouseScrollMultiplierPrecision: 1,
-    });
-    onGhosttySettingsAction?.("applyRecommendedGhosttySettings");
-  };
+  useSettingsModalEffects({
+    activeTab,
+    agentsOnboardingSectionRef,
+    appIconPickerUnavailable,
+    appIconSectionRef,
+    autoSleepSectionRef,
+    betaSectionRef,
+    browserSectionRef,
+    chatSectionRef,
+    debuggingSectionRef,
+    dialogContentRef,
+    editorSectionRef,
+    getMainSettingsSectionMeasurementItems,
+    ghostexFolderStats,
+    ghostexFolderStatsLoading,
+    ghosttyBehaviorSectionRef,
+    ghosttyScrollingSectionRef,
+    ghosttyTerminalSectionRef,
+    hasRequestedAppIconsRef,
+    hasRequestedStorageStatsRef,
+    initialSection,
+    isFirstLaunchSetup,
+    isOpen,
+    onRequestGhostexFolderStats,
+    pendingNavigationPersistTimeoutRef,
+    pendingTimeoutRef,
+    powerSectionRef,
+    sessionCardsSectionRef,
+    setActiveMainSettingsSectionId,
+    setActiveTabState,
+    setDraft,
+    settings,
+    settingsSearchQuery,
+    sidebarSectionRef,
+    sidebarTagsSectionRef,
+    soundsSectionRef,
+    statusIndicatorsSectionRef,
+    storageSectionRef,
+    terminalDevServersSectionRef,
+    themingSectionRef,
+    visibleMainSettingsSectionIds,
+    vscode,
+  });
 
-  const resetGhosttySettingsToDefault = () => {
-    /**
-     * CDXC:GhosttySettings 2026-04-30-01:48
-     * Resetting Ghostty defaults should also move the visible terminal
-     * controls back to ghostex defaults, then remove managed keys from the real
-     * Ghostty config so Ghostty's own defaults take effect.
-     */
-    applySettings({
-      ...draft,
-      terminalCursorStyle: DEFAULT_ghostex_SETTINGS.terminalCursorStyle,
-      terminalFontFamily: DEFAULT_ghostex_SETTINGS.terminalFontFamily,
-      terminalFontSize: DEFAULT_ghostex_SETTINGS.terminalFontSize,
-      terminalFontWeight: DEFAULT_ghostex_SETTINGS.terminalFontWeight,
-      terminalLetterSpacing: DEFAULT_ghostex_SETTINGS.terminalLetterSpacing,
-      terminalLineHeight: DEFAULT_ghostex_SETTINGS.terminalLineHeight,
-      terminalMouseScrollMultiplierDiscrete:
-        DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierDiscrete,
-      terminalMouseScrollMultiplierPrecision:
-        DEFAULT_ghostex_SETTINGS.terminalMouseScrollMultiplierPrecision,
-      terminalScrollToBottomWhenTyping: DEFAULT_ghostex_SETTINGS.terminalScrollToBottomWhenTyping,
-    });
-    onGhosttySettingsAction?.("resetGhosttySettingsToDefault");
-  };
+  const {
+    applySettings,
+    applySettingsPatch,
+    closeSettingsModal,
+    persistSettingsModalNavigation,
+    scheduleSettingsModalNavigationPersist,
+    updateDiagnosticLoggingScenario,
+    updateDraft,
+    updateDraftDebounced,
+    updateShowAdvancedSettings,
+  } = createSettingsPersistence({
+    activeTab,
+    draft,
+    isFirstLaunchSetup,
+    onChange,
+    onClose,
+    onPatch,
+    pendingNavigationPersistTimeoutRef,
+    pendingSettingsPatchRef,
+    pendingSettingsRef,
+    pendingTimeoutRef,
+    rememberActiveScrollPosition,
+    setDraft,
+  });
+  const {
+    chooseAppIconFile,
+    chooseTerminalBackgroundImageFile,
+    nativeFilePickerAvailable,
+    selectAppIcon,
+  } = useAppIconSettings({
+    appIconPickerUnavailable,
+    appIconState,
+    draft,
+    handledAppIconStateRef,
+    isOpen,
+    pendingAppIconSourceIdRef,
+    pendingSettingsRef,
+    setAppIconError,
+    updateDraft,
+    vscode,
+  });
+  const {
+    activeSidebarSettingsPresetId,
+    applyRecommendedGhosttySettings,
+    getSettingModificationProps,
+    resetGhosttySettingsToDefault,
+    resetSettings,
+    updateSidebarSettingsPreset,
+  } = createSettingsActions({
+    applySettings,
+    applySettingsPatch,
+    draft,
+    onGhosttySettingsAction,
+    pendingAppIconSourceIdRef,
+    pendingSettingsRef,
+    setAppIconError,
+    vscode,
+  });
 
   const settingsSearchEmptyState = isSettingsSearching ? (
     <SettingsSearchNoMatchesNotice

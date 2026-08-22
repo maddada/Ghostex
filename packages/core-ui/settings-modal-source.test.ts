@@ -43,6 +43,37 @@ const settingsModalPortlessTabSource = readFileSync(
   new URL("./settings-modal/tabs/portless.tsx", import.meta.url),
   "utf8",
 );
+// CDXC:SettingsModalSplit 2026-08-23: the inline SettingsModal hook/logic block
+// was decomposed into packages/core-ui/settings-modal/*; these mirror the pieces
+// the raw-source assertions below now need to read from.
+const settingsModalSearchCatalogSource = readFileSync(
+  new URL("./settings-modal/search-catalog.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalVisibilitySource = readFileSync(
+  new URL("./settings-modal/main-settings-visibility.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalSidebarPagesSource = readFileSync(
+  new URL("./settings-modal/sidebar-pages.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalEffectsSource = readFileSync(
+  new URL("./settings-modal/use-settings-modal-effects.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalPersistenceSource = readFileSync(
+  new URL("./settings-modal/settings-persistence.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalAppIconSource = readFileSync(
+  new URL("./settings-modal/use-app-icon-settings.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalActionsSource = readFileSync(
+  new URL("./settings-modal/settings-actions.ts", import.meta.url),
+  "utf8",
+);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -136,7 +167,7 @@ describe("settings modal source", () => {
     expect(settingsSidebar).toContain("Show Advanced");
     expect(settingsModalSource).toContain("const showAdvancedSettings = draft.showAdvancedSettings;");
     expect(settingsModalSource).not.toContain("const [showAdvancedSettings, setShowAdvancedSettings]");
-    expect(settingsModalSource).toContain("showAdvancedSettings: checked");
+    expect(settingsModalPersistenceSource).toContain("showAdvancedSettings: checked");
     expect(settingsSidebar).toContain('<PageIcon aria-hidden="true" data-icon="inline-start" />');
     expect(settingsSidebar).toContain('className="settings-sidebar-page-title truncate"');
     expect(settingsModalSource).not.toContain("settings-show-advanced-anchor");
@@ -151,7 +182,7 @@ describe("settings modal source", () => {
       "icon: IconPlayerPlay",
       "icon: IconExternalLink",
     ]) {
-      expect(settingsModalSource).toContain(categoryIcon);
+      expect(settingsModalSidebarPagesSource).toContain(categoryIcon);
     }
     const subsectionButton = sourceBetween(
       settingsSidebar,
@@ -226,7 +257,7 @@ describe("settings modal source", () => {
     expect(tabSetter).toContain("persistSettingsModalNavigation(visibleTab);");
 
     const navigationPersistence = sourceBetween(
-      settingsModalSource,
+      settingsModalPersistenceSource,
       "const persistSettingsModalNavigation",
       "const closeSettingsModal",
     );
@@ -340,10 +371,9 @@ describe("settings modal source", () => {
      * on each installed hook row plus one Uninstall All in the Agent Hooks
      * section — instead of a separate Hooks & Skills recovery card.
      */
-    const navigation = sourceBetween(
-      settingsModalSource,
+    const navigation = sourceFrom(
+      settingsModalSearchCatalogSource,
       "const mainSettingsSectionNavigation",
-      "const hasVisibleMainSettings",
     );
     const integrationsTab = sourceBetween(
       settingsModalIntegrationsTabSource,
@@ -391,7 +421,7 @@ describe("settings modal source", () => {
      * button so search can lead users to the opt-in gate.
      */
     const betaSearch = sourceBetween(
-      settingsModalSource,
+      settingsModalSearchCatalogSource,
       'beta: getSettingsSectionSearch(settingsSearchQuery, "Experimental", [',
       'debugging: getSettingsSectionSearch(settingsSearchQuery, "Debugging", [',
     );
@@ -401,7 +431,7 @@ describe("settings modal source", () => {
       '{mainSubsectionVisible("debugging", settingsSearch.debugging) ? (',
     );
     const mainVisibility = sourceBetween(
-      settingsModalSource,
+      settingsModalVisibilitySource,
       "const keepAwakeSettingsVisible =",
       "const visibleMainSettingsSectionNavigation",
     );
@@ -412,7 +442,7 @@ describe("settings modal source", () => {
     expect(betaSection).toContain("Title bar and Power settings: Keep Awake");
     expect(betaSection).toContain("Keep Awake title-bar button");
     expect(mainVisibility).toContain('sectionId === "power" && !keepAwakeSettingsVisible');
-    expect(mainVisibility).toContain("system: powerSectionRef");
+    expect(settingsModalSource).toContain("system: powerSectionRef");
     expect(mainVisibility).toContain("first-launch lid-close preference");
   });
 
@@ -428,10 +458,9 @@ describe("settings modal source", () => {
       "const DEBUGGING_MODE_DEPENDENT_SETTING_KEYS = [",
       "] as const;",
     );
-    const debuggingVisibility = sourceBetween(
-      settingsModalSource,
+    const debuggingVisibility = sourceFrom(
+      settingsModalVisibilitySource,
       "const debuggingModeDependentSettingsVisible = draft.debuggingMode;",
-      "const hotkeyDefinitionsById",
     );
     const debuggingSection = sourceBetween(
       settingsModalSource,
@@ -521,10 +550,9 @@ describe("settings modal source", () => {
       "terminalDevServers: [",
       "browser: [",
     );
-    const settingsNavigation = sourceBetween(
-      settingsModalSource,
+    const settingsNavigation = sourceFrom(
+      settingsModalSearchCatalogSource,
       "const mainSettingsSectionNavigation",
-      "const hasVisibleMainSettings",
     );
     const devServersSection = sourceBetween(
       settingsModalSource,
@@ -557,7 +585,7 @@ describe("settings modal source", () => {
       "tools: [",
     );
     const terminalSearch = sourceBetween(
-      settingsModalSource,
+      settingsModalSearchCatalogSource,
       'terminal: getSettingsSectionSearch(settingsSearchQuery, "Terminal", [',
       'terminalBehavior: getSettingsSectionSearch(settingsSearchQuery, "Terminal Behavior", [',
     );
@@ -733,10 +761,9 @@ describe("settings modal source", () => {
      * App Icon now lives under the grouped Appearance navigation item rather
      * than owning a separate sidebar row.
      */
-    const settingsNavigation = sourceBetween(
-      settingsModalSource,
+    const settingsNavigation = sourceFrom(
+      settingsModalSearchCatalogSource,
       "const mainSettingsSectionNavigation",
-      "const hasVisibleMainSettings",
     );
     const advancedMainSettings = sourceBetween(
       settingsModalTypesSource,
@@ -744,7 +771,7 @@ describe("settings modal source", () => {
       "type HotkeySettingsSectionId",
     );
     const appIconSearch = sourceBetween(
-      settingsModalSource,
+      settingsModalSearchCatalogSource,
       'appIcon: getSettingsSectionSearch(settingsSearchQuery, "App Icon", [',
       'browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", [',
     );
@@ -763,23 +790,29 @@ describe("settings modal source", () => {
     expect(appIconSearch).toContain("appIconSourceId");
 
     // Exact outbound wire-contract messages used by the simplified UI.
-    expect(settingsModalSource).toContain('vscode.postMessage({ type: "listAppIcons" });');
-    expect(settingsModalSource).toContain('vscode.postMessage({ type: "setAppIcon", sourceId });');
-    expect(settingsModalSource).toContain('vscode.postMessage({ type: "pickAppIconFile" });');
-    expect(settingsModalSource).not.toContain("revealAppIconsFolder");
+    expect(settingsModalEffectsSource).toContain('vscode.postMessage({ type: "listAppIcons" });');
+    expect(settingsModalAppIconSource).toContain(
+      'vscode.postMessage({ type: "setAppIcon", sourceId });',
+    );
+    expect(settingsModalAppIconSource).toContain('vscode.postMessage({ type: "pickAppIconFile" });');
+    expect(settingsModalAppIconSource).not.toContain("revealAppIconsFolder");
 
     // Inbound appIconState is prop-driven (relayed via the modal host like
     // osIntegrationStatus), NOT direct window host-event listeners.
     expect(settingsModalSource).toContain("appIconState?: SidebarAppIconStateMessage;");
-    expect(settingsModalSource).toContain("}, [appIconState, draft]);");
-    expect(settingsModalSource).not.toContain("handleAppIconHostEvent");
-    expect(settingsModalSource).not.toContain("isSidebarAppIconStateMessage");
+    expect(settingsModalAppIconSource).toContain("}, [appIconState, draft]);");
+    expect(settingsModalAppIconSource).not.toContain("handleAppIconHostEvent");
+    expect(settingsModalAppIconSource).not.toContain("isSidebarAppIconStateMessage");
 
     // Confirm-before-persist: only an ok prop state writes appIconSourceId.
-    expect(settingsModalSource).toContain("if (appIconState.ok) {");
-    expect(settingsModalSource).toContain("handledAppIconStateRef.current === appIconState");
-    expect(settingsModalSource).toContain('updateDraft("appIconSourceId", confirmedSourceId);');
-    expect(settingsModalSource).toContain('vscode?.postMessage({ type: "setAppIcon", sourceId: "" });');
+    expect(settingsModalAppIconSource).toContain("if (appIconState.ok) {");
+    expect(settingsModalAppIconSource).toContain("handledAppIconStateRef.current === appIconState");
+    expect(settingsModalAppIconSource).toContain(
+      'updateDraft("appIconSourceId", confirmedSourceId);',
+    );
+    expect(settingsModalActionsSource).toContain(
+      'vscode?.postMessage({ type: "setAppIcon", sourceId: "" });',
+    );
 
     // The field is one preview plus Select Image; no gallery, reveal action, or
     // separate reset button. The preview X selects the empty/default source id.
