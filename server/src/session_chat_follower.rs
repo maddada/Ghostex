@@ -1,0 +1,1224 @@
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use serde_json::{json, Map, Value};
+
+use crate::session_chat::*;
+use crate::session_chat_paths::resolve_session_chat_transcript_path;
+use crate::session_chat_successor::{
+    find_claude_successor_transcript, is_uuid_transcript_stem,
+    last_substantive_transcript_timestamp_ms, SessionChatSuccessorOutcome,
+};
+
+pub(crate) struct FollowerFileState {
+    incremental: SessionChatIncrementalState,
+    watched_version: Option<TranscriptFileVersion>,
+    watched_boundary: String,
+}
+
+impl FollowerFileState {
+    pub(crate) fn new() -> Self {
+        Self {
+            incremental: SessionChatIncrementalState::new(),
+            watched_version: None,
+            watched_boundary: String::new(),
+        }
+    }
+}
+
+pub(crate) enum FollowerDrainOutcome {
+    /// stat/read failed — the path is gone; return to resolve-poll.
+    Missing,
+    Idle,
+    Snapshot {
+        tail: SessionChatTailFileResult,
+        appended: Vec<SessionChatMessage>,
+        appended_lifecycle: Option<SessionChatTurnLifecycle>,
+        content_replaced: bool,
+    },
+    Appended {
+        batches: Vec<Vec<SessionChatMessage>>,
+        lifecycle: Option<SessionChatTurnLifecycle>,
+        /// Prompts published by an earlier drain that this one proved
+        /// abandoned (see `superseded_prompt_id`).
+        superseded: Vec<String>,
+    },
+}
+
+pub(crate) fn follower_drain_once(
+    file_path: &Path,
+    limit: usize,
+    agent: SessionChatTranscriptAgent,
+    decode: SessionChatLineDecoder,
+    decode_lifecycle: Option<SessionChatLifecycleDecoder>,
+    state: &mut FollowerFileState,
+    want_snapshot: bool,
+) -> FollowerDrainOutcome {
+    let lineage = session_chat_lineage_extractor(agent);
+    let Ok(current) = read_transcript_file_version(file_path) else {
+        return FollowerDrainOutcome::Missing;
+    };
+    let current_boundary =
+        boundary_fingerprint(file_path, state.incremental.offset).unwrap_or_default();
+    let identity_changed = state
+        .watched_version
+        .as_ref()
+        .is_some_and(|watched| watched.identity != current.identity);
+    let same_size_version_changed = state.watched_version.as_ref().is_some_and(|watched| {
+        watched.identity == current.identity && watched.size == current.size && *watched != current
+    });
+    let content_replaced = identity_changed
+        || same_size_version_changed
+        || current.size < state.incremental.offset
+        || (state.incremental.offset > 0 && state.watched_boundary != current_boundary);
+    if agent == SessionChatTranscriptAgent::Pi {
+        if !want_snapshot && !content_replaced && current.size == state.incremental.offset {
+            state.watched_version = Some(current);
+            return FollowerDrainOutcome::Idle;
+        }
+        let Ok(tail) = read_pi_session_chat_transcript_tail_file(file_path, limit, false, None)
+        else {
+            return FollowerDrainOutcome::Missing;
+        };
+        state.incremental.rebase(tail.consumed_to);
+        state.watched_boundary =
+            boundary_fingerprint(file_path, state.incremental.offset).unwrap_or_default();
+        state.watched_version = read_transcript_file_version(file_path)
+            .ok()
+            .or(Some(current));
+        return FollowerDrainOutcome::Snapshot {
+            tail,
+            appended: Vec::new(),
+            appended_lifecycle: None,
+            content_replaced,
+        };
+    }
+    if content_replaced {
+        state.incremental.reset();
+    }
+
+    let outcome = if want_snapshot || content_replaced {
+        match read_session_chat_transcript_tail_file(
+            file_path,
+            limit,
+            decode,
+            false,
+            None,
+            decode_lifecycle,
+            lineage,
+        ) {
+            Err(_) => return FollowerDrainOutcome::Missing,
+            Ok(tail) => {
+                state.incremental.rebase(tail.consumed_to);
+                state
+                    .incremental
+                    .seed_queued_prompts(tail.outstanding_queued_prompts.clone());
+                // Pick up anything written after consumed_to before we settle.
+                let mut appended_lifecycle: Option<SessionChatTurnLifecycle> = None;
+                let mut capture_lifecycle =
+                    |next: SessionChatTurnLifecycle| appended_lifecycle = Some(next);
+                let capture_lifecycle: &mut dyn FnMut(SessionChatTurnLifecycle) =
+                    &mut capture_lifecycle;
+                let mut appended = read_incremental_transcript_messages(
+                    file_path,
+                    &mut state.incremental,
+                    decode,
+                    None,
+                    decode_lifecycle,
+                    Some(capture_lifecycle),
+                    lineage,
+                )
+                .unwrap_or_default();
+                // The window itself is already filtered, so anything the
+                // trailing read retracts can only be inside `appended`.
+                let superseded = state.incremental.take_superseded_prompt_ids();
+                if !superseded.is_empty() {
+                    appended.retain(|message| !superseded.contains(&message.id));
+                }
+                FollowerDrainOutcome::Snapshot {
+                    tail,
+                    appended,
+                    appended_lifecycle,
+                    content_replaced,
+                }
+            }
+        }
+    } else if current.size != state.incremental.offset {
+        let mut batches: Vec<Vec<SessionChatMessage>> = Vec::new();
+        let mut lifecycle: Option<SessionChatTurnLifecycle> = None;
+        let mut push_batch = |batch: Vec<SessionChatMessage>| batches.push(batch);
+        let push_batch: &mut dyn FnMut(Vec<SessionChatMessage>) = &mut push_batch;
+        let mut capture_lifecycle = |next: SessionChatTurnLifecycle| lifecycle = Some(next);
+        let capture_lifecycle: &mut dyn FnMut(SessionChatTurnLifecycle) = &mut capture_lifecycle;
+        match read_incremental_transcript_messages(
+            file_path,
+            &mut state.incremental,
+            decode,
+            Some(push_batch),
+            decode_lifecycle,
+            Some(capture_lifecycle),
+            lineage,
+        ) {
+            Err(_) => return FollowerDrainOutcome::Missing,
+            Ok(remaining) => {
+                if !remaining.is_empty() {
+                    batches.push(remaining);
+                }
+                // A prompt abandoned inside this same drain never reaches a
+                // client, so it is dropped from the batch instead of being
+                // published and retracted in the same breath.
+                let mut superseded = state.incremental.take_superseded_prompt_ids();
+                if !superseded.is_empty() {
+                    let abandoned: HashSet<String> = superseded.iter().cloned().collect();
+                    let mut removed_before_publishing: HashSet<String> = HashSet::new();
+                    for batch in batches.iter_mut() {
+                        batch.retain(|message| {
+                            if abandoned.contains(&message.id) {
+                                removed_before_publishing.insert(message.id.clone());
+                                return false;
+                            }
+                            true
+                        });
+                    }
+                    batches.retain(|batch| !batch.is_empty());
+                    // Only ids an EARLIER drain already published have to be
+                    // retracted; the rest never reached a client.
+                    superseded.retain(|id| !removed_before_publishing.contains(id));
+                }
+                if batches.is_empty() && lifecycle.is_none() && superseded.is_empty() {
+                    FollowerDrainOutcome::Idle
+                } else {
+                    FollowerDrainOutcome::Appended {
+                        batches,
+                        lifecycle,
+                        superseded,
+                    }
+                }
+            }
+        }
+    } else {
+        FollowerDrainOutcome::Idle
+    };
+
+    state.watched_boundary =
+        boundary_fingerprint(file_path, state.incremental.offset).unwrap_or_default();
+    match read_transcript_file_version(file_path) {
+        // A write raced the drain: keep the start version so the next 1s
+        // reconcile observes the difference and drains again.
+        Ok(completed) if completed == current => state.watched_version = Some(completed),
+        _ => state.watched_version = Some(current),
+    }
+    outcome
+}
+
+fn session_chat_frame(
+    config: &SessionChatFollowerConfig,
+    frame_type: &str,
+    epoch: i64,
+    seq: i64,
+) -> Map<String, Value> {
+    let mut frame = Map::new();
+    frame.insert("type".to_string(), json!(frame_type));
+    frame.insert("projectId".to_string(), json!(config.project_id));
+    frame.insert("sessionId".to_string(), json!(config.session_id));
+    frame.insert("epoch".to_string(), json!(epoch));
+    frame.insert("seq".to_string(), json!(seq));
+    frame.insert(
+        "protocolVersion".to_string(),
+        json!(config.protocol_version),
+    );
+    frame.insert("serverId".to_string(), json!(config.server_id));
+    frame
+}
+
+fn insert_optional_lifecycle(
+    frame: &mut Map<String, Value>,
+    lifecycle: Option<&SessionChatTurnLifecycle>,
+) {
+    if let Some(lifecycle) = lifecycle {
+        if let Ok(value) = serde_json::to_value(lifecycle) {
+            frame.insert("lifecycle".to_string(), value);
+        }
+    }
+}
+
+fn insert_optional_agent_session_id(
+    frame: &mut Map<String, Value>,
+    config: &SessionChatFollowerConfig,
+) {
+    if let Some(agent_session_id) = config
+        .agent_session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        frame.insert("agentSessionId".to_string(), json!(agent_session_id));
+    }
+}
+
+fn insert_optional_prompt(
+    frame: &mut Map<String, Value>,
+    prompt: Option<&SessionChatInteractivePrompt>,
+) {
+    if let Some(prompt) = prompt {
+        if let Ok(value) = serde_json::to_value(prompt) {
+            frame.insert("prompt".to_string(), value);
+        }
+    }
+}
+
+/// Detected model/effort. Absent ⇒ the field is omitted ⇒ clients keep their
+/// own truth (older daemons behave the same way).
+pub(crate) fn insert_optional_selected_options(
+    frame: &mut Map<String, Value>,
+    selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+) {
+    if let Some(selected_options) = selected_options {
+        frame.insert("selectedOptions".to_string(), selected_options.to_value());
+    }
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-19:
+Terminal-state notice (login expired, trust dialog, usage limit, undelivered
+send). Absent ⇒ the field is omitted ⇒ clients CLEAR the card, exactly like
+`prompt` and unlike `selectedOptions`. Every frame that can carry it must
+therefore carry the CURRENT value, never `None` as a shorthand for "unchanged".
+*/
+fn insert_optional_terminal_notice(
+    frame: &mut Map<String, Value>,
+    terminal_notice: Option<&crate::session_chat_notice::SessionChatTerminalNotice>,
+) {
+    if let Some(terminal_notice) = terminal_notice {
+        frame.insert("terminalNotice".to_string(), terminal_notice.to_value());
+    }
+}
+
+/*
+CDXC:SessionChatTerminalActivity 2026-08-22:
+Everything one terminal capture tells a client, travelling as ONE value. The
+notice card and the transcript's activity row are read from the same screen and
+are always restated together — carrying them as two parallel parameters through
+four frame builders is how they would eventually drift out of step, with a
+stale progress row surviving a frame that cleared its notice (or the reverse).
+Both halves keep `prompt` semantics: absent ⇒ the field is omitted ⇒ the client
+CLEARS it, so every producer restates the CURRENT value.
+*/
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SessionChatScreenState<'a> {
+    pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
+    pub activity:
+        Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    /*
+    CDXC:SessionChatScreenProbed 2026-08-22:
+    True once a WHOLE screen capture has actually been read for this session.
+
+    Every other screen-derived field omits itself when it has nothing to say,
+    which leaves a client unable to tell "the model is still being detected"
+    from "detection ran and this agent's screen names no model". The composer
+    needs exactly that distinction to decide between a loading skeleton and a
+    plain unset pill — a stopped or sleeping session has no screen at all and
+    must never sit under a spinner waiting for a value that is not coming.
+
+    Same rule as `captured` in SessionChatTerminalDetection, which is where
+    this comes from: only a capture that succeeded whole counts.
+    */
+    pub probed: bool,
+}
+
+pub(crate) fn insert_screen_state(frame: &mut Map<String, Value>, screen: SessionChatScreenState<'_>) {
+    insert_optional_terminal_notice(frame, screen.notice);
+    if let Some(activity) = screen.activity {
+        frame.insert("terminalActivity".to_string(), activity.to_value());
+    }
+    if screen.probed {
+        frame.insert("screenProbed".to_string(), Value::Bool(true));
+    }
+}
+
+/*
+CDXC:SessionChatQueueCarriage 2026-08-21:
+Queue + draft ride snapshot / replaced / state frames only. `queue` is written
+even when empty — present is the daemon capability probe — while `draft` is
+written only when the server actually holds one, because an omitted draft means
+UNCHANGED and never "cleared". Reads the state database, so this runs inside the
+frame builders and never on the reconcile tick.
+*/
+fn insert_optional_queue(frame: &mut Map<String, Value>, config: &SessionChatFollowerConfig) {
+    let Some(reader) = config.queue_reader.as_ref() else {
+        return;
+    };
+    reader().insert_into(frame);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_state_frame(
+    emit: &SessionChatFrameEmitter,
+    config: &SessionChatFollowerConfig,
+    stream: &SessionChatStream,
+    epoch: i64,
+    status: SessionChatStatus,
+    prompt: Option<&SessionChatInteractivePrompt>,
+    working: Option<bool>,
+    selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    screen: SessionChatScreenState<'_>,
+) {
+    stream.emit_sequenced(
+        |seq| {
+            let mut frame = session_chat_frame(config, "sessionChatState", epoch, seq);
+            frame.insert("status".to_string(), json!(status.as_str()));
+            insert_optional_prompt(&mut frame, prompt);
+            if let Some(working) = working {
+                frame.insert("working".to_string(), json!(working));
+            }
+            insert_optional_selected_options(&mut frame, selected_options);
+            insert_screen_state(&mut frame, screen);
+            insert_optional_queue(&mut frame, config);
+            insert_optional_agent_session_id(&mut frame, config);
+            Value::Object(frame)
+        },
+        |frame| emit(frame),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_snapshot_frame(
+    emit: &SessionChatFrameEmitter,
+    config: &SessionChatFollowerConfig,
+    stream: &SessionChatStream,
+    epoch: i64,
+    frame_type: &str,
+    tail: &SessionChatTailFileResult,
+    prompt: Option<&SessionChatInteractivePrompt>,
+    working: bool,
+    selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
+    screen: SessionChatScreenState<'_>,
+) {
+    stream.emit_sequenced(
+        |seq| {
+            let mut frame = session_chat_frame(config, frame_type, epoch, seq);
+            frame.insert(
+                "messages".to_string(),
+                serde_json::to_value(&tail.messages).unwrap_or(Value::Array(Vec::new())),
+            );
+            insert_optional_lifecycle(&mut frame, tail.lifecycle.as_ref());
+            frame.insert("hasMore".to_string(), json!(tail.has_more));
+            frame.insert("beforeOffset".to_string(), json!(tail.before_offset));
+            let status = if tail.messages.is_empty() {
+                SessionChatStatus::Empty
+            } else {
+                SessionChatStatus::Ready
+            };
+            frame.insert("status".to_string(), json!(status.as_str()));
+            frame.insert("working".to_string(), json!(working));
+            insert_optional_prompt(&mut frame, prompt);
+            insert_optional_selected_options(&mut frame, selected_options);
+            insert_screen_state(&mut frame, screen);
+            insert_optional_queue(&mut frame, config);
+            insert_optional_agent_session_id(&mut frame, config);
+            Value::Object(frame)
+        },
+        |frame| emit(frame),
+    );
+}
+
+fn emit_appended_frame(
+    emit: &SessionChatFrameEmitter,
+    config: &SessionChatFollowerConfig,
+    stream: &SessionChatStream,
+    epoch: i64,
+    messages: &[SessionChatMessage],
+    lifecycle: Option<&SessionChatTurnLifecycle>,
+    superseded_message_ids: &[String],
+) {
+    stream.emit_sequenced(
+        |seq| {
+            let mut frame = session_chat_frame(config, "sessionChatAppended", epoch, seq);
+            frame.insert(
+                "messages".to_string(),
+                serde_json::to_value(messages).unwrap_or(Value::Array(Vec::new())),
+            );
+            // Omitted when empty: daemons and clients that predate the field
+            // then behave exactly as before.
+            if !superseded_message_ids.is_empty() {
+                frame.insert(
+                    "supersededMessageIds".to_string(),
+                    json!(superseded_message_ids),
+                );
+            }
+            insert_optional_lifecycle(&mut frame, lifecycle);
+            Value::Object(frame)
+        },
+        |frame| emit(frame),
+    );
+}
+
+/// How often a follower may pay for a successor directory scan while the
+/// transcript it tails stays substantively stale.
+pub(crate) const SUCCESSOR_SCAN_INTERVAL: Duration = Duration::from_millis(30_000);
+
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/*
+CDXC:SessionChatIdentity 2026-08-02:
+Runs when the tailed transcript has had no `user`/`assistant` record for
+SUCCESSOR_STALE_SUBSTANTIVE_IDLE_MS and re-resolving the stored identity landed
+back on that same file. Adoption is persisted through the registry FIRST: if the
+write is refused the follower keeps tailing what it has, so the chat can never
+show a conversation the rest of the daemon does not agree with (and the next
+staleness check cannot flap back and forth between two files).
+*/
+async fn detect_and_adopt_successor_transcript(
+    transcript_agent: SessionChatTranscriptAgent,
+    config: &SessionChatFollowerConfig,
+    stale_path: &Path,
+    stored_agent_session_id: Option<&str>,
+    logged_notice: &mut Option<String>,
+) -> Option<SessionChatIdentityAdoption> {
+    if transcript_agent != SessionChatTranscriptAgent::Claude {
+        return None;
+    }
+    let hooks = config.successor_hooks.clone()?;
+    let stale_session_id = stale_path.file_stem()?.to_str()?.to_string();
+    if !is_uuid_transcript_stem(&stale_session_id) {
+        return None;
+    }
+    let now_ms = now_epoch_ms();
+    let stale_substantive_idle_ms = config.tuning.successor_stale_substantive_idle_ms;
+    let scan_path = stale_path.to_path_buf();
+    let scan_stale_session_id = stale_session_id.clone();
+    let bound_agent_session_ids = hooks.bound_agent_session_ids.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let last_substantive_ms = last_substantive_transcript_timestamp_ms(&scan_path)?;
+        if now_ms.saturating_sub(last_substantive_ms) < stale_substantive_idle_ms {
+            return None;
+        }
+        let owned = bound_agent_session_ids();
+        Some(find_claude_successor_transcript(
+            &scan_stale_session_id,
+            &scan_path,
+            last_substantive_ms,
+            &owned,
+        ))
+    })
+    .await
+    .ok()
+    .flatten()?;
+
+    // Repeat scans of an unchanged directory must not spam the log.
+    let mut log_once = |key: String, notice: SessionChatSuccessorNotice| {
+        if logged_notice.as_deref() != Some(key.as_str()) {
+            *logged_notice = Some(key);
+            (hooks.log)(notice);
+        }
+    };
+
+    match outcome {
+        SessionChatSuccessorOutcome::NotFound => None,
+        SessionChatSuccessorOutcome::Ambiguous {
+            predecessor_session_id,
+            candidate_session_ids,
+        } => {
+            let key = format!(
+                "ambiguous|{predecessor_session_id}|{}",
+                candidate_session_ids.join(",")
+            );
+            log_once(
+                key,
+                SessionChatSuccessorNotice::Ambiguous {
+                    predecessor_session_id,
+                    candidate_session_ids,
+                },
+            );
+            None
+        }
+        SessionChatSuccessorOutcome::OwnedByAnotherSession {
+            candidate_session_ids,
+        } => {
+            let key = format!("owned|{}", candidate_session_ids.join(","));
+            log_once(
+                key,
+                SessionChatSuccessorNotice::OwnedByAnotherSession {
+                    predecessor_session_id: stale_session_id,
+                    candidate_session_ids,
+                },
+            );
+            None
+        }
+        SessionChatSuccessorOutcome::Found(successor) => {
+            let adoption = SessionChatIdentityAdoption {
+                previous_agent_session_id: stored_agent_session_id.map(str::to_string),
+                predecessor_transcript_session_id: stale_session_id.clone(),
+                agent_session_id: successor.agent_session_id.clone(),
+                agent_session_path: successor.path.to_string_lossy().into_owned(),
+                lineage: successor.lineage.as_str(),
+                hops: successor.hops,
+            };
+            let adopt_identity = hooks.adopt_identity.clone();
+            let persisted_input = adoption.clone();
+            let persisted = tokio::task::spawn_blocking(move || adopt_identity(persisted_input))
+                .await
+                .unwrap_or(false);
+            if !persisted {
+                let key = format!("rejected|{}", successor.agent_session_id);
+                log_once(
+                    key,
+                    SessionChatSuccessorNotice::AdoptionRejected {
+                        agent_session_id: successor.agent_session_id,
+                        reason: "registry-identity-write-refused",
+                    },
+                );
+                return None;
+            }
+            *logged_notice = None;
+            (hooks.log)(SessionChatSuccessorNotice::Adopted(adoption.clone()));
+            Some(adoption)
+        }
+    }
+}
+
+/*
+Per-session follower task. Runs only while ≥1 client subscribes AND the
+session is running (the server.rs registry enforces both). `resnapshot` is
+signaled when another subscriber joins a live follower: every subscribe must
+be answered by an authoritative snapshot, so the follower starts a fresh
+generation (epoch bump, seq reset) and re-reads the tail instead of being
+torn down and respawned mid-drain.
+*/
+pub async fn run_session_chat_follower(
+    mut config: SessionChatFollowerConfig,
+    stream: Arc<SessionChatStream>,
+    resnapshot: Arc<tokio::sync::Notify>,
+    emit: SessionChatFrameEmitter,
+) {
+    let read_live_state = || match config.state_reader.as_ref() {
+        Some(reader) => reader(),
+        None => SessionChatLiveState::default(),
+    };
+    // Cached detection only: frames must never pay for a process spawn. Carries
+    // BOTH the model/effort pills and the terminal-state notice.
+    let read_cached_detection = || {
+        config
+            .options_reader
+            .as_ref()
+            .map(|reader| reader(crate::session_chat_options::SessionChatOptionsReadMode::Cached))
+            .unwrap_or_default()
+    };
+    let Some(transcript_agent) = resolve_session_chat_transcript_agent(config.agent.as_deref())
+    else {
+        loop {
+            let epoch = stream.begin_generation();
+            emit_state_frame(
+                &emit,
+                &config,
+                &stream,
+                epoch,
+                SessionChatStatus::Unsupported,
+                None,
+                None,
+                None,
+                SessionChatScreenState::default(),
+            );
+            resnapshot.notified().await;
+        }
+    };
+    let decode = session_chat_line_decoder(transcript_agent);
+    let decode_lifecycle = session_chat_lifecycle_decoder(transcript_agent);
+
+    let mut epoch = stream.begin_generation();
+    let mut want_snapshot = true;
+    let mut emitted_starting = false;
+    let mut resolved: Option<PathBuf> = None;
+    let mut resolve_delay = INITIAL_RESOLVE_POLL;
+    let mut file_state = FollowerFileState::new();
+    // Rolling AskUserQuestion state folded over everything decoded so far, plus
+    // the last prompt/working pair actually published to clients.
+    let mut transcript_prompt = SessionChatTranscriptPromptState::default();
+    let mut published_prompt: Option<SessionChatInteractivePrompt> = None;
+    let mut published_working = false;
+    let mut published_state_valid = false;
+    let mut identity = SessionChatFollowerIdentity {
+        agent_session_id: config.agent_session_id.clone(),
+        agent_session_path: config.agent_session_path.clone(),
+    };
+    let mut last_transcript_change = std::time::Instant::now();
+    let mut last_staleness_check = std::time::Instant::now();
+    let mut last_successor_scan = std::time::Instant::now();
+    // "Adopt none and log once" for an ambiguous successor set.
+    let mut logged_successor_ambiguity: Option<String> = None;
+    // Model/effort the follower has published, plus counters that pace the
+    // fast startup probes and periodic steady-state re-detects.
+    let mut published_options: Option<crate::session_chat_options::SessionChatDetectedOptions> =
+        None;
+    // Terminal-state notice the follower has published. Tracked separately
+    // because it can legitimately go back to `None` (the screen cleared), which
+    // MUST be published as an omitted field.
+    let mut published_notice: Option<crate::session_chat_notice::SessionChatTerminalNotice> = None;
+    /*
+    CDXC:SessionChatTerminalActivity 2026-08-22: the progress row the follower
+    has published. Tracked like the notice (it can legitimately go back to
+    `None` when the work finishes) but compared on its NUMBERS too, because a
+    moving percentage is the whole point of publishing it again.
+    */
+    let mut published_activity: Option<
+        crate::session_chat_terminal_activity::SessionChatTerminalActivity,
+    > = None;
+    // CDXC:SessionChatScreenProbed 2026-08-22: latched, not sampled. It answers
+    // "has detection run for this session yet", so a later capture failure (the
+    // session stopped, the daemon went away) must not put the composer back
+    // under a loading skeleton.
+    let mut published_screen_probed = false;
+    let mut reconcile_ticks: u64 = 0;
+    let mut startup_option_reconcile_ticks: u64 = 0;
+
+    /*
+    CDXC:SessionChatSeedDetection 2026-08-22:
+    Probe once, here, before the first frame goes out.
+
+    The snapshot frame reads detection from the shared cache and never spawns,
+    which was right when a capture cost a login shell and a process. On a cold
+    cache — the first chat open after a gxserver start — that meant the
+    snapshot carried NO model/effort at all, and the client's seed read (which
+    does force a detection) is explicitly outranked by the first frame, so its
+    freshly detected value was discarded. The pills then stayed blank until the
+    startup probe below fired on the second reconcile, a second or more later,
+    and only then snapped to the real model. That flash of "Model"/"Options"
+    turning into "Opus 5"/"High" is what this removes.
+
+    A capture is now a direct socket read (CDXC:SessionChatScreenCapture),
+    ~0.1ms typical and ~6ms against a very large scrollback, so paying for one
+    before the snapshot is cheaper than the frame it rides on. The deadline
+    exists only for a wedged daemon that accepts the connection and never
+    answers: the capture's own read timeout is 5s, and stalling a subscribe
+    that long to populate a pill is not a trade worth making. Missing the
+    deadline is not an error — the startup probe below still runs.
+    */
+    if let Some(reader) = config.options_reader.clone() {
+        let _ = tokio::time::timeout(
+            SEED_OPTION_DETECTION_DEADLINE,
+            tokio::task::spawn_blocking(move || {
+                reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
+            }),
+        )
+        .await;
+    }
+
+    loop {
+        if resolved.is_none() {
+            let agent_session_id = identity.agent_session_id.clone();
+            let agent_session_path = identity.agent_session_path.clone();
+            resolved = tokio::task::spawn_blocking(move || {
+                resolve_session_chat_transcript_path(
+                    transcript_agent,
+                    agent_session_id.as_deref(),
+                    agent_session_path.as_deref(),
+                )
+            })
+            .await
+            .ok()
+            .flatten();
+            if resolved.is_none() {
+                if !emitted_starting {
+                    let live = read_live_state();
+                    let detection = read_cached_detection();
+                    emit_state_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        SessionChatStatus::Starting,
+                        live.prompt.as_ref(),
+                        Some(live.working),
+                        detection.options.as_ref(),
+                        SessionChatScreenState {
+                            notice: detection.notice.as_ref(),
+                            activity: live
+                                .working
+                                .then_some(detection.activity.as_ref())
+                                .flatten(),
+                            probed: published_screen_probed || detection.attempted,
+                        },
+                    );
+                    published_notice = detection.notice;
+                    published_activity = if live.working {
+                        detection.activity
+                    } else {
+                        None
+                    };
+                    emitted_starting = true;
+                }
+                tokio::select! {
+                    _ = tokio::time::sleep(resolve_delay) => {}
+                    _ = resnapshot.notified() => {
+                        epoch = stream.begin_generation();
+                        emitted_starting = false;
+                        want_snapshot = true;
+                    }
+                }
+                resolve_delay = (resolve_delay * 2).min(MAX_RESOLVE_POLL);
+                // A stale hook identity is the usual reason the path never
+                // appears: re-read the session's current identity each poll.
+                identity.adopt(read_live_state());
+                continue;
+            }
+            want_snapshot = true;
+            file_state = FollowerFileState::new();
+            transcript_prompt = SessionChatTranscriptPromptState::default();
+            last_transcript_change = std::time::Instant::now();
+        }
+
+        let path = resolved.clone().expect("resolved transcript path");
+        let drain_limit = config.limit;
+        let drain_want_snapshot = want_snapshot;
+        let mut drain_state = std::mem::replace(&mut file_state, FollowerFileState::new());
+        let Ok((returned_state, outcome)) = tokio::task::spawn_blocking(move || {
+            let outcome = follower_drain_once(
+                &path,
+                drain_limit,
+                transcript_agent,
+                decode,
+                decode_lifecycle,
+                &mut drain_state,
+                drain_want_snapshot,
+            );
+            (drain_state, outcome)
+        })
+        .await
+        else {
+            return;
+        };
+        file_state = returned_state;
+        // One live-state read per reconcile: it opens the domain database.
+        let live = read_live_state();
+
+        match outcome {
+            FollowerDrainOutcome::Missing => {
+                // Rotation to a missing path — resolve-poll again and deliver
+                // an authoritative frame once the successor file appears.
+                resolved = None;
+                resolve_delay = INITIAL_RESOLVE_POLL;
+                epoch = stream.begin_generation();
+                emitted_starting = false;
+                want_snapshot = true;
+                continue;
+            }
+            FollowerDrainOutcome::Snapshot {
+                tail,
+                appended,
+                appended_lifecycle,
+                content_replaced,
+            } => {
+                let frame_type = if want_snapshot {
+                    "sessionChatSnapshot"
+                } else {
+                    if content_replaced {
+                        epoch = stream.begin_generation();
+                    }
+                    "sessionChatReplaced"
+                };
+                // The tail window replaces everything the client had, so the
+                // question fold restarts from it.
+                transcript_prompt = SessionChatTranscriptPromptState::default();
+                transcript_prompt.advance(&tail.messages);
+                transcript_prompt.advance(&appended);
+                let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
+                // A subscribing client gets the detected pills value and any
+                // terminal-state notice with its snapshot, so it needs no
+                // separate read.
+                let snapshot_detection = read_cached_detection();
+                emit_snapshot_frame(
+                    &emit,
+                    &config,
+                    &stream,
+                    epoch,
+                    frame_type,
+                    &tail,
+                    prompt.as_ref(),
+                    live.working,
+                    snapshot_detection.options.as_ref(),
+                    SessionChatScreenState {
+                        notice: snapshot_detection.notice.as_ref(),
+                        activity: live
+                            .working
+                            .then_some(snapshot_detection.activity.as_ref())
+                            .flatten(),
+                        probed: published_screen_probed || snapshot_detection.attempted,
+                    },
+                );
+                published_screen_probed = published_screen_probed || snapshot_detection.attempted;
+                if snapshot_detection.options.is_some() {
+                    published_options = snapshot_detection.options;
+                }
+                published_notice = snapshot_detection.notice;
+                published_activity = if live.working {
+                    snapshot_detection.activity
+                } else {
+                    None
+                };
+                published_prompt = prompt;
+                published_working = live.working;
+                published_state_valid = true;
+                want_snapshot = false;
+                last_transcript_change = std::time::Instant::now();
+                if !appended.is_empty() || appended_lifecycle.is_some() {
+                    emit_appended_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        &appended,
+                        appended_lifecycle.as_ref(),
+                        &[],
+                    );
+                }
+            }
+            FollowerDrainOutcome::Appended {
+                batches,
+                lifecycle,
+                superseded,
+            } => {
+                last_transcript_change = std::time::Instant::now();
+                if batches.is_empty() {
+                    // Lifecycle-only and retraction-only frames ARE emitted.
+                    emit_appended_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        &[],
+                        lifecycle.as_ref(),
+                        &superseded,
+                    );
+                } else {
+                    let last_index = batches.len() - 1;
+                    for (index, batch) in batches.iter().enumerate() {
+                        transcript_prompt.advance(batch);
+                        let batch_lifecycle = if index == last_index {
+                            lifecycle.as_ref()
+                        } else {
+                            None
+                        };
+                        // The retraction rides the FIRST frame so a client can
+                        // never re-order it after the rows that replace it.
+                        let batch_superseded: &[String] =
+                            if index == 0 { &superseded } else { &[] };
+                        emit_appended_frame(
+                            &emit,
+                            &config,
+                            &stream,
+                            epoch,
+                            batch,
+                            batch_lifecycle,
+                            batch_superseded,
+                        );
+                    }
+                }
+            }
+            FollowerDrainOutcome::Idle => {}
+        }
+
+        /*
+        CDXC:SessionChatCore 2026-08-01:
+        Interactive cards used to depend entirely on agent hooks. When the
+        installed hook script does not forward toolName/toolInput the card never
+        appeared, and when it never reports PostToolUse a card answered in the
+        terminal stayed on screen forever. The transcript itself answers both:
+        a trailing AskUserQuestion tool call with no tool result means "pending",
+        a tool result after it means "answered". The hook prompt still wins when
+        both exist, so approvals and richer hook payloads are unaffected.
+        */
+        let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
+        // A `⏺` row remains in terminal scrollback after Claude stops. It is
+        // live status only while the agent is working, so the ready transition
+        // must clear it even before the next screen sample.
+        if !live.working {
+            published_activity = None;
+        }
+        if !published_state_valid
+            || effective_prompt != published_prompt
+            || live.working != published_working
+        {
+            if published_state_valid {
+                emit_state_frame(
+                    &emit,
+                    &config,
+                    &stream,
+                    epoch,
+                    if live.working {
+                        SessionChatStatus::Working
+                    } else {
+                        SessionChatStatus::Ready
+                    },
+                    effective_prompt.as_ref(),
+                    Some(live.working),
+                    published_options.as_ref(),
+                    SessionChatScreenState {
+                        notice: published_notice.as_ref(),
+                        activity: published_activity.as_ref(),
+                        probed: published_screen_probed,
+                    },
+                );
+            }
+            published_prompt = effective_prompt;
+            published_working = live.working;
+            published_state_valid = true;
+        }
+
+        /*
+        CDXC:SessionChatDetectedOptions 2026-08-01:
+        Model/effort probe: a newly launched agent can paint its footer just
+        after the seed probe read an empty screen. Probe each 1s reconcile for
+        up to ten seconds until both values arrive, then retain the ~30s
+        steady-state cadence that catches direct TUI changes. The follower only
+        exists while subscribed, and a frame is emitted only when the detected
+        value actually changed.
+
+        `reconcile_ticks > 1` skips the first pass on purpose: the subscribe's
+        own probe (CDXC:SessionChatSeedDetection) already captured at t=0 and
+        the snapshot frame published it, so probing again immediately would
+        capture the same unchanged screen twice.
+
+        CDXC:SessionChatTerminalNotices 2026-08-19:
+        The same probe classifies the captured screen, so a trust dialog or an
+        expired login reaches chat on this cadence for free. A notice may also
+        legitimately CLEAR, which the options half can never do — but only a
+        capture that actually succeeded proves a clean screen, so a failed or
+        capped read leaves the published notice standing.
+        */
+        reconcile_ticks = reconcile_ticks.wrapping_add(1);
+        let startup_probe_due = published_state_valid
+            && config.options_reader.is_some()
+            && reconcile_ticks > 1
+            && startup_option_reconcile_ticks
+                < crate::session_chat_options::SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS
+            && published_options.as_ref().map_or(true, |options| {
+                options.selection.model.is_none() || options.selection.effort.is_none()
+            });
+        if startup_probe_due {
+            startup_option_reconcile_ticks += 1;
+        }
+        /*
+        CDXC:SessionChatTerminalActivity 2026-08-22:
+        The steady 30s cadence is right for state that either holds or does not
+        (a login screen, a model pill), and useless for a progress bar: a
+        compaction can be over before the second sample lands. So the interval
+        is chosen by what the LAST probe found —
+
+          - a live activity ⇒ every few ticks, because its numbers are the
+            reason to publish again at all;
+          - the agent working with no activity known ⇒ a middle cadence, which
+            is what discovers an AUTOMATIC compaction (nothing announces it,
+            and the user never typed a command we could hang a re-detect on);
+          - idle ⇒ the original 30s.
+
+        Only followed sessions probe at all, and only while a client is
+        subscribed, so the faster tiers are bounded by what is actually on
+        screen in front of someone.
+        */
+        let probe_interval_ticks = if published_activity.is_some() {
+            crate::session_chat_options::SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS
+        } else if published_working {
+            crate::session_chat_options::SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS
+        } else {
+            crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
+        };
+        let periodic_probe_due = reconcile_ticks % probe_interval_ticks == 0;
+        if published_state_valid
+            && config.options_reader.is_some()
+            && (startup_probe_due || periodic_probe_due)
+        {
+            let reader = config.options_reader.clone();
+            let mut detection = tokio::task::spawn_blocking(move || {
+                reader
+                    .map(|reader| {
+                        reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
+                    })
+                    .unwrap_or_default()
+            })
+            .await
+            .unwrap_or_default();
+            if !published_working {
+                detection.activity = None;
+            }
+            let options_changed = detection
+                .options
+                .as_ref()
+                .is_some_and(|detected| !detected.same_selection(published_options.as_ref()));
+            let notice_changed = detection.captured
+                && !crate::session_chat_notice::same_session_chat_terminal_notice(
+                    detection.notice.as_ref(),
+                    published_notice.as_ref(),
+                );
+            // Same capture rule as the notice: only a WHOLE capture proves the
+            // progress line is gone, so a capped read leaves the row standing.
+            let activity_changed = detection.captured
+                && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                    detection.activity.as_ref(),
+                    published_activity.as_ref(),
+                );
+            /*
+            CDXC:SessionChatScreenProbed 2026-08-22: the first successful
+            capture is publishable on its own, even when it changed nothing.
+            An agent whose screen names no model detects nothing forever, and
+            without this the composer would never hear that detection HAD run
+            and would hold its loading skeleton for the life of the session.
+            */
+            let probed_changed = detection.attempted && !published_screen_probed;
+            if options_changed || notice_changed || activity_changed || probed_changed {
+                if options_changed {
+                    published_options = detection.options;
+                }
+                if notice_changed {
+                    published_notice = detection.notice;
+                }
+                if activity_changed {
+                    published_activity = detection.activity;
+                }
+                published_screen_probed = published_screen_probed || detection.attempted;
+                emit_state_frame(
+                    &emit,
+                    &config,
+                    &stream,
+                    epoch,
+                    if published_working {
+                        SessionChatStatus::Working
+                    } else {
+                        SessionChatStatus::Ready
+                    },
+                    published_prompt.as_ref(),
+                    Some(published_working),
+                    published_options.as_ref(),
+                    SessionChatScreenState {
+                        notice: published_notice.as_ref(),
+                        activity: published_activity.as_ref(),
+                        probed: published_screen_probed,
+                    },
+                );
+            }
+        }
+
+        /*
+        CDXC:SessionChatCore 2026-08-01:
+        Stale-identity guard. `/clear` and `resume` make the agent start a NEW
+        transcript file while the old one stays on disk, so the follower keeps
+        tailing a file that will never grow again and the chat freezes at the
+        switch point — with no Missing outcome to recover from. When the tailed
+        file has been silent, re-derive the path from the session's CURRENT
+        identity; a different file is treated exactly like a content
+        replacement.
+
+        CDXC:SessionChatIdentity 2026-08-02:
+        The hook-driven re-resolution above only runs while hooks report the
+        session as `working`. The case successor detection must recover from is
+        precisely the one where hooks never fire at all (a background-job
+        continuation writes a NEW transcript and nothing updates the registry),
+        so `working` cannot gate it. It gets its own, slower cadence instead:
+        every SUCCESSOR_SCAN_INTERVAL while the tailed file stays silent.
+        */
+        let successor_scan_due = transcript_agent == SessionChatTranscriptAgent::Claude
+            && config.successor_hooks.is_some()
+            && last_successor_scan.elapsed() >= config.tuning.successor_scan_interval;
+        if last_transcript_change.elapsed() >= config.tuning.stale_transcript_idle
+            && ((published_working
+                && last_staleness_check.elapsed() >= config.tuning.stale_transcript_idle)
+                || successor_scan_due)
+        {
+            last_staleness_check = std::time::Instant::now();
+            identity.adopt(live);
+            let agent_session_id = identity.agent_session_id.clone();
+            let agent_session_path = identity.agent_session_path.clone();
+            let re_resolved = tokio::task::spawn_blocking(move || {
+                resolve_session_chat_transcript_path(
+                    transcript_agent,
+                    agent_session_id.as_deref(),
+                    agent_session_path.as_deref(),
+                )
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(next_path) = re_resolved {
+                if Some(&next_path) != resolved.as_ref() {
+                    resolved = Some(next_path);
+                    file_state = FollowerFileState::new();
+                    transcript_prompt = SessionChatTranscriptPromptState::default();
+                    epoch = stream.begin_generation();
+                    want_snapshot = true;
+                    published_state_valid = false;
+                    last_transcript_change = std::time::Instant::now();
+                    continue;
+                }
+                /*
+                CDXC:SessionChatIdentity 2026-08-02:
+                Re-resolution landed on the SAME file, so the registry identity
+                itself is stale. Look for a transcript that proves it continues
+                this one and re-bind the session to it.
+                */
+                if successor_scan_due {
+                    last_successor_scan = std::time::Instant::now();
+                    if let Some(adopted) = detect_and_adopt_successor_transcript(
+                        transcript_agent,
+                        &config,
+                        &next_path,
+                        identity.agent_session_id.as_deref(),
+                        &mut logged_successor_ambiguity,
+                    )
+                    .await
+                    {
+                        identity.agent_session_id = Some(adopted.agent_session_id.clone());
+                        identity.agent_session_path = Some(adopted.agent_session_path.clone());
+                        config.agent_session_id = Some(adopted.agent_session_id);
+                        config.agent_session_path = Some(adopted.agent_session_path.clone());
+                        resolved = Some(PathBuf::from(&adopted.agent_session_path));
+                        file_state = FollowerFileState::new();
+                        transcript_prompt = SessionChatTranscriptPromptState::default();
+                        epoch = stream.begin_generation();
+                        want_snapshot = true;
+                        published_state_valid = false;
+                        last_transcript_change = std::time::Instant::now();
+                        continue;
+                    }
+                }
+            }
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(config.tuning.reconcile_interval) => {}
+            _ = resnapshot.notified() => {
+                epoch = stream.begin_generation();
+                want_snapshot = true;
+            }
+        }
+    }
+}
+
+/// Identity the follower is currently tailing. Seeded from the spawn config and
+/// refreshed from the live session so a hook update that did not respawn the
+/// task still reaches the resolver.
+pub(crate) struct SessionChatFollowerIdentity {
+    agent_session_id: Option<String>,
+    agent_session_path: Option<String>,
+}
+
+impl SessionChatFollowerIdentity {
+    fn adopt(&mut self, live: SessionChatLiveState) {
+        if live.agent_session_id.is_some() {
+            self.agent_session_id = live.agent_session_id;
+        }
+        if live.agent_session_path.is_some() {
+            self.agent_session_path = live.agent_session_path;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive prompts (upstream chat spec §8.1-§8.3): question/approval cards
+// ---------------------------------------------------------------------------
+
