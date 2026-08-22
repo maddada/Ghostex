@@ -109,6 +109,7 @@ import {
   priorityLabel,
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
+  readWorkflowStatuses,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
   isDescriptionImageSource,
@@ -1184,10 +1185,14 @@ function ProjectBoardApp() {
       setErrorMessage("");
     }
     try {
+      let customStatusConfig: string;
       if (mode === "initial" || mode === "manual") {
         await ensureIssuePrefix(runBeads, issuePrefix);
+        customStatusConfig = await ensureWorkflowStatuses(runBeads);
+      } else {
+        customStatusConfig = await readWorkflowStatuses(runBeads);
       }
-      const nextColumns = buildBoardColumns(await ensureWorkflowStatuses(runBeads));
+      const nextColumns = buildBoardColumns(customStatusConfig);
       if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
         boardColumnsRef.current = nextColumns;
         setBoardColumns(nextColumns);
