@@ -936,23 +936,29 @@ three bytes of backing-integer padding — followed by `len` payload bytes.
 */
 
 /// `ipc.Tag.History`.
+#[cfg(unix)]
 const ZMX_IPC_TAG_HISTORY: u8 = 8;
 /// `@sizeOf(ipc.Header)`: a packed `struct { u8, u32 }` backs to `u40`, which
 /// rounds up to 8 bytes. The top three bytes are padding on both ends.
+#[cfg(unix)]
 const ZMX_IPC_HEADER_BYTES: usize = 8;
 /// `util.HistoryFormat.plain`.
+#[cfg(unix)]
 const ZMX_IPC_HISTORY_FORMAT_PLAIN: u8 = 0;
 /// Matches the 5s poll `zmx history` uses before it gives up on the daemon.
+#[cfg(unix)]
 const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
 /// Scrollback TAIL retained by a screen capture. The widest consumer window is
 /// 60 non-blank lines, so this is orders of magnitude more than any reader
 /// needs; it exists to bound memory against a 10 MB daemon scrollback.
+#[cfg(unix)]
 const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
 
 /// Directory the zmx daemon binds its session sockets in, resolved exactly as
 /// `Cfg.socketDir` does in zmx/src/main.zig. Both ends agree: gxserver exports
 /// this same environment into every daemon it launches, and the macOS launchd
 /// supervisor already watches the resulting path as its liveness signal.
+#[cfg(unix)]
 fn zmx_socket_directory() -> PathBuf {
     if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
         return PathBuf::from(zmx_dir);
@@ -968,12 +974,14 @@ fn zmx_socket_directory() -> PathBuf {
     PathBuf::from(format!("{temporary_directory}/zmx-{uid}"))
 }
 
+#[cfg(unix)]
 fn zmx_session_socket_path(session_name: &str) -> PathBuf {
     zmx_socket_directory().join(session_name)
 }
 
 /// The live screen plus the tail of the scrollback, read straight off the
 /// daemon's IPC socket. See `CDXC:SessionChatScreenCapture`.
+#[cfg(unix)]
 pub(crate) fn read_zmx_session_screen_capture(
     zmx_name: &str,
 ) -> Result<ZmxHistoryCapture, String> {
@@ -1005,6 +1013,7 @@ pub(crate) fn read_zmx_session_screen_capture(
 /// Drains one `History` reply, retaining only the last
 /// `ZMX_SCREEN_CAPTURE_TAIL_BYTES` of payload so a huge scrollback costs
 /// bounded memory here regardless of what the daemon serialized.
+#[cfg(unix)]
 fn read_zmx_screen_capture_reply(
     stream: &mut std::os::unix::net::UnixStream,
 ) -> Result<ZmxHistoryCapture, String> {
@@ -1053,6 +1062,7 @@ fn read_zmx_screen_capture_reply(
 
 /// Decodes a retained tail into text, starting at the first clean line
 /// boundary so a reader never sees half of a dropped line.
+#[cfg(unix)]
 fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
     let clipped = tail.len() < payload_len;
     let mut text = String::from_utf8_lossy(&tail).into_owned();
@@ -1062,6 +1072,39 @@ fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
         }
     }
     text
+}
+
+/*
+CDXC:SessionChatScreenCapture 2026-08-22:
+On Windows every zmx daemon lives inside WSL, so its session socket sits in the
+WSL filesystem namespace and a Windows process has no AF_UNIX path that reaches
+it. The direct read above is therefore Unix-only, and Windows keeps running
+`zmx history` through the same WSL command wrapper every other zmx interaction
+uses. That path caps stdout and keeps the HEAD, so a session with more
+scrollback than the cap reports `truncated` and screen-state readers correctly
+decline to conclude anything from it — the behaviour Windows already had.
+*/
+#[cfg(not(unix))]
+pub(crate) fn read_zmx_session_screen_capture(
+    zmx_name: &str,
+) -> Result<ZmxHistoryCapture, String> {
+    let zmx = require_bundled_zmx()?;
+    let result = run_zmx_interaction_command(
+        build_zmx_history_command(zmx_name, &zmx.executable_path),
+        ZmxCommandOptions {
+            allow_stdout_truncation: true,
+            stdout_limit_bytes: Some(GXSERVER_ZMX_HISTORY_STDOUT_LIMIT_BYTES),
+            ..ZmxCommandOptions::default()
+        },
+    )
+    .map_err(|error| match error {
+        ZmxEndpointError::DependencyUnavailable(message) => message,
+        ZmxEndpointError::Domain(error) => error.message,
+    })?;
+    Ok(ZmxHistoryCapture {
+        truncated: result.stdout_truncated,
+        text: result.stdout,
+    })
 }
 
 fn create_attach_session_metadata(
