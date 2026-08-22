@@ -1,5 +1,4 @@
 import {
-  IconCheck,
   IconChevronDown,
   IconFolderPlus,
   IconGitBranch,
@@ -11,6 +10,7 @@ import { useState } from "react";
 import type { SidebarNewSessionEnvMode } from "../../shared/ghostex-settings";
 import type { SidebarAgentButton } from "../../shared/sidebar-agents";
 import { AppTooltip } from "../app-tooltip";
+import { AgentMenuChatIndicator } from "../agent-menu-chat-indicator";
 import { ProjectAgentLauncherIcon } from "../project-agent-launcher-icon";
 import { SidebarContextMenuPortal } from "../sidebar-context-menu-portal";
 import type { WebviewApi } from "../webview-api";
@@ -188,6 +188,7 @@ export function SidebarV2CreateButton({
             <div className="session-context-menu-section">
               {pickableAgents.map((agent) => (
                 <button
+                  aria-label={agent.name}
                   aria-pressed={agent.agentId === primaryAgentId}
                   className="session-context-menu-item group-agent-menu-item sidebar-v2-create-menu-agent"
                   data-agent-id={agent.agentId}
@@ -202,13 +203,7 @@ export function SidebarV2CreateButton({
                 >
                   <ProjectAgentLauncherIcon agent={agent} colorMode="brand" />
                   <span className="group-agent-menu-label">{agent.name}</span>
-                  {agent.agentId === primaryAgentId ? (
-                    <IconCheck
-                      aria-hidden="true"
-                      className="session-context-menu-icon"
-                      size={14}
-                    />
-                  ) : null}
+                  <AgentMenuChatIndicator agent={agent} />
                 </button>
               ))}
               {canCreateWorktree ? (

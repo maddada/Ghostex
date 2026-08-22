@@ -834,9 +834,8 @@
 .group-agent-menu-item[data-selected="true"] {
   /*
    * CDXC:ProjectAgents 2026-05-10-14:18
-   * The selected project agent must keep the same icon and label color as
-   * sibling launch options; only the row background and checkmark communicate
-   * selection in the agent-only dropdown.
+   * Keep the selected row neutral; its brighter semibold label communicates
+   * selection without competing with the right-aligned chat capability icon.
    */
   color: inherit;
 }
@@ -845,8 +844,24 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  color: color-mix(in srgb, var(--app-foreground) 86%, var(--app-muted) 14%);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.group-agent-menu-item[data-selected="true"] .group-agent-menu-label {
+  color: var(--app-foreground);
+  font-weight: 600;
+}
+
+.group-agent-menu-chat-support {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  color: var(--app-muted);
+  opacity: 0.58;
 }
 
 .group-agent-launcher-icon {

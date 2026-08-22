@@ -45,6 +45,7 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { AppTooltip } from "./app-tooltip";
+import { AgentMenuChatIndicator } from "./agent-menu-chat-indicator";
 import { SidebarV2ProjectIcon } from "./v2/sidebar-v2-icons";
 import {
   getSidebarSessionLifecycleState,
@@ -3454,6 +3455,7 @@ export function SessionGroupSection({
            */}
           {agents.map((agent) => (
             <button
+              aria-label={agent.name}
               aria-pressed={primaryProjectAgent?.agentId === agent.agentId}
               className="session-context-menu-item group-control-menu-item group-agent-menu-item"
               data-selected={String(primaryProjectAgent?.agentId === agent.agentId)}
@@ -3464,9 +3466,7 @@ export function SessionGroupSection({
             >
               <ProjectAgentLauncherIcon agent={agent} colorMode="brand" />
               <span className="group-agent-menu-label">{agent.name}</span>
-              {primaryProjectAgent?.agentId === agent.agentId ? (
-                <IconCheck aria-hidden="true" className="session-context-menu-icon" size={14} />
-              ) : null}
+              <AgentMenuChatIndicator agent={agent} />
             </button>
           ))}
           {agents.length > 0 ? (
