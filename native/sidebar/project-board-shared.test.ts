@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   appendImageMarkdownToDescription,
-  BOARD_COLUMNS,
   BOARD_SORT_OPTIONS,
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
+  boardStatusLabel,
   boardTagFilterOptions,
   buildAgentWorkPrompt,
+  buildBoardColumns,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   extractDescriptionImagePreviews,
   extractDescriptionImageReferences,
@@ -474,8 +475,10 @@ describe("project board comment metadata", () => {
 });
 
 describe("project board statuses", () => {
+  const builtinColumns = buildBoardColumns("");
+
   test("places Backlog before Todo and persists it as a Beads custom status", () => {
-    expect(BOARD_COLUMNS.map((column) => column.key)).toEqual([
+    expect(builtinColumns.map((column) => column.key)).toEqual([
       "backlog",
       "todo",
       "in_progress",
@@ -483,8 +486,42 @@ describe("project board statuses", () => {
       "review",
       "done",
     ]);
-    expect(beadsStatusToBoardStatus("backlog")).toBe("backlog");
-    expect(boardStatusBeadsValue("backlog")).toBe("backlog");
+    expect(beadsStatusToBoardStatus("backlog", builtinColumns)).toBe("backlog");
+    expect(boardStatusBeadsValue("backlog", builtinColumns)).toBe("backlog");
+  });
+
+  test("adds the board's own extra statuses as columns after the built-in lanes", () => {
+    const columns = buildBoardColumns("backlog,review,test,needs_input:wip");
+
+    expect(columns.map((column) => column.key)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "test",
+      "review",
+      "done",
+      "needs_input",
+    ]);
+    expect(columns[columns.length - 1]).toEqual({
+      key: "needs_input",
+      label: "Needs Input",
+      beadsStatus: "needs_input",
+      tone: "muted",
+    });
+  });
+
+  test("shows a bead parked in an extra status in that status's own lane", () => {
+    const columns = buildBoardColumns("backlog,review,test,needs_input:wip");
+
+    expect(beadsStatusToBoardStatus("needs_input", columns)).toBe("needs_input");
+    expect(boardStatusLabel("needs_input", columns)).toBe("Needs Input");
+    expect(boardStatusBeadsValue("needs_input", columns)).toBe("needs_input");
+  });
+
+  test("keeps a bead whose status has no lane visible in Todo", () => {
+    expect(beadsStatusToBoardStatus("needs_input", builtinColumns)).toBe("todo");
+    expect(boardStatusLabel("needs_input", builtinColumns)).toBe("Todo");
+    expect(boardStatusBeadsValue("needs_input", builtinColumns)).toBe("open");
   });
 });
 

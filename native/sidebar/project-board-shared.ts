@@ -7,7 +7,17 @@ import type { ProjectBoardConversationLinkView } from "../../shared/bead-convers
   Shared Beads board helpers keep display-id formatting, t-shirt estimate mapping, and filter logic consistent between the Project WKWebView surface and future Storybook coverage.
 */
 
-export type BoardStatusKey = "backlog" | "todo" | "in_progress" | "test" | "review" | "done";
+export type BoardBuiltinStatusKey = "backlog" | "todo" | "in_progress" | "test" | "review" | "done";
+
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  A board's lanes are whatever statuses bd is configured with, not a fixed six, so a bead parked in
+  a project's own status (for example needs_input) is drawn where it actually is instead of being
+  folded into Todo and read as fresh work.
+  An extra lane's key is the raw bd status name, so BoardStatusKey stays open to any string while
+  still offering the six built-in keys for completion.
+*/
+export type BoardStatusKey = BoardBuiltinStatusKey | (string & {});
 
 export type BeadsComment = {
   author?: string;
@@ -125,12 +135,14 @@ export type BeadsBridgeResponse = {
   stdout: string;
 };
 
-export const BOARD_COLUMNS: Array<{
+export type BoardColumn = {
   key: BoardStatusKey;
   label: string;
   beadsStatus: string;
   tone: string;
-}> = [
+};
+
+const BUILTIN_BOARD_COLUMNS: ReadonlyArray<BoardColumn> = [
   /*
     CDXC:ProjectBoard 2026-05-30-08:58:
     The Kanban Project view needs a Backlog swim lane positioned before Todo, persisted as the Beads custom status `backlog` so drag/drop, edit-status selects, and reloads all share the same workflow state.
@@ -143,6 +155,43 @@ export const BOARD_COLUMNS: Array<{
   { key: "review", label: "Review", beadsStatus: "review", tone: "violet" },
   { key: "done", label: "Done", beadsStatus: "closed", tone: "green" },
 ];
+
+const BUILTIN_BOARD_STATUS_NAMES = new Set(
+  BUILTIN_BOARD_COLUMNS.flatMap((column) => [column.key, column.beadsStatus]),
+);
+
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Columns are derived from the board's `status.custom` config (the same comma list ensureWorkflowStatuses reconciles, entries optionally suffixed with `:<bd category>`) rather than being a constant, so every surface that renders, drags, or edits a status works from the lanes the board actually has.
+  The six built-in lanes always come first and unchanged; each additional configured status becomes one muted lane whose key and Beads value are the raw status name, so no mapping table has to be kept in sync with a user's board.
+  Creating, renaming, and reordering columns stays a bd concern: this only draws what bd already knows.
+*/
+export function buildBoardColumns(customStatusConfig: string): BoardColumn[] {
+  const extraColumns: BoardColumn[] = [];
+  const seenNames = new Set<string>();
+  for (const entry of customStatusConfig.split(",")) {
+    const name = entry.split(":")[0].trim();
+    if (!name || BUILTIN_BOARD_STATUS_NAMES.has(name) || seenNames.has(name)) {
+      continue;
+    }
+    seenNames.add(name);
+    extraColumns.push({
+      key: name,
+      label: boardStatusNameToLabel(name),
+      beadsStatus: name,
+      tone: "muted",
+    });
+  }
+  return [...BUILTIN_BOARD_COLUMNS, ...extraColumns];
+}
+
+function boardStatusNameToLabel(name: string): string {
+  return name
+    .split(/[\s_-]+/u)
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
 
 export const PRIORITY_OPTIONS = [
   /*
@@ -230,29 +279,29 @@ const PROJECT_BOARD_COMMENT_METADATA_SEPARATOR = "---";
 const PROJECT_BOARD_COMMENT_AGENT_PREFIX = "Agent:";
 const PROJECT_BOARD_COMMENT_SESSION_PREFIX = "Session:";
 
-export function beadsStatusToBoardStatus(status: string): BoardStatusKey {
-  switch (status) {
-    case "backlog":
-      return "backlog";
-    case "closed":
-      return "done";
-    case "in_progress":
-      return "in_progress";
-    case "review":
-      return "review";
-    case "test":
-      return "test";
-    default:
-      return "todo";
-  }
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Status resolution reads the caller's column list instead of a fixed table so a bead sitting in one of the board's own statuses lands in that lane. Todo remains the home for a status with no lane at all — a bead whose status was removed from the board config still has to be visible somewhere.
+*/
+export function beadsStatusToBoardStatus(
+  status: string,
+  columns: ReadonlyArray<BoardColumn>,
+): BoardStatusKey {
+  return columns.find((column) => column.beadsStatus === status)?.key ?? "todo";
 }
 
-export function boardStatusLabel(status: BoardStatusKey): string {
-  return BOARD_COLUMNS.find((column) => column.key === status)?.label ?? "Todo";
+export function boardStatusLabel(
+  status: BoardStatusKey,
+  columns: ReadonlyArray<BoardColumn>,
+): string {
+  return columns.find((column) => column.key === status)?.label ?? "Todo";
 }
 
-export function boardStatusBeadsValue(status: BoardStatusKey): string {
-  return BOARD_COLUMNS.find((column) => column.key === status)?.beadsStatus ?? "open";
+export function boardStatusBeadsValue(
+  status: BoardStatusKey,
+  columns: ReadonlyArray<BoardColumn>,
+): string {
+  return columns.find((column) => column.key === status)?.beadsStatus ?? "open";
 }
 
 export function normalizeIssuePrefix(value: string | undefined): string {
@@ -327,13 +376,14 @@ export function formatTicketDisplayId(
 export function toBoardTickets(
   issues: BeadsIssue[],
   displayKey: string,
+  columns: ReadonlyArray<BoardColumn>,
 ): BoardTicket[] {
   const serialByIssueId = buildDisplayIdMap(issues);
   return issues
     .filter((issue) => issue && typeof issue.id === "string")
     .map((issue) => ({
       ...issue,
-      boardStatus: beadsStatusToBoardStatus(issue.status),
+      boardStatus: beadsStatusToBoardStatus(issue.status, columns),
       displayId: formatTicketDisplayId(issue, displayKey, serialByIssueId),
     }));
 }
@@ -645,11 +695,23 @@ function normalizeBoardViewPreference<TValue extends string>(
   return allowedValues.includes(candidate as TValue) ? (candidate as TValue) : fallback;
 }
 
+/*
+  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  Status reads return the board's full list, extra statuses included, for buildBoardColumns.
+  Background refreshes use this read-only helper so polling cannot overwrite a concurrent config edit;
+  initial and manual loads call ensureWorkflowStatuses to reconcile Ghostex's required lanes.
+*/
+export async function readWorkflowStatuses(
+  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
+): Promise<string> {
+  const payload = await runBeads({ action: "configGet" });
+  return normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+}
+
 export async function ensureWorkflowStatuses(
   runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
-): Promise<void> {
-  const payload = await runBeads({ action: "configGet" });
-  const currentValue = normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+): Promise<string> {
+  const currentValue = await readWorkflowStatuses(runBeads);
   const requiredEntries = REQUIRED_CUSTOM_STATUS_CONFIG.split(",");
   const requiredNames = new Set(requiredEntries.map((entry) => entry.split(":")[0]));
   const currentEntries = currentValue
@@ -671,6 +733,7 @@ export async function ensureWorkflowStatuses(
   if (nextValue !== currentValue) {
     await runBeads({ action: "configSet", value: nextValue });
   }
+  return nextValue;
 }
 
 /*
