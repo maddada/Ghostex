@@ -116,7 +116,7 @@ const LANGUAGE_ALIASES: Record<string, SessionChatCodeLanguage> = {
   fish: "shellscript",
   fs: "fsharp",
   fsharp: "fsharp",
-  // Shiki ships no gitignore grammar; ini is the closest match (t3code #685).
+  // Shiki ships no gitignore grammar; ini is the closest match.
   gitignore: "ini",
   go: "go",
   golang: "go",

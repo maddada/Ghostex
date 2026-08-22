@@ -42,7 +42,7 @@ export const SESSION_CHAT_SHIKI_DARK_THEME = "github-dark-default";
 /** Identifies the theme pair baked into every cached HTML string. */
 const SESSION_CHAT_SHIKI_THEME_KEY = `${SESSION_CHAT_SHIKI_LIGHT_THEME}+${SESSION_CHAT_SHIKI_DARK_THEME}`;
 
-// t3code's caps (apps/web/src/components/ChatMarkdown.tsx).
+// Caps carried over from the reference markdown renderer this port follows.
 const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;
 const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
 
@@ -198,7 +198,7 @@ function fnv1a32(value: string): number {
   return hash >>> 0;
 }
 
-/** Content hash + length + language + theme pair, per the t3code shape. */
+/** Content hash + length + language + theme pair, per the reference shape. */
 export function sessionChatHighlightCacheKey(
   code: string,
   language: string,
