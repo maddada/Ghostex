@@ -43,6 +43,13 @@ import { describe, expect, test } from "vitest";
  * `Self::RenameWorktree` app-modal-kind literals, which never had a contiguity
  * assumption between them (three independent `toContain`s), moved to
  * `app/model/types1.rs`. What each test verifies is unchanged.
+ *
+ * CDXC:ModelTypesRecluster 2026-08-23:
+ * `app/model/types1.rs..types6.rs` (the C1 wave-3 chunk split) were
+ * re-clustered into descriptively named domain modules per their
+ * FOLLOW-UPS.md note. `GpuiAppModalKind` (and so the three `Self::
+ * RenameWorktree` literals) landed in `app/model/app_modal_kind.rs`; nothing
+ * else about what is asserted changed.
  */
 
 const gpuiSidebarDispatchSource = readFileSync(
@@ -54,7 +61,7 @@ const gpuiDelayedSendSource = readFileSync(
   "utf8",
 );
 const gpuiModalKindSource = readFileSync(
-  new URL("../../apps/desktop/src/app/model/types1.rs", import.meta.url),
+  new URL("../../apps/desktop/src/app/model/app_modal_kind.rs", import.meta.url),
   "utf8",
 );
 const gpuiRuntimeDispatchSource = readFileSync(
