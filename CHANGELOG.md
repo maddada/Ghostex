@@ -1,5 +1,37 @@
 # Changelog
 
+## 7.13.0 - 2026-08-22
+
+- Major
+  - Prompts can now be queued from the chat composer with Tab or a long press on Send, and Ghostex delivers one each time the agent stops — with every client closed, the phone locked, or the desktop app quit — so you can line up a session's next few turns and walk away; queued prompts can be edited, sent immediately, deleted, or reordered, the sidebar and the terminal show how many are waiting, and a session with a queue is never put to sleep automatically.
+  - Your unsent chat draft now follows you between the desktop, web, and Android apps, and a newer draft from another device offers itself in a bar above the composer instead of overwriting what you were typing.
+  - A new Find Prompts surface, opened with Alt+F or from the command palette, searches every prompt this machine has ever sent to an agent — across Claude Code, Codex, grok, Pi, OpenCode, and Cursor Agent — and resumes or forks the session it came from, on the desktop, web, and Android apps, sharing its index and starred prompts with `gx f` in the terminal.
+  - grok sessions can now be opened in Session Chat, which follows its conversation, tool calls, and results as they happen, reads the model and reasoning effort off its statusline, and exports its transcript.
+  - The project board now draws your own custom bd statuses as their own columns instead of showing those cards as fresh work, and columns can be added, renamed, and removed from the board itself.
+  - Adding a project and cloning a repository are now one dialog: paste a repository or pick a folder, and a confirmation step shows where the clone will land, warns when the destination is already taken, and carries the branch name, main-only, and shallow options through to the clone.
+- Minor
+  - Cmd+K clears the focused terminal on macOS the way Ghostty's own binding does, dropping the scrollback and then the rows above the cursor so a half-typed command line lifts to the top, and Settings names the chord as reserved rather than letting a command take it.
+  - The chat transcript is set in one deliberate type scale instead of four sizes with per-host line heights, and opening chat no longer flashes a lighter panel before the conversation appears.
+  - Fenced code in a conversation is syntax highlighted, GitHub-style alerts render as callouts, and tables, file chips, and collapsible details read properly.
+  - A reasoning turn is now headed by its own opening line instead of a column of identical "Thinking" rows.
+  - The transcript shows what Claude Code is doing while it works — the status line it repaints on its terminal, and compaction with its progress — instead of staying empty until the turn lands.
+  - An on-screen picker the agent puts up, such as Claude Code's resume chooser, can now be answered from the chat surface, and it delivers the row you actually chose.
+  - The chat composer has a cut, copy, paste, and select-all context menu.
+  - The model and effort pills no longer sit under a loading skeleton forever on a session whose agent names neither, or on a session that has stopped.
+  - A message the agent CLI handles itself, such as `/usage` or `!ls`, is no longer reported as having failed to reach the agent.
+  - One "Open links in" setting under Browser now decides where every web link an agent sends opens — terminal Command-clicks, chat links, and detected dev servers — replacing two settings that answered the same question with opposite defaults.
+  - Agent menus mark every agent whose sessions can be opened in Session Chat, on the desktop and Android apps.
+  - A custom agent built on a supported provider now keeps that provider's icon on its sessions and can be opened in Session Chat.
+  - Browser tabs show the page's favicon in the sidebar, and a page that asks to close its own tab now closes it.
+  - The project board can be filtered by tag alongside priority and estimate, and the choice follows you into every project.
+  - Android loads Session Chat from assets bundled in the app, keeps Send Answer above the software keyboard, opens transcript search from the terminal overflow menu, and shows the sessions list with the same project rails, icons, tags, and grouping as the desktop sidebar.
+  - Creating a terminal on a remote machine now checks what that machine's gxserver can actually do and says which side needs updating, instead of failing with the daemon's own error text.
+  - Sidebar hover styling works again after switching back to the window, and tooltips dismiss when the pointer leaves.
+  - A project ticket taller than the window now scrolls inside it instead of losing its top and bottom past the screen edges.
+  - The Delayed Send dialog no longer sits low in its own window.
+  - The Stashed Prompts search field takes focus when the dialog opens.
+  - Browser Profiles is a normal Browser feature now rather than an experimental one.
+
 ## 7.12.0 - 2026-08-20
 
 - Major
