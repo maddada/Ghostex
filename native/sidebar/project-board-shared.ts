@@ -215,6 +215,7 @@ export const TSHIRT_OPTIONS = [
 export type TshirtSize = (typeof TSHIRT_OPTIONS)[number]["label"];
 export type BoardPriorityFilter = "all" | (typeof PRIORITY_OPTIONS)[number]["value"];
 export type BoardEstimateFilter = "all" | "none" | TshirtSize;
+export type BoardTagFilter = string;
 export type BoardSortDirection = "asc" | "desc";
 export type BoardSortKey = "created" | "priority" | "updated";
 export type BoardSortOption = "default" | `${BoardSortKey}-${BoardSortDirection}`;
@@ -238,6 +239,7 @@ export type ProjectBoardViewPreferences = {
   estimateFilter: BoardEstimateFilter;
   priorityFilter: BoardPriorityFilter;
   sortOption: BoardSortOption;
+  tagFilter: BoardTagFilter;
 };
 
 /*
@@ -245,11 +247,17 @@ export type ProjectBoardViewPreferences = {
   The Kanban is its own web surface, so leaving the board tears it down and every toolbar selection dies with it. Priority, estimate, and sort are durable view settings and are restored on the next mount; ticket search stays ephemeral because a restored query would hide most of the board without an obvious cause.
   The three selections describe how the user wants to read a board rather than anything about a particular project, so one app-wide set follows them into every project instead of each board keeping its own.
   Stored values outlive the option lists that produced them, so a preference that no longer matches a current option falls back to its default instead of leaving the toolbar showing a value the board cannot filter or sort by.
+
+  CDXC:ProjectBoardTagFilter 2026-08-21:
+  Tags are the only ticket metadata the board could write but never read back, so a board of mixed work had to be scrolled rather than narrowed. The tag selection joins the other three under the same storage key and the same app-wide scope.
+  Unlike priority, estimate, and sort, the tag options are not a fixed list: they are the labels the loaded tickets actually carry, so validity is only knowable once a board has loaded. Normalisation therefore only rejects values that could never be a tag, and a stored tag that the loaded board does not offer is resolved to "all" at read time by resolveBoardTagFilter rather than being written over, so returning to the board that has the tag restores the selection.
+  The tag filter only ever includes: there is no hide-by-tag mode, because a board silently omitting cards the user never asked to hide is the failure this control exists to fix.
 */
 export const DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES: ProjectBoardViewPreferences = {
   estimateFilter: "all",
   priorityFilter: "all",
   sortOption: "default",
+  tagFilter: "all",
 };
 
 export const PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY = "ghostex-project-board-view";
@@ -672,6 +680,10 @@ export function normalizeProjectBoardViewPreferences(
       BOARD_SORT_OPTION_VALUES,
       DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.sortOption,
     ),
+    tagFilter:
+      typeof stored.tagFilter === "string" && stored.tagFilter.trim().length > 0
+        ? stored.tagFilter
+        : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter,
   };
 }
 
@@ -724,11 +736,33 @@ export async function ensureWorkflowStatuses(
   return nextValue;
 }
 
+/*
+  CDXC:ProjectBoardTagFilter 2026-08-21:
+  The tag dropdown offers the labels the loaded tickets actually carry rather than every label the project has ever defined, so selecting one can never produce an empty board and the list shrinks as retired tags stop being used.
+*/
+export function boardTagFilterOptions(tickets: BoardTicket[]): BoardTagFilter[] {
+  const tags = new Set<string>();
+  for (const ticket of tickets) {
+    for (const label of ticket.labels ?? []) {
+      tags.add(label);
+    }
+  }
+  return ["all", ...Array.from(tags).sort((left, right) => left.localeCompare(right))];
+}
+
+export function resolveBoardTagFilter(
+  tagFilter: BoardTagFilter,
+  options: ReadonlyArray<BoardTagFilter>,
+): BoardTagFilter {
+  return options.includes(tagFilter) ? tagFilter : DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES.tagFilter;
+}
+
 export function filterBoardTickets(
   tickets: BoardTicket[],
   query: string,
   priorityFilter: BoardPriorityFilter,
   estimateFilter: BoardEstimateFilter,
+  tagFilter: BoardTagFilter,
 ): BoardTicket[] {
   const normalizedQuery = query.trim();
   /*
@@ -747,6 +781,10 @@ export function filterBoardTickets(
           const ticketEstimate = estimateToTshirt(ticket.estimate);
           return estimateFilter === "none" ? ticketEstimate === undefined : ticketEstimate === estimateFilter;
         });
+  filtered =
+    tagFilter === "all"
+      ? filtered
+      : filtered.filter((ticket) => ticket.labels?.includes(tagFilter) ?? false);
   if (!normalizedQuery) {
     return filtered;
   }

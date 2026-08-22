@@ -37,7 +37,7 @@ import {
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,
-  TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS,
+  WEB_LINK_OPEN_TARGET_OPTIONS,
 } from "./ghostex-settings";
 import { DEFAULT_PET_ID } from "./pets";
 import {
@@ -173,25 +173,19 @@ describe("normalizeghostexSettings", () => {
   test("normalizes terminal dev-server discovery settings", () => {
     /*
      * CDXC:TerminalDevServers 2026-06-23-19:22:
-     * Terminal dev-server preferences should persist as app settings with detection enabled by default, one launch target for either the user's system browser or the internal browser, and ignored ports stored as canonical port or range strings.
+     * Terminal dev-server preferences should persist as app settings with detection enabled by default and ignored ports stored as canonical port or range strings.
+     *
+     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * Where a detected URL opens is no longer a dev-server setting; it lives in webLinkOpenTarget with every other web link.
      */
     expect(DEFAULT_ghostex_SETTINGS.terminalDevServerDetectionEnabled).toBe(true);
-    expect(DEFAULT_ghostex_SETTINGS.terminalDevServerOpenTarget).toBe(
-      "system-default-browser",
-    );
-    expect(TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS).toEqual([
-      { label: "System Default Browser", value: "system-default-browser" },
-      { label: "Internal Browser", value: "internal-browser" },
-    ]);
     expect(normalizeghostexSettings({})).toMatchObject({
       terminalDevServerDetectionEnabled: true,
-      terminalDevServerOpenTarget: "system-default-browser",
       terminalDevServerIgnoredPortRules: [],
     });
     expect(
       normalizeghostexSettings({
         terminalDevServerDetectionEnabled: false,
-        terminalDevServerOpenTarget: "internal-browser",
         terminalDevServerIgnoredPortRules: [
           "3000-3005",
           "3004-3008",
@@ -202,16 +196,7 @@ describe("normalizeghostexSettings", () => {
       }),
     ).toMatchObject({
       terminalDevServerDetectionEnabled: false,
-      terminalDevServerOpenTarget: "internal-browser",
       terminalDevServerIgnoredPortRules: ["3000-3008", "9229-9230"],
-    });
-    expect(
-      normalizeghostexSettings({
-        terminalDevServerDefaultBrowserId: "edge",
-        terminalDevServerEnabledBrowserIds: ["firefox"],
-      }),
-    ).toMatchObject({
-      terminalDevServerOpenTarget: "system-default-browser",
     });
     expect(normalizeTerminalDevServerIgnoredPortRuleInput(" 24678 - 24680 ")).toBe(
       "24678-24680",
@@ -222,6 +207,42 @@ describe("normalizeghostexSettings", () => {
     expect(normalizeTerminalDevServerIgnoredPortRules(["3000", "3001", "3002-3003"])).toEqual([
       "3000-3003",
     ]);
+  });
+
+  test("merges the legacy link-destination settings into one web-link target", () => {
+    /*
+     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * The Browser toggle and the Dev Servers dropdown answered the same question with opposite defaults. They merge into one target, so the toggle has to win migration: it is the switch users actually flipped, while nearly every install carries a dev-server default it never chose.
+     */
+    expect(DEFAULT_ghostex_SETTINGS.webLinkOpenTarget).toBe("internal-browser");
+    expect(WEB_LINK_OPEN_TARGET_OPTIONS).toEqual([
+      { label: "Internal Browser", value: "internal-browser" },
+      { label: "System Default Browser", value: "system-default-browser" },
+    ]);
+    expect(normalizeghostexSettings({})).toMatchObject({
+      webLinkOpenTarget: "internal-browser",
+    });
+    expect(
+      normalizeghostexSettings({ webLinkOpenTarget: "system-default-browser" }),
+    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+    expect(
+      normalizeghostexSettings({
+        openTerminalLinksInApp: false,
+        terminalDevServerOpenTarget: "internal-browser",
+      }),
+    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+    expect(
+      normalizeghostexSettings({
+        openTerminalLinksInApp: true,
+        terminalDevServerOpenTarget: "system-default-browser",
+      }),
+    ).toMatchObject({ webLinkOpenTarget: "internal-browser" });
+    expect(
+      normalizeghostexSettings({ terminalDevServerOpenTarget: "system-default-browser" }),
+    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
+    expect(
+      normalizeghostexSettings({ terminalDevServerDefaultBrowserId: "edge" }),
+    ).toMatchObject({ webLinkOpenTarget: "system-default-browser" });
   });
 
   test("normalizes global Portless settings", () => {

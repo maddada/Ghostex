@@ -5,6 +5,7 @@ import {
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
   boardStatusLabel,
+  boardTagFilterOptions,
   buildAgentWorkPrompt,
   buildBoardColumns,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
@@ -21,6 +22,7 @@ import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
+  resolveBoardTagFilter,
   sortBoardTickets,
   ticketCreatorName,
   type BoardTicket,
@@ -116,6 +118,7 @@ describe("project board filters", () => {
       displayId: "ZMX-1",
       estimate: 15,
       id: "urgent-xs",
+      labels: ["docs", "needs:review"],
       priority: 0,
       status: "open",
       title: "Urgent XS task",
@@ -125,6 +128,7 @@ describe("project board filters", () => {
       displayId: "ZMX-2",
       estimate: null,
       id: "medium-none",
+      labels: ["backend", "docs"],
       priority: 2,
       status: "in_progress",
       title: "Medium unestimated task",
@@ -141,15 +145,57 @@ describe("project board filters", () => {
   ];
 
   test("filters by normalized priority and estimate without changing lane status", () => {
-    expect(filterBoardTickets(tickets, "", "3", "all").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "3", "all", "all").map((ticket) => ticket.id)).toEqual([
       "legacy-low",
     ]);
-    expect(filterBoardTickets(tickets, "", "all", "none").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "all", "none", "all").map((ticket) => ticket.id)).toEqual([
       "medium-none",
     ]);
-    expect(filterBoardTickets(tickets, "", "0", "XS").map((ticket) => ticket.id)).toEqual([
+    expect(filterBoardTickets(tickets, "", "0", "XS", "all").map((ticket) => ticket.id)).toEqual([
       "urgent-xs",
     ]);
+  });
+
+  test("filters by tag alongside the other toolbar selections", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * The tag control only ever includes, so a selected tag narrows the board to the tickets that
+     * carry it and stacks with priority and estimate instead of replacing them. Tickets with no
+     * labels are simply not in that set rather than being treated as a selectable state of their
+     * own, because an untagged bead is untriaged rather than a kind of work.
+     */
+    expect(filterBoardTickets(tickets, "", "all", "all", "docs").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+      "medium-none",
+    ]);
+    expect(filterBoardTickets(tickets, "", "all", "all", "backend").map((ticket) => ticket.id)).toEqual([
+      "medium-none",
+    ]);
+    expect(filterBoardTickets(tickets, "", "0", "all", "docs").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+    ]);
+    expect(filterBoardTickets(tickets, "", "0", "all", "backend")).toEqual([]);
+    expect(filterBoardTickets(tickets, "", "all", "all", "all").map((ticket) => ticket.id)).toEqual([
+      "urgent-xs",
+      "medium-none",
+      "legacy-low",
+    ]);
+  });
+
+  test("offers the loaded tickets' own labels, sorted, with all first", () => {
+    expect(boardTagFilterOptions(tickets)).toEqual(["all", "backend", "docs", "needs:review"]);
+    expect(boardTagFilterOptions([])).toEqual(["all"]);
+  });
+
+  test("resolves a tag the loaded board does not offer back to all", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * A stored tag outlives the board that produced it, so opening a project that never used it
+     * must show the whole board rather than an empty one under a tag nothing carries.
+     */
+    expect(resolveBoardTagFilter("frontend", boardTagFilterOptions(tickets))).toBe("all");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions(tickets))).toBe("docs");
+    expect(resolveBoardTagFilter("docs", boardTagFilterOptions([]))).toBe("all");
   });
 });
 
@@ -489,17 +535,19 @@ describe("project board view preferences", () => {
     expect(PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY).toBe("ghostex-project-board-view");
   });
 
-  test("restores stored priority, estimate, and sort selections", () => {
+  test("restores stored priority, estimate, sort, and tag selections", () => {
     expect(
       normalizeProjectBoardViewPreferences({
         estimateFilter: "M",
         priorityFilter: "1",
         sortOption: "created-asc",
+        tagFilter: "docs",
       }),
     ).toEqual({
       estimateFilter: "M",
       priorityFilter: "1",
       sortOption: "created-asc",
+      tagFilter: "docs",
     });
     expect(normalizeProjectBoardViewPreferences({ estimateFilter: "none" }).estimateFilter).toBe(
       "none",
@@ -521,8 +569,26 @@ describe("project board view preferences", () => {
         estimateFilter: "XXL",
         priorityFilter: 1,
         sortOption: "closed-desc",
+        tagFilter: 7,
       }),
     ).toEqual(DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES);
+  });
+
+  test("keeps a stored tag the current board may no longer offer", () => {
+    /*
+     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * Tag options are the labels the loaded tickets carry, so nothing at storage-read time can say
+     * whether a tag is still real. Normalisation therefore rejects only values that could never be
+     * a tag and leaves a stale-looking one intact, so a board that still has it restores the
+     * selection instead of the first tagless project erasing it. resolveBoardTagFilter is what
+     * lands an unavailable tag on "all" once a board has actually loaded.
+     */
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "docs" }).tagFilter).toBe("docs");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "retired-lane-tag" }).tagFilter).toBe(
+      "retired-lane-tag",
+    );
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: "   " }).tagFilter).toBe("all");
+    expect(normalizeProjectBoardViewPreferences({ tagFilter: ["docs"] }).tagFilter).toBe("all");
   });
 
   test("keeps every offered toolbar option restorable", () => {
