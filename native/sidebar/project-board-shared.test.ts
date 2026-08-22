@@ -5,9 +5,17 @@ import {
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
   boardStatusLabel,
+  addBoardColumn,
+  boardColumnNameError,
   boardTagFilterOptions,
   buildAgentWorkPrompt,
   buildBoardColumns,
+  managedBoardColumnNames,
+  moveBoardColumn,
+  parseBoardColumnConfig,
+  removeBoardColumn,
+  beginBoardColumnRename,
+  serializeBoardColumnConfig,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
   extractDescriptionImagePreviews,
   extractDescriptionImageReferences,
@@ -739,5 +747,97 @@ describe("project board assigned agent resolution", () => {
         { agentId: "custom-mf1k2j-77c1aa", label: "codex" },
       ]),
     ).toBe("codex");
+  });
+});
+
+describe("board column management", () => {
+  const config = "backlog,test,review,needs_input:wip,parked";
+
+  test("parses entries and keeps each bd category suffix", () => {
+    expect(parseBoardColumnConfig(config)).toEqual([
+      { name: "backlog", suffix: "" },
+      { name: "test", suffix: "" },
+      { name: "review", suffix: "" },
+      { name: "needs_input", suffix: ":wip" },
+      { name: "parked", suffix: "" },
+    ]);
+    expect(serializeBoardColumnConfig(parseBoardColumnConfig(config))).toBe(config);
+  });
+
+  test("ignores blanks and duplicate names", () => {
+    expect(parseBoardColumnConfig(" a , ,a, b ")).toEqual([
+      { name: "a", suffix: "" },
+      { name: "b", suffix: "" },
+    ]);
+  });
+
+  test("only non built-in statuses are manageable", () => {
+    expect(managedBoardColumnNames(config)).toEqual(["needs_input", "parked"]);
+  });
+
+  test("adds a column at the end", () => {
+    expect(addBoardColumn(config, " blocked ")).toBe(`${config},blocked`);
+  });
+
+  test("renaming keeps both names live and carries the category onto the new one", () => {
+    // the old entry must survive this step: a bead may not hold a status the config does not list
+    expect(beginBoardColumnRename(config, "needs_input", "waiting")).toBe(
+      "backlog,test,review,needs_input:wip,parked,waiting:wip",
+    );
+  });
+
+  test("renaming refuses to touch a built-in entry", () => {
+    expect(beginBoardColumnRename(config, "review", "nope")).toBe(config);
+  });
+
+  test("renaming an absent column changes nothing", () => {
+    expect(beginBoardColumnRename(config, "ghost", "nope")).toBe(config);
+  });
+
+  test("the finished rename drops the old entry and keeps the category", () => {
+    const both = beginBoardColumnRename(config, "needs_input", "waiting");
+    expect(removeBoardColumn(both, "needs_input")).toBe("backlog,test,review,parked,waiting:wip");
+  });
+
+  test("removing drops only the named managed entry", () => {
+    expect(removeBoardColumn(config, "needs_input")).toBe("backlog,test,review,parked");
+    expect(removeBoardColumn(config, "backlog")).toBe(config);
+  });
+
+  test("reordering swaps managed columns without disturbing built-ins", () => {
+    expect(moveBoardColumn(config, "parked", -1)).toBe("backlog,test,review,parked,needs_input:wip");
+    expect(moveBoardColumn(config, "needs_input", 1)).toBe("backlog,test,review,parked,needs_input:wip");
+  });
+
+  test("reordering past either end is a no-op", () => {
+    expect(moveBoardColumn(config, "needs_input", -1)).toBe(config);
+    expect(moveBoardColumn(config, "parked", 1)).toBe(config);
+    expect(moveBoardColumn(config, "absent", -1)).toBe(config);
+  });
+
+  test("name validation covers empty, shape, built-ins and duplicates", () => {
+    expect(boardColumnNameError("", config)).toBe("Enter a column name.");
+    expect(boardColumnNameError("9lives", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("has space", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("with:colon", config)).toContain("starting with a letter");
+    expect(boardColumnNameError("review", config)).toContain("built-in lane");
+    expect(boardColumnNameError("parked", config)).toBe("That column already exists.");
+    expect(boardColumnNameError("a".repeat(65), config)).toContain("64 characters");
+    expect(boardColumnNameError("waiting_on_ci", config)).toBe("");
+  });
+
+  test("a new column becomes a real lane", () => {
+    const next = addBoardColumn(config, "waiting");
+    expect(buildBoardColumns(next).map((column) => column.key)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "test",
+      "review",
+      "done",
+      "needs_input",
+      "parked",
+      "waiting",
+    ]);
   });
 });
