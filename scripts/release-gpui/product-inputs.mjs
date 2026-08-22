@@ -71,7 +71,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "appcast.xml", why: "Sparkle feed output written by the publisher, not a build input." },
   { path: "claude-code-codex-keybindings.json", why: "Developer keybindings; not packaged." },
   { path: "favicon.png", why: "Web asset for local tooling; not packaged by any release job." },
-  { path: "ghostex-cli", why: "Port planning notes only (no build inputs)." },
   { path: "ghostex-history", why: "Local history CLI; not packaged by any release job." },
   {
     path: "ghostty-patches",

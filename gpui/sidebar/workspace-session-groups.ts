@@ -7,10 +7,11 @@
  * (matching the macOS app, which keeps its grouped workspace state in
  * localStorage), so GPUI persists a per-project overlay that assigns
  * presentation sessions to user-defined sub-groups and remembers project
- * order. Semantics mirror shared/simple-grouped-session-workspace-state.ts:
- * group ids are minted as `group-${n}`, titles default to `Group ${n}`, and a
- * project holds at most MAX_GROUP_COUNT groups including its implicit main
- * (project) group.
+ * order. Semantics originally mirrored the equivalent shared grouped
+ * session-workspace-state module, deleted in the 2026-08-22 restructure once
+ * its last production importers were gone: group ids are minted as
+ * `group-${n}`, titles default to `Group ${n}`, and a project holds at most
+ * MAX_GROUP_COUNT groups including its implicit main (project) group.
  */
 
 export const GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY =
