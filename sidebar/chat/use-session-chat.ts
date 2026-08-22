@@ -90,6 +90,7 @@ const NOTFOUND_RETRY_WINDOW_MS = 60_000;
 // continuously streaming turn from turning follow-ups into a read loop.
 const RESYNC_FOLLOW_UP_DELAY_MS = 250;
 const MAX_RESYNC_FOLLOW_UPS = 4;
+const CLAUDE_TERMINAL_STATUS_KIND = "claude-status";
 
 interface SessionChatStreamPosition {
   epoch: number;
@@ -108,6 +109,32 @@ function isAheadOf(
 
 function notFoundRetryDelayMs(attempt: number): number {
   return NOTFOUND_RETRY_DELAYS_MS[attempt] ?? NOTFOUND_RETRY_FIXED_DELAY_MS;
+}
+
+function normalizedSessionChatText(message: SessionChatMessage): string {
+  return message.blocks
+    .filter((block) => block.type === "text")
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("\n\n")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function terminalStatusMessage(
+  activity: SessionChatTerminalActivity,
+): SessionChatMessage | null {
+  const text = activity.label.trim();
+  if (activity.kind !== CLAUDE_TERMINAL_STATUS_KIND || !text) {
+    return null;
+  }
+  const timestamp = Date.parse(activity.detectedAt);
+  return {
+    id: `terminal-status:${activity.detectedAt}:${text}`,
+    role: "reasoning",
+    blocks: [{ type: "text", text }],
+    timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
+    source: "hook",
+  };
 }
 
 interface FrameState {
@@ -194,6 +221,13 @@ export interface UseSessionChatResult {
    * a frame that can carry it and does not has CLEARED it.
    */
   terminalActivity: SessionChatTerminalActivity | null;
+  /**
+   * True once gxserver has actually read this session's screen. Latched: a
+   * later frame that omits it does NOT unset it, because "we have looked" does
+   * not stop being true. The option pills use it to decide between a loading
+   * skeleton and a plain unset pill.
+   */
+  screenProbed: boolean;
   agent: string | null;
   agentSessionId: string | null;
   error: string | null;
@@ -253,13 +287,26 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     null,
   );
   /*
-  CDXC:SessionChatTerminalActivity 2026-08-22: on-screen progress (compaction),
-  carried and cleared exactly like the notice above. It is separate state
-  because it is a different thing to the user — work in flight, not a problem
-  to act on — and it renders in the transcript rather than the notice stack.
+  CDXC:SessionChatTerminalActivity 2026-08-22: structured on-screen progress
+  (compaction), carried and cleared exactly like the notice above. Claude's
+  current `⏺` line is split into transient reasoning history below instead.
   */
   const [terminalActivity, setTerminalActivity] =
     useState<SessionChatTerminalActivity | null>(null);
+  // Claude replaces its current `⏺ …` terminal line in place. Keep each
+  // changed value only for this mounted chat; matching transcript text removes
+  // it from composition as soon as JSONL catches up.
+  const [terminalStatusMessages, setTerminalStatusMessages] = useState<
+    readonly SessionChatMessage[]
+  >([]);
+  /*
+  CDXC:SessionChatScreenProbed 2026-08-22: "gxserver has read this screen",
+  carried by read results and by snapshot/replaced/state frames. Latched rather
+  than cleared-on-omission: unlike the notice and the activity row, this is not
+  a description of the screen that can stop being true, and an older daemon
+  that never sends it simply leaves the pills in their pre-probe state.
+  */
+  const [screenProbed, setScreenProbed] = useState(false);
   /*
   Ghostex prompt queue. `null` means NO frame has carried a `queue` field yet,
   which is the "old daemon / not supported" state and hides every queue
@@ -299,6 +346,28 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const workingRef = useRef(false);
   const workingStartedAtRef = useRef<number | null>(null);
 
+  const applyTerminalActivity = useCallback(
+    (activity: SessionChatTerminalActivity | undefined): void => {
+      const transient = activity ? terminalStatusMessage(activity) : null;
+      if (!transient) {
+        setTerminalActivity(activity ?? null);
+        return;
+      }
+      setTerminalActivity(null);
+      setTerminalStatusMessages((current) => {
+        const last = current.at(-1);
+        if (
+          last &&
+          normalizedSessionChatText(last) === normalizedSessionChatText(transient)
+        ) {
+          return current;
+        }
+        return [...current, transient];
+      });
+    },
+    [],
+  );
+
   /**
    * Folds the two queue-carriage fields with their DIFFERENT omission rules:
    * an absent `queue` leaves the capability (and the list) exactly as it was,
@@ -336,6 +405,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       terminalNotice?: SessionChatTerminalNotice;
       /** Live on-screen progress; omitted ⇒ cleared. */
       terminalActivity?: SessionChatTerminalActivity;
+      /** gxserver has read the screen; latched, never cleared by omission. */
+      screenProbed?: boolean;
       /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
       queue?: SessionChatQueuedPrompt[];
       /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
@@ -357,14 +428,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setSelectedOptions(result.selectedOptions);
       }
       setTerminalNotice(result.terminalNotice ?? null);
-      setTerminalActivity(result.terminalActivity ?? null);
+      applyTerminalActivity(result.terminalActivity);
+      if (result.screenProbed) {
+        setScreenProbed(true);
+      }
       applyQueueCarriage(result);
       setError(result.status === "error" ? (result.error ?? "Conversation could not be loaded.") : null);
       // A fresh authoritative generation cancels an in-flight older page.
       loadEarlierEpochRef.current = null;
       setLoadingEarlier(false);
     },
-    [applyQueueCarriage],
+    [applyQueueCarriage, applyTerminalActivity],
   );
 
   const requestResync = useCallback((): void => {
@@ -463,8 +537,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     setPending([]);
     setMarkers([]);
     setInterrupted(false);
+    setTerminalNotice(null);
+    setTerminalActivity(null);
+    setTerminalStatusMessages([]);
     // A different session's detection must never leak into this one.
     setSelectedOptions(null);
+    // Its "we have looked" latch is per-session too: a new session has not
+    // been probed yet, whatever the previous one had proven.
+    setScreenProbed(false);
     // Nor its queue or its draft: both are per-session, and re-probing the
     // capability from scratch is what keeps a mixed old/new daemon honest.
     setQueuePrompts(null);
@@ -552,7 +632,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setSelectedOptions(event.selectedOptions);
       }
       setTerminalNotice(event.terminalNotice ?? null);
-      setTerminalActivity(event.terminalActivity ?? null);
+      applyTerminalActivity(event.terminalActivity);
+      if (event.screenProbed) {
+        setScreenProbed(true);
+      }
       applyQueueCarriage(event);
       if (event.agentSessionId !== undefined) {
         setAgentSessionId(event.agentSessionId);
@@ -626,7 +709,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       unsubscribe();
     };
-  }, [applyAuthoritative, applyQueueCarriage, initialLimit, requestResync, transport]);
+  }, [
+    applyAuthoritative,
+    applyQueueCarriage,
+    applyTerminalActivity,
+    initialLimit,
+    requestResync,
+    transport,
+  ]);
 
   // --- Assembly (suffix-extension fast path, §6.4) ---------------------------
   const assembled = useMemo(() => {
@@ -726,7 +816,19 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     const pendingMessages = sessionChatPendingSendsAsMessages(
       visibleSessionChatPendingSends(pending, boundaried),
     );
-    const tail: SessionChatMessage[] = [...markerMessages];
+    const authoritativeText = new Set(
+      boundaried
+        .filter((message) => message.source === "transcript")
+        .map(normalizedSessionChatText)
+        .filter(Boolean),
+    );
+    const visibleTerminalStatuses = terminalStatusMessages.filter(
+      (message) => !authoritativeText.has(normalizedSessionChatText(message)),
+    );
+    const tail: SessionChatMessage[] = [
+      ...visibleTerminalStatuses,
+      ...markerMessages,
+    ];
     const streamingText = deriveSessionChatStreamingText({
       messages: [...boundaried, ...pendingMessages],
       previewText,
@@ -737,7 +839,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
     tail.push(...pendingMessages);
     return [...boundaried, ...tail];
-  }, [boundaried, markers, pending, previewText, working]);
+  }, [boundaried, markers, pending, previewText, terminalStatusMessages, working]);
 
   const view = selectSessionChatViewState({
     error,
@@ -1033,6 +1135,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     status,
     terminalNotice,
     terminalActivity,
+    screenProbed,
     view,
     working,
     ...(transportSendKey ? { sendKey } : {}),

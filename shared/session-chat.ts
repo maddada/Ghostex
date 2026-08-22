@@ -45,10 +45,16 @@ export type SessionChatTranscriptAgent = "claude" | "codex" | "grok" | "pi";
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
+  agentIcon?: string | null,
 ): SessionChatTranscriptAgent | null {
-  if (agentId === "claude" || agentId === "openclaude") return "claude";
-  if (agentId === "codex" || agentId === "grok") return agentId;
-  if (agentId === "pi" || agentId === "omp") return "pi";
+  const candidates = [agentId, agentIcon];
+  for (const candidate of candidates) {
+    const normalized = candidate?.trim().toLowerCase();
+    if (normalized === "claude" || normalized === "openclaude") return "claude";
+    if (normalized === "codex") return "codex";
+    if (normalized === "grok" || normalized === "grok-build") return "grok";
+    if (normalized === "pi" || normalized === "omp") return "pi";
+  }
   return null;
 }
 
@@ -289,17 +295,15 @@ export interface SessionChatTerminalNotice {
 
 /*
 CDXC:SessionChatTerminalActivity 2026-08-22:
-Long-running work the agent CLI reports ONLY as a progress line on its terminal
-screen, with nothing in the transcript until it finishes — Claude Code's
-compaction is the first and today the only one:
+Live work the agent CLI reports on its terminal before transcript JSONL catches
+up. `claude-status` is the current `⏺ …` assistant line and becomes transient
+reasoning history in the client; `compacting` is structured progress:
 
     ✶ Compacting conversation… (1m 1s)
       ████████████████████░░░░░░░░░░░░░░░░░░░░ 49%
 
 Deliberately NOT a `terminalNotice`: nothing is wrong, nothing is blocked, and
-there is nothing to answer. It is progress, so it renders in the TRANSCRIPT,
-where the work is — and for compaction in particular, next to the very messages
-it is about to replace.
+there is nothing to answer. Both variants render in the transcript.
 
 `percent` and `elapsedSeconds` are read off the screen or omitted; a client must
 never estimate them. `detectedAt` is the anchor for a smoothly ticking local
@@ -309,7 +313,7 @@ numbers move. Carried by read results and by snapshot/replaced/state frames with
 learns the work finished.
 */
 export interface SessionChatTerminalActivity {
-  /** Open set (`compacting`). Render an unknown kind from `label` alone. */
+  /** Open set (`compacting`, `claude-status`). */
   kind: string;
   /** Agent-facing wording, without the spinner glyph or the clock. */
   label: string;
@@ -367,6 +371,16 @@ export interface GxserverReadSessionChatResult {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * True once gxserver has actually read this session's screen. Unlike every
+   * other screen-derived field here, it does NOT describe what was found — it
+   * says the looking happened, which is the only way a client can tell "the
+   * model is still being detected" from "detection ran and this agent's screen
+   * names no model". The composer needs that to choose between a loading
+   * skeleton and a plain unset pill; a stopped session, which has no screen at
+   * all, must never sit under a skeleton forever. Omitted ⇒ not probed yet.
+   */
+  screenProbed?: boolean;
   /**
    * The session's Ghostex-owned prompt queue, head first. PRESENT (even as an
    * empty array) is the daemon capability probe: a daemon that predates this
@@ -615,6 +629,16 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
   /**
+   * True once gxserver has actually read this session's screen. Unlike every
+   * other screen-derived field here, it does NOT describe what was found — it
+   * says the looking happened, which is the only way a client can tell "the
+   * model is still being detected" from "detection ran and this agent's screen
+   * names no model". The composer needs that to choose between a loading
+   * skeleton and a plain unset pill; a stopped session, which has no screen at
+   * all, must never sit under a skeleton forever. Omitted ⇒ not probed yet.
+   */
+  screenProbed?: boolean;
+  /**
    * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
    * capability probe; omitted ⇒ this daemon has no queue and the client hides
    * every queue control. When present it is authoritative and replaces the
@@ -660,6 +684,16 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
   /**
+   * True once gxserver has actually read this session's screen. Unlike every
+   * other screen-derived field here, it does NOT describe what was found — it
+   * says the looking happened, which is the only way a client can tell "the
+   * model is still being detected" from "detection ran and this agent's screen
+   * names no model". The composer needs that to choose between a loading
+   * skeleton and a plain unset pill; a stopped session, which has no screen at
+   * all, must never sit under a skeleton forever. Omitted ⇒ not probed yet.
+   */
+  screenProbed?: boolean;
+  /**
    * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
    * capability probe; omitted ⇒ this daemon has no queue and the client hides
    * every queue control. When present it is authoritative and replaces the
@@ -687,6 +721,16 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /**
+   * True once gxserver has actually read this session's screen. Unlike every
+   * other screen-derived field here, it does NOT describe what was found — it
+   * says the looking happened, which is the only way a client can tell "the
+   * model is still being detected" from "detection ran and this agent's screen
+   * names no model". The composer needs that to choose between a loading
+   * skeleton and a plain unset pill; a stopped session, which has no screen at
+   * all, must never sit under a skeleton forever. Omitted ⇒ not probed yet.
+   */
+  screenProbed?: boolean;
   /**
    * Ghostex's prompt queue, head first. PRESENT (even empty) is the daemon
    * capability probe; omitted ⇒ this daemon has no queue and the client hides

@@ -10993,7 +10993,18 @@ presentation revision stream.
 */
 
 fn session_chat_agent_for_session(session: &Value) -> Option<String> {
-    normalize_agent_name(first_prompt_agent_name(session).as_deref())
+    let agent_id = normalize_agent_name(first_prompt_agent_name(session).as_deref());
+    if let Some(agent) = crate::session_chat::session_chat_transcript_agent_id(agent_id.as_deref())
+    {
+        return Some(agent.to_string());
+    }
+
+    let agent_icon = session
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get("icon"))
+        .and_then(Value::as_str);
+    crate::session_chat::session_chat_transcript_agent_id(agent_icon).map(str::to_string)
 }
 
 fn session_chat_identity_fingerprint(session: &Value) -> String {
@@ -11210,6 +11221,9 @@ and can never be published one frame apart.
 struct CachedSessionChatScreenState {
     notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    /// CDXC:SessionChatScreenProbed 2026-08-22: whether the cache entry these
+    /// came from was backed by a whole capture at all.
+    probed: bool,
 }
 
 impl CachedSessionChatScreenState {
@@ -11217,6 +11231,7 @@ impl CachedSessionChatScreenState {
         crate::session_chat::SessionChatScreenState {
             notice: self.notice.as_ref(),
             activity: self.activity.as_ref(),
+            probed: self.probed,
         }
     }
 }
@@ -11226,14 +11241,18 @@ fn cached_session_chat_screen_state(
     project_id: &str,
     session_id: &str,
 ) -> CachedSessionChatScreenState {
-    let (screen_notice, activity) = state
+    let (screen_notice, activity, probed) = state
         .session_chat_option_cache
         .lock()
         .ok()
         .and_then(|cache| {
-            cache
-                .get(&session_observer_key(project_id, session_id))
-                .map(|entry| (entry.value.notice.clone(), entry.value.activity.clone()))
+            cache.get(&session_observer_key(project_id, session_id)).map(|entry| {
+                (
+                    entry.value.notice.clone(),
+                    entry.value.activity.clone(),
+                    entry.value.attempted,
+                )
+            })
         })
         .unwrap_or_default();
     CachedSessionChatScreenState {
@@ -11243,6 +11262,7 @@ fn cached_session_chat_screen_state(
             screen_notice,
         ),
         activity,
+        probed,
     }
 }
 
@@ -11284,7 +11304,7 @@ fn session_chat_terminal_notice_publisher(
     let session_id = session_id.to_string();
     Arc::new(move || {
         let key = session_observer_key(&project_id, &session_id);
-        let (options, screen_notice, activity) = option_cache
+        let (options, screen_notice, activity, captured) = option_cache
             .lock()
             .ok()
             .and_then(|cache| {
@@ -11293,6 +11313,7 @@ fn session_chat_terminal_notice_publisher(
                         entry.value.options.clone(),
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
+                        entry.value.attempted,
                     )
                 })
             })
@@ -11313,6 +11334,7 @@ fn session_chat_terminal_notice_publisher(
             crate::session_chat::SessionChatScreenState {
                 notice: notice.as_ref(),
                 activity: activity.as_ref(),
+                probed: captured,
             },
         );
     })
@@ -12390,9 +12412,28 @@ async fn handle_read_session_chat_http(
         CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache,
         same running-only gate. Omitted means the client clears its progress row.
         */
-        if let Some(activity) = detection.activity.as_ref() {
-            result.insert("terminalActivity".to_string(), activity.to_value());
+        if working {
+            if let Some(activity) = detection.activity.as_ref() {
+                result.insert("terminalActivity".to_string(), activity.to_value());
+            }
         }
+        /*
+        CDXC:SessionChatScreenProbed 2026-08-22: same capture again. Followerless
+        clients need the "detection has run" bit for exactly the reason follower
+        clients do — telling a pill that is still loading from one whose agent
+        simply never names a model.
+        */
+        if detection.attempted {
+            result.insert("screenProbed".to_string(), json!(true));
+        }
+    } else {
+        /*
+        CDXC:SessionChatScreenProbed 2026-08-22: a session that is not running
+        has no screen, so detection is skipped entirely above — but the answer
+        ("nothing to read") is settled, not pending. Saying so keeps a stopped
+        session's pills from sitting under a loading skeleton forever.
+        */
+        result.insert("screenProbed".to_string(), json!(true));
     }
     let stored_prompt = stored_prompt
         .as_deref()
@@ -13848,11 +13889,11 @@ async fn handle_answer_session_chat_prompt_http(
         A row of an on-screen picker (Claude Code's resume-usage chooser), which
         the chat surface renders from the `choices` its terminal notice carries.
 
-        The keystrokes are derived from a capture taken RIGHT NOW rather than
-        from the detection that painted the card: the notice can be seconds old,
-        and the user may have arrowed the highlight around in the terminal — or
-        answered it there — in between. A picker that is no longer on screen is
-        an error, never a blind Enter into whatever replaced it.
+        The keystroke is derived from a capture taken RIGHT NOW rather than from
+        the detection that painted the card: the notice can be seconds old, and
+        the picker may have been answered in the terminal — or repainted with
+        different rows — in between. A picker that is no longer on screen is an
+        error, never a blind keystroke into whatever replaced it.
         */
         "terminalChoice" => {
             let Some(choice_index) = params
@@ -13884,7 +13925,7 @@ async fn handle_answer_session_chat_prompt_http(
                     },
                 );
             };
-            let Some(row_moves) = picker.row_moves_to(choice_index) else {
+            let Some(answer_key) = picker.answer_key(choice_index) else {
                 return domain_error_response(
                     endpoint_path,
                     request_id,
@@ -13894,7 +13935,7 @@ async fn handle_answer_session_chat_prompt_http(
                     },
                 );
             };
-            crate::session_chat_send::build_terminal_picker_answer_steps(row_moves)
+            crate::session_chat_send::build_terminal_picker_answer_steps(&answer_key)
         }
         _ => {
             return domain_error_response(
@@ -14273,6 +14314,7 @@ fn schedule_session_chat_option_redetect(
                 crate::session_chat::SessionChatScreenState {
                     notice: published_notice.as_ref(),
                     activity: published_activity.as_ref(),
+                    probed: detection.attempted,
                 },
             );
         }

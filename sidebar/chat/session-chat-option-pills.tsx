@@ -156,44 +156,123 @@ export interface SessionChatSessionOptionPillsProps {
   canSend: boolean;
   /** True when the transport can inject raw keystrokes for agent TUI controls. */
   canSendKey: boolean;
+  /*
+  CDXC:SessionChatScreenProbed 2026-08-22: true once gxserver has actually read
+  this session's screen. Until then a pill with no value has not been LOOKED
+  for yet and shows a skeleton; once it is true, a pill with no value means the
+  agent's screen names none, and the category word is the honest label.
+  */
+  screenProbed: boolean;
   onDispatchCommand: (command: string) => Promise<void>;
   onDispatchKey: (key: SessionChatSendKey, marker: string) => Promise<void>;
   /** Agent-picker options flip the pane to the terminal after typing. */
   onSwitchToTerminal?: () => void;
 }
 
+/*
+CDXC:SessionChatScreenProbed 2026-08-22:
+`skeleton` names which placeholder width to use while gxserver has not read the
+session's screen yet. The bar replaces only the LABEL — same button, same
+chevron, same padding — so resolving a value swaps text in without moving the
+composer row. The trigger is disabled while it shows, because the menu would be
+offering choices against an unknown current value.
+*/
 function PillTrigger({
   ariaLabel,
   className,
   disabled,
   label,
+  skeleton,
   title,
 }: {
   ariaLabel: string;
   className?: string;
   disabled: boolean;
   label: string;
+  skeleton?: "model" | "options" | "combined";
   title: string;
 }) {
+  // A skeleton has no value to name, so the tooltip and the accessible name
+  // say what is happening instead of reading out the category word.
+  const loadingText = skeleton === "options" ? "Reading options…" : "Reading model…";
   return (
-    <AppTooltip content={title}>
+    <AppTooltip content={skeleton ? loadingText : title}>
       <DropdownMenuTrigger
         render={
           <Button
-            aria-label={ariaLabel}
+            aria-label={skeleton ? loadingText : ariaLabel}
             className={cn(
               "ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground",
               className,
             )}
-            disabled={disabled}
+            disabled={disabled || skeleton !== undefined}
             size="xs"
             variant="ghost"
           />
         }
       >
-        <span className="truncate">{label}</span>
+        {skeleton ? (
+          <span
+            aria-hidden="true"
+            className="ghostex-chat-pill-skeleton"
+            data-pill={skeleton}
+          />
+        ) : (
+          <span className="truncate">{label}</span>
+        )}
         <IconChevronDown aria-hidden="true" className="size-3 shrink-0" stroke={2} />
       </DropdownMenuTrigger>
+    </AppTooltip>
+  );
+}
+
+/*
+The read-only twin of PillTrigger for `terminal-handoff` options: same chip, no
+chevron, because there is no menu behind it — the click hands the user to the
+terminal. It stays enabled while the agent is working: switching panes types
+nothing at the TUI, which is the only reason the dispatching pills go dead.
+*/
+function PillButton({
+  ariaLabel,
+  className,
+  disabled,
+  label,
+  onClick,
+  skeleton,
+  title,
+}: {
+  ariaLabel: string;
+  className?: string;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+  skeleton?: "model" | "options" | "combined";
+  title: string;
+}) {
+  const loadingText = skeleton === "options" ? "Reading options…" : "Reading model…";
+  return (
+    <AppTooltip content={skeleton ? loadingText : title}>
+      <Button
+        aria-label={skeleton ? loadingText : ariaLabel}
+        className={cn(
+          "ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground",
+          className,
+        )}
+        disabled={disabled || skeleton !== undefined}
+        onClick={onClick}
+        size="xs"
+        variant="ghost"
+      >
+        {skeleton ? (
+          <span
+            aria-hidden="true"
+            className="ghostex-chat-pill-skeleton"
+            data-pill={skeleton}
+          />
+        ) : (
+          <span className="truncate">{label}</span>
+        )}
+      </Button>
     </AppTooltip>
   );
 }
@@ -206,6 +285,7 @@ export function SessionChatSessionOptionPills({
   onDispatchCommand,
   onDispatchKey,
   onSwitchToTerminal,
+  screenProbed,
 }: SessionChatSessionOptionPillsProps) {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -249,6 +329,11 @@ export function SessionChatSessionOptionPills({
         }
         if (delivery.kind === "agent-picker") {
           await onDispatchCommand(delivery.command);
+          onSwitchToTerminal?.();
+          return;
+        }
+        if (delivery.kind === "terminal-handoff") {
+          // Nothing is typed: the agent's own picker owns the change.
           onSwitchToTerminal?.();
           return;
         }
@@ -366,6 +451,59 @@ export function SessionChatSessionOptionPills({
   const tooltipText = (title: string, hint: string | null): string => hint ?? title;
   const modelHint = hintFor([catalog.model]);
   const optionsHint = hintFor(visibleOptions);
+  /*
+  CDXC:SessionChatScreenProbed 2026-08-22: a pill is "still loading" only while
+  it has NO value AND gxserver has not read the screen yet. Once the screen has
+  been read, no value is an answer — this agent's screen names none — and the
+  category word is the honest label rather than a spinner that never ends. A
+  locally dispatched value also counts as a value, so a pill the user just set
+  never falls back to a skeleton while the agent repaints.
+  */
+  const skeletonFor = (
+    pill: "model" | "options" | "combined",
+    value: string | null | undefined,
+  ): "model" | "options" | "combined" | undefined =>
+    !screenProbed && !value ? pill : undefined;
+
+  /*
+  Read-only pills (grok): both values come from the statusline gxserver reads,
+  and either pill hands the user to the terminal — where the host also raises
+  the "set it in the CLI, then come back" toast — instead of opening a menu
+  this side cannot honour.
+  */
+  if (catalog.model.dispatch.kind === "terminal-handoff") {
+    const handoffTitle = (category: string, value: string | null): string =>
+      value ? `${category} ${value} — change it in the CLI` : `${category} — set it in the CLI`;
+    const modelHandoffTitle = handoffTitle(catalog.model.label, modelLabel);
+    const optionsHandoffTitle = handoffTitle(
+      visibleOptions.length === 1 ? (visibleOptions[0]?.label ?? "Options") : "Options",
+      optionsLabel,
+    );
+    return (
+      <>
+        <PillButton
+          ariaLabel={modelHandoffTitle}
+          className="ghostex-chat-model-pill"
+          disabled={onSwitchToTerminal === undefined}
+          label={modelLabel ?? catalog.model.label}
+          onClick={() => onSwitchToTerminal?.()}
+          skeleton={skeletonFor("model", modelLabel)}
+          title={modelHandoffTitle}
+        />
+        {visibleOptions.length > 0 ? (
+          <PillButton
+            ariaLabel={optionsHandoffTitle}
+            className="ghostex-chat-options-pill"
+            disabled={onSwitchToTerminal === undefined}
+            label={optionsLabel ?? "Options"}
+            onClick={() => onSwitchToTerminal?.()}
+            skeleton={skeletonFor("options", optionsLabel)}
+            title={optionsHandoffTitle}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   if (usesCombinedAgentPicker) {
     const effortLabel = sessionChatOptionValueLabel(combinedPickerEffort, state);
@@ -391,6 +529,7 @@ export function SessionChatSessionOptionPills({
             className="ghostex-chat-model-pill"
             disabled={disabled}
             label={combinedLabel}
+            skeleton={skeletonFor("combined", selectedLabel)}
             title={tooltipText(combinedTitle, combinedHint)}
           />
           <DropdownMenuContent
@@ -424,6 +563,7 @@ export function SessionChatSessionOptionPills({
           className="ghostex-chat-model-pill"
           disabled={disabled}
           label={modelLabel ?? catalog.model.label}
+          skeleton={skeletonFor("model", modelLabel)}
           title={tooltipText(modelTitle, modelHint)}
         />
         <DropdownMenuContent
@@ -449,6 +589,7 @@ export function SessionChatSessionOptionPills({
             className="ghostex-chat-options-pill"
             disabled={disabled}
             label={optionsLabel ?? "Options"}
+            skeleton={skeletonFor("options", optionsLabel)}
             title={tooltipText(optionsTitle, optionsHint)}
           />
           <DropdownMenuContent

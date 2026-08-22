@@ -813,6 +813,7 @@ export function SessionChatView({
                   canSendKey={chat.sendKey !== undefined}
                   controller={sessionOptions}
                   isWorking={chat.working}
+                  screenProbed={chat.screenProbed}
                   onDispatchCommand={send}
                   onDispatchKey={async (key, marker) => {
                     await chat.sendKey?.(key, marker);

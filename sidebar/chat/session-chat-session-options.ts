@@ -8,7 +8,7 @@
 // the transcript/statusline by gxserver. No catalog value is presented as the
 // current session truth without evidence.
 //
-// Agents without a catalog (grok, unknown ids) get no pills at all.
+// Agents without a catalog (unknown ids) get no pills at all.
 
 import type { SessionChatSendKey } from "../../shared/session-chat";
 
@@ -39,6 +39,13 @@ export type SessionChatOptionDispatch =
   | { kind: "toggle-command"; command: string }
   /** Types a command that opens the agent's own picker, then shows the terminal. */
   | { kind: "agent-picker"; command: string }
+  /**
+   * Nothing is typed: the pill shows the value gxserver read from the agent's
+   * statusline and hands the user to the terminal to change it. For a TUI whose
+   * picker cannot be driven blind from here (grok), a read-only pill plus a
+   * handoff is the honest control — see GROK_CATALOG.
+   */
+  | { kind: "terminal-handoff" }
   /** Steps through a bounded TUI setting using shifted arrow keys. */
   | {
       kind: "bounded-key-steps";
@@ -186,6 +193,43 @@ const CODEX_MODE: SessionChatOptionDescriptor = {
 };
 
 // ---------------------------------------------------------------------------
+// Grok
+// ---------------------------------------------------------------------------
+
+/*
+Grok prints `Grok 4.6 (medium)` in its composer footer and changes both values
+through one interactive `/model` picker, which also owns the effort list per
+model. There is no command that sets either value directly, and blind keystrokes
+into that picker would be guesswork against a menu this side cannot see. So both
+pills are read-only mirrors of the statusline gxserver already reads, and either
+one hands the user to the terminal to make the change.
+*/
+const GROK_EFFORTS: readonly SessionChatOptionChoice[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra high" },
+];
+
+/** No `choices`: grok's model list is account-dependent and never typed here. */
+const GROK_MODEL: SessionChatOptionDescriptor = {
+  id: "model",
+  label: "Model",
+  category: "model",
+  actionLabel: "Change it in the CLI",
+  dispatch: { kind: "terminal-handoff" },
+};
+
+const GROK_EFFORT: SessionChatOptionDescriptor = {
+  id: "effort",
+  label: "Reasoning effort",
+  category: "thought_level",
+  choices: GROK_EFFORTS,
+  actionLabel: "Change it in the CLI",
+  dispatch: { kind: "terminal-handoff" },
+};
+
+// ---------------------------------------------------------------------------
 // Catalog resolution
 // ---------------------------------------------------------------------------
 
@@ -218,10 +262,16 @@ function sortDescriptors(
   );
 }
 
+const GROK_CATALOG: SessionChatSessionOptionCatalog = {
+  model: GROK_MODEL,
+  optionsForModel: () => [GROK_EFFORT],
+};
+
 const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
   claude: CLAUDE_CATALOG,
   openclaude: CLAUDE_CATALOG,
   codex: CODEX_CATALOG,
+  grok: GROK_CATALOG,
 };
 
 export function sessionChatSessionOptionCatalog(

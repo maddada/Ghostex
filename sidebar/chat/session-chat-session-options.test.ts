@@ -26,7 +26,6 @@ function catalogFor(agent: string) {
 
 describe("session chat session-option catalogs", () => {
   it("gives agents without a catalog no pills at all", () => {
-    expect(sessionChatSessionOptionCatalog("grok")).toBeNull();
     expect(sessionChatSessionOptionCatalog("pi")).toBeNull();
     expect(sessionChatSessionOptionCatalog(null)).toBeNull();
     expect(sessionChatOptionCommandNames("grok")).toEqual([]);
