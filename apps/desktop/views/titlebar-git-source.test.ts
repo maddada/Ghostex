@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const titlebarHostSource = readFileSync(new URL("./titlebar-host.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("./titlebar/app.tsx", import.meta.url), "utf8");
+const constantsSource = readFileSync(new URL("./titlebar/constants.ts", import.meta.url), "utf8");
+const projectStateSource = readFileSync(new URL("./titlebar/project-state.ts", import.meta.url), "utf8");
 
 describe("native titlebar Git source", () => {
   test("hydrates transient refresh state from cached Git metadata", () => {
@@ -12,17 +14,17 @@ describe("native titlebar Git source", () => {
      * state, so Branch does not flash as detached before the branch probe
      * finishes.
      */
-    expect(titlebarHostSource).toContain(
+    expect(constantsSource).toContain(
       'const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = "ghostex.titlebar.gitState."',
     );
-    expect(titlebarHostSource).toContain("function resolveTitlebarGitStateForMerge(");
-    expect(titlebarHostSource).toContain("shouldHydrateMissingTitlebarGitStateFromCache(current, cached)");
-    expect(titlebarHostSource).toMatch(
+    expect(projectStateSource).toContain("function resolveTitlebarGitStateForMerge(");
+    expect(projectStateSource).toContain("shouldHydrateMissingTitlebarGitStateFromCache(current, cached)");
+    expect(projectStateSource).toMatch(
       /incoming\.isBusy &&\s*incoming\.branch === null &&\s*\(cached\.branch !== null \|\| cached\.isRepo\)/,
     );
-    expect(titlebarHostSource).toContain("readCachedTitlebarGitState(projectIdentity)");
-    expect(titlebarHostSource).toContain("cacheTitlebarGitState(next);");
-    expect(titlebarHostSource).toContain("cacheTitlebarGitState(mergedState);");
-    expect(titlebarHostSource).toContain("localStorage.setItem(cacheKey, JSON.stringify(state.git));");
+    expect(projectStateSource).toContain("readCachedTitlebarGitState(projectIdentity)");
+    expect(appSource).toContain("cacheTitlebarGitState(next);");
+    expect(projectStateSource).toContain("cacheTitlebarGitState(mergedState);");
+    expect(projectStateSource).toContain("localStorage.setItem(cacheKey, JSON.stringify(state.git));");
   });
 });

@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const titlebarHostSource = readFileSync(new URL("./titlebar-host.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("./titlebar/app.tsx", import.meta.url), "utf8");
+const constantsSource = readFileSync(new URL("./titlebar/constants.ts", import.meta.url), "utf8");
+const tipsDataSource = readFileSync(new URL("./titlebar/tips-data.ts", import.meta.url), "utf8");
+const tipsPanelSource = readFileSync(new URL("./titlebar/tips-panel.tsx", import.meta.url), "utf8");
+const stylesSource = readFileSync(new URL("./titlebar/styles.ts", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -30,7 +34,7 @@ describe("native titlebar Tips & Tricks source", () => {
      * The header should label the tutorial-video action Video and the changelog action Updates so the widest equal-width header button is shorter.
      */
     const menuSource = sourceBetween(
-      titlebarHostSource,
+      tipsPanelSource,
       "function TitlebarTipsMenu",
       "function TitlebarTipsSection",
     );
@@ -59,11 +63,11 @@ describe("native titlebar Tips & Tricks source", () => {
     expect(menuSource).not.toContain("onMarkAllRead");
     expect(menuSource).not.toContain("Run Setup Flow");
     expect(menuSource).not.toContain("titlebar-tips-summary");
-    expect(titlebarHostSource).toContain('type: "openBrowserPane", url: GHOSTEX_DOCS_URL');
-    expect(titlebarHostSource).toContain('type: "openGhostexTutorialVideo"');
-    expect(titlebarHostSource).toContain('type: "openWorkspaceWelcome"');
-    expect(titlebarHostSource).toContain('type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL');
-    expect(titlebarHostSource).toContain("https://github.com/maddada/ghostex/releases");
+    expect(appSource).toContain('type: "openBrowserPane", url: GHOSTEX_DOCS_URL');
+    expect(appSource).toContain('type: "openGhostexTutorialVideo"');
+    expect(appSource).toContain('type: "openWorkspaceWelcome"');
+    expect(appSource).toContain('type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL');
+    expect(constantsSource).toContain("https://github.com/maddada/ghostex/releases");
   });
 
   test("keeps tips actions equal width, full height, connected, and right-flush", () => {
@@ -79,24 +83,24 @@ describe("native titlebar Tips & Tricks source", () => {
      * button background fill, and share the widest action width with 15px side
      * padding.
      */
-    const stylesSource = sourceBetween(
-      titlebarHostSource,
+    const tipsMenuStylesSource = sourceBetween(
+      stylesSource,
       ".titlebar-tips-menu",
       ".titlebar-resources-info-button",
     );
     const actionsStyles = sourceBetween(
-      stylesSource,
+      tipsMenuStylesSource,
       ".titlebar-tips-actions {",
       "  .titlebar-tips-action-button {",
     );
     const actionButtonStyles = sourceBetween(
-      stylesSource,
+      tipsMenuStylesSource,
       ".titlebar-tips-action-button {",
       "  .titlebar-tips-action-button:last-child",
     );
 
-    expect(stylesSource).toContain("min-height: 47px;");
-    expect(stylesSource).toContain("padding: 0 0 0 12px;");
+    expect(tipsMenuStylesSource).toContain("min-height: 47px;");
+    expect(tipsMenuStylesSource).toContain("padding: 0 0 0 12px;");
     expect(actionsStyles).toContain("align-self: stretch;");
     expect(actionsStyles).toContain("align-items: stretch;");
     expect(actionsStyles).toContain("gap: 0;");
@@ -109,11 +113,11 @@ describe("native titlebar Tips & Tricks source", () => {
     expect(actionButtonStyles).toContain("box-sizing: border-box;");
     expect(actionButtonStyles).toContain("height: 100%;");
     expect(actionButtonStyles).toContain("padding: 0 15px;");
-    expect(stylesSource).toContain(".titlebar-tips-action-button:last-child");
-    expect(stylesSource).toContain("border-right: 1px solid rgba(255,255,255,0.12);");
-    expect(stylesSource).toContain(".titlebar-tips-panel button:not(:disabled)");
-    expect(stylesSource).toContain("cursor: pointer;");
-    expect(stylesSource).not.toContain(".titlebar-tips-summary");
+    expect(tipsMenuStylesSource).toContain(".titlebar-tips-action-button:last-child");
+    expect(tipsMenuStylesSource).toContain("border-right: 1px solid rgba(255,255,255,0.12);");
+    expect(tipsMenuStylesSource).toContain(".titlebar-tips-panel button:not(:disabled)");
+    expect(tipsMenuStylesSource).toContain("cursor: pointer;");
+    expect(tipsMenuStylesSource).not.toContain(".titlebar-tips-summary");
   });
 
   test("opens agent skill tips to their related detail surfaces", () => {
@@ -125,12 +129,12 @@ describe("native titlebar Tips & Tricks source", () => {
      * browser pane. The read check remains separate from row navigation.
      */
     const tipsSource = sourceBetween(
-      titlebarHostSource,
+      tipsDataSource,
       "const TITLEBAR_TIPS: TitlebarTip[] = [",
       "const TITLEBAR_PERSISTENCE_OFF_NOTICE",
     );
     const rowSource = sourceBetween(
-      titlebarHostSource,
+      tipsPanelSource,
       "function TitlebarTipRow",
       "function getTitlebarTipIcon",
     );
@@ -143,12 +147,12 @@ describe("native titlebar Tips & Tricks source", () => {
     expect(tipsSource).toContain('settingsSearchQuery: "Ghostex Browser Use"');
     expect(tipsSource).toContain('id: "recommend-faster-chrome-devtools-skill"');
     expect(tipsSource).toContain("personal Chrome");
-    expect(titlebarHostSource).toContain(
+    expect(constantsSource).toContain(
       'const FASTER_CHROME_DEVTOOLS_SKILL_URL = "https://github.com/zeke/faster-chrome-devtools-skill";',
     );
-    expect(titlebarHostSource).toContain("initialSearchQuery: action.settingsSearchQuery");
-    expect(titlebarHostSource).toContain('initialTab: "integrations"');
-    expect(titlebarHostSource).toContain('postTitlebarSidebarCommand({ type: "openBrowserPane", url: action.url });');
+    expect(appSource).toContain("initialSearchQuery: action.settingsSearchQuery");
+    expect(appSource).toContain('initialTab: "integrations"');
+    expect(appSource).toContain('postTitlebarSidebarCommand({ type: "openBrowserPane", url: action.url });');
     expect(rowSource).toContain("titlebar-tip-detail-button");
     expect(rowSource).toContain("onOpenTipAction(tip)");
     expect(rowSource).toContain("titlebar-tip-read-button");
@@ -162,14 +166,15 @@ describe("native titlebar Tips & Tricks source", () => {
      * right-side count looked like noisy chrome beside Read and Unread headings.
      */
     const sectionSource = sourceBetween(
-      titlebarHostSource,
+      tipsPanelSource,
       "function TitlebarTipsSection",
       "function TitlebarNoticeRow",
     );
 
-    expect(titlebarHostSource).toContain("headers read as labels only");
+    expect(tipsPanelSource).toContain("headers read as labels only");
     expect(sectionSource).toContain("count > 0 ? children");
-    expect(titlebarHostSource).not.toContain("titlebar-tips-section-count");
+    expect(tipsPanelSource).not.toContain("titlebar-tips-section-count");
+    expect(stylesSource).not.toContain("titlebar-tips-section-count");
   });
 
   test("warns from Tips when installed agent CLIs are missing hooks", () => {
@@ -186,7 +191,7 @@ describe("native titlebar Tips & Tricks source", () => {
      * control instead of starting installation from titlebar chrome.
      */
     const noticeSource = sourceBetween(
-      titlebarHostSource,
+      tipsDataSource,
       "function createTitlebarMissingAgentHooksNotice",
       "function isTitlebarLiveTerminalAgentSession",
     );
@@ -200,10 +205,10 @@ describe("native titlebar Tips & Tricks source", () => {
     expect(noticeSource).toContain("sleeping or resuming agent sessions will not work correctly");
     expect(noticeSource).toContain('action: "openSettings"');
     expect(noticeSource).toContain('settingsTarget: "agentHooks"');
-    expect(titlebarHostSource).toContain('initialSearchQuery: "Agent Hooks"');
-    expect(titlebarHostSource).toContain('initialTab: "integrations"');
-    expect(titlebarHostSource).toContain('title="Notices"');
-    expect(titlebarHostSource).toContain("openAgentHooksSettings");
-    expect(titlebarHostSource).not.toContain("installAgentHooksFromTitlebarNotice");
+    expect(appSource).toContain('initialSearchQuery: "Agent Hooks"');
+    expect(appSource).toContain('initialTab: "integrations"');
+    expect(tipsPanelSource).toContain('title="Notices"');
+    expect(appSource).toContain("openAgentHooksSettings");
+    expect(appSource).not.toContain("installAgentHooksFromTitlebarNotice");
   });
 });
