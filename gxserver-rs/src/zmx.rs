@@ -639,9 +639,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
     })
 }
 
-/// In-server `zmx history` read: the exact `/api/readSessionText` path (same
-/// 256 KiB cap, same one-shot process) without the HTTP/JSON round trip, for
-/// server-side scrollback consumers such as the chat option detector.
+/// Screen-state read for one session, by repository identity.
 ///
 /// CDXC:SessionChatTerminalNotices 2026-08-19: the truncation flag travels with
 /// the text now. A capture that hit the cap lost its TAIL — the live screen —
@@ -651,25 +649,13 @@ pub(crate) fn read_zmx_session_history_capture(
     project_id: &str,
     session_id: &str,
 ) -> ZmxEndpointResult<ZmxHistoryCapture> {
-    let mut params = Map::new();
-    params.insert(
-        "projectId".to_string(),
-        Value::String(project_id.to_string()),
-    );
-    params.insert(
-        "sessionId".to_string(),
-        Value::String(session_id.to_string()),
-    );
-    let result =
-        dispatch_zmx_session_interaction_endpoint(repository, "/api/readSessionText", &params)?;
-    Ok(ZmxHistoryCapture {
-        text: result
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string(),
-        truncated: result.get("truncated").and_then(Value::as_bool) == Some(true),
-    })
+    let lifecycle = LifecycleParams {
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+    };
+    let session = require_session(repository, &lifecycle)?;
+    let zmx_name = provider_zmx_session_name(&session)?;
+    read_zmx_session_screen_capture(&zmx_name).map_err(ZmxEndpointError::DependencyUnavailable)
 }
 
 pub fn dispatch_zmx_session_interaction_endpoint(
@@ -902,36 +888,180 @@ pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i3
     Ok(result.exit_code)
 }
 
-/// Terminal text (scrollback + live screen) for one zmx session, read by
-/// name. The session chat send worker only carries the zmx name, so it cannot
-/// go through the repository-scoped `/api/readSessionText` dispatcher.
+/// Terminal text for one zmx session, read by name.
 pub(crate) struct ZmxHistoryCapture {
     pub text: String,
-    /// The history exceeded the capture cap, so its TAIL — the live screen —
-    /// is missing. Screen-state readers must not draw conclusions from it.
+    /// The capture lost its TAIL — the live screen — so screen-state readers
+    /// must not draw conclusions from it. The in-process screen capture keeps
+    /// the tail by construction, so only the spawned `/api/readSessionText`
+    /// path can still set this.
     pub truncated: bool,
 }
 
-pub(crate) fn read_zmx_session_history_text_by_name(
+/*
+CDXC:SessionChatScreenCapture 2026-08-22:
+Screen-state readers (chat model/effort pills, terminal notices, the compaction
+activity row, the send-delivery watchdog) talk the zmx IPC socket directly
+instead of spawning `zsh -lc … zmx history`. Measured on this machine against
+live daemons, p50 per capture:
+
+    session scrollback   zsh -lc + zmx    direct socket
+    871 B                       5.67 ms          0.10 ms
+    193 KB                     13.74 ms          1.67 ms
+    686 KB                     11.25 ms          6.20 ms
+
+The spawn was the whole cost at small sizes: `command_shell()` runs `zsh -lc`,
+so every capture paid for a LOGIN shell sourcing the user's profile, plus an
+exec of the zmx binary, just to copy bytes off a socket the daemon was already
+listening on. At large sizes the remaining time is the daemon's own
+`serializeTerminal` (5.5 ms of the 6.2 ms above is time-to-first-byte), which
+no client-side change can touch — cutting that needs a tail-scoped IPC tag in
+zmx itself.
+
+Two behavior notes, both improvements over the spawn:
+
+  - `/api/readSessionText` capped stdout at 256 KiB and kept the HEAD, so any
+    session with more than 256 KiB of scrollback reported `truncated` and every
+    screen-state reader correctly refused to conclude anything — those sessions
+    never showed model/effort pills at all. This path keeps the TAIL instead,
+    which is the only part any reader looks at (the widest window is 60
+    non-blank lines), so scrollback size stops deciding whether detection works.
+  - the public `/api/readSessionText` endpoint, the CLI, and automations still
+    go through the spawned path unchanged: they are whole-history consumers,
+    not screen-state readers.
+
+The wire format is frozen (see zmx/src/ipc.zig): 8-byte header of a packed
+`struct { tag: u8, len: u32 }` — one tag byte, four little-endian length bytes,
+three bytes of backing-integer padding — followed by `len` payload bytes.
+*/
+
+/// `ipc.Tag.History`.
+const ZMX_IPC_TAG_HISTORY: u8 = 8;
+/// `@sizeOf(ipc.Header)`: a packed `struct { u8, u32 }` backs to `u40`, which
+/// rounds up to 8 bytes. The top three bytes are padding on both ends.
+const ZMX_IPC_HEADER_BYTES: usize = 8;
+/// `util.HistoryFormat.plain`.
+const ZMX_IPC_HISTORY_FORMAT_PLAIN: u8 = 0;
+/// Matches the 5s poll `zmx history` uses before it gives up on the daemon.
+const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
+/// Scrollback TAIL retained by a screen capture. The widest consumer window is
+/// 60 non-blank lines, so this is orders of magnitude more than any reader
+/// needs; it exists to bound memory against a 10 MB daemon scrollback.
+const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
+
+/// Directory the zmx daemon binds its session sockets in, resolved exactly as
+/// `Cfg.socketDir` does in zmx/src/main.zig. Both ends agree: gxserver exports
+/// this same environment into every daemon it launches, and the macOS launchd
+/// supervisor already watches the resulting path as its liveness signal.
+fn zmx_socket_directory() -> PathBuf {
+    if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
+        return PathBuf::from(zmx_dir);
+    }
+    if let Some(xdg_runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") {
+        return PathBuf::from(xdg_runtime_dir).join("zmx");
+    }
+    let temporary_directory = std::env::var("TMPDIR")
+        .unwrap_or_else(|_| "/tmp".to_string())
+        .trim_end_matches('/')
+        .to_string();
+    let uid = unsafe { libc::getuid() };
+    PathBuf::from(format!("{temporary_directory}/zmx-{uid}"))
+}
+
+fn zmx_session_socket_path(session_name: &str) -> PathBuf {
+    zmx_socket_directory().join(session_name)
+}
+
+/// The live screen plus the tail of the scrollback, read straight off the
+/// daemon's IPC socket. See `CDXC:SessionChatScreenCapture`.
+pub(crate) fn read_zmx_session_screen_capture(
     zmx_name: &str,
 ) -> Result<ZmxHistoryCapture, String> {
-    let zmx = require_bundled_zmx()?;
-    let result = run_zmx_interaction_command(
-        build_zmx_history_command(zmx_name, &zmx.executable_path),
-        ZmxCommandOptions {
-            allow_stdout_truncation: true,
-            stdout_limit_bytes: Some(GXSERVER_ZMX_HISTORY_STDOUT_LIMIT_BYTES),
-            ..ZmxCommandOptions::default()
-        },
-    )
-    .map_err(|error| match error {
-        ZmxEndpointError::DependencyUnavailable(message) => message,
-        ZmxEndpointError::Domain(error) => error.message,
+    let socket_path = zmx_session_socket_path(zmx_name);
+    let mut stream = std::os::unix::net::UnixStream::connect(&socket_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::ConnectionRefused {
+            // Same hygiene as `zmx history`: a refused connect means the daemon
+            // is gone and only its socket file is left behind.
+            let _ = fs::remove_file(&socket_path);
+        }
+        format!("zmx session screen capture could not reach the session: {error}")
     })?;
-    Ok(ZmxHistoryCapture {
-        truncated: result.stdout_truncated,
-        text: result.stdout,
-    })
+    stream
+        .set_read_timeout(Some(ZMX_SCREEN_CAPTURE_TIMEOUT))
+        .and_then(|()| stream.set_write_timeout(Some(ZMX_SCREEN_CAPTURE_TIMEOUT)))
+        .map_err(|error| format!("zmx session screen capture could not arm timeouts: {error}"))?;
+
+    let mut request = [0_u8; ZMX_IPC_HEADER_BYTES + 1];
+    request[0] = ZMX_IPC_TAG_HISTORY;
+    request[1..5].copy_from_slice(&1_u32.to_le_bytes());
+    request[ZMX_IPC_HEADER_BYTES] = ZMX_IPC_HISTORY_FORMAT_PLAIN;
+    stream
+        .write_all(&request)
+        .map_err(|error| format!("zmx session screen capture could not be requested: {error}"))?;
+
+    read_zmx_screen_capture_reply(&mut stream)
+}
+
+/// Drains one `History` reply, retaining only the last
+/// `ZMX_SCREEN_CAPTURE_TAIL_BYTES` of payload so a huge scrollback costs
+/// bounded memory here regardless of what the daemon serialized.
+fn read_zmx_screen_capture_reply(
+    stream: &mut std::os::unix::net::UnixStream,
+) -> Result<ZmxHistoryCapture, String> {
+    let mut header = [0_u8; ZMX_IPC_HEADER_BYTES];
+    let mut chunk = vec![0_u8; 64 * 1024];
+    loop {
+        stream.read_exact(&mut header).map_err(|error| {
+            format!("zmx session screen capture reply header was unreadable: {error}")
+        })?;
+        let tag = header[0];
+        let payload_len =
+            u32::from_le_bytes([header[1], header[2], header[3], header[4]]) as usize;
+
+        let mut remaining = payload_len;
+        let mut tail: Vec<u8> = Vec::new();
+        let keep = tag == ZMX_IPC_TAG_HISTORY;
+        while remaining > 0 {
+            let want = remaining.min(chunk.len());
+            let read = stream.read(&mut chunk[..want]).map_err(|error| {
+                format!("zmx session screen capture reply body was unreadable: {error}")
+            })?;
+            if read == 0 {
+                return Err(
+                    "zmx session screen capture reply ended before the payload did".to_string(),
+                );
+            }
+            remaining -= read;
+            if keep {
+                tail.extend_from_slice(&chunk[..read]);
+                if tail.len() > ZMX_SCREEN_CAPTURE_TAIL_BYTES {
+                    let drop_to = tail.len() - ZMX_SCREEN_CAPTURE_TAIL_BYTES;
+                    tail.drain(..drop_to);
+                }
+            }
+        }
+        if keep {
+            return Ok(ZmxHistoryCapture {
+                text: zmx_screen_capture_tail_text(tail, payload_len),
+                truncated: false,
+            });
+        }
+        // Any other tag on this connection is a message we did not ask for
+        // (or one a newer daemon volunteers); skip it and keep reading.
+    }
+}
+
+/// Decodes a retained tail into text, starting at the first clean line
+/// boundary so a reader never sees half of a dropped line.
+fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
+    let clipped = tail.len() < payload_len;
+    let mut text = String::from_utf8_lossy(&tail).into_owned();
+    if clipped {
+        if let Some(first_newline) = text.find('\n') {
+            text.drain(..=first_newline);
+        }
+    }
+    text
 }
 
 fn create_attach_session_metadata(
@@ -2270,7 +2400,7 @@ impl MacosZmxLaunchdJob {
             log_path: runtime_dir.join(format!("{key}.log")),
             plist_path,
             plist_path_string,
-            socket_path: macos_zmx_socket_path(session_name, uid),
+            socket_path: macos_zmx_socket_path(session_name),
         })
     }
 
@@ -2384,19 +2514,8 @@ fn macos_zmx_launchd_environment_exports() -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn macos_zmx_socket_path(session_name: &str, uid: u32) -> PathBuf {
-    let socket_directory = if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
-        PathBuf::from(zmx_dir)
-    } else if let Some(xdg_runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") {
-        PathBuf::from(xdg_runtime_dir).join("zmx")
-    } else {
-        let temporary_directory = std::env::var("TMPDIR")
-            .unwrap_or_else(|_| "/tmp".to_string())
-            .trim_end_matches('/')
-            .to_string();
-        PathBuf::from(format!("{temporary_directory}/zmx-{uid}"))
-    };
-    socket_directory.join(session_name)
+fn macos_zmx_socket_path(session_name: &str) -> PathBuf {
+    zmx_session_socket_path(session_name)
 }
 
 #[cfg(target_os = "macos")]
