@@ -75,10 +75,21 @@ import {
 } from "./session-chat-noise";
 import { SESSION_CHAT_STREAMING_ID } from "./session-chat-streaming";
 import {
+  answeredSessionChatQuestionExchange,
+  isSessionChatQuestionToolName,
+  SessionChatQuestionExchangeCard,
+  type SessionChatQuestionExchange,
+} from "./session-chat-question-exchange";
+import {
   foldSessionChatToolMessages,
+  pairSessionChatToolBlocks,
   splitSessionChatBlocks,
 } from "./session-chat-tool-fold";
 import { SessionChatToolRun } from "./session-chat-tool-run";
+import {
+  countSessionChatToolCalls,
+  summarizeSessionChatToolRun,
+} from "./session-chat-tool-summary";
 
 const LOAD_EARLIER_SCROLL_TOP_PX = 80;
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
@@ -393,14 +404,126 @@ function splitReasoningHeadline(markdown: string): {
   };
 }
 
+/**
+ * Answered question cards carried by a turn's tool blocks. They are
+ * conversation, not work, so every disclosure that collapses tool activity
+ * (thinking rows, agent-message tool sections) renders them OUTSIDE its fold
+ * and passes questionPairsAsRows to the run inside, keeping the raw pair as a
+ * plain row there. Empty when the parent already hoists them.
+ */
+function questionExchangesFromTools(
+  tools: ReturnType<typeof splitSessionChatBlocks>["tools"],
+): SessionChatQuestionExchange[] {
+  const out: SessionChatQuestionExchange[] = [];
+  for (const pair of pairSessionChatToolBlocks(tools)) {
+    const exchange = answeredSessionChatQuestionExchange(pair);
+    if (exchange) {
+      out.push(exchange);
+    }
+  }
+  return out;
+}
+
+function QuestionExchangeCards({
+  exchanges,
+}: {
+  exchanges: readonly SessionChatQuestionExchange[];
+}) {
+  if (exchanges.length === 0) {
+    return null;
+  }
+  return (
+    <div className="grid min-w-0 gap-3 py-1.5">
+      {exchanges.map((exchange, index) => (
+        <SessionChatQuestionExchangeCard exchange={exchange} key={index} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Tool activity owned by a plain agent message, collapsed behind one summary
+ * row — the same reading the thinking lane gives its tools, so a turn's answer
+ * is never pushed off screen by the work that produced it.
+ */
+function AgentToolsDisclosure({
+  questionPairsAsRows,
+  tools,
+  verboseMode,
+}: {
+  questionPairsAsRows: boolean;
+  tools: ReturnType<typeof splitSessionChatBlocks>["tools"];
+  verboseMode: boolean;
+}) {
+  const [open, setOpen] = useState(verboseMode);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => setOpen(verboseMode), [verboseMode]);
+
+  const exchanges = questionPairsAsRows ? [] : questionExchangesFromTools(tools);
+  const count = countSessionChatToolCalls(tools);
+  const label =
+    count === 0 ? "Tool output" : count === 1 ? "1 tool call" : `${count} tool calls`;
+  // A question's JSON input is noise in the preview: its card carries it.
+  const summary = summarizeSessionChatToolRun(
+    tools.filter(
+      (block) =>
+        block.type !== "tool-call" ||
+        !isSessionChatQuestionToolName(block.name),
+    ),
+  );
+
+  return (
+    <>
+      <div className="ghostex-chat-tool-run">
+        <button
+          aria-expanded={open}
+          className="ghostex-chat-tool-run-toggle"
+          onClick={() => {
+            if (!open) {
+              centerSessionChatExpansion(triggerRef.current);
+            }
+            setOpen((value) => !value);
+          }}
+          ref={triggerRef}
+          type="button"
+        >
+          <span className="ghostex-chat-work-icon">
+            <IconChevronRight
+              aria-hidden="true"
+              className={cn(open && "rotate-90")}
+              stroke={2}
+            />
+          </span>
+          <span className="shrink-0">{label}</span>
+          {!open && summary ? (
+            <span className="ghostex-chat-work-preview">{summary}</span>
+          ) : null}
+        </button>
+        {open ? (
+          <SessionChatExpansion
+            bodyClassName="ghostex-chat-tool-run-expanded"
+            label="Collapse tool calls"
+            onCollapse={() => setOpen(false)}
+          >
+            <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
+          </SessionChatExpansion>
+        ) : null}
+      </div>
+      <QuestionExchangeCards exchanges={exchanges} />
+    </>
+  );
+}
+
 function ReasoningRow({
   isStreaming,
   markdown,
+  questionPairsAsRows,
   tools,
   verboseMode,
 }: {
   isStreaming: boolean;
   markdown: string;
+  questionPairsAsRows: boolean;
   tools: ReturnType<typeof splitSessionChatBlocks>["tools"];
   verboseMode: boolean;
 }) {
@@ -417,10 +540,15 @@ function ReasoningRow({
   // With tools, the caret owns BOTH the reasoning body and the tool rows: a
   // long reasoning turn collapses to its first line instead of pushing the
   // answer it belongs to off the screen. Verbose mode still opens it by
-  // default, so nothing is hidden from anyone who wants it.
+  // default, so nothing is hidden from anyone who wants it. Answered question
+  // cards escape the collapse — they are conversation, not work.
   if (tools.length > 0) {
     const { headline, body: detail } = splitReasoningHeadline(markdown);
+    const exchanges = questionPairsAsRows
+      ? []
+      : questionExchangesFromTools(tools);
     return (
+      <>
       <div className="ghostex-chat-thinking-row is-disclosure">
         <button
           aria-expanded={open}
@@ -456,10 +584,12 @@ function ReasoningRow({
             onCollapse={() => setOpen(false)}
           >
             {detail.length > 0 ? renderBody(detail) : null}
-            <SessionChatToolRun blocks={tools} showAllRows />
+            <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
           </SessionChatExpansion>
         ) : null}
       </div>
+      <QuestionExchangeCards exchanges={exchanges} />
+      </>
     );
   }
 
@@ -533,6 +663,7 @@ function userTurnCopyMarkdown(
 function MessageRow({
   isStreaming = false,
   message,
+  questionPairsAsRows = false,
   showAssistantCopy,
   verboseMode,
 }: {
@@ -543,6 +674,9 @@ function MessageRow({
    */
   isStreaming?: boolean;
   message: SessionChatMessage;
+  /** Set inside the expanded completed-work log, where the hoisted question
+   * card already shows any answered question this message carries. */
+  questionPairsAsRows?: boolean;
   showAssistantCopy: boolean;
   verboseMode: boolean;
 }) {
@@ -621,6 +755,7 @@ function MessageRow({
       <ReasoningRow
         isStreaming={isStreaming}
         markdown={markdown}
+        questionPairsAsRows={questionPairsAsRows}
         tools={tools}
         verboseMode={verboseMode}
       />
@@ -668,8 +803,25 @@ function MessageRow({
             <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
           </div>
         ) : null}
+        {/*
+         * Tools owned by a prose turn collapse behind a summary row, matching
+         * the thinking lane's treatment of its tool activity. A tool-only
+         * message keeps the open run: with no prose above it, the disclosure
+         * would collapse the turn to nothing.
+         */}
         {tools.length > 0 ? (
-          <SessionChatToolRun blocks={tools} />
+          markdown.length > 0 ? (
+            <AgentToolsDisclosure
+              questionPairsAsRows={questionPairsAsRows}
+              tools={tools}
+              verboseMode={verboseMode}
+            />
+          ) : (
+            <SessionChatToolRun
+              blocks={tools}
+              questionPairsAsRows={questionPairsAsRows}
+            />
+          )
         ) : null}
         {showCopy ? <CopyFooter markdown={markdown} /> : null}
       </MessageContent>
@@ -715,6 +867,14 @@ function finalAssistantMessageIds(
   };
 
   for (const message of messages) {
+    // A harness-injected turn (a background-task notification, local command
+    // output, a message from another session) is authored by the terminal, not
+    // by the reader: the agent is still mid-response on both sides of it.
+    // Ending the turn there put a copy affordance under commentary that the
+    // agent then kept building on.
+    if (sessionChatSuppressedTurnLabel(message) !== null) {
+      continue;
+    }
     if (message.role === "user") {
       commitTurn();
       continue;
@@ -821,10 +981,42 @@ function workedDurationLabel(
   return `Worked for ${minutes}m${remainder > 0 ? ` ${remainder}s` : ""}`;
 }
 
+/**
+ * Answered agent questions buried inside a completed turn's work. The user's
+ * answer never writes a user row to the transcript — the whole ask/answer
+ * exchange lives in tool blocks between two user turns — so without hoisting
+ * it would vanish into the collapsed "Worked for Xs" section. The raw tool
+ * rows stay in the expanded work log (questionPairsAsRows), so nothing renders
+ * twice.
+ */
+function hoistedQuestionExchanges(
+  work: readonly SessionChatMessage[],
+): { exchange: SessionChatQuestionExchange; key: string }[] {
+  const out: { exchange: SessionChatQuestionExchange; key: string }[] = [];
+  for (const message of work) {
+    const { tools } = splitSessionChatBlocks(message.blocks);
+    pairSessionChatToolBlocks(tools).forEach((pair, index) => {
+      const exchange = answeredSessionChatQuestionExchange(pair);
+      if (exchange) {
+        out.push({ exchange, key: `${message.id}:${index}` });
+      }
+    });
+  }
+  return out;
+}
+
 function CompletedWork({
+  showAssistantCopy,
   turn,
   verboseMode,
 }: {
+  /**
+   * A folded turn ends at the next user row, and a harness-injected turn
+   * (task notification, local command output) is one of those rows — so this
+   * turn's `final` can still be mid-response. Only the real end of the
+   * response carries the copy affordance.
+   */
+  showAssistantCopy: boolean;
   turn: CompletedWorkTurn;
   verboseMode: boolean;
 }) {
@@ -832,6 +1024,10 @@ function CompletedWork({
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(verboseMode), [verboseMode]);
   const hasWork = turn.work.length > 0;
+  const questionExchanges = useMemo(
+    () => hoistedQuestionExchanges(turn.work),
+    [turn.work],
+  );
 
   return (
     <div className="ghostex-chat-completed-turn">
@@ -874,6 +1070,7 @@ function CompletedWork({
               <MessageRow
                 key={message.id}
                 message={message}
+                questionPairsAsRows
                 showAssistantCopy={false}
                 verboseMode={verboseMode}
               />
@@ -881,9 +1078,18 @@ function CompletedWork({
           </SessionChatExpansion>
         ) : null}
       </div>
+      {questionExchanges.length > 0 ? (
+        <Message align="start" className="pb-4" data-role="question-exchange">
+          <MessageContent>
+            {questionExchanges.map(({ exchange, key }) => (
+              <SessionChatQuestionExchangeCard exchange={exchange} key={key} />
+            ))}
+          </MessageContent>
+        </Message>
+      ) : null}
       <MessageRow
         message={turn.final}
-        showAssistantCopy
+        showAssistantCopy={showAssistantCopy}
         verboseMode={verboseMode}
       />
     </div>
@@ -1065,6 +1271,9 @@ export function SessionChatMessageList({
                   />
                 ) : (
                   <CompletedWork
+                    showAssistantCopy={copyableAssistantMessageIds.has(
+                      item.turn.final.id,
+                    )}
                     turn={item.turn}
                     verboseMode={verboseMode}
                   />
