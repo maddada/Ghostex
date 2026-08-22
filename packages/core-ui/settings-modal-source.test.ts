@@ -16,6 +16,33 @@ const sharedSidebarContractSource = readFileSync(
   new URL("../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
+// CDXC:SettingsModalSplit 2026-08-22: settings-modal.tsx was split into
+// packages/core-ui/settings-modal/*; these mirror the pieces raw-source
+// assertions below now need to read from.
+const settingsModalFieldsSource = readFileSync(
+  new URL("./settings-modal/fields.tsx", import.meta.url),
+  "utf8",
+);
+const settingsModalTypesSource = readFileSync(
+  new URL("./settings-modal/types.ts", import.meta.url),
+  "utf8",
+);
+const settingsModalAgentsTabSource = readFileSync(
+  new URL("./settings-modal/tabs/agents.tsx", import.meta.url),
+  "utf8",
+);
+const settingsModalIntegrationsTabSource = readFileSync(
+  new URL("./settings-modal/tabs/integrations.tsx", import.meta.url),
+  "utf8",
+);
+const settingsModalProjectsTabSource = readFileSync(
+  new URL("./settings-modal/tabs/projects.tsx", import.meta.url),
+  "utf8",
+);
+const settingsModalPortlessTabSource = readFileSync(
+  new URL("./settings-modal/tabs/portless.tsx", import.meta.url),
+  "utf8",
+);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -23,6 +50,17 @@ function sourceBetween(source: string, start: string, end: string): string {
   expect(startIndex).toBeGreaterThanOrEqual(0);
   expect(endIndex).toBeGreaterThan(startIndex);
   return source.slice(startIndex, endIndex);
+}
+
+// CDXC:SettingsModalSplit 2026-08-22: some markers used to bound a slice up to
+// the NEXT top-level declaration in the old monolithic settings-modal.tsx.
+// After the split that next declaration can live in a different file, so
+// there is no longer an `end` marker to search for in the same source; take
+// the rest of the (now-standalone) file instead.
+function sourceFrom(source: string, start: string): string {
+  const startIndex = source.indexOf(start);
+  expect(startIndex).toBeGreaterThanOrEqual(0);
+  return source.slice(startIndex);
 }
 
 describe("settings modal source", () => {
@@ -270,7 +308,7 @@ describe("settings modal source", () => {
       'toolbarClassName="settings-modal-search-toolbar"',
     );
     const textField = sourceBetween(
-      settingsModalSource,
+      settingsModalFieldsSource,
       "function TextField",
       "function DisabledCommandPreviewField",
     );
@@ -308,17 +346,17 @@ describe("settings modal source", () => {
       "const hasVisibleMainSettings",
     );
     const integrationsTab = sourceBetween(
-      settingsModalSource,
+      settingsModalIntegrationsTabSource,
       "function IntegrationsSettingsTab",
       "function IntegrationSettingsRow",
     );
     const agentsTab = sourceBetween(
-      settingsModalSource,
+      settingsModalAgentsTabSource,
       "function AgentsSettingsTab",
       "function AgentHookStatusRow",
     );
     const hookStatusRow = sourceBetween(
-      settingsModalSource,
+      settingsModalAgentsTabSource,
       "function AgentHookStatusRow",
       "function AgentHookStatusIcon",
     );
@@ -386,7 +424,7 @@ describe("settings modal source", () => {
      * hidden diagnostic rows do not leave an empty Debugging section.
      */
     const dependentKeys = sourceBetween(
-      settingsModalSource,
+      settingsModalTypesSource,
       "const DEBUGGING_MODE_DEPENDENT_SETTING_KEYS = [",
       "] as const;",
     );
@@ -430,7 +468,7 @@ describe("settings modal source", () => {
      * Showing an unavailable row is preferable to visually falling back to Codex.
      */
     const agentsTab = sourceBetween(
-      settingsModalSource,
+      settingsModalAgentsTabSource,
       "function AgentsSettingsTab",
       "function AgentHookStatusRow",
     );
@@ -449,24 +487,25 @@ describe("settings modal source", () => {
      * otherwise the portaled popup can keep input trapped.
      */
     const settingsSelect = sourceBetween(
-      settingsModalSource,
+      settingsModalFieldsSource,
       "function SettingsSelect",
       "function SettingsSelectContent",
     );
     const selectField = sourceBetween(
-      settingsModalSource,
+      settingsModalFieldsSource,
       "function SelectField",
       "function StaticNoteField",
     );
-    const settingsModalWithoutSettingsSelect = settingsModalSource.replace(settingsSelect, "");
+    const fieldsSourceWithoutSettingsSelect = settingsModalFieldsSource.replace(settingsSelect, "");
 
-    expect(settingsModalSource).toContain('import { flushSync } from "react-dom";');
+    expect(settingsModalFieldsSource).toContain('import { flushSync } from "react-dom";');
     expect(settingsSelect).toContain("const [selectOpen, setSelectOpen] = useState(false);");
     expect(settingsSelect).toContain("flushSync(() => {");
     expect(settingsSelect).toContain("onOpenChange={(nextOpen, eventDetails) => {");
     expect(settingsSelect).toContain("open={selectOpen}");
     expect(selectField).toContain("<SettingsSelect");
-    expect(settingsModalWithoutSettingsSelect).not.toMatch(/<Select(?:\s|>)/u);
+    expect(fieldsSourceWithoutSettingsSelect).not.toMatch(/<Select(?:\s|>)/u);
+    expect(settingsModalSource).not.toMatch(/<Select(?:\s|>)/u);
   });
 
   test("keeps dev-server controls in the Terminal settings flow", () => {
@@ -478,7 +517,7 @@ describe("settings modal source", () => {
      * The launch choice moved the other way: it is now the Browser section's single web-link target, shared with terminal and session chat links.
      */
     const sectionKeys = sourceBetween(
-      settingsModalSource,
+      settingsModalTypesSource,
       "terminalDevServers: [",
       "browser: [",
     );
@@ -513,7 +552,7 @@ describe("settings modal source", () => {
      * frames, not split spacing or Ghostty config behavior.
      */
     const terminalSectionKeys = sourceBetween(
-      settingsModalSource,
+      settingsModalTypesSource,
       "terminal: [",
       "tools: [",
     );
@@ -546,7 +585,7 @@ describe("settings modal source", () => {
      * the macOS Settings modal.
      */
     const colorPickerField = sourceBetween(
-      settingsModalSource,
+      settingsModalFieldsSource,
       "function WebColorPickerField",
       "function normalizeColorInputValue",
     );
@@ -563,15 +602,10 @@ describe("settings modal source", () => {
      * Projects settings edits selected-project metadata only. The standalone
      * trash action should not be available from this page.
      */
-    const projectsPanel = sourceBetween(
-      settingsModalSource,
-      "function ProjectsSettingsPanel",
-      "function OpenTargetsSettingsTab",
-    );
-    const selectedProjectEditor = sourceBetween(
-      settingsModalSource,
+    const projectsPanel = sourceFrom(settingsModalProjectsTabSource, "function ProjectsSettingsPanel");
+    const selectedProjectEditor = sourceFrom(
+      settingsModalProjectsTabSource,
       '<Card className="settings-project-command-card">',
-      "type PortlessSettingsDomainSummary",
     );
 
     expect(projectsPanel).not.toContain('type: "removeProject"');
@@ -586,11 +620,7 @@ describe("settings modal source", () => {
      * Phase 14 puts app-wide Portless controls at the top of Settings ->
      * Projects, before the project selector and selected-project fields.
      */
-    const projectsPanel = sourceBetween(
-      settingsModalSource,
-      "function ProjectsSettingsPanel",
-      "function PortlessGlobalSettingsPanel",
-    );
+    const projectsPanel = sourceFrom(settingsModalProjectsTabSource, "function ProjectsSettingsPanel");
     const settingsModalProjectsTab = sourceBetween(
       settingsModalSource,
       '<TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="projects">',
@@ -618,7 +648,7 @@ describe("settings modal source", () => {
       "</TabsContent>",
     );
     const globalPanel = sourceBetween(
-      settingsModalSource,
+      settingsModalPortlessTabSource,
       "function PortlessGlobalSettingsPanel",
       "function PortlessSettingsAdminActionButton",
     );
@@ -631,8 +661,8 @@ describe("settings modal source", () => {
     );
     expect(globalPanel).toContain("checked={settings.portlessEnabled}");
     expect(globalPanel).toContain("value={[settings.portlessProtocol]}");
-    expect(settingsModalSource).toContain('{ label: "HTTPS", value: "https" }');
-    expect(settingsModalSource).toContain('{ label: "HTTP", value: "http" }');
+    expect(settingsModalPortlessTabSource).toContain('{ label: "HTTPS", value: "https" }');
+    expect(settingsModalPortlessTabSource).toContain('{ label: "HTTP", value: "http" }');
   });
 
   test("keeps Portless settings actions explicit and sanitized", () => {
@@ -642,11 +672,7 @@ describe("settings modal source", () => {
      * Ghostex-managed proxy, but the sidebar command may carry only enum action,
      * request id, and selected protocol metadata.
      */
-    const projectsPanel = sourceBetween(
-      settingsModalSource,
-      "function ProjectsSettingsPanel",
-      "type SettingsAgentDragData",
-    );
+    const projectsPanel = sourceFrom(settingsModalProjectsTabSource, "function ProjectsSettingsPanel");
     const sharedSettingsCommand = sourceBetween(
       sharedSidebarContractSource,
       "Settings -> Projects exposes explicit Portless setup actions",
@@ -656,8 +682,8 @@ describe("settings modal source", () => {
     expect(projectsPanel).toContain('type: "runPortlessSettingsAdminAction"');
     expect(projectsPanel).toContain('action === "remove"');
     expect(projectsPanel).toContain("protocol: settings.portlessProtocol");
-    expect(projectsPanel).toContain('onClick={() => onEnabledChange(false)}');
-    expect(projectsPanel).toContain('remove: "Remove background proxy"');
+    expect(settingsModalPortlessTabSource).toContain('onClick={() => onEnabledChange(false)}');
+    expect(settingsModalPortlessTabSource).toContain('remove: "Remove background proxy"');
     expect(sharedSettingsCommand).toContain("action: NativePortlessAdminInstallAction;");
     expect(sharedSettingsCommand).toContain("protocol: NativePortlessProtocol;");
     expect(sharedSettingsCommand).toContain('action: "remove";');
@@ -670,12 +696,12 @@ describe("settings modal source", () => {
      * reset, or input controls. Worktree grouping needs only stable project ids.
      */
     const domainsSummary = sourceBetween(
-      settingsModalSource,
+      settingsModalPortlessTabSource,
       "function PortlessAssignedDomainsSummary",
       "function getPortlessSettingsStatus",
     );
     const domainGrouping = sourceBetween(
-      settingsModalSource,
+      settingsModalPortlessTabSource,
       "function getProjectPortlessDomainSummaries",
       "function getPortlessAssignedDomainsEmptyMessage",
     );
@@ -713,7 +739,7 @@ describe("settings modal source", () => {
       "const hasVisibleMainSettings",
     );
     const advancedMainSettings = sourceBetween(
-      settingsModalSource,
+      settingsModalTypesSource,
       "const ADVANCED_MAIN_SETTING_KEYS",
       "type HotkeySettingsSectionId",
     );
@@ -723,7 +749,7 @@ describe("settings modal source", () => {
       'browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", [',
     );
     const appIconField = sourceBetween(
-      settingsModalSource,
+      settingsModalFieldsSource,
       "function AppIconPickerField",
       "function SoundField",
     );
