@@ -3684,7 +3684,10 @@ fn schedule_agent_title_metadata_check(state: AppState, project_id: String, sess
             GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS,
         ))
         .await;
-        let Ok(db) = open_gxserver_database(&state.paths) else {
+        let Ok(db) = open_gxserver_database_with_busy_timeout(
+            &state.paths,
+            Duration::from_secs(10),
+        ) else {
             return;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
