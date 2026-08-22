@@ -4,10 +4,10 @@
  * the inline HTML that iOS has to parse before showing the chat surface.
  * Keep this entry limited to the shared primitives and chat-specific chrome.
  */
-@import "../sidebar/styles/shadcn.generated.css";
-@import "../sidebar/styles/theme.css";
-@import "../sidebar/styles/workspace-theme.css";
-@import "../sidebar/styles/chat.css";
+@import "@/sidebar/styles/shadcn.generated.css";
+@import "@/sidebar/styles/theme.css";
+@import "@/sidebar/styles/workspace-theme.css";
+@import "@/sidebar/styles/chat.css";
 
 /*
  * Phone/tablet transcript gutter. The shared rule reserves 30px each side

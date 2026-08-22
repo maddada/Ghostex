@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
-import "../../sidebar/styles.css";
-import { SidebarApp } from "../../sidebar/sidebar-app";
-import { dismissSidebarTooltips } from "../../sidebar/app-tooltip";
-import { dismissAllSidebarContextMenus } from "../../sidebar/sidebar-context-menu-portal";
+import "@/sidebar/styles.css";
+import { SidebarApp } from "@/sidebar/sidebar-app";
+import { dismissSidebarTooltips } from "@/sidebar/app-tooltip";
+import { dismissAllSidebarContextMenus } from "@/sidebar/sidebar-context-menu-portal";
 import { createGpuiSidebarRuntime } from "./gxserver-runtime";
 import "./sidebar.css";
 

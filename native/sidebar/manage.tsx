@@ -94,9 +94,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { AppTooltip, TooltipProvider } from "../../sidebar/app-tooltip";
-import { SidebarContextMenuPortal } from "../../sidebar/sidebar-context-menu-portal";
-import "../../sidebar/styles/session-overlays.css";
+import { AppTooltip, TooltipProvider } from "@/sidebar/app-tooltip";
+import { SidebarContextMenuPortal } from "@/sidebar/sidebar-context-menu-portal";
+import "@/sidebar/styles/session-overlays.css";
 import {
   requestProjectDocsFromHost,
   type ProjectDocsFileEntry as ManageFileEntry,
@@ -105,7 +105,7 @@ import {
   type ProjectDocsGitBaselineReason as ManageGitBaselineReason,
   type ProjectDocsRequest as ManageFilesBridgeRequest,
   type ProjectDocsResponse as ManageFilesBridgeResponse,
-} from "../../shared/project-docs";
+} from "@/shared/project-docs";
 import { createEditor as createMeoEditor } from "./meo/editor";
 import { applyThemeSettings as applyMeoThemeSettings } from "./meo/helpers/theme";
 import "./meo/styles.css";

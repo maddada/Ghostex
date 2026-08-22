@@ -1,6 +1,6 @@
-import type { SidebarStoryWorkspace } from "../../sidebar/sidebar-story-workspace";
-import type { SidebarSessionGroup } from "../../shared/session-grid-contract";
-import { normalizeWorkspaceProjectIconDataUrl } from "../../shared/workspace-project-appearance";
+import type { SidebarStoryWorkspace } from "@/sidebar/sidebar-story-workspace";
+import type { SidebarSessionGroup } from "@/shared/session-grid-contract";
+import { normalizeWorkspaceProjectIconDataUrl } from "@/shared/workspace-project-appearance";
 
 type ExplicitSidebarProjectContext = NonNullable<
   SidebarStoryWorkspace["groupMetadataById"][string]["projectContext"]

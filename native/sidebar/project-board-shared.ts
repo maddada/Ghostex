@@ -1,6 +1,6 @@
 import Fuse from "fuse.js";
 
-import type { ProjectBoardConversationLinkView } from "../../shared/bead-conversation-links";
+import type { ProjectBoardConversationLinkView } from "@/shared/bead-conversation-links";
 
 /*
   CDXC:ProjectBoard 2026-05-23-14:10:

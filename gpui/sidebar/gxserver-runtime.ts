@@ -36,24 +36,24 @@ import {
   type GxserverSidebarHudSettingsMutationResult,
   type GxserverSidebarProjectCollectionsState,
   type GxserverTypedOperationResult,
-} from "../../shared/gxserver-protocol";
+} from "@/shared/gxserver-protocol";
 import {
   reduceGxserverPresentationDelta,
   reorderPresentationProjectSessions,
-} from "../../shared/gxserver-presentation-cache";
+} from "@/shared/gxserver-presentation-cache";
 import {
   isSessionChatEventType,
   type GxserverSessionChatEvent,
-} from "../../shared/session-chat";
-import { createDisplaySessionLayout } from "../../shared/active-sessions-sort";
+} from "@/shared/session-chat";
+import { createDisplaySessionLayout } from "@/shared/active-sessions-sort";
 import {
   NAVIGATION_HISTORY_SCOPE_GPUI,
   type NavigationHistoryEntry,
-} from "../../shared/navigation-history/navigation-history-contract";
+} from "@/shared/navigation-history/navigation-history-contract";
 import {
   NavigationHistoryController,
   type NavigationHistoryRpc,
-} from "../../shared/navigation-history/navigation-history-controller";
+} from "@/shared/navigation-history/navigation-history-controller";
 import {
   createEmptyGpuiWorkspaceSessionGroupsState,
   createGpuiWorkspaceSessionSubgroup,
@@ -89,8 +89,8 @@ import {
   type GxserverPresentationCloseAfterDoneProjection,
   type GxserverPresentationDelayedSendProjection,
   type GxserverPresentationSidebarProjectOverlay,
-} from "../../shared/gxserver-presentation-sidebar-projection";
-import { orderProjectsWithWorktrees } from "../../shared/project-worktree-order";
+} from "@/shared/gxserver-presentation-sidebar-projection";
+import { orderProjectsWithWorktrees } from "@/shared/project-worktree-order";
 import {
   createAgentSessionDefaultTitle,
   DEFAULT_TERMINAL_SESSION_TITLE,
@@ -115,14 +115,14 @@ import {
   type SidebarSessionItem,
   type SidebarTheme,
   type SidebarToExtensionMessage,
-} from "../../shared/session-grid-contract";
+} from "@/shared/session-grid-contract";
 import {
   createSidebarAgentButtons,
   DEFAULT_SIDEBAR_AGENTS,
   getSidebarAgentIconById,
   isDefaultSidebarAgentId,
   type SidebarAgentButton,
-} from "../../shared/sidebar-agents";
+} from "@/shared/sidebar-agents";
 import {
   createSidebarCommandButtons,
   DEFAULT_BROWSER_LAUNCH_URL,
@@ -132,10 +132,10 @@ import {
   normalizeSidebarCommandLinks,
   type SidebarCommandButton,
   type SidebarCommandScope,
-} from "../../shared/sidebar-commands";
-import { getCompletionSoundLabel } from "../../shared/completion-sound";
-import type { CompletionSoundSetting } from "../../shared/completion-sound";
-import { createAppToastRequest, type AppToastLevel } from "../../shared/app-toast-contract";
+} from "@/shared/sidebar-commands";
+import { getCompletionSoundLabel } from "@/shared/completion-sound";
+import type { CompletionSoundSetting } from "@/shared/completion-sound";
+import { createAppToastRequest, type AppToastLevel } from "@/shared/app-toast-contract";
 import {
   beadConversationLinkMatchKey,
   canonicalizeBeadConversationLinksForBoard,
@@ -148,12 +148,12 @@ import {
   type ProjectBoardConversationLinkView,
   type ProjectBoardConversationState,
   type ProjectBoardSessionOption,
-} from "../../shared/bead-conversation-links";
+} from "@/shared/bead-conversation-links";
 import {
   normalizeghostexSettings,
   type ghostexSettings,
   type PreferredAgentInterface,
-} from "../../shared/ghostex-settings";
+} from "@/shared/ghostex-settings";
 import {
   buildSidebarGitMenuItems,
   createDefaultSidebarGitState,
@@ -165,28 +165,28 @@ import {
   type SidebarGitChangedFile,
   type SidebarGitFileDiffDraft,
   type SidebarGitState,
-} from "../../shared/sidebar-git";
+} from "@/shared/sidebar-git";
 import {
   SIDEBAR_GIT_HUB_MEMO_TTL_MS,
   SIDEBAR_GIT_STATE_MEMO_TTL_MS,
   SidebarGitTtlMemo,
-} from "../../shared/sidebar-git-state-memo";
+} from "@/shared/sidebar-git-state-memo";
 import {
   createDefaultSidebarProjectDiffStats,
   parseGitNumstatDiffStats,
   parseGitZeroDelimitedPaths,
   resolveSidebarProjectDiffStats,
   type SidebarProjectDiffStats,
-} from "../../shared/project-diff-stats";
+} from "@/shared/project-diff-stats";
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
   normalizeWorkspaceThemeColor,
   type WorkspaceProjectIcon,
-} from "../../shared/workspace-project-appearance";
-import type { SidebarSessionTag } from "../../shared/session-tags";
-import { openAppModal, postAppModalHostMessage } from "../../sidebar/app-modal-host-bridge";
-import type { WebviewApi } from "../../sidebar/webview-api";
+} from "@/shared/workspace-project-appearance";
+import type { SidebarSessionTag } from "@/shared/session-tags";
+import { openAppModal, postAppModalHostMessage } from "@/sidebar/app-modal-host-bridge";
+import type { WebviewApi } from "@/sidebar/webview-api";
 import { createGpuiSidebarActiveProjectContextPayloadFromGroups } from "./active-project-context";
 import { runGpuiSidebarBulkSleepPaced } from "./bulk-sleep-pacing";
 import {
@@ -195,7 +195,7 @@ import {
   parseRemoteProjectId,
   parseRemoteTerminalSessionId,
   resolveActiveTerminalSelection,
-} from "../../shared/remote-terminal-selection";
+} from "@/shared/remote-terminal-selection";
 
 export type GpuiGxserverBootstrap = {
   authToken?: string;

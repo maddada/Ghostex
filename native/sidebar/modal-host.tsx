@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { AddProjectModal } from "../../sidebar/add-project-modal/add-project-modal";
+import { AddProjectModal } from "@/sidebar/add-project-modal/add-project-modal";
 import type {
   AddProjectAddResult,
   AddProjectBrowseResult,
@@ -12,59 +12,59 @@ import type {
   AddProjectMachineOption,
   AddProjectRepositoryInfo,
   AddProjectSourceControlDiscovery,
-} from "../../sidebar/add-project-modal/types";
-import { AgentConfigModal, type AgentConfigDraft } from "../../sidebar/agent-config-modal";
-import { AgentsHubModal } from "../../sidebar/agents-hub-modal";
-import { CommandPalette } from "../../sidebar/command-palette";
-import { DaemonSessionsModal } from "../../sidebar/daemon-sessions-modal";
-import { DelayedSendModal } from "../../sidebar/delayed-send-modal";
-import { DiscoverGhostexModal } from "../../sidebar/discover-ghostex-modal";
-import { FirstUserMessageModal } from "../../sidebar/first-user-message-modal";
-import { PinnedPromptsModal } from "../../sidebar/pinned-prompts-modal";
-import { StashedPromptsModal } from "../../sidebar/stashed-prompts-modal";
+} from "@/sidebar/add-project-modal/types";
+import { AgentConfigModal, type AgentConfigDraft } from "@/sidebar/agent-config-modal";
+import { AgentsHubModal } from "@/sidebar/agents-hub-modal";
+import { CommandPalette } from "@/sidebar/command-palette";
+import { DaemonSessionsModal } from "@/sidebar/daemon-sessions-modal";
+import { DelayedSendModal } from "@/sidebar/delayed-send-modal";
+import { DiscoverGhostexModal } from "@/sidebar/discover-ghostex-modal";
+import { FirstUserMessageModal } from "@/sidebar/first-user-message-modal";
+import { PinnedPromptsModal } from "@/sidebar/pinned-prompts-modal";
+import { StashedPromptsModal } from "@/sidebar/stashed-prompts-modal";
 import {
   PortlessSetupModal,
   type PortlessSetupModalMode,
-} from "../../sidebar/portless-setup-modal";
-import { PreviousSessionsModal } from "../../sidebar/previous-sessions-modal";
-import { RecentProjectsModal } from "../../sidebar/recent-projects-modal";
-import { RemoteGxserverInstallModal } from "../../sidebar/remote-gxserver-install-modal";
-import { RemoteProjectPickerModal } from "../../sidebar/remote-project-picker/remote-project-picker-modal";
-import type { RemoteFilesystemBrowseResult } from "../../sidebar/remote-project-picker/remote-filesystem";
-import { ScratchPadModal } from "../../sidebar/scratch-pad-modal";
+} from "@/sidebar/portless-setup-modal";
+import { PreviousSessionsModal } from "@/sidebar/previous-sessions-modal";
+import { RecentProjectsModal } from "@/sidebar/recent-projects-modal";
+import { RemoteGxserverInstallModal } from "@/sidebar/remote-gxserver-install-modal";
+import { RemoteProjectPickerModal } from "@/sidebar/remote-project-picker/remote-project-picker-modal";
+import type { RemoteFilesystemBrowseResult } from "@/sidebar/remote-project-picker/remote-filesystem";
+import { ScratchPadModal } from "@/sidebar/scratch-pad-modal";
 import {
   SettingsModal,
   type MainSettingsInitialSectionId,
   type SettingsModalTab,
-} from "../../sidebar/settings-modal";
-import { ExportTranscriptResultModal } from "../../sidebar/export-transcript-result-modal";
-import { SessionRenameModal } from "../../sidebar/session-rename-modal";
-import { WatchGhostexVideoModal } from "../../sidebar/watch-ghostex-video-modal";
+} from "@/sidebar/settings-modal";
+import { ExportTranscriptResultModal } from "@/sidebar/export-transcript-result-modal";
+import { SessionRenameModal } from "@/sidebar/session-rename-modal";
+import { WatchGhostexVideoModal } from "@/sidebar/watch-ghostex-video-modal";
 import {
   UpdateAvailableModal,
   type UpdateAvailableModalState,
-} from "../../sidebar/update-available-modal";
-import { FirstLaunchSetupModal } from "../../sidebar/first-launch-setup-modal";
-import { GitFileDiffModal, type GitFileDiffModalDraft } from "../../sidebar/git-file-diff-modal";
-import { GitCommitModal, type GitCommitModalDraft } from "../../sidebar/git-commit-modal";
+} from "@/sidebar/update-available-modal";
+import { FirstLaunchSetupModal } from "@/sidebar/first-launch-setup-modal";
+import { GitFileDiffModal, type GitFileDiffModalDraft } from "@/sidebar/git-file-diff-modal";
+import { GitCommitModal, type GitCommitModalDraft } from "@/sidebar/git-commit-modal";
 import {
   WorktreeDeleteModal,
   type WorktreeDeleteModalDraft,
-} from "../../sidebar/worktree-delete-modal";
+} from "@/sidebar/worktree-delete-modal";
 import {
   WorktreeRenameModal,
   type WorktreeRenameModalDraft,
-} from "../../sidebar/worktree-rename-modal";
-import { WorktreeCreateModal } from "../../sidebar/worktree-create-modal";
+} from "@/sidebar/worktree-rename-modal";
+import { WorktreeCreateModal } from "@/sidebar/worktree-create-modal";
 import {
   normalizeAppToastDescription,
   type AppToastRequest,
-} from "../../shared/app-toast-contract";
+} from "@/shared/app-toast-contract";
 import {
   sidebarAgentIconSupportsSessionHistoryTitleGeneration,
   type SidebarAgentButton,
   type SidebarAgentIcon,
-} from "../../shared/sidebar-agents";
+} from "@/shared/sidebar-agents";
 import type {
   ExtensionToSidebarMessage,
   SidebarAddProjectDialogOperation,
@@ -77,26 +77,26 @@ import type {
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state flows to Settings through the modal-state relay.
   SidebarAppIconStateMessage,
   SidebarToExtensionMessage,
-} from "../../shared/session-grid-contract";
+} from "@/shared/session-grid-contract";
 import {
   getWorkspaceThemeForeground,
   normalizeWorkspaceThemeColor,
-} from "../../shared/workspace-project-appearance";
+} from "@/shared/workspace-project-appearance";
 import {
   installAppModalGlobalErrorLogging,
   logAppModalError,
-} from "../../sidebar/app-modal-error-log";
-import { postAppModalHostMessage } from "../../sidebar/app-modal-host-bridge";
-import { MissingProjectFolderModal } from "../../sidebar/missing-project-folder-modal";
-import { useSidebarStore } from "../../sidebar/sidebar-store";
+} from "@/sidebar/app-modal-error-log";
+import { postAppModalHostMessage } from "@/sidebar/app-modal-host-bridge";
+import { MissingProjectFolderModal } from "@/sidebar/missing-project-folder-modal";
+import { useSidebarStore } from "@/sidebar/sidebar-store";
 import {
   DEFAULT_ghostex_SETTINGS,
   isDiagnosticLoggingScenarioEnabled,
   SETTINGS_MODAL_NAVIGATION_TABS,
   type DiagnosticLoggingScenarioId,
-} from "../../shared/ghostex-settings";
-import type { WebviewApi } from "../../sidebar/webview-api";
-import "../../sidebar/styles.css";
+} from "@/shared/ghostex-settings";
+import type { WebviewApi } from "@/sidebar/webview-api";
+import "@/sidebar/styles.css";
 
 type AppModalKind =
   | "addProject"

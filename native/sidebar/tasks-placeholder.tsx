@@ -38,7 +38,7 @@ import {
   DEFAULT_ghostex_SETTINGS,
   isDiagnosticLoggingScenarioEnabled,
   normalizeghostexSettings,
-} from "../../shared/ghostex-settings";
+} from "@/shared/ghostex-settings";
 import {
   Card,
   CardContent,
@@ -150,8 +150,8 @@ import {
   type ProjectBoardConversationLinkView,
   type ProjectBoardConversationState,
   type ProjectBoardStartLocation,
-} from "../../shared/bead-conversation-links";
-import type { AppToastLevel } from "../../shared/app-toast-contract";
+} from "@/shared/bead-conversation-links";
+import type { AppToastLevel } from "@/shared/app-toast-contract";
 import {
   compareAutomationRunsNewestFirst,
   computeNextRunAt,
@@ -163,14 +163,14 @@ import {
   type ProjectAutomationAgentOption,
   type ProjectAutomationTargetOption,
   type ProjectAutomationsBridgeState,
-} from "../../shared/automations";
-import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "../../sidebar/agent-logos";
+} from "@/shared/automations";
+import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/sidebar/agent-logos";
 import {
   createSidebarAgentSelectItems,
   getSidebarAgentIconById,
   type SidebarAgentIcon,
-} from "../../shared/sidebar-agents";
-import "../../sidebar/styles/shadcn.generated.css";
+} from "@/shared/sidebar-agents";
+import "@/sidebar/styles/shadcn.generated.css";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
