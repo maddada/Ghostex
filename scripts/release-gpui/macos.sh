@@ -169,7 +169,25 @@ trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP_PATH" "$STAGE/Ghostex.app"
 ln -s /Applications "$STAGE/Applications"
 DMG="$OUTPUT/ghostex-$VERSION-arm64.dmg"
-hdiutil create -volname Ghostex -srcfolder "$STAGE" -format UDZO "$DMG"
+# CDXC:ReleaseHdiutilResourceBusy 2026-08-22:
+# `hdiutil create` attaches a device to read the staging folder, and another
+# process on the runner — Spotlight indexing the stage it has just seen appear,
+# or a leftover attachment — can hold it and fail the whole macOS build with
+# "Resource busy" minutes after the app was signed and validated. 7.13.0 lost a
+# 30-minute build to exactly that, and the retry produced the DMG. Bounded, and
+# the partial image is removed first so a retry never reads a stale file.
+for attempt in 1 2 3; do
+  if hdiutil create -volname Ghostex -srcfolder "$STAGE" -format UDZO "$DMG"; then
+    break
+  fi
+  if [[ "$attempt" == 3 ]]; then
+    echo "hdiutil create failed after $attempt attempts" >&2
+    exit 1
+  fi
+  echo "hdiutil create failed (attempt $attempt); retrying" >&2
+  rm -f "$DMG"
+  sleep "$((attempt * 10))"
+done
 release_gpui_assert_dmg_budget "$DMG"
 
 ON_DEMAND_ROOT="$REPO_ROOT/build/on-demand-assets/$VERSION"

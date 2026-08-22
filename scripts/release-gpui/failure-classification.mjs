@@ -66,6 +66,15 @@ export const RETRYABLE_RULES = Object.freeze([
   { id: "brew-transient", pattern: /Failed to download resource|curl: \(\d+\).*homebrew/i },
   { id: "notary-transient", pattern: /Unable to (?:reach|contact) (?:the )?Apple notary|HTTP status code: 5\d\d/i },
   { id: "runner-net", pattern: /The remote (?:name|server) could not be resolved|TLS handshake timeout/i },
+  /*
+   * CDXC:ReleaseHdiutilResourceBusy 2026-08-22:
+   * `hdiutil create` attaches a device to read the staging folder, and on a
+   * GitHub macOS runner another process (Spotlight indexing the fresh stage,
+   * or a leftover attachment) can hold it. It says nothing about the app,
+   * which by then has already been signed and validated. 7.13.0 lost a
+   * 30-minute macOS build to this and the retry produced the DMG.
+   */
+  { id: "hdiutil-busy", pattern: /hdiutil:.*(?:Resource busy|Device busy|error -?5341)/i },
 ]);
 
 /*
