@@ -67,7 +67,7 @@ jobs:
         run: |
           {
             printf 'zig=%s-%s\n' "$(git rev-parse HEAD:.dependencies/zmx)" "$(git rev-parse HEAD:.dependencies/zehn)"
-            printf 'cargo=%s\n' "$(git rev-parse HEAD:gxserver-rs)"
+            printf 'cargo=%s\n' "$(git rev-parse HEAD:server)"
           } >> "$GITHUB_OUTPUT"
       - name: Restore Cargo registry cache
         uses: actions/cache@v6

@@ -126,8 +126,8 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "ghostex-paths/**" },
   { pathspec: "zehn-rs/**" },
   { pathspec: ":(exclude)zehn-rs/target" },
-  { pathspec: "gxserver-rs/**" },
-  { pathspec: ":(exclude)gxserver-rs/target" },
+  { pathspec: "server/**" },
+  { pathspec: ":(exclude)server/target" },
   { pathspec: "shared/**" },
   { pathspec: "sidebar/**" },
   { pathspec: "components/**" },
@@ -155,8 +155,8 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
 
 /* Inputs shared by both gxserver Linux architectures. */
 const GXSERVER_PATHSPECS = Object.freeze([
-  { pathspec: "gxserver-rs/**" },
-  { pathspec: ":(exclude)gxserver-rs/target" },
+  { pathspec: "server/**" },
+  { pathspec: ":(exclude)server/target" },
   { pathspec: "ghostex-paths/**" },
   { pathspec: "zehn-rs/**" },
   { pathspec: ":(exclude)zehn-rs/target" },

@@ -334,7 +334,7 @@ EOF
     'if errorlevel 1 exit /b %errorlevel%' \
     "\"$WINDOWS_RUSTUP_WIN\" target add $WSL_RUST_TARGET" \
     'if errorlevel 1 exit /b %errorlevel%' \
-    "\"$WINDOWS_CARGO_WIN\" build --release --manifest-path \"$REPO_ROOT_WIN\\gxserver-rs\\Cargo.toml\" --target $WSL_RUST_TARGET --bin gxserver" \
+    "\"$WINDOWS_CARGO_WIN\" build --release --manifest-path \"$REPO_ROOT_WIN\\server\\Cargo.toml\" --target $WSL_RUST_TARGET --bin gxserver" \
     'exit /b %errorlevel%' \
     >"$build_batch"
 

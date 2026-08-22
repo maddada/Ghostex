@@ -52,7 +52,7 @@ const FIXTURE_FILES = {
   ".dependencies/ghostty/src/main.zig": "pub fn main() void {}\n",
   "apps/desktop/Cargo.toml": "[package]\nname = \"ghostex-gpui\"\n",
   "apps/desktop/src/main.rs": "fn main() {}\n",
-  "gxserver-rs/src/constants.rs": "pub const GXSERVER_PROTOCOL_VERSION: u32 = 42;\n",
+  "server/src/constants.rs": "pub const GXSERVER_PROTOCOL_VERSION: u32 = 42;\n",
   "lib/utils.ts": "export const cn = () => \"\";\n",
   "media/sounds/zap.mp3": "sound\n",
   "apps/desktop/views/modal-host.tsx": "export const ModalHost = () => null;\n",

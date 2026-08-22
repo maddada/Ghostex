@@ -91,7 +91,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-reg-linux-${{ hashFiles('apps/desktop/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
+          key: cargo-reg-linux-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
           restore-keys: cargo-reg-linux-
       - name: Restore CEF distribution cache
         uses: actions/cache@v6

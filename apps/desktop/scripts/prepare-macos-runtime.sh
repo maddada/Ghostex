@@ -23,7 +23,7 @@ fi
 # script builds and stages as Web/bin/zehn. Prompt-history search is a Rust crate
 # compiled into gxserver, so there is nothing to build, cache, or copy here.
 ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
-GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/gxserver-rs}"
+GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/server}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
 # CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.

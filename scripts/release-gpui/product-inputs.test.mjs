@@ -155,7 +155,7 @@ describe("release product input map", () => {
     const specs = (nodeId) => nodePathspecs(nodeId).map((declaration) => declaration.pathspec);
     for (const desktop of ["macos-arm64", "linux-deb-x64", "linux-rpm-x64", "windows-x64", "windows-arm64"]) {
       /* Rule 1: protocol coupling and the embedded gxserver payload. */
-      expect(specs(desktop)).toContain("gxserver-rs/**");
+      expect(specs(desktop)).toContain("server/**");
       expect(specs(desktop)).toContain("ghostex-paths/**");
       /* Rule 2: CEF surfaces are built from the shared React trees. */
       expect(specs(desktop)).toContain("shared/**");

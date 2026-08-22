@@ -340,7 +340,7 @@ build_arch() {
 		"CARGO_TARGET_${env_suffix}_RUSTFLAGS=-C linker-flavor=ld.lld" \
 		ZMX_ZIG="$ZIG_015" \
 		TUI_ZIG="$ZIG_015" \
-		node "$REPO_ROOT/gxserver-rs/package-remote-linux.mjs" --arch "$arch" --allow-cross
+		node "$REPO_ROOT/server/package-remote-linux.mjs" --arch "$arch" --allow-cross
 
 	if ! status="$(package_status "$arch")"; then
 		echo "LINUX_$arch package failed validation after build: $status" >&2

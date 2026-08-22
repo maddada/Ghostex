@@ -44,7 +44,7 @@ Usage:
 
 Options:
   --release-branch <branch>  Branch being released. Defaults to main.
-  --cargo                    Also run cargo check for gxserver-rs and gpui.
+  --cargo                    Also run cargo check for server and gpui.
   --skip-tests               Skip bun run release:test.
   --skip-typecheck           Skip bun run typecheck.
   --skip-credentials         Skip gh/signing/notary credential probes.
@@ -415,7 +415,7 @@ async function checkReleaseTests() {
 }
 
 async function checkCargo() {
-  for (const crate of ["gxserver-rs", "apps/desktop"]) {
+  for (const crate of ["server", "apps/desktop"]) {
     const result = await runCommand(`cargo check --manifest-path '${path.join(repoRoot, crate, "Cargo.toml")}'`, {
       timeoutMs: 15 * 60 * 1000,
     });
@@ -423,7 +423,7 @@ async function checkCargo() {
       return fail(`${crate}: ${shortOutput(result.stderr, 8)}`);
     }
   }
-  return pass("gxserver-rs and gpui check clean");
+  return pass("server and gpui check clean");
 }
 
 async function runChecks(checks) {

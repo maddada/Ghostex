@@ -14,19 +14,19 @@ const sidebarContractSource = readFileSync(
   "utf8",
 );
 const portlessRustSource = readFileSync(
-  new URL("../../../gxserver-rs/src/portless.rs", import.meta.url),
+  new URL("../../../server/src/portless.rs", import.meta.url),
   "utf8",
 );
 const presentationRustSource = readFileSync(
-  new URL("../../../gxserver-rs/src/presentation.rs", import.meta.url),
+  new URL("../../../server/src/presentation.rs", import.meta.url),
   "utf8",
 );
 const protocolRustSource = readFileSync(
-  new URL("../../../gxserver-rs/src/protocol.rs", import.meta.url),
+  new URL("../../../server/src/protocol.rs", import.meta.url),
   "utf8",
 );
 const serverRustSource = readFileSync(
-  new URL("../../../gxserver-rs/src/server.rs", import.meta.url),
+  new URL("../../../server/src/server.rs", import.meta.url),
   "utf8",
 );
 

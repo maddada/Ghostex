@@ -215,7 +215,7 @@ if (!isDarwin && !targetsWindows) {
     "bin",
   );
   const packageArgs = [
-    path.join(repoRoot, "gxserver-rs", "package-remote-linux.mjs"),
+    path.join(repoRoot, "server", "package-remote-linux.mjs"),
     "--arch",
     process.arch,
     "--rust-target",

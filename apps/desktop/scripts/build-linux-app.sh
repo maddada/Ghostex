@@ -158,7 +158,7 @@ mkdir -p "$APP_DIR/dist"
 cp -R "$GPUI_DIR/dist/sidebar" "$APP_DIR/dist/sidebar"
 
 # 5) Bundle the local gxserver package (bin/gxserver + zmx + node runtime),
-# produced by gxserver-rs/package-remote-linux.mjs. The GPUI app resolves it
+# produced by server/package-remote-linux.mjs. The GPUI app resolves it
 # at <executable dir>/gxserver/bin/gxserver in this flat layout
 # (gpui_resolve_local_gxserver_binary), matching macOS's bundled
 # Contents/Resources/Web/gxserver.
@@ -169,7 +169,7 @@ fi
 GXSERVER_PACKAGE="$REPO_ROOT/build/remote-gxserver-linux/$GXSERVER_ARCH/package"
 if [[ ! -x "$GXSERVER_PACKAGE/bin/gxserver" ]]; then
   echo "gxserver package not found at $GXSERVER_PACKAGE." >&2
-  echo "Build it first: bun gxserver-rs/package-remote-linux.mjs --arch $GXSERVER_ARCH" >&2
+  echo "Build it first: bun server/package-remote-linux.mjs --arch $GXSERVER_ARCH" >&2
   exit 1
 fi
 cp -R "$GXSERVER_PACKAGE" "$APP_DIR/gxserver"

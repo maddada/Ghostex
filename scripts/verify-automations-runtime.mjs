@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
-const CLI_PATH = path.join(REPO_ROOT, "gxserver-rs", "target", "debug", "ghostex");
+const CLI_PATH = path.join(REPO_ROOT, "server", "target", "debug", "ghostex");
 const RUNNING_STATUSES = new Set(["queued", "running"]);
 const FINAL_TIMEOUT_MS = 90_000;
 const POLL_MS = 1_000;

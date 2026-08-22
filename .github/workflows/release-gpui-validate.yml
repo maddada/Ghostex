@@ -78,7 +78,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-reg-windows-${{ hashFiles('apps/desktop/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
+          key: cargo-reg-windows-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
           restore-keys: cargo-reg-windows-
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
@@ -130,7 +130,7 @@ jobs:
         run: cargo check --locked --all-targets --manifest-path apps/desktop/Cargo.toml --target aarch64-pc-windows-msvc
       - name: Type-check the Windows gxserver tree
         shell: bash
-        run: cargo check --locked --all-targets --manifest-path gxserver-rs/Cargo.toml --target x86_64-pc-windows-msvc
+        run: cargo check --locked --all-targets --manifest-path server/Cargo.toml --target x86_64-pc-windows-msvc
       - name: Record job observability
         if: ${{ always() }}
         shell: bash

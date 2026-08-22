@@ -16,7 +16,7 @@ import { buildAgentWorkPrompt } from "./project-board-shared";
 describe("board start-work prompt parity", () => {
   test("the Rust work-prompt template matches buildAgentWorkPrompt line for line", () => {
     const rustSource = readFileSync(
-      new URL("../../../gxserver-rs/src/board_start_work.rs", import.meta.url),
+      new URL("../../../server/src/board_start_work.rs", import.meta.url),
       "utf8",
     );
     const functionSource = rustSource.slice(
