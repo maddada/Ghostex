@@ -8355,11 +8355,30 @@ styleElement.textContent = `
     max-width: min(780px, calc(100vw - 44px));
     overflow: hidden;
     width: 780px;
+    /*
+     * CDXC:ProjectBoardDialogHeight 2026-08-22:
+     * The dialog is centred with a -50% translate, so a popup taller than the
+     * window loses its top and bottom to the viewport edges with no way to
+     * reach them. Bound the popup to the window and lay it out as a column so
+     * the header and footer stay pinned and only the body scrolls. The base
+     * dialog popup is a grid, so the column direction is set here rather than
+     * relying on the shared component.
+     */
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+
+  .project-ticket-dialog > [data-slot="dialog-header"],
+  .project-ticket-dialog > [data-slot="dialog-footer"] {
+    flex: 0 0 auto;
   }
 
   .project-ticket-dialog-body {
     --edge-fade-distance: 16px;
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 16px;
     max-height: min(72vh, 760px);
