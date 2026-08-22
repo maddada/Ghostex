@@ -5,87 +5,167 @@
 - Multiple sub-agents are working in this repository. Don't be alarmed if something gets changed around your code. This is normal. Just get your work done without affecting the work of other sub-agents or breaking their work.
 - Don't get stuck on stale git locks. You can delete those and continue on your work without confirmation.
 
+### Repository layout (restructured 2026-08-22)
+
+The repository root was restructured on 2026-08-22. Old top-level folders
+(`gpui/`, `native/`, `ghostex-web/`, `gxserver-rs/`, `sidebar/`, `shared/`,
+`components/`, `lib/`, `src/`, `zehn-rs/`, `ghostex-paths/`, `ghostex-history/`,
+`mobile-chat/`, `mobile-find/`, `ghostty/`, `tui2/`, `zmx/`, `code-server/`,
+`zehn/`) no longer exist at the root. If you are working from an old plan,
+transcript, or memory file, re-derive the path before you search or edit.
+
+One-line vocabulary:
+
+- **`apps/`** = deliverables (things that ship and have an entry point).
+- **`views/`** = embedded pages an app ships (never call these "webviews" or "surfaces").
+- **`packages/`** = libraries imported by apps and by the server.
+- **`.dependencies/`** = ALL external-origin code, *including code we edit*.
+
+Current root:
+
+```
+Ghostex/
+├── .dependencies/     # ALL external-origin code (edited or not)
+│   ├── ghostty/  ghostty-patches/  code-server/  tui2/  zmx/  zehn/
+│   └── zed/  cef-rs/  gpui-component/
+├── apps/
+│   ├── desktop/       # Rust/GPUI desktop app (crate ghostex-gpui)
+│   │   ├── src/       # Rust
+│   │   ├── sidebar/   # CEF entry modules (main, chat, find, kanban, manage)
+│   │   └── views/     # embedded pages: modal-host, titlebar-host, manage, kanban, meo
+│   ├── web/           # static browser build of the shared workspace UI
+│   ├── mobile/
+│   │   ├── app/       # React Native / Expo submodule
+│   │   └── views/     # chat/ + find/ view bundles embedded by the RN app
+│   ├── editor/        # GhostexEditor daemon (Monaco prompt editor)
+│   └── history-cli/   # `ghostex-history` CLI crate
+├── server/            # gxserver crate (binaries: gxserver, ghostex)
+├── packages/
+│   ├── shared/        # cross-app contracts + logic
+│   ├── core-ui/       # the shared React app UI (sidebar, chat, find, settings, assets)
+│   ├── components/    # shadcn primitives (ui/) + utils.ts
+│   ├── find/          # Rust prompt-history search (crate ghostex-find)
+│   └── paths/         # Rust path resolution (crate ghostex-paths)
+├── scripts/  media/  skills/  docs/
+└── package.json  tsconfig.json  AGENTS.md  CHANGELOG.md  appcast*.xml  bun.lock …
+```
+
+Imports: the `@/` alias maps to the **repo root only**, and every import uses the
+real path — `@/packages/shared/…`, `@/packages/core-ui/…`,
+`@/packages/components/…`, `@/packages/components/utils`. There are no
+per-package alias remaps, so every import is grep-able as a literal path.
+
+The full move map, per-file referencer inventory, and split log live in
+`docs/2026-08-22/repo-restructure/` (`PLAN.md`, `PROGRESS.md`, `REFERENCERS.md`,
+`SPLITS.md`). Read those before assuming a file is missing.
+
 ### Active apps vs deprecated apps
 
 Only three Ghostex apps are active development targets:
 
-1. **gpui desktop app** — `gpui/` (Rust/GPUI shell + CEF React surfaces). This is *the* desktop app. `bun run start`, `bun run build`, and every `release:*` script in `package.json` target it.
-2. **Web app** — `ghostex-web/` (static browser build of the shared sidebar/Agents workspace, talks to gxserver).
-3. **Mobile app** — `mobile/` (React Native/Expo, ships Android).
+1. **Desktop app** — `apps/desktop/` (Rust/GPUI shell + CEF React views). This is *the* desktop app. `bun run start`, `bun run build`, and every `release:*` script in `package.json` target it.
+2. **Web app** — `apps/web/` (static browser build of the shared workspace/Agents UI, talks to gxserver).
+3. **Mobile app** — `apps/mobile/` (React Native/Expo submodule in `apps/mobile/app`, ships Android).
 
-Deprecated, kept in-tree but **not** development targets. Never route new features, refactors, parity work, or bug fixes to these:
+Deprecated. Never route new features, refactors, parity work, or bug fixes to these:
 
-- **macOS Swift/AppKit app** — removed on 2026-08-20. The Swift sources and its `native/sidebar/native-sidebar.tsx` WKWebView host are gone; do not restore them, re-add a macOS Swift target, or treat the old app's behavior as the spec for new work. What is left under `native/sidebar/` is listed below and is compiled into gpui.
+- **macOS Swift/AppKit app** — removed on 2026-08-20. The Swift sources and their WKWebView sidebar host are gone; do not restore them, re-add a macOS Swift target, or treat the old app's behavior as the spec for new work.
 - **Native iOS app** and **Termux-fork Android app** — already removed from this checkout; they live under `/Users/madda/dev/_active/ghostex-deprecated/` and must never be restored as active release inputs.
 
-Important: `native/` is no longer a deprecated app directory — it is now only a
-holding folder for gpui-owned CEF surfaces plus `src/assets/` agent icons. Everything
-still there is compiled into an active app:
+Everything under `apps/`, `packages/`, and `server/` is active. `.dependencies/`
+is external-origin code: some of it we edit (ghostty, tui2, zmx, code-server),
+some of it is a pure build input (zed, cef-rs, gpui-component), and one entry
+(`.dependencies/zehn`) is reference-only.
 
-- `native/sidebar/modal-host.tsx` and `native/sidebar/titlebar-host.tsx` are built by `gpui/vite.config.ts` into gpui's CEF `modal-host.html` / `titlebar-host.html` surfaces. Note that gpui only loads `titlebar-host.html` for the Tips/info dropdown panel: the gpui titlebar itself (project name, Agents/Code/Browser/Kanban/Automate/Docs mode tabs, buttons, tooltips) is drawn natively in Rust by `render_titlebar` / `render_mode_tab` in `gpui/src/main.rs`. Titlebar work for the desktop app belongs there, not in the React mode switcher inside `titlebar-host.tsx`.
-- `native/sidebar/manage.tsx` and `native/sidebar/tasks-placeholder.tsx` are loaded by `gpui/sidebar/manage-main.tsx` and `gpui/sidebar/kanban-main.tsx`.
-- `native/sidebar/project-board-shared.ts` and `native/sidebar/combined-sidebar-mode.ts` are shared logic consumed by those surfaces. Note that shared gxserver logic lives in `shared/` (for example `shared/gxserver-presentation-cache.ts`), and the web app has its own client at `ghostex-web/src/connections/gxserver-client.ts` — the old macOS `native/sidebar/gxserver-client.ts` is gone.
-- `native/sidebar/meo/` is the markdown editor behind the Docs surface, reached through `manage.tsx` -> `meo/editor.ts`. It has no VS Code webview entry any more.
-- `shared/` is shared contract/logic code used by gpui, web, mobile, and gxserver. It is active.
-- `sidebar/` is the shared React sidebar (`sidebar/sidebar-app.tsx`), mounted by gpui through `gpui/sidebar/main.tsx` and by the web app. It is active.
-- `src/` now contains only `src/assets/` (agent and editor icons) imported by `sidebar/brand-icons.tsx`. It has no Swift app left in it.
+### `apps/desktop/views/` — the desktop app's embedded pages
 
-When in doubt about a file under `native/`, check whether an active app imports it before deciding it is dead.
+`apps/desktop/views/` holds the React pages the desktop app ships inside CEF.
+`apps/desktop/vite.config.ts` builds them, together with the CEF entry modules in
+`apps/desktop/sidebar/`, into the app's HTML bundles:
+
+- `apps/desktop/views/modal-host.tsx` → `modal-host.html` (app modals, dropdowns, toasts).
+- `apps/desktop/views/titlebar-host.tsx` → `titlebar-host.html`, with its implementation split across `apps/desktop/views/titlebar/`. The desktop app only loads this page for the Tips and Resources dropdown panels.
+  **The gpui titlebar itself is native Rust, not this page.** The project name, the Agents/Code/Browser/Kanban/Automate/Docs mode tabs, the buttons, and the tooltips are drawn by `render_titlebar` / `render_mode_tab` in `apps/desktop/src/app/render.rs`; the titlebar menus, popups, tips and resources behaviour live in `apps/desktop/src/app/titlebar.rs`; the mode-tab list is built by `titlebar_mode_switcher_items` in `apps/desktop/src/app/helpers/titlebar.rs` (with thin wrappers in `apps/desktop/src/app/workarea.rs` and `apps/desktop/src/app/model/runtime_state.rs`). Titlebar work for the desktop app belongs in those Rust files, not in `titlebar-host.tsx`.
+- `apps/desktop/views/manage.tsx` (+ `apps/desktop/views/manage/`) is the Docs surface, loaded through `apps/desktop/sidebar/manage-main.tsx`.
+- `apps/desktop/views/tasks-placeholder.tsx` (+ `apps/desktop/views/project-board/`) is the Kanban surface, loaded through `apps/desktop/sidebar/kanban-main.tsx`.
+- `apps/desktop/views/meo/` is the markdown editor behind the Docs surface, reached through `manage.tsx` → `meo/editor.ts`.
+- `apps/desktop/views/project-board-shared.ts` and `apps/desktop/views/combined-sidebar-mode.ts` are shared logic consumed by those pages.
+
+Shared gxserver logic lives in `packages/shared/` (for example
+`packages/shared/gxserver-presentation-cache.ts`); the desktop runtime client is
+`apps/desktop/sidebar/gxserver-runtime.ts` (+ `gxserver-runtime/`), and the web
+app has its own client at `apps/web/src/connections/gxserver-client.ts`.
+
+The shared React app UI is `packages/core-ui/` (`packages/core-ui/sidebar-app.tsx`),
+mounted by the desktop app through `apps/desktop/sidebar/main.tsx` and by the web
+app. Its icons are in `packages/core-ui/assets/`.
 
 ### Repository Search Routing
 
-This repository contains Ghostex app code plus large imported/vendored terminal code. Start searches in the smallest app-owned area that matches the task, and only expand after the first pass doesn't find what you need.
+This repository contains Ghostex app code plus large external terminal/editor
+code. Start searches in the smallest app-owned area that matches the task, and
+only expand after the first pass doesn't find what you need.
 
 Default search posture:
 
-- For broad text/file searches, exclude imported, vendored, dependency, build, and cache trees unless the task specifically targets them. At minimum exclude `ghostty/**`, `tui2/vendor/**`, `code-server/**`, `node_modules/**`, `.git/**`, `dist/**`, `build/**`, `out/**`, `storybook-static/**`, `tmp/**`, `.cache/**`, `.turbo/**`, `.vite/**`, `.zig-cache/**`, `zig-out/**`, `DerivedData/**`, and `target/**`.
-- Treat `ghostty/**` as imported upstream Ghostty code. Do not search it first just because a symbol, setting, file, or bug report mentions "ghostty", "terminal", "session", "restore", "fork", "launch", or "pane"; many Ghostex-owned files use those words.
-- If a targeted app-owned search misses, expand one layer at a time and explain why the next folder is relevant before searching large imported trees.
+- **`.dependencies/**` is THE exclusion for external code.** Everything imported or vendored now lives there, so a single `-g '!.dependencies/**'` replaces the old per-tree ghostty/tui2-vendor/code-server excludes. Also exclude build, dependency, and cache trees: `node_modules/**`, `.git/**`, `dist/**`, `build/**`, `out/**`, `target/**`, `storybook-static/**`, `tmp/**`, `artifacts/**`, `.cache/**`, `.turbo/**`, `.vite/**`, `.zig-cache/**`, `zig-out/**`, and `DerivedData/**`.
+- Do not search `.dependencies/ghostty/` first just because a symbol, setting, file, or bug report mentions "ghostty", "terminal", "session", "restore", "fork", "launch", or "pane"; many Ghostex-owned files use those words.
+- If a targeted app-owned search misses, expand one layer at a time and explain why the next folder is relevant before searching large external trees.
 
 Search these app-owned areas first by task:
 
-- Desktop app shell, window lifecycle, app startup, terminals/panes, titlebar, session restore/fork launch plans, terminal host integration: `gpui/src/`, `gpui/sidebar/`, `gpui/native/macos/`, `gpui/scripts/`, `sidebar/`, `shared/`, and `scripts/`.
-- Frontend UI, React components, settings, project/sidebar interactions, Storybook stories: `sidebar/`, `components/`, `components/ui/`, `shared/`, `gpui/sidebar/`, `native/sidebar/` (for the gpui-owned modal/titlebar/manage/kanban hosts listed above).
-- Web app: `ghostex-web/`, then the shared `sidebar/` and `shared/` code it builds on.
-- Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `shared/`, then the consuming surface in `sidebar/`, `gpui/sidebar/`, `native/sidebar/`, `mobile/`, or `gxserver-rs/`.
-- Server, remote protocol, hooks, authentication, remote setup: `gxserver-rs/`, `shared/`, `scripts/`.
-- TUI or zmx behavior: `tui2/`, `zmx/src/`, and `zmx/test/`; keep `tui2/vendor/**` excluded unless the task is specifically about the vendored VT library.
-- Prompt-history search (`gx f`, the Find surface): `zehn-rs/` for the engine, `gxserver-rs/src/agent_prompt_search.rs` for the API, `sidebar/find/` for the shared UI. `zehn/` is the retired Zig source — reference only, never a build input.
-- Mobile app work: `mobile/` is the only active mobile app and releases Android through the React Native/Expo project. The retired native `iOS/` and Termux-fork `android/` repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
-- Assets, sounds, icons, and release notes: `media/`, `gpui/assets/`, `src/assets/`, `release/`, and the relevant script under `scripts/`.
+- Desktop app shell, window lifecycle, app startup, terminals/panes, titlebar, session restore/fork launch plans, terminal host integration: `apps/desktop/src/`, `apps/desktop/sidebar/`, `apps/desktop/native/macos/`, `apps/desktop/scripts/`, `packages/core-ui/`, `packages/shared/`, and `scripts/`.
+- Frontend UI, React components, settings, project/sidebar interactions, Storybook stories: `packages/core-ui/`, `packages/components/`, `packages/components/ui/`, `packages/shared/`, `apps/desktop/sidebar/`, `apps/desktop/views/` (for the modal host, titlebar host, Docs/manage, Kanban, and `meo` pages listed above).
+- Web app: `apps/web/src/`, then the shared `packages/core-ui/` and `packages/shared/` code it builds on.
+- Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `packages/shared/`, then the consuming surface in `packages/core-ui/`, `apps/desktop/sidebar/`, `apps/desktop/views/`, `apps/mobile/views/`, or `server/src/`.
+- Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `scripts/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
+- TUI or zmx behavior: `.dependencies/tui2/` and `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. These are the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits them — but keep `.dependencies/tui2/vendor/**` excluded unless the task is specifically about the vendored VT library.
+- Prompt-history search (`gx f`, the Find surface): `packages/find/` for the engine, `server/src/agent_prompt_search.rs` for the API, `packages/core-ui/find/` for the shared UI.
+- Mobile app work: `apps/mobile/` is the only active mobile app and releases Android through the React Native/Expo project in `apps/mobile/app` (a git submodule). Its embedded chat and find pages are `apps/mobile/views/chat/` and `apps/mobile/views/find/`, bundled by `bun run build:mobile-chat` / `bun run build:mobile-find`. The retired native iOS and Termux-fork Android repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
+- Assets, sounds, icons, and release tooling: `media/`, `apps/desktop/assets/`, `packages/core-ui/assets/`, `scripts/`, and `scripts/release-gpui/`.
 
-Search imported Ghostty code only when the task is explicitly about upstream Ghostty behavior, the embedded Ghostty source, Zig terminal internals, Ghostty macOS internals, or a build/test failure whose failing file is already under `ghostty/**`. Even then, target the relevant subfolder such as `ghostty/src/`, `ghostty/macos/`, `ghostty/pkg/`, or `ghostty/test/`, and continue excluding `ghostty/.zig-cache/**` and `ghostty/zig-out/**`.
+Search external Ghostty code only when the task is explicitly about upstream
+Ghostty behavior, the embedded Ghostty source, Zig terminal internals, Ghostty
+macOS internals, or a build/test failure whose failing file is already under
+`.dependencies/ghostty/**`. Even then, target the relevant subfolder such as
+`.dependencies/ghostty/src/`, `.dependencies/ghostty/macos/`,
+`.dependencies/ghostty/pkg/`, or `.dependencies/ghostty/test/`, and continue
+excluding `.dependencies/ghostty/.zig-cache/**` and
+`.dependencies/ghostty/zig-out/**`. Ghostex's own patch series on top of
+upstream is `.dependencies/ghostty-patches/`, re-applied by
+`scripts/sync-ghostty.sh`.
 
 Preferred `rg` shape for first-pass searches:
 
 ```bash
-rg -n "pattern" gpui/src gpui/sidebar sidebar shared scripts gxserver-rs ghostex-web \
-  -g '!ghostty/**' -g '!tui2/vendor/**' -g '!code-server/**' \
-  -g '!node_modules/**' -g '!storybook-static/**' -g '!tmp/**' \
-  -g '!dist/**' -g '!build/**' -g '!out/**' -g '!target/**' -g '!.git/**'
+rg -n "pattern" apps/desktop/src apps/desktop/sidebar packages/core-ui packages/shared \
+  server/src apps/web/src scripts \
+  -g '!.dependencies/**' -g '!node_modules/**' -g '!storybook-static/**' -g '!tmp/**' \
+  -g '!dist/**' -g '!build/**' -g '!out/**' -g '!target/**' -g '!artifacts/**' -g '!.git/**'
 ```
 
-Add `native/sidebar` to that list only when the task is about the gpui-owned modal
-host, titlebar host, manage, kanban, or Docs/`meo` surfaces, or about shared
-`native/sidebar/*.ts` logic.
+Add `apps/desktop/views` to that list only when the task is about the desktop
+modal host, titlebar host, Docs/manage, Kanban, or `meo` pages, or about the
+shared `apps/desktop/views/*.ts` logic. Add `packages/components` for shadcn
+primitives, and `apps/mobile/views` for the mobile embedded pages.
 
-### Prompt-history search: zehn is Rust, and `zehn/` is dead
+### Prompt-history search: it is Rust, and `.dependencies/zehn/` is dead
 
-`gx f` used to spawn a bundled Zig binary built from the `zehn/` submodule. It
-does not any more. Prompt-history search is the `zehn-rs/` Rust crate, compiled
-into gxserver and the `ghostex` CLI, so:
+`gx f` used to spawn a bundled Zig binary built from the `zehn` submodule. It
+does not any more. Prompt-history search is the `packages/find/` Rust crate
+(crate name `ghostex-find`), compiled into gxserver and the `ghostex` CLI, so:
 
 - `gx f` runs the picker **in-process**. There is no `bin/zehn` to stage, no
   `GHOSTEX_ZEHN_BIN`, no `ZEHN_ZIG`, and no Zig 0.16 requirement for a release.
-- The `zehn/` directory is kept only as reference for the original
+- `.dependencies/zehn/` is kept only as reference for the original
   implementation. Never build it, bundle it, add it back to a packaging list, or
-  treat it as the spec for new work — change `zehn-rs/` instead.
+  treat it as the spec for new work — change `packages/find/` instead.
 - Two hotkeys moved in **both** the terminal picker and the GUI so the surfaces
   share one key map: agents is `^g` (was `^t`) and projects is `^j` (was `^r`),
   because browsers reserve Ctrl+T and Ctrl+R and will not hand them to a page.
-- The GUI (`sidebar/find/`) and `gx f` share the same scanner, matcher, Codex
-  cache, and favorites file, so a prompt starred in one is starred in the other.
-  Anything that would make them rank or star differently is a bug.
+- The GUI (`packages/core-ui/find/`) and `gx f` share the same scanner, matcher,
+  Codex cache, and favorites file, so a prompt starred in one is starred in the
+  other. Anything that would make them rank or star differently is a bug.
 
 ### Don't write any tests at all except if explicitly asked to do so by the user
 
@@ -102,7 +182,7 @@ Yes. The clean fix is to stop generating local font sources at all when the curr
 
 ### Native layout and hit-testing discipline
 
-This applies to the active gpui desktop app (GPUI views, CEF surfaces, AppKit shims, Ghostty terminal hosts). The historical WKWebView wording below refers to the deprecated macOS Swift app; the rule itself is unchanged for gpui.
+This applies to the active desktop app (GPUI views, CEF pages, AppKit shims, Ghostty terminal hosts). The historical WKWebView wording below refers to the deprecated macOS Swift app; the rule itself is unchanged for the desktop app.
 
 Ghostex native UI should be built with strict normal layout ownership: lay out interactive AppKit, WKWebView, CEF, Ghostty, sidebar, titlebar, pane, and divider regions as non-overlapping sibling or child frames wherever possible. Do not solve click, drag, hover, or focus bugs by stacking transparent views, extending webviews under native chrome, adding broad parent/window hit-test routing, or creating hidden overlap between interactive regions.
 
@@ -153,13 +233,15 @@ Multiple agents and the user work in this same checkout at the same time. Files 
 - When committing, never selectively drop pending hunks in files you commit. Either include a file's whole pending diff, or split it hunk-by-hunk only if you verify afterwards (`git status` + `git diff`) that every hunk you excluded still exists in the working tree. A batch "split the working tree into topical commits" pass must end with zero silently-vanished hunks.
 - If you find changes in a file you are about to modify that you cannot attribute to your own task, keep them intact and mention them to the user instead of "cleaning them up".
 
-Example of what this rule prevents (happened on 2026-07-09): one agent added the gpui sidebar persistence fix (`cef_app_ui_profile_cache_path` in `gpui/src/cef/shell.rs`) as uncommitted working-tree state. Later that day, a concurrent agent's titlebar/attention work was committed in an automated batch that wrote `shell.rs` from a version without that fix. The fix had never been committed anywhere, so it vanished without a trace, the user's bug came back, and the fix had to be re-diagnosed and re-applied from scratch.
+Example of what this rule prevents (happened on 2026-07-09): one agent added the desktop sidebar persistence fix (`cef_app_ui_profile_cache_path`, in the CEF shell code that is now `apps/desktop/src/cef/shell/` — its pre-restructure path was `gpui/src/cef/shell.rs`) as uncommitted working-tree state. Later that day, a concurrent agent's titlebar/attention work was committed in an automated batch that wrote that file from a version without the fix. The fix had never been committed anywhere, so it vanished without a trace, the user's bug came back, and the fix had to be re-diagnosed and re-applied from scratch.
 
 Corollary: after you verify a surgical bug fix, tell the user it should be committed promptly (or commit it when they ask) so concurrent agents cannot wipe it.
 
 ### Rules for running commands
 
 - Never run "bun run start" or any command that would restart the app unless I ask you to.
+- TypeScript is gated by three configs, not one: `bun run typecheck` (root — `packages/shared`, `packages/core-ui`, `packages/components`, `apps/desktop/views`, `apps/mobile/views`), `bun run web:typecheck` (`apps/web/tsconfig.json`), and `bun run desktop:typecheck` (`apps/desktop/tsconfig.json`, which covers `apps/desktop/sidebar/` and `apps/desktop/views/`). A change under `apps/desktop/sidebar/` is only checked by `desktop:typecheck`.
+- Run desktop-crate cargo commands **from inside `apps/desktop/`**, not with `--manifest-path` from the repo root. The crate pins its own toolchain in `apps/desktop/rust-toolchain.toml` (1.95.0), and `--manifest-path` from the root resolves the root toolchain instead and fails on dependency code that needs the pin.
 
 ### Diagnostic logging workflow
 
