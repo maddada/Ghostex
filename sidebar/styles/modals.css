@@ -3449,6 +3449,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .app-modal-host-native-window-body .delayed-send-modal-shadcn {
+  --tw-translate-y: 0px;
   box-sizing: border-box;
   /*
    * CDXC:DelayedSend 2026-06-30-16:08:
@@ -3461,6 +3462,7 @@ html:has(body.app-modal-host-native-window-body) {
   max-width: 100vw;
   overflow: visible;
   padding: 24px;
+  top: 0;
   width: 100vw;
 }
 
