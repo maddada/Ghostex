@@ -3543,10 +3543,14 @@ wrap_display_handler! {
         ) {
             /*
             CDXC:GPUIBrowserFavicons 2026-06-22-09:11:
-            CEF favicon URL callbacks are runtime browser metadata only. Forward a single representative non-empty URL so the GPUI tab strip can show favicon presence, but keep bitmap download/cache and shell-state persistence of favicon URLs out of this slice.
+            CEF favicon URL callbacks are runtime browser metadata only. Forward a single representative non-empty URL so GPUI browser chrome and sidebar sessions can show favicon presence, but keep bitmap download/cache and shell-state persistence of favicon URLs out of this slice.
             */
             let representative_url = icon_urls.and_then(|icon_urls| {
-                let icon_urls = (*icon_urls).clone();
+                // `CefStringList::clone` changes a mutable borrowed list into a
+                // non-iterable immutable wrapper in cef-rs. Move the callback's
+                // borrowed wrapper out instead so the URLs CEF supplied remain
+                // visible to the iterator for the lifetime of this callback.
+                let icon_urls = std::mem::take(icon_urls);
                 icon_urls.into_iter().find_map(|url| {
                     let url = url.trim().to_string();
                     if url.is_empty() { None } else { Some(url) }

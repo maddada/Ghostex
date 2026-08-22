@@ -539,6 +539,7 @@ type GpuiActiveWorkspaceTabSessionPayload = {
 };
 
 type GpuiBrowserTabSummary = {
+  faviconUrl?: string;
   isActive: boolean;
   isSleeping: boolean;
   isVisible: boolean;
@@ -660,6 +661,7 @@ const GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE =
 const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE = "ghostex.gpui.sidebar.openBrowserUrl";
 const GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS = 16 * 1024;
+const GPUI_SIDEBAR_BROWSER_FAVICON_URL_MAX_CHARS = 2048;
 const GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_VERSION = 1;
 const GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_TYPE =
   "ghostex.gpui.sidebar.projectBoardConversationRequest";
@@ -5892,6 +5894,7 @@ class GpuiSidebarRuntime {
           alias: tab.title,
           column: index % GRID_COLUMN_COUNT,
           displayTitle: tab.title,
+          ...(tab.faviconUrl ? { faviconDataUrl: tab.faviconUrl } : {}),
           isFocused: tab.isActive && this.activeProjectId === projectId,
           isLive: !tab.isSleeping,
           isRunning: !tab.isSleeping,
@@ -6343,6 +6346,7 @@ class GpuiSidebarRuntime {
         alias: tab.title,
         column: index % GRID_COLUMN_COUNT,
         displayTitle: tab.title,
+        ...(tab.faviconUrl ? { faviconDataUrl: tab.faviconUrl } : {}),
         isFocused: tab.isActive && this.activeGroupId === group.groupId,
         isLive: !tab.isSleeping,
         isRunning: !tab.isSleeping,
@@ -6810,9 +6814,6 @@ class GpuiSidebarRuntime {
         return;
       case "reconnectRemoteMachine":
         this.reconnectRemoteMachine(message.remoteMachineId, message.installApproved === true);
-        return;
-      case "openRemoteCloneRepository":
-        this.openRemoteCloneRepository(message.remoteMachineId);
         return;
       case "pickWorkspaceFolder":
         this.pickWorkspaceFolder(message);
@@ -14378,32 +14379,6 @@ class GpuiSidebarRuntime {
     }
   }
 
-  private openRemoteCloneRepository(remoteMachineId: string): void {
-    /*
-    CDXC:RemoteClone 2026-06-24-19:35:
-    GPUI remote machine headers reuse the shared Clone Repository modal, but only after the selected machine has a live Rust-delivered gxserver presentation. The renderer may carry the saved machine id/name into the modal; clone preview, Git execution, project registration, and presentation refresh remain Rust/remote-gxserver owned.
-    */
-    const normalizedMachineId = remoteMachineId.trim();
-    if (!normalizedMachineId || !this.remotePresentations.has(normalizedMachineId)) {
-      this.postRemoteToast("warning", "Remote clone unavailable", {
-        description: "Reconnect the remote machine before cloning a repository.",
-      });
-      return;
-    }
-    try {
-      openAppModal({
-        modal: "addRepository",
-        remoteMachineId: normalizedMachineId,
-        remoteMachineName: this.remoteMachineName(normalizedMachineId) ?? "Remote",
-        type: "open",
-      });
-    } catch {
-      this.postRemoteToast("warning", "Remote clone unavailable", {
-        description: "GPUI could not open the shared Clone Repository modal.",
-      });
-    }
-  }
-
   private requestRemoteGxserver<TResult = unknown>(
     remoteMachineId: string,
     path: GxserverEndpointPath,
@@ -16898,11 +16873,13 @@ function normalizeGpuiBrowserTabs(
       typeof record.url === "string"
         ? record.url.trim().slice(0, GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS)
         : "";
+    const faviconUrl = normalizeGpuiBrowserFaviconUrl(record.faviconUrl);
     if (!projectId || !tabId || !title) {
       return [];
     }
     return [
       {
+        ...(faviconUrl ? { faviconUrl } : {}),
         isActive: record.isActive === true,
         isSleeping: record.isSleeping === true,
         isVisible: record.isVisible === true,
@@ -16913,6 +16890,34 @@ function normalizeGpuiBrowserTabs(
       },
     ];
   });
+}
+
+function normalizeGpuiBrowserFaviconUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > GPUI_SIDEBAR_BROWSER_FAVICON_URL_MAX_CHARS) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password ||
+      !parsed.hostname
+    ) {
+      return undefined;
+    }
+    parsed.hash = "";
+    const normalized = parsed.toString();
+    return normalized.length <= GPUI_SIDEBAR_BROWSER_FAVICON_URL_MAX_CHARS
+      ? normalized
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function relayoutGpuiSidebarSessions(
