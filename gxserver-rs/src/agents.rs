@@ -344,6 +344,8 @@ pub(crate) fn create_agent_session_params_for_project(
         .cloned()
         .unwrap_or_default();
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
+    let agent_icon = read_text_from_map(&agent_config, "icon")
+        .or_else(|| read_text_from_map(&launch_settings, "icon"));
     let launch_plan = build_agent_launch_plan(AgentLaunchInput {
         accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
             .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
@@ -357,8 +359,7 @@ pub(crate) fn create_agent_session_params_for_project(
             .get("agentAcceptAllEnabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        icon: read_text_from_map(&agent_config, "icon")
-            .or_else(|| read_text_from_map(&launch_settings, "icon")),
+        icon: agent_icon.clone(),
     });
     let launch_plan_object = launch_plan.as_object().cloned().unwrap_or_default();
     let has_launch_command = launch_plan_object
@@ -456,6 +457,9 @@ pub(crate) fn create_agent_session_params_for_project(
                 == Some("queueAfterTerminalReady"),
         ),
     );
+    if let Some(agent_icon) = agent_icon {
+        launch_settings.insert("icon".to_string(), Value::String(agent_icon));
+    }
     launch_settings.insert("agentLaunchPlan".to_string(), launch_plan);
     launch_settings.insert(
         "runtimeRelevant".to_string(),
@@ -2197,14 +2201,17 @@ fn ingest_session_state_event(
     home_dir: &Path,
 ) -> Result<Value, DomainStateError> {
     let current = require_session(repository, lifecycle)?;
-    let observed_identity = resolve_session_identity(&IdentityInput {
-        agent_id: None,
-        agent_name: read_text(params, "agentName"),
-        agent_session_id: read_text(params, "agentSessionId"),
-        agent_session_path: read_text(params, "agentSessionPath"),
-        runtime_settings: Map::new(),
-        startup_text: read_text(params, "startupText"),
-    });
+    let observed_identity = align_observed_identity_with_launch_profile(
+        &current,
+        resolve_session_identity(&IdentityInput {
+            agent_id: None,
+            agent_name: read_text(params, "agentName"),
+            agent_session_id: read_text(params, "agentSessionId"),
+            agent_session_path: read_text(params, "agentSessionPath"),
+            runtime_settings: Map::new(),
+            startup_text: read_text(params, "startupText"),
+        }),
+    );
     if launch_agent_mismatch(&current, observed_identity.agent_id.as_deref()) {
         return Ok(json!({
             "changed": false,
@@ -3164,14 +3171,17 @@ fn apply_session_state_update(
     let session = require_session(repository, lifecycle)?;
     let project = require_project(repository, &lifecycle.project_id)?;
     let project_sessions = repository.list_sessions(Some(&lifecycle.project_id))?;
-    let observed_identity = resolve_session_identity(&IdentityInput {
-        agent_id: None,
-        agent_name: read_text(params, "agentName"),
-        agent_session_id: read_text(params, "agentSessionId"),
-        agent_session_path: read_text(params, "agentSessionPath"),
-        runtime_settings: Map::new(),
-        startup_text: read_text(params, "startupText"),
-    });
+    let observed_identity = align_observed_identity_with_launch_profile(
+        &session,
+        resolve_session_identity(&IdentityInput {
+            agent_id: None,
+            agent_name: read_text(params, "agentName"),
+            agent_session_id: read_text(params, "agentSessionId"),
+            agent_session_path: read_text(params, "agentSessionPath"),
+            runtime_settings: Map::new(),
+            startup_text: read_text(params, "startupText"),
+        }),
+    );
     if identity_update_source != SessionIdentityUpdateSource::LiveProcess
         && launch_agent_mismatch(&session, observed_identity.agent_id.as_deref())
     {
@@ -4612,8 +4622,33 @@ fn launch_agent_mismatch(session: &Value, incoming_agent_id: Option<&str>) -> bo
         return false;
     };
     locked_session_agent_id(session)
-        .map(|locked| locked != incoming)
+        .map(|locked| {
+            locked != incoming
+                && session_launch_agent_provider_id(session).as_deref() != Some(incoming.as_str())
+        })
         .unwrap_or(false)
+}
+
+fn session_launch_agent_provider_id(session: &Value) -> Option<String> {
+    normalize_agent_id(
+        object_field(session, "launchSettings")
+            .get("icon")
+            .and_then(Value::as_str),
+    )
+}
+
+fn align_observed_identity_with_launch_profile(
+    session: &Value,
+    mut identity: ResolvedIdentity,
+) -> ResolvedIdentity {
+    let observed_agent_id = normalize_agent_id(identity.agent_id.as_deref());
+    if observed_agent_id.is_some() && observed_agent_id == session_launch_agent_provider_id(session)
+    {
+        if let Some(launch_agent_id) = locked_session_agent_id(session) {
+            identity.agent_id = Some(launch_agent_id);
+        }
+    }
+    identity
 }
 
 fn infer_agent_id_from_command(command: &str) -> Option<String> {

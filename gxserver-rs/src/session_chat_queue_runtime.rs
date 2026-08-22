@@ -314,16 +314,24 @@ impl SessionChatQueueRuntime {
     directories.
     */
     fn transcript_lifecycle_is_working(&self, key: &str, session: &Value) -> bool {
-        let agent =
-            session_text(session, "agentId").or_else(|| runtime_text(session, "agentName"));
-        let Some(transcript_agent) = resolve_session_chat_transcript_agent(agent.as_deref()) else {
+        let agent = session_text(session, "agentId").or_else(|| runtime_text(session, "agentName"));
+        let agent_icon = session
+            .get("launchSettings")
+            .and_then(Value::as_object)
+            .and_then(|settings| settings.get("icon"))
+            .and_then(Value::as_str);
+        let resolved_agent = agent
+            .as_deref()
+            .filter(|value| resolve_session_chat_transcript_agent(Some(value)).is_some())
+            .or(agent_icon);
+        let Some(transcript_agent) = resolve_session_chat_transcript_agent(resolved_agent) else {
             return false;
         };
         let agent_session_id = runtime_text(session, "agentSessionId");
         let agent_session_path = runtime_text(session, "agentSessionPath");
         let identity = format!(
             "{}|{}|{}",
-            agent.unwrap_or_default(),
+            resolved_agent.unwrap_or_default(),
             agent_session_id.clone().unwrap_or_default(),
             agent_session_path.clone().unwrap_or_default(),
         );

@@ -672,7 +672,10 @@ fn project_presentation_session(
     );
     if let Some(agent_id) = string_field(session, "agentId").filter(|value| !value.is_empty()) {
         output.insert("agentId".to_string(), Value::String(agent_id.clone()));
-        output.insert("agentIcon".to_string(), Value::String(agent_id));
+        output.insert(
+            "agentIcon".to_string(),
+            Value::String(session_agent_icon(Some(project), session).unwrap_or(agent_id)),
+        );
     }
     insert_optional_string(
         &mut output,
@@ -1126,7 +1129,10 @@ fn previous_session_closed_at(session: &Value) -> String {
 fn search_result(project: Option<&Value>, session: &Value, matched: Value) -> Value {
     let mut output = Map::new();
     if let Some(agent_id) = string_field(session, "agentId").filter(|value| !value.is_empty()) {
-        output.insert("agentIcon".to_string(), Value::String(agent_id.clone()));
+        output.insert(
+            "agentIcon".to_string(),
+            Value::String(session_agent_icon(project, session).unwrap_or_else(|| agent_id.clone())),
+        );
         output.insert("agentId".to_string(), Value::String(agent_id));
     }
     insert_optional_string(
@@ -2249,6 +2255,37 @@ fn read_provider_trimmed_text(session: &Value, key: &str) -> Option<String> {
 
 fn string_field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
+fn session_agent_icon(project: Option<&Value>, session: &Value) -> Option<String> {
+    let stored_icon = session
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get("icon"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if stored_icon.is_some() {
+        return stored_icon;
+    }
+
+    let agent_id = string_field(session, "agentId")?;
+    project
+        .and_then(|project| project.get("customAgents"))
+        .and_then(Value::as_array)
+        .and_then(|agents| {
+            agents.iter().find(|agent| {
+                agent
+                    .get("agentId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|candidate| candidate.trim().eq_ignore_ascii_case(&agent_id))
+            })
+        })
+        .and_then(|agent| string_field(agent, "icon"))
+        .map(|icon| icon.trim().to_string())
+        .filter(|icon| !icon.is_empty())
+        .or(Some(agent_id))
 }
 
 fn value_field(value: &Value, key: &str) -> Value {

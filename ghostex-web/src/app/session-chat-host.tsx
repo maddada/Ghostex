@@ -193,9 +193,10 @@ export function SessionChatHost({
     () => createSessionChatTransport(session.machineId, session.projectId, session.sessionId),
     [session.machineId, session.projectId, session.sessionId],
   );
-  const agentLabel = session.agentId
-    ? resolveSessionChatTranscriptAgent(session.agentId) ?? session.agentId
-    : null;
+  const agentLabel =
+    resolveSessionChatTranscriptAgent(session.agentId, session.agentIcon)
+    ?? session.agentId
+    ?? null;
   const hostActions = useMemo<SessionChatHostActions | undefined>(
     () =>
       onSwitchToTerminal

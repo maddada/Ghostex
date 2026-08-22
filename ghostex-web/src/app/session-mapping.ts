@@ -56,11 +56,16 @@ export function domainSessionToWorkspaceSession(
   const agentSessionId = typeof session.runtimeSettings.agentSessionId === "string"
     ? session.runtimeSettings.agentSessionId.trim()
     : "";
+  const agentIcon = typeof session.launchSettings.icon === "string"
+    ? session.launchSettings.icon.trim()
+    : "";
   return {
     ...reference,
     activity: "idle",
     ...(session.commandId ? { commandId: session.commandId } : {}),
-    ...(session.agentId ? { agentIcon: session.agentId, agentId: session.agentId } : {}),
+    ...(session.agentId
+      ? { agentIcon: agentIcon || session.agentId, agentId: session.agentId }
+      : {}),
     ...(agentSessionId ? { agentSessionId } : {}),
     presentationState,
     ...(statusMessage ? { statusMessage } : {}),

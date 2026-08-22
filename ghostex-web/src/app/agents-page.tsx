@@ -592,9 +592,8 @@ export function IntegratedAgentsPage() {
               return <div className="workspace-terminal-unavailable">Machine connection unavailable.</div>;
             }
             const chatEligible =
-              session.agentId !== undefined
-              && Boolean(session.agentSessionId?.trim())
-              && resolveSessionChatTranscriptAgent(session.agentId) !== null;
+              Boolean(session.agentSessionId?.trim())
+              && resolveSessionChatTranscriptAgent(session.agentId, session.agentIcon) !== null;
             return (
               <div className="workspace-terminal-surface">
                 <SessionTerminal
