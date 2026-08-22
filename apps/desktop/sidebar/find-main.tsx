@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
-import "@/sidebar/styles.css";
-import { GXSERVER_PROTOCOL_VERSION } from "@/shared/gxserver-protocol";
+import "@/packages/core-ui/styles.css";
+import { GXSERVER_PROTOCOL_VERSION } from "@/packages/shared/gxserver-protocol";
 import type {
   ReadAgentPromptTextParams,
   ReadAgentPromptTextResult,
@@ -10,9 +10,9 @@ import type {
   SearchAgentPromptsResult,
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
-} from "@/shared/agent-prompt-search";
-import { FindPromptsView } from "@/sidebar/find/find-prompts-view";
-import type { FindPromptsTransport } from "@/sidebar/find/find-prompts-transport";
+} from "@/packages/shared/agent-prompt-search";
+import { FindPromptsView } from "@/packages/core-ui/find/find-prompts-view";
+import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
 
 /*
 CDXC:AgentHistorySearch 2026-08-20:

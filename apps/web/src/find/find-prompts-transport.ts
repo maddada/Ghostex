@@ -14,8 +14,8 @@ import type {
   SearchAgentPromptsResult,
   ToggleAgentPromptFavoriteParams,
   ToggleAgentPromptFavoriteResult,
-} from "@/shared/agent-prompt-search";
-import type { FindPromptsTransport } from "@/sidebar/find/find-prompts-transport";
+} from "@/packages/shared/agent-prompt-search";
+import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
 import { rpcForMachine } from "../connections/connection-registry";
 
 export interface WebFindPromptsHostActions {

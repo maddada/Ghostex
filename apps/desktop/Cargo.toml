@@ -44,7 +44,7 @@ base64 = "0.22"
 cef = { path = "../../.dependencies/cef-rs/cef", default-features = false }
 flate2 = "1"
 futures = "0.3"
-ghostex-paths = { path = "../../ghostex-paths" }
+ghostex-paths = { path = "../../packages/paths" }
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 gpui-component = { path = "../../.dependencies/gpui-component/crates/ui" }

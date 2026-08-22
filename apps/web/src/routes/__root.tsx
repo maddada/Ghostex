@@ -6,8 +6,8 @@ import {
   useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { AppTooltip, TooltipProvider } from "@/sidebar/app-tooltip";
-import { NavigationHistoryButtons } from "@/shared/navigation-history/navigation-history-buttons";
+import { AppTooltip, TooltipProvider } from "@/packages/core-ui/app-tooltip";
+import { NavigationHistoryButtons } from "@/packages/shared/navigation-history/navigation-history-buttons";
 import {
   getConnectionStates,
   subscribeConnectionStates,

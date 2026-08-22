@@ -3,8 +3,8 @@ CDXC:SessionChatCodeHighlighting 2026-08-21:
 Shiki assets for the two Ghostex chat surfaces that cannot load ES modules.
 
 Session Chat highlights fenced code with Shiki and loads the engine plus one
-grammar per language on demand (sidebar/chat/session-chat-shiki-engine.ts and
-sidebar/chat/session-chat-code-grammars.ts). On the web that is plain dynamic
+grammar per language on demand (packages/core-ui/chat/session-chat-shiki-engine.ts and
+packages/core-ui/chat/session-chat-code-grammars.ts). On the web that is plain dynamic
 `import()` and the bundler splits it. Two hosts cannot do that:
 
   * gpui packaged CEF surfaces are file:// documents.
@@ -32,7 +32,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
 
-import { SESSION_CHAT_CODE_LANGUAGES } from "../sidebar/chat/session-chat-code-languages.ts";
+import { SESSION_CHAT_CODE_LANGUAGES } from "../packages/core-ui/chat/session-chat-code-languages.ts";
 
 /** Directory name the staged scripts live in, relative to the page. */
 export const SHIKI_ASSET_DIR_NAME = "shiki";

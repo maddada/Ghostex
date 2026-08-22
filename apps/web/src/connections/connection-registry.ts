@@ -1,4 +1,4 @@
-import type { GxserverRpcEndpointPath } from "@/shared/gxserver-protocol";
+import type { GxserverRpcEndpointPath } from "@/packages/shared/gxserver-protocol";
 import type { SessionChatEventHandler } from "./gxserver-client";
 import { GxserverConnection } from "./gxserver-connection";
 import type { GhostexWebMachine, MachineConnectionState } from "./types";

@@ -26,7 +26,7 @@
  *   (re-run on modal close) instead of dropping it.
  */
 import type { StoreApi } from "zustand";
-import type { SidebarHydrateMessage } from "@/shared/session-grid-contract";
+import type { SidebarHydrateMessage } from "@/packages/shared/session-grid-contract";
 import { sendToModalWindow, setModalOutboundHandler } from "../bridge/modal-connections";
 import {
   FIRST_LAUNCH_SETUP_SEEN_REVISION,

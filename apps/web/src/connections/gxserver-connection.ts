@@ -1,4 +1,4 @@
-import { reduceGxserverPresentationDelta } from "@/shared/gxserver-presentation-cache";
+import { reduceGxserverPresentationDelta } from "@/packages/shared/gxserver-presentation-cache";
 import {
   createGxserverClient,
   type PresentationSubscription,

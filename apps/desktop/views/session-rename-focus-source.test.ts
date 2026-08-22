@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const sessionRenameModalSource = readFileSync(
-  new URL("../../../sidebar/session-rename-modal.tsx", import.meta.url),
+  new URL("../../../packages/core-ui/session-rename-modal.tsx", import.meta.url),
   "utf8",
 );
 

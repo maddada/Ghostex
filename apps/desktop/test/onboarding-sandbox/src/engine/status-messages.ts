@@ -16,13 +16,13 @@ import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
   SidebarHydrateMessage,
-} from "@/shared/session-grid-contract";
-import { DEFAULT_SIDEBAR_AGENTS } from "@/shared/sidebar-agents";
-import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from "@/shared/ghostex-settings";
+} from "@/packages/shared/session-grid-contract";
+import { DEFAULT_SIDEBAR_AGENTS } from "@/packages/shared/sidebar-agents";
+import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from "@/packages/shared/ghostex-settings";
 import {
   createSidebarStoryMessage,
   type SidebarStoryArgs,
-} from "@/sidebar/sidebar-story-fixtures";
+} from "@/packages/core-ui/sidebar-story-fixtures";
 import {
   PRIORITY_AGENT_IDS,
   SIM_AGENT_IDS,

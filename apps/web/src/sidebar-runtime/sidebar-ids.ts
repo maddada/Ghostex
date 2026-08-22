@@ -3,7 +3,7 @@ import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectGroupId,
   parseGxserverPresentationProjectSessionId,
-} from "@/shared/gxserver-presentation-sidebar-projection";
+} from "@/packages/shared/gxserver-presentation-sidebar-projection";
 
 export type SidebarProjectReference = {
   machineId: string;

@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import "@/sidebar/styles.css";
+import "@/packages/core-ui/styles.css";
 import {
   isSessionChatEventType,
   normalizeSessionChatTheme,
@@ -16,21 +16,21 @@ import {
   type GxserverSessionChatQueueResult,
   type GxserverSessionChatRemoveQueuedPromptResult,
   type SessionChatTheme,
-} from "@/shared/session-chat";
-import { GXSERVER_PROTOCOL_VERSION } from "@/shared/gxserver-protocol";
+} from "@/packages/shared/session-chat";
+import { GXSERVER_PROTOCOL_VERSION } from "@/packages/shared/gxserver-protocol";
 import {
   clampSessionChatTranscriptWidthPercent,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
-} from "@/shared/ghostex-settings";
-import { normalizeghostexHotkeySettings } from "@/shared/ghostex-hotkeys";
-import { formatSidebarHotkeyLabel } from "@/sidebar/hotkey-label";
+} from "@/packages/shared/ghostex-settings";
+import { normalizeghostexHotkeySettings } from "@/packages/shared/ghostex-hotkeys";
+import { formatSidebarHotkeyLabel } from "@/packages/core-ui/hotkey-label";
 import {
   SessionChatView,
   type SessionChatHostActions,
   type SessionChatHostComposerBridge,
   type SessionChatHostLinks,
-} from "@/sidebar/chat/session-chat-view";
-import type { SessionChatTransport } from "@/sidebar/chat/session-chat-transport";
+} from "@/packages/core-ui/chat/session-chat-view";
+import type { SessionChatTransport } from "@/packages/core-ui/chat/session-chat-transport";
 
 /*
 CDXC:GPUISessionChatSurface 2026-07-31:

@@ -1,4 +1,4 @@
-import type { SessionSurfaceMode } from "@/shared/session-chat";
+import type { SessionSurfaceMode } from "@/packages/shared/session-chat";
 
 export type WorkspaceSplitAxis = "horizontal" | "vertical";
 

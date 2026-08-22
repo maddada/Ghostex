@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
-import { AppTooltip } from "@/sidebar/app-tooltip";
+import { AppTooltip } from "@/packages/core-ui/app-tooltip";
 import {
   getConnectionStates,
   subscribeConnectionStates,

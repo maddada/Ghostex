@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import type { ghostexSettings } from "@/shared/ghostex-settings";
+import type { ghostexSettings } from "@/packages/shared/ghostex-settings";
 import type { WebSidebarRuntime } from "../sidebar-runtime/sidebar-runtime";
 import { readWebSettings, writeWebSettings } from "./web-settings";
 
 const SettingsModal = lazy(() =>
-  import("@/sidebar/settings-modal").then((module) => ({ default: module.SettingsModal })),
+  import("@/packages/core-ui/settings-modal").then((module) => ({ default: module.SettingsModal })),
 );
 
 export function SettingsModalHost({ runtime }: { runtime: WebSidebarRuntime }) {

@@ -10,8 +10,8 @@ focus path the web app already has instead of inventing another.
 */
 
 import { useMemo } from "react";
-import { FindPromptsView } from "@/sidebar/find/find-prompts-view";
-import "@/sidebar/styles.css";
+import { FindPromptsView } from "@/packages/core-ui/find/find-prompts-view";
+import "@/packages/core-ui/styles.css";
 import { createFindPromptsTransport } from "../find/find-prompts-transport";
 import type { WorkspaceSession } from "../workspace/workspace-model";
 

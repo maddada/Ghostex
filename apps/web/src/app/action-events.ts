@@ -1,8 +1,8 @@
 import type {
   GxserverExportSessionTranscriptResult,
   GxserverSidebarHudCommandButton,
-} from "@/shared/gxserver-protocol";
-import type { OpenAppModalMessage } from "@/sidebar/app-modal-host-bridge";
+} from "@/packages/shared/gxserver-protocol";
+import type { OpenAppModalMessage } from "@/packages/core-ui/app-modal-host-bridge";
 
 export type OpenRecentProjectsModalDetail = Pick<
   Extract<OpenAppModalMessage, { modal: "recentProjects" }>,

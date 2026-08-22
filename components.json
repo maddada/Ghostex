@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "sidebar/styles/shadcn.css",
+    "css": "packages/core-ui/styles/shadcn.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
@@ -13,10 +13,9 @@
   "iconLibrary": "tabler",
   "rtl": false,
   "aliases": {
-    "components": "@/components",
-    "utils": "@/lib/utils",
-    "ui": "@/components/ui",
-    "lib": "@/lib",
+    "components": "@/packages/components",
+    "utils": "@/packages/components/utils",
+    "ui": "@/packages/components/ui",
     "hooks": "@/hooks"
   },
   "menuColor": "default",

@@ -19,13 +19,13 @@ import type {
   GxserverExportSessionTranscriptResult,
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
-} from "@/shared/gxserver-protocol";
-import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
+} from "@/packages/shared/gxserver-protocol";
+import { resolveSessionChatTranscriptAgent } from "@/packages/shared/session-chat";
 import {
   SessionChatView,
   type SessionChatHostActions,
-} from "@/sidebar/chat/session-chat-view";
-import "@/sidebar/styles.css";
+} from "@/packages/core-ui/chat/session-chat-view";
+import "@/packages/core-ui/styles.css";
 import { rpcForMachine } from "../connections/connection-registry";
 import type { GhostexWebFocusSessionDetail } from "../sidebar-runtime/sidebar-runtime";
 import type { WorkspaceSession } from "../workspace/workspace-model";

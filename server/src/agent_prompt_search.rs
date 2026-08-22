@@ -1,7 +1,7 @@
 /*
 CDXC:AgentHistorySearch 2026-08-20:
 The Find surface (a GUI for `gx f`) is served from here. It keeps one warm
-`zehn::SearchIndex` — the same scanner, matcher, favorites file, and Codex cache
+`ghostex_find::SearchIndex` — the same scanner, matcher, favorites file, and Codex cache
 the terminal picker uses — so both surfaces rank identically and a prompt starred
 in one is starred in the other.
 
@@ -23,9 +23,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
-use zehn::agent::{Agent, ALL_AGENTS};
-use zehn::index::{day_key, QueryOptions, SearchIndex};
-use zehn::{favorites, index as zehn_index};
+use ghostex_find::agent::{Agent, ALL_AGENTS};
+use ghostex_find::index::{day_key, QueryOptions, SearchIndex};
+use ghostex_find::{favorites, index as zehn_index};
 
 /// Rows carry a bounded slice of the prompt so a keystroke never ships megabytes
 /// of pasted transcripts — a full page of 60 pasted AGENTS.md prompts is a
@@ -276,7 +276,7 @@ pub fn search_agent_prompts(
                 .into_iter()
                 .map(|path| json!({
                     "path": path,
-                    "name": zehn::scan::project_display_name(path),
+                    "name": ghostex_find::scan::project_display_name(path),
                 }))
                 .collect::<Vec<_>>());
             payload["agents"] = json!(ALL_AGENTS
@@ -616,7 +616,7 @@ mod tests {
         paths.home_dir = PathBuf::from("/Users/example");
         let (home, _cache_root, favorites_path) = resolve_search_paths(&paths);
         assert_eq!(home, "/Users/example");
-        // Matches zehn::favorites::path_for, so `gx f` and the GUI share stars.
+        // Matches ghostex_find::favorites::path_for, so `gx f` and the GUI share stars.
         let expected = match std::env::var("XDG_CONFIG_HOME") {
             Ok(dir) if !dir.is_empty() => PathBuf::from(dir).join("zehn").join("favorites"),
             _ => PathBuf::from("/Users/example/.config/zehn/favorites"),

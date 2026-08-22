@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import { codeServerComponentNames } from './code-server-component-identity.mjs';
 
 export const CODE_SERVER_ARCHIVE_CONTRACT = Object.freeze(
-  JSON.parse(readFileSync(new URL('../../shared/code-server-archive-contract.json', import.meta.url), 'utf8'))
+  JSON.parse(readFileSync(new URL('../../packages/shared/code-server-archive-contract.json', import.meta.url), 'utf8'))
 );
 export const CODE_SERVER_REQUIRED_ARCHIVE_ENTRIES = Object.freeze([...CODE_SERVER_ARCHIVE_CONTRACT.requiredEntries]);
 

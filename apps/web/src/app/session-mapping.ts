@@ -1,7 +1,7 @@
 import type {
   GxserverPresentationSession,
   GxserverSessionDomainState,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import type {
   WorkspacePresentationState,
   WorkspaceSession,

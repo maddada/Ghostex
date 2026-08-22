@@ -3,7 +3,7 @@ import {
   GXSERVER_PROTOCOL_VERSION,
   GXSERVER_WEB_BOOTSTRAP_ENDPOINT,
   type GxserverWebBootstrapResult,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import { createGxserverClient } from "../connections/gxserver-client";
 import {
   removeMachineConnection,

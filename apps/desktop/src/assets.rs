@@ -9,7 +9,7 @@ use std::borrow::Cow;
 struct GhostexEmbeddedAssets;
 
 #[derive(RustEmbed)]
-#[folder = "../../src/assets"]
+#[folder = "../../packages/core-ui/assets"]
 #[include = "*.svg"]
 struct GhostexAgentIconAssets;
 

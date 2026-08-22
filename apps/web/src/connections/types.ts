@@ -1,4 +1,4 @@
-import type { GxserverPresentationSnapshot } from "@/shared/gxserver-protocol";
+import type { GxserverPresentationSnapshot } from "@/packages/shared/gxserver-protocol";
 
 export type GhostexWebMachine = {
   authToken: string;

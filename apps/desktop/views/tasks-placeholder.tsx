@@ -33,19 +33,19 @@ import {
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Toaster, toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/packages/components/ui/button";
 import {
   DEFAULT_ghostex_SETTINGS,
   isDiagnosticLoggingScenarioEnabled,
   normalizeghostexSettings,
-} from "@/shared/ghostex-settings";
+} from "@/packages/shared/ghostex-settings";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@/packages/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -53,26 +53,26 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
+} from "@/packages/components/ui/dialog";
+import { Input } from "@/packages/components/ui/input";
+import { ScrollArea } from "@/packages/components/ui/scroll-area";
+import { Separator } from "@/packages/components/ui/separator";
+import { Switch } from "@/packages/components/ui/switch";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+} from "@/packages/components/ui/select";
+import { Textarea } from "@/packages/components/ui/textarea";
 import {
   TOOLTIP_DELAY_MS,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/packages/components/ui/tooltip";
 import {
   BOARD_SORT_OPTIONS,
   DEFAULT_PROJECT_BOARD_VIEW_PREFERENCES,
@@ -150,8 +150,8 @@ import {
   type ProjectBoardConversationLinkView,
   type ProjectBoardConversationState,
   type ProjectBoardStartLocation,
-} from "@/shared/bead-conversation-links";
-import type { AppToastLevel } from "@/shared/app-toast-contract";
+} from "@/packages/shared/bead-conversation-links";
+import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
 import {
   compareAutomationRunsNewestFirst,
   computeNextRunAt,
@@ -163,14 +163,14 @@ import {
   type ProjectAutomationAgentOption,
   type ProjectAutomationTargetOption,
   type ProjectAutomationsBridgeState,
-} from "@/shared/automations";
-import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/sidebar/agent-logos";
+} from "@/packages/shared/automations";
+import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/packages/core-ui/agent-logos";
 import {
   createSidebarAgentSelectItems,
   getSidebarAgentIconById,
   type SidebarAgentIcon,
-} from "@/shared/sidebar-agents";
-import "@/sidebar/styles/shadcn.generated.css";
+} from "@/packages/shared/sidebar-agents";
+import "@/packages/core-ui/styles/shadcn.generated.css";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 

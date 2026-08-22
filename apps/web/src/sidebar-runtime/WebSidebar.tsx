@@ -1,5 +1,5 @@
-import { SidebarApp } from "@/sidebar/sidebar-app";
-import "@/sidebar/styles.css";
+import { SidebarApp } from "@/packages/core-ui/sidebar-app";
+import "@/packages/core-ui/styles.css";
 import type { WebSidebarRuntime } from "./sidebar-runtime";
 
 export function WebSidebar({ runtime }: { runtime: WebSidebarRuntime }) {

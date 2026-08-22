@@ -10,7 +10,7 @@
  * reaches the dialog's props, its state, or anything it logs.
  */
 
-import { AddProjectModal } from "@/sidebar/add-project-modal/add-project-modal";
+import { AddProjectModal } from "@/packages/core-ui/add-project-modal/add-project-modal";
 import type {
   AddProjectAddInput,
   AddProjectAddResult,
@@ -28,7 +28,7 @@ import type {
   AddProjectRepositoryInfo,
   AddProjectRepositoryLookupInput,
   AddProjectSourceControlDiscovery,
-} from "@/sidebar/add-project-modal/types";
+} from "@/packages/core-ui/add-project-modal/types";
 import type {
   GxserverCreateProjectDirectoryResult,
   GxserverDiscoverSourceControlResult,
@@ -37,7 +37,7 @@ import type {
   GxserverProjectDomainState,
   GxserverRepositoryCloneJobRpcResult,
   GxserverRepositoryClonePreviewRpcResult,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import { useCallback, useEffect, useState } from "react";
 import type { OpenAddProjectModalDetail } from "./action-events";
 import {

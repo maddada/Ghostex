@@ -84,7 +84,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   },
   {
     path: ".dependencies/zehn",
-    why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the zehn-rs crate compiled into gxserver.",
+    why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the packages/find crate compiled into gxserver.",
   },
   { path: "vitest.config.ts", why: "Test runner configuration; release:test uses vitest.release.config.ts." },
   { path: "vitest.release.config.ts", why: "Runs in prepare only; cannot change artifact bytes." },
@@ -123,22 +123,16 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "apps/desktop/**" },
   { pathspec: ":(exclude)apps/desktop/build" },
   { pathspec: ":(exclude)apps/desktop/target" },
-  { pathspec: "ghostex-paths/**" },
-  { pathspec: "zehn-rs/**" },
-  { pathspec: ":(exclude)zehn-rs/target" },
+  { pathspec: "packages/paths/**" },
+  { pathspec: "packages/find/**" },
+  { pathspec: ":(exclude)packages/find/target" },
   { pathspec: "server/**" },
   { pathspec: ":(exclude)server/target" },
-  { pathspec: "shared/**" },
-  { pathspec: "sidebar/**" },
-  { pathspec: "components/**" },
+  { pathspec: "packages/shared/**" },
+  { pathspec: "packages/core-ui/**" },
+  { pathspec: "packages/components/**" },
   { pathspec: "components.json" },
-  { pathspec: "lib/**" },
   { pathspec: "apps/desktop/views/**" },
-  /*
-   * sidebar/brand-icons.tsx inlines these SVGs into every CEF surface, so an
-   * editor icon changes the built bundle even though src/ holds no app.
-   */
-  { pathspec: "src/assets/**" },
   { pathspec: ".dependencies/ghostty/**" },
   { pathspec: ":(exclude).dependencies/ghostty/.zig-cache" },
   { pathspec: ":(exclude).dependencies/ghostty/zig-out" },
@@ -157,9 +151,9 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
 const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: "server/**" },
   { pathspec: ":(exclude)server/target" },
-  { pathspec: "ghostex-paths/**" },
-  { pathspec: "zehn-rs/**" },
-  { pathspec: ":(exclude)zehn-rs/target" },
+  { pathspec: "packages/paths/**" },
+  { pathspec: "packages/find/**" },
+  { pathspec: ":(exclude)packages/find/target" },
   { pathspec: ".dependencies/tui2/**" },
   { pathspec: ":(exclude).dependencies/tui2/target" },
   { pathspec: ".dependencies/zmx" },
@@ -370,7 +364,7 @@ const PRODUCT_LIST = [
   {
     /*
      * §4.5: apps/mobile/app is a self-contained submodule with its own lockfile, so
-     * shared/** and sidebar/** are deliberately excluded. Add them and bump the
+     * packages/shared/** and packages/core-ui/** are deliberately excluded. Add them and bump the
      * algorithm revision if mobile ever imports from the parent repo.
      */
     artifacts: () => ["ghostex-android.apk"],

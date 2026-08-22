@@ -3,11 +3,11 @@ import { describe, expect, test } from "vitest";
 
 const modalHostSource = readFileSync(new URL("./modal-host.tsx", import.meta.url), "utf8");
 const contractSource = readFileSync(
-  new URL("../../../shared/session-grid-contract-sidebar.ts", import.meta.url),
+  new URL("../../../packages/shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
 const gxserverProtocolSource = readFileSync(
-  new URL("../../../shared/gxserver-protocol.ts", import.meta.url),
+  new URL("../../../packages/shared/gxserver-protocol.ts", import.meta.url),
   "utf8",
 );
 

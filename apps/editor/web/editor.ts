@@ -1,4 +1,4 @@
-import { trimPromptEditorTrailingSpaces } from "../../../shared/prompt-editor-text";
+import { trimPromptEditorTrailingSpaces } from "../../../packages/shared/prompt-editor-text";
 
 type GhostexEditorConfigureMessage = {
   type: "configure";

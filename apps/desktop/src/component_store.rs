@@ -21,7 +21,7 @@ use std::process::{Command, Stdio};
 const MANIFEST_SCHEMA_VERSION: u64 = 2;
 const CODE_SERVER_COMPONENT_NAME: &str = "code-server";
 const CODE_SERVER_ARCHIVE_CONTRACT_JSON: &str =
-    include_str!("../../../shared/code-server-archive-contract.json");
+    include_str!("../../../packages/shared/code-server-archive-contract.json");
 
 struct CodeServerArchiveContract {
     schema_version: u64,

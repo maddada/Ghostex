@@ -156,11 +156,11 @@ describe("release product input map", () => {
     for (const desktop of ["macos-arm64", "linux-deb-x64", "linux-rpm-x64", "windows-x64", "windows-arm64"]) {
       /* Rule 1: protocol coupling and the embedded gxserver payload. */
       expect(specs(desktop)).toContain("server/**");
-      expect(specs(desktop)).toContain("ghostex-paths/**");
+      expect(specs(desktop)).toContain("packages/paths/**");
       /* Rule 2: CEF surfaces are built from the shared React trees. */
-      expect(specs(desktop)).toContain("shared/**");
-      expect(specs(desktop)).toContain("sidebar/**");
-      expect(specs(desktop)).toContain("components/**");
+      expect(specs(desktop)).toContain("packages/shared/**");
+      expect(specs(desktop)).toContain("packages/core-ui/**");
+      expect(specs(desktop)).toContain("packages/components/**");
       expect(specs(desktop)).toContain("apps/desktop/views/**");
       /* Rule 4: patched dependency gitlinks. */
       expect(specs(desktop)).toContain(".dependencies/cef-rs");
@@ -168,9 +168,9 @@ describe("release product input map", () => {
       expect(specs(desktop)).toContain(".github/workflows/release-gpui.yml");
       expect(specs(desktop)).toContain("scripts/release-gpui/common.sh");
     }
-    /* Rule 3: shared/** is deliberately absent from the remote Linux package. */
-    expect(specs("gxserver-linux-x64")).not.toContain("shared/**");
-    expect(specs("gxserver-linux-arm64")).not.toContain("shared/**");
+    /* Rule 3: packages/shared/** is deliberately absent from the remote Linux package. */
+    expect(specs("gxserver-linux-x64")).not.toContain("packages/shared/**");
+    expect(specs("gxserver-linux-arm64")).not.toContain("packages/shared/**");
     /* Rule 5: a gxserver rebuild forces every desktop rebuild through composition. */
     expect(productDefinition("macos-arm64").composedFrom).toEqual([
       "gxserver-linux-x64",

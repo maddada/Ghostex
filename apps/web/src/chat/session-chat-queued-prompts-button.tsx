@@ -13,7 +13,7 @@
 // count derived from this client's own calls would go stale on its own.
 
 import { IconStackPush } from "@tabler/icons-react";
-import { AppTooltip } from "@/sidebar/app-tooltip";
+import { AppTooltip } from "@/packages/core-ui/app-tooltip";
 
 export function SessionChatQueuedPromptsButton({
   count,

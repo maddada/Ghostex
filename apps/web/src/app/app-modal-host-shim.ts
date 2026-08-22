@@ -1,4 +1,4 @@
-import type { OpenAppModalMessage } from "@/sidebar/app-modal-host-bridge";
+import type { OpenAppModalMessage } from "@/packages/core-ui/app-modal-host-bridge";
 import type {
   OpenAddProjectModalDetail,
   OpenDelayedActionsModalDetail,

@@ -4,10 +4,10 @@
  * inline HTML the phone has to parse before showing results. Keep this entry
  * limited to the shared primitives and the Find surface's own chrome.
  */
-@import "@/sidebar/styles/shadcn.generated.css";
-@import "@/sidebar/styles/theme.css";
-@import "@/sidebar/styles/workspace-theme.css";
-@import "@/sidebar/styles/find.css";
+@import "@/packages/core-ui/styles/shadcn.generated.css";
+@import "@/packages/core-ui/styles/theme.css";
+@import "@/packages/core-ui/styles/workspace-theme.css";
+@import "@/packages/core-ui/styles/find.css";
 
 /*
  * Phone ergonomics: the desktop hint strip is hidden below `md`, and touch

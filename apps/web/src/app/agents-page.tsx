@@ -12,7 +12,7 @@ import type {
   GxserverSidebarHudCommandButton,
   GxserverSessionDomainState,
   GxserverSessionId,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import {
   getConnectionStates,
   rpcForMachine,
@@ -46,8 +46,8 @@ import {
 import { prepareSessionAttach, RestoreBlockedError, type AttachIntent } from "./attach-flow";
 import "./action-events";
 import { CommandPane } from "./command-pane";
-import { resolveSessionChatTranscriptAgent } from "@/shared/session-chat";
-import { SessionChatHostActionsCluster } from "@/sidebar/chat/session-chat-host-actions-cluster";
+import { resolveSessionChatTranscriptAgent } from "@/packages/shared/session-chat";
+import { SessionChatHostActionsCluster } from "@/packages/core-ui/chat/session-chat-host-actions-cluster";
 import { SessionChatQueuedPromptsButton } from "../chat/session-chat-queued-prompts-button";
 import { createWebSessionHostActions, SessionChatHost } from "./session-chat-host";
 import { FindPromptsHost } from "./find-prompts-host";

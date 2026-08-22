@@ -5,14 +5,14 @@ import {
   createGxserverPresentationSidebarGroups,
   orderGxserverPresentationSidebarProjects,
   type GxserverPresentationSidebarProjectOverlay,
-} from "@/shared/gxserver-presentation-sidebar-projection";
+} from "@/packages/shared/gxserver-presentation-sidebar-projection";
 import type {
   GxserverPresentationSession,
   GxserverForkSessionResult,
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import {
   createDefaultSessionGridSnapshot,
   createSidebarHudState,
@@ -21,22 +21,22 @@ import {
   type SidebarRecentProject,
   type SidebarSessionGroup,
   type SidebarToExtensionMessage,
-} from "@/shared/session-grid-contract";
+} from "@/packages/shared/session-grid-contract";
 import {
   DEFAULT_SIDEBAR_AGENTS,
   getSidebarAgentIconById,
   type SidebarAgentButton,
-} from "@/shared/sidebar-agents";
+} from "@/packages/shared/sidebar-agents";
 import {
   type RemoteMachineSettings,
   type ghostexSettings,
-} from "@/shared/ghostex-settings";
+} from "@/packages/shared/ghostex-settings";
 import { readWebSettings } from "../app/web-settings";
 import {
   normalizeWorkspaceProjectIcon,
   normalizeWorkspaceProjectIconDataUrl,
   normalizeWorkspaceThemeColor,
-} from "@/shared/workspace-project-appearance";
+} from "@/packages/shared/workspace-project-appearance";
 import type { OpenAddProjectModalDetail } from "../app/action-events";
 import {
   getConnectionStates,
@@ -60,16 +60,16 @@ import {
   type SidebarSessionReference,
 } from "./sidebar-ids";
 import { setActiveSidebarProject } from "./active-project-store";
-import type { NavigationHistoryEntry } from "@/shared/navigation-history/navigation-history-contract";
-import { NAVIGATION_HISTORY_SCOPE_WEB } from "@/shared/navigation-history/navigation-history-contract";
+import type { NavigationHistoryEntry } from "@/packages/shared/navigation-history/navigation-history-contract";
+import { NAVIGATION_HISTORY_SCOPE_WEB } from "@/packages/shared/navigation-history/navigation-history-contract";
 import {
   NavigationHistoryController,
   type NavigationHistoryRpc,
-} from "@/shared/navigation-history/navigation-history-controller";
+} from "@/packages/shared/navigation-history/navigation-history-controller";
 import {
   installNavigationHistoryHotkeys,
   navigationHistoryHotkeyDirection,
-} from "@/shared/navigation-history/navigation-history-hotkeys";
+} from "@/packages/shared/navigation-history/navigation-history-hotkeys";
 
 const DEBUG_SIDEBAR_STORAGE_KEY = "ghostexWeb.debugSidebar";
 const DEFAULT_TERMINAL_TITLE = "Terminal";

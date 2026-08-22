@@ -1,1 +1,1 @@
-/// <reference path="../../../shared/asset-modules.d.ts" />
+/// <reference path="../../../packages/shared/asset-modules.d.ts" />

@@ -22,9 +22,9 @@
     "types": ["node"]
   },
   "include": [
-    "src/**/*",
-    "shared/**/*",
-    "sidebar/**/*",
+    "packages/shared/**/*",
+    "packages/core-ui/**/*",
+    "packages/components/**/*",
     "apps/desktop/views/**/*",
     "apps/mobile/views/chat/**/*",
     "apps/mobile/views/find/**/*"

@@ -71,7 +71,7 @@ describe("release fingerprint algorithm", () => {
 
   test("moves only the products that declare a changed path", () => {
     const before = fingerprintsAt(repo.commit("checkpoint"));
-    repo.write("shared/ghostex-settings.ts", "export const settings = { changed: true };\n");
+    repo.write("packages/shared/ghostex-settings.ts", "export const settings = { changed: true };\n");
     const after = fingerprintsAt(repo.commit("shared change"));
     const moved = changed(before, after);
     expect(moved).toContain("macos-arm64");
@@ -79,7 +79,7 @@ describe("release fingerprint algorithm", () => {
     expect(moved).toContain("linux-rpm-x64");
     expect(moved).toContain("windows-x64");
     expect(moved).toContain("windows-arm64");
-    /* §4.11 rule 3: shared/** was deliberately removed from the remote Linux package. */
+    /* §4.11 rule 3: packages/shared/** was deliberately removed from the remote Linux package. */
     expect(moved).not.toContain("gxserver-linux-x64");
     expect(moved).not.toContain("gxserver-linux-arm64");
     /* §4.5: the mobile submodule is self-contained. */

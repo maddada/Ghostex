@@ -761,7 +761,7 @@ pub fn zehn_search_command(args: &[String]) -> CliResult<()> {
         current_cli_executable().as_os_str(),
     );
     let zehn_args = resolve_zehn_search_args(args);
-    let code = zehn::cli::run(&zehn_args);
+    let code = ghostex_find::cli::run(&zehn_args);
     if code != 0 {
         crate::ghostex_cli::set_exit_code(code);
     }

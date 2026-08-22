@@ -406,7 +406,7 @@ function sourcePathAffectsPackage(file, packageName) {
   if (file === "apps/mobile/app") {
     return packageName === "android";
   }
-  if (file.startsWith("apps/desktop/") || file.startsWith("sidebar/")) {
+  if (file.startsWith("apps/desktop/") || file.startsWith("packages/core-ui/")) {
     return packageName === "macos-arm64";
   }
   return true;

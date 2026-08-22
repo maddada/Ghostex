@@ -14,8 +14,8 @@ import type {
   GxserverSendSessionChatQueuedPromptResult,
   GxserverSessionChatQueueResult,
   GxserverSessionChatRemoveQueuedPromptResult,
-} from "@/shared/session-chat";
-import type { SessionChatTransport } from "@/sidebar/chat/session-chat-transport";
+} from "@/packages/shared/session-chat";
+import type { SessionChatTransport } from "@/packages/core-ui/chat/session-chat-transport";
 import {
   rpcForMachine,
   subscribeSessionChatForMachine,

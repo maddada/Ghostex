@@ -1,8 +1,19 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+/*
+ * CDXC:RepoRestructure 2026-08-22: source trees moved under packages/ and apps/,
+ * and cross-tree imports are written as repo-root `@/...` specifiers. Vitest needs
+ * the same `@` -> repository-root alias every vite/esbuild/Storybook config already
+ * declares, otherwise suites that pull in shared UI fail to resolve those modules.
+ */
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
+      "@": repoRoot,
       "bun:test": "vitest",
       "vite-plus/test": "vitest",
     },

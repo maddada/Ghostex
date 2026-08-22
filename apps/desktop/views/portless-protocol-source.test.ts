@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const gxserverProtocolSource = readFileSync(
-  new URL("../../../shared/gxserver-protocol.ts", import.meta.url),
+  new URL("../../../packages/shared/gxserver-protocol.ts", import.meta.url),
   "utf8",
 );
 const nativeHostProtocolSource = readFileSync(
-  new URL("../../../shared/native-ghostty-host-protocol.ts", import.meta.url),
+  new URL("../../../packages/shared/native-ghostty-host-protocol.ts", import.meta.url),
   "utf8",
 );
 const sidebarContractSource = readFileSync(
-  new URL("../../../shared/session-grid-contract-sidebar.ts", import.meta.url),
+  new URL("../../../packages/shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
 const portlessRustSource = readFileSync(

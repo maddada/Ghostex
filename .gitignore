@@ -24,8 +24,8 @@ tmp/imagegen/
 storybook-static/
 apps/desktop/runtime/
 apps/editor/macos/.build/
-ghostex-paths/target/
-ghostex-paths/Cargo.lock
+packages/paths/target/
+packages/paths/Cargo.lock
 tmp/
 .dependencies/ghostty/zig-pkg/
 .zig-cache/
@@ -53,7 +53,7 @@ tmp/
 # CDXC:RepoSafety 2026-07-06: The standalone GhostexEditor SwiftPM build writes
 # compiler outputs under apps/editor/macos/.build. Keep those local build products
 # ignored so release commits contain source changes only.
-# CDXC:RepoSafety 2026-08-05: The standalone ghostex-paths library writes Cargo
+# CDXC:RepoSafety 2026-08-05: The standalone packages/paths library writes Cargo
 # build output and a library-local lockfile. Keep those generated files out of
 # release commits while the workspace lockfile remains the source of truth.
 # CDXC:GPUIRuntimeOwnership 2026-07-14: GPUI-owned macOS runtime staging contains

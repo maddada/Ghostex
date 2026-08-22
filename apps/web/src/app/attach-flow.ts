@@ -2,7 +2,7 @@ import type {
   GxserverAttachSessionMetadataResult,
   GxserverSessionLifecycleResult,
   GxserverStartupTextDisposition,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import { rpcForMachine } from "../connections/connection-registry";
 import type { SessionReference } from "./session-mapping";
 

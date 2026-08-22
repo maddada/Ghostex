@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppTooltip } from "@/sidebar/app-tooltip";
+import { AppTooltip } from "@/packages/core-ui/app-tooltip";
 import type {
   GxserverSidebarHudCommandButton,
   GxserverSidebarHudResponse,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import {
   getConnectionStates,
   rpcForMachine,

@@ -6,11 +6,11 @@ import {
   type GxserverPresentationSnapshot,
   type GxserverRpcEndpointPath,
   type GxserverServerHealthResponse,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import {
   isSessionChatEventType,
   type GxserverSessionChatEvent,
-} from "@/shared/session-chat";
+} from "@/packages/shared/session-chat";
 import type { GhostexWebMachine } from "./types";
 
 export type SessionChatEventHandler = (event: GxserverSessionChatEvent) => void;

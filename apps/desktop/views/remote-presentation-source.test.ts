@@ -2,18 +2,18 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 const sortableSessionCardSource = readFileSync(
-  new URL("../../../sidebar/sortable-session-card.tsx", import.meta.url),
+  new URL("../../../packages/core-ui/sortable-session-card.tsx", import.meta.url),
   "utf8",
 );
 const sessionGroupSectionSource = readFileSync(
-  new URL("../../../sidebar/session-group-section.tsx", import.meta.url),
+  new URL("../../../packages/core-ui/session-group-section.tsx", import.meta.url),
   "utf8",
 );
 const sessionCardsCssSource = readFileSync(
-  new URL("../../../sidebar/styles/session-cards.css", import.meta.url),
+  new URL("../../../packages/core-ui/styles/session-cards.css", import.meta.url),
   "utf8",
 );
-const sidebarStoreSource = readFileSync(new URL("../../../sidebar/sidebar-store.ts", import.meta.url), "utf8");
+const sidebarStoreSource = readFileSync(new URL("../../../packages/core-ui/sidebar-store.ts", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);

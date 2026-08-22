@@ -448,6 +448,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghostex-find"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ghostex-paths"
 version = "0.1.0"
 
@@ -462,6 +472,7 @@ dependencies = [
  "chrono",
  "crossterm",
  "futures-util",
+ "ghostex-find",
  "ghostex-paths",
  "libc",
  "md-5",
@@ -480,7 +491,6 @@ dependencies = [
  "url",
  "uuid",
  "windows-sys 0.59.0",
- "zehn",
 ]
 
 [[package]]
@@ -2120,16 +2130,6 @@ dependencies = [
  "quote",
  "syn",
  "synstructure",
-]
-
-[[package]]
-name = "zehn"
-version = "0.1.0"
-dependencies = [
- "libc",
- "rusqlite",
- "serde",
- "serde_json",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 import { installManageCefBridge } from "./project-workarea-cef-bridge";
-import "@/sidebar/styles/shadcn.generated.css";
-import "@/sidebar/styles/theme.css";
+import "@/packages/core-ui/styles/shadcn.generated.css";
+import "@/packages/core-ui/styles/theme.css";
 
 installManageCefBridge();
 

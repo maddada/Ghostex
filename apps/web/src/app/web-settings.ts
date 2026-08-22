@@ -2,7 +2,7 @@ import {
   DEFAULT_ghostex_SETTINGS,
   normalizeghostexSettings,
   type ghostexSettings,
-} from "@/shared/ghostex-settings";
+} from "@/packages/shared/ghostex-settings";
 
 const WEB_SETTINGS_STORAGE_KEY = "ghostexWeb.settings.v1";
 export const WEB_SETTINGS_CHANGED_EVENT = "ghostex-web:settings-changed";

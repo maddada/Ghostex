@@ -1,5 +1,5 @@
-import { RecentProjectsModal } from "@/sidebar/recent-projects-modal";
-import type { ExtensionToSidebarMessage } from "@/shared/session-grid-contract";
+import { RecentProjectsModal } from "@/packages/core-ui/recent-projects-modal";
+import type { ExtensionToSidebarMessage } from "@/packages/shared/session-grid-contract";
 import { useEffect, useState } from "react";
 import type { OpenRecentProjectsModalDetail } from "./action-events";
 import type { WebSidebarRuntime } from "../sidebar-runtime/sidebar-runtime";

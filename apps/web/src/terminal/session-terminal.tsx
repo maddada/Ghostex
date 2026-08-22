@@ -10,13 +10,13 @@ import {
   useRef,
   type HTMLAttributes,
 } from "react";
-import { detectghostexHotkeyPlatform } from "@/shared/ghostex-hotkeys";
+import { detectghostexHotkeyPlatform } from "@/packages/shared/ghostex-hotkeys";
 import type {
   GxserverProjectId,
   GxserverSessionId,
   GxserverTerminalWsExitMessage,
   GxserverTerminalWsReadyMessage,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 import { GHOSTTY_DEFAULT_THEME } from "./ghostty-default-theme";
 import {
   TerminalWsClient,

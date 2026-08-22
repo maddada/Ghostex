@@ -8,7 +8,7 @@ import {
   type GxserverTerminalWsReadyMessage,
   type GxserverTerminalWsServerControlMessage,
   type GxserverZmxSessionName,
-} from "@/shared/gxserver-protocol";
+} from "@/packages/shared/gxserver-protocol";
 
 const TERMINAL_PROTOCOL_VERSION = "1";
 const RESIZE_COALESCE_MS = 50;

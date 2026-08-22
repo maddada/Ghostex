@@ -10,9 +10,9 @@
  * wrapped in the exact result containers the host's readers expect
  * (modal-host.tsx:828-920: `machines`, `project`, `discovery`, `repository`, `job`).
  */
-import type { SidebarAddProjectDialogOperation } from "@/shared/session-grid-contract";
-import { createAddProjectStoryMocks } from "@/sidebar/add-project-modal/add-project-modal-mocks";
-import type { AddProjectProviderId } from "@/sidebar/add-project-modal/types";
+import type { SidebarAddProjectDialogOperation } from "@/packages/shared/session-grid-contract";
+import { createAddProjectStoryMocks } from "@/packages/core-ui/add-project-modal/add-project-modal-mocks";
+import type { AddProjectProviderId } from "@/packages/core-ui/add-project-modal/types";
 import type { ModalHostOutboundMessage } from "../state/types";
 
 export type AddProjectAnswer = {

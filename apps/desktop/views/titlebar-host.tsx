@@ -40,28 +40,28 @@ import {
   type ReactNode,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { cn } from "@/lib/utils";
-import { AppTooltip, TooltipProvider } from "@/sidebar/app-tooltip";
-import { openQuickAccess } from "@/sidebar/app-modal-host-bridge";
-import type { SidebarProjectDiffStats } from "@/shared/project-diff-stats";
-import { createDefaultSidebarProjectDiffStats } from "@/shared/project-diff-stats";
+import { cn } from "@/packages/components/utils";
+import { AppTooltip, TooltipProvider } from "@/packages/core-ui/app-tooltip";
+import { openQuickAccess } from "@/packages/core-ui/app-modal-host-bridge";
+import type { SidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
+import { createDefaultSidebarProjectDiffStats } from "@/packages/shared/project-diff-stats";
 import {
   isSidebarCommandConfigured,
   type SidebarCommandButton,
-} from "@/shared/sidebar-commands";
-import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/sidebar/agent-logos";
+} from "@/packages/shared/sidebar-commands";
+import { AGENT_LOGO_COLORS, AGENT_LOGOS } from "@/packages/core-ui/agent-logos";
 import {
   getDefaultSidebarAgentById,
   getDefaultSidebarAgentByIcon,
   type SidebarAgentIcon,
-} from "@/shared/sidebar-agents";
+} from "@/packages/shared/sidebar-agents";
 import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
   SidebarPortlessState,
-} from "@/shared/session-grid-contract-sidebar";
-import type { NativePortlessAdminInstallAction } from "@/shared/native-ghostty-host-protocol";
-import { resolveSidebarTheme, type SidebarTheme } from "@/shared/session-grid-contract";
+} from "@/packages/shared/session-grid-contract-sidebar";
+import type { NativePortlessAdminInstallAction } from "@/packages/shared/native-ghostty-host-protocol";
+import { resolveSidebarTheme, type SidebarTheme } from "@/packages/shared/session-grid-contract";
 import {
   getSidebarTitlebarGradientColors,
   getSidebarTitlebarForegroundForBackground,
@@ -73,26 +73,26 @@ import {
   type SidebarSide,
   type SessionPersistenceProvider,
   type WebLinkOpenTarget,
-} from "@/shared/ghostex-settings";
+} from "@/packages/shared/ghostex-settings";
 import {
   normalizeghostexHotkeySettings,
   type ghostexHotkeySettings,
-} from "@/shared/ghostex-hotkeys";
+} from "@/packages/shared/ghostex-hotkeys";
 import {
   BUILT_IN_WORKSPACE_OPEN_TARGETS,
   type CustomWorkspaceOpenTarget,
   type WorkspaceIdeTargetApp,
   type WorkspaceOpenTargetAvailability,
   type WorkspaceOpenTargetDefinition,
-} from "@/shared/workspace-open-targets";
-import { parseRemoteProjectId } from "@/shared/remote-terminal-selection";
-import { formatSidebarHotkeyLabel } from "@/sidebar/hotkey-label";
+} from "@/packages/shared/workspace-open-targets";
+import { parseRemoteProjectId } from "@/packages/shared/remote-terminal-selection";
+import { formatSidebarHotkeyLabel } from "@/packages/core-ui/hotkey-label";
 import {
   createCombinedProjectSessionId,
   parseCombinedProjectGroupId,
   parseCombinedProjectSessionId,
 } from "./combined-sidebar-mode";
-import "@/sidebar/styles.css";
+import "@/packages/core-ui/styles.css";
 import {
   buildSidebarGitMenuItems,
   createDefaultSidebarGitState,
@@ -100,7 +100,7 @@ import {
   resolveSidebarGitPrimaryActionState,
   type SidebarGitAction,
   type SidebarGitState,
-} from "@/shared/sidebar-git";
+} from "@/packages/shared/sidebar-git";
 
 type ProjectEditorLoadStatus = "idle" | "opening" | "running" | "error";
 type TitlebarMode = "agents" | "code" | "git" | "automate" | "tasks" | "manage";

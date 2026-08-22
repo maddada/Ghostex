@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import type { GxserverProjectId, GxserverSessionId } from "@/shared/gxserver-protocol";
+import type { GxserverProjectId, GxserverSessionId } from "@/packages/shared/gxserver-protocol";
 import type { GhostexWebMachine } from "../connections/types";
 import { SessionTerminal } from "../terminal";
 import {

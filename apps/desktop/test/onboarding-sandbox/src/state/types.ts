@@ -2,7 +2,7 @@
  * Shared contracts for the onboarding sandbox. All modules import from here.
  * Extend ADDITIVELY only — renaming/removing breaks parallel agents. See SPEC.md.
  */
-import type { AppModalKind } from "@/sidebar/app-modal-host-bridge";
+import type { AppModalKind } from "@/packages/core-ui/app-modal-host-bridge";
 
 /** All modal kinds the sandbox can open. `updateAvailable` exists only in the
  * modal host's own union, not in the bridge export, so it is added here. */

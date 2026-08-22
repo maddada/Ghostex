@@ -1,4 +1,4 @@
-import type { GxserverProjectId, GxserverSessionId } from "@/shared/gxserver-protocol";
+import type { GxserverProjectId, GxserverSessionId } from "@/packages/shared/gxserver-protocol";
 import { SessionTerminal } from "./session-terminal";
 
 const DEV_PROJECT_ID = "P0dev" as GxserverProjectId;

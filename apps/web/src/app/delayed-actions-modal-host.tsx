@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { DelayedSendModal } from "@/sidebar/delayed-send-modal";
-import type { GxserverRpcEndpointPath } from "@/shared/gxserver-protocol";
+import { DelayedSendModal } from "@/packages/core-ui/delayed-send-modal";
+import type { GxserverRpcEndpointPath } from "@/packages/shared/gxserver-protocol";
 import { rpcForMachine } from "../connections/connection-registry";
 import { parseSidebarSessionId } from "../sidebar-runtime/sidebar-ids";
 import type { OpenDelayedActionsModalDetail } from "./action-events";

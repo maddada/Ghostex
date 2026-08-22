@@ -260,7 +260,7 @@ describe('active WSL2 code-server consumer contract', () => {
       expect.arrayContaining(['lib/node', 'lib/vscode/node_modules/@vscode/ripgrep/bin/rg'])
     );
     expect(CODE_SERVER_ARCHIVE_CONTRACT.readinessSignal).toBe('promptEditorIpcReady');
-    expect(nativeVerifier).toContain('include_str!("../../../shared/code-server-archive-contract.json")');
+    expect(nativeVerifier).toContain('include_str!("../../../packages/shared/code-server-archive-contract.json")');
     expect(nativeVerifier).toContain('verify_installed_windows_code_server_component');
     expect(windowsConsumer).toContain('verify_code_server_archive');
     expect(windowsConsumer).toContain('code_server_payload_shell_validation_script');

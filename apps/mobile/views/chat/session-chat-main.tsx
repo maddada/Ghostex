@@ -17,14 +17,14 @@ import {
   type GxserverSessionChatSnapshotEvent,
   type SessionChatQueuedPrompt,
   type SessionChatTheme,
-} from "@/shared/session-chat";
-import { GXSERVER_PROTOCOL_VERSION } from "@/shared/gxserver-protocol";
+} from "@/packages/shared/session-chat";
+import { GXSERVER_PROTOCOL_VERSION } from "@/packages/shared/gxserver-protocol";
 import {
   SessionChatView,
   type SessionChatHostComposerBridge,
   type SessionChatHostSearchBridge,
-} from "@/sidebar/chat/session-chat-view";
-import type { SessionChatTransport } from "@/sidebar/chat/session-chat-transport";
+} from "@/packages/core-ui/chat/session-chat-view";
+import type { SessionChatTransport } from "@/packages/core-ui/chat/session-chat-transport";
 
 /*
 CDXC:SessionChatMobileWebview 2026-07-31:
