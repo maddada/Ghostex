@@ -811,13 +811,21 @@ function normalizeBoardViewPreference<TValue extends string>(
 
 /*
   CDXC:ProjectBoardCustomColumns 2026-08-21:
-  Reconciliation already holds the board's full status list, extra statuses included, so it returns that list for buildBoardColumns instead of making the board read the same config a second time.
+  Status reads return the board's full list, extra statuses included, for buildBoardColumns.
+  Background refreshes use this read-only helper so polling cannot overwrite a concurrent config edit;
+  initial and manual loads call ensureWorkflowStatuses to reconcile Ghostex's required lanes.
 */
-export async function ensureWorkflowStatuses(
+export async function readWorkflowStatuses(
   runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
 ): Promise<string> {
   const payload = await runBeads({ action: "configGet" });
-  const currentValue = normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+  return normalizeBeadsPayload<{ value?: string }>(payload, {}).value ?? "";
+}
+
+export async function ensureWorkflowStatuses(
+  runBeads: (request: Omit<BeadsBridgeRequest, "cwd" | "requestId">) => Promise<unknown>,
+): Promise<string> {
+  const currentValue = await readWorkflowStatuses(runBeads);
   const requiredEntries = REQUIRED_CUSTOM_STATUS_CONFIG.split(",");
   const requiredNames = new Set(requiredEntries.map((entry) => entry.split(":")[0]));
   const currentEntries = currentValue

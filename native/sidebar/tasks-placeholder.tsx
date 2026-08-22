@@ -115,6 +115,7 @@ import {
   priorityLabel,
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
+  readWorkflowStatuses,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
   isDescriptionImageSource,
@@ -1199,18 +1200,21 @@ function ProjectBoardApp() {
       setErrorMessage("");
     }
     try {
+      let customStatusConfig: string;
       if (mode === "initial" || mode === "manual") {
         await ensureIssuePrefix(runBeads, issuePrefix);
-        const nextConfig = await ensureWorkflowStatuses(runBeads);
-        if (nextConfig !== boardColumnConfigRef.current) {
-          boardColumnConfigRef.current = nextConfig;
-          setBoardColumnConfig(nextConfig);
-        }
-        const nextColumns = buildBoardColumns(nextConfig);
-        if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
-          boardColumnsRef.current = nextColumns;
-          setBoardColumns(nextColumns);
-        }
+        customStatusConfig = await ensureWorkflowStatuses(runBeads);
+      } else {
+        customStatusConfig = await readWorkflowStatuses(runBeads);
+      }
+      if (customStatusConfig !== boardColumnConfigRef.current) {
+        boardColumnConfigRef.current = customStatusConfig;
+        setBoardColumnConfig(customStatusConfig);
+      }
+      const nextColumns = buildBoardColumns(customStatusConfig);
+      if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
+        boardColumnsRef.current = nextColumns;
+        setBoardColumns(nextColumns);
       }
       const payload = await runBeads({ action: "listIssues" });
       const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
