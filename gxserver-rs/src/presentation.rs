@@ -723,6 +723,25 @@ fn project_presentation_session(
             .and_then(|cwd| crate::session_git_status::published_session_git_status(&cwd)),
     );
     output.insert("groupId".to_string(), Value::String(group_id.to_string()));
+    /*
+    CDXC:AutoSleepNeverActive 2026-08-22:
+    `lastActiveAt` below falls back to `createdAt` so sorting and Last Active
+    labels always have a timestamp, which leaves a session that has NEVER been
+    active indistinguishable from one last active when it was created. Auto
+    Sleep needs exactly that difference: an agent terminal nobody has prompted
+    yet has no conversation to resume, because the agent publishes its session
+    id at startup but writes no transcript until the first prompt. Sleeping one
+    kills a provider whose stored resume reference points at a conversation
+    that never existed, so the row can never be woken back into that agent.
+    Publish the raw fact instead of asking clients to infer it from a timestamp
+    this projection already rewrote.
+    */
+    output.insert(
+        "hasEverBeenActive".to_string(),
+        Value::Bool(
+            string_field(session, "lastActiveAt").is_some_and(|value| !value.trim().is_empty()),
+        ),
+    );
     output.insert("isFavorite".to_string(), Value::Bool(is_favorite(session)));
     /*
     CDXC:GxserverSessionTitle 2026-07-02-15:10:
@@ -2926,7 +2945,10 @@ mod tests {
             missing.get("providerSessionState").and_then(Value::as_str),
             Some("missing")
         );
-        assert_eq!(missing.get("commandId").and_then(Value::as_str), Some("build"));
+        assert_eq!(
+            missing.get("commandId").and_then(Value::as_str),
+            Some("build")
+        );
         assert_eq!(
             missing
                 .get("sessionPersistenceProvider")

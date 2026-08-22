@@ -1917,10 +1917,12 @@ export interface GxserverSleepSessionParams extends GxserverSessionLifecyclePara
 export interface GxserverSleepSessionResult {
   /*
   Present ONLY when the daemon refused the request. `"keptAwake"` means an
-  automatic sweep hit a session another client is attached to; the session was
-  not touched, so a client must not optimistically mark the row sleeping.
+  automatic sweep hit a session another client is attached to; `"neverActive"`
+  means it hit a session nobody has prompted yet, which has no idle time to
+  measure and no conversation to resume. Either way the session was not touched,
+  so a client must not optimistically mark the row sleeping.
   */
-  declined?: "keptAwake";
+  declined?: "keptAwake" | "neverActive";
   kill?: Record<string, unknown>;
   session: GxserverSessionDomainState;
 }
@@ -2232,6 +2234,17 @@ export interface GxserverPresentationSession {
    */
   gitStatus?: GxserverPresentationSessionGitStatus;
   groupId: string;
+  /**
+   * CDXC:AutoSleepNeverActive 2026-08-22:
+   * Whether this session has EVER entered working or attention, i.e. whether
+   * anybody has prompted it. `lastActiveAt` below cannot answer that: the
+   * projection falls back to `createdAt` so labels and sorting always have a
+   * timestamp, which makes a never-prompted session read as "idle since it was
+   * created". Auto Sleep needs the difference, because an agent terminal with
+   * no conversation yet cannot be resumed after its provider is killed.
+   * Absent from daemons that predate this field; treat that as not-yet-active.
+   */
+  hasEverBeenActive?: boolean;
   isFavorite: boolean;
   isGeneratingFirstPromptTitle: boolean;
   isPinned: boolean;

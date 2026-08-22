@@ -599,21 +599,43 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 && crate::session_keep_awake::sleep_trigger_is_automatic(
                     params.get("sleepTrigger").and_then(Value::as_str),
                 )
-                && (crate::session_keep_awake::is_held_awake(
+            {
+                if crate::session_keep_awake::is_held_awake(
                     &lifecycle.project_id,
                     &lifecycle.session_id,
                 ) || crate::session_chat_queue::session_has_pending_session_chat_queue(
                     repository.connection(),
                     &lifecycle.project_id,
                     &lifecycle.session_id,
-                ))
-            {
+                ) {
+                    let session = require_session(repository, &lifecycle)?;
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "keptAwake", "session": session }),
+                        presentation_session: None,
+                    });
+                }
+                /*
+                CDXC:AutoSleepNeverActive 2026-08-22:
+                A session that has never been active has never been prompted:
+                `lastActiveAt` is written only when a session enters working or
+                attention. An inactivity sweep has no idle time to measure on
+                such a row, and sleeping it is destructive rather than thrifty —
+                an agent publishes its session id at startup but writes no
+                transcript until the first prompt, so waking one resumes a
+                conversation that was never recorded and the terminal is lost.
+                The decision lives here, next to the keep-awake decline, so every
+                client's sweep gets the same answer. A user-triggered Sleep is
+                never declined.
+                */
                 let session = require_session(repository, &lifecycle)?;
-                return Ok(ZmxEndpointOutput {
-                    created_workspace_terminal: None,
-                    result: json!({ "declined": "keptAwake", "session": session }),
-                    presentation_session: None,
-                });
+                if !session_has_ever_been_active(&session) {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "neverActive", "session": session }),
+                        presentation_session: None,
+                    });
+                }
             }
             let target_lifecycle = if endpoint_path == "/api/sleepSession" {
                 "sleeping"
@@ -982,9 +1004,7 @@ fn zmx_session_socket_path(session_name: &str) -> PathBuf {
 /// The live screen plus the tail of the scrollback, read straight off the
 /// daemon's IPC socket. See `CDXC:SessionChatScreenCapture`.
 #[cfg(unix)]
-pub(crate) fn read_zmx_session_screen_capture(
-    zmx_name: &str,
-) -> Result<ZmxHistoryCapture, String> {
+pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
     let socket_path = zmx_session_socket_path(zmx_name);
     let mut stream = std::os::unix::net::UnixStream::connect(&socket_path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::ConnectionRefused {
@@ -1024,8 +1044,7 @@ fn read_zmx_screen_capture_reply(
             format!("zmx session screen capture reply header was unreadable: {error}")
         })?;
         let tag = header[0];
-        let payload_len =
-            u32::from_le_bytes([header[1], header[2], header[3], header[4]]) as usize;
+        let payload_len = u32::from_le_bytes([header[1], header[2], header[3], header[4]]) as usize;
 
         let mut remaining = payload_len;
         let mut tail: Vec<u8> = Vec::new();
@@ -1085,9 +1104,7 @@ scrollback than the cap reports `truncated` and screen-state readers correctly
 decline to conclude anything from it — the behaviour Windows already had.
 */
 #[cfg(not(unix))]
-pub(crate) fn read_zmx_session_screen_capture(
-    zmx_name: &str,
-) -> Result<ZmxHistoryCapture, String> {
+pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
     let zmx = require_bundled_zmx()?;
     let result = run_zmx_interaction_command(
         build_zmx_history_command(zmx_name, &zmx.executable_path),
@@ -3300,6 +3317,20 @@ fn require_session(
                 lifecycle.project_id, lifecycle.session_id
             ))
         })
+}
+
+/// Whether this session has ever entered working or attention.
+///
+/// CDXC:AutoSleepNeverActive 2026-08-22: the durable `lastActiveAt` column is
+/// written only by an activity transition, so its absence is the daemon's own
+/// record that nobody has prompted this terminal yet. Presentation publishes the
+/// same fact as `hasEverBeenActive` because the projected `lastActiveAt` there
+/// falls back to `createdAt`.
+fn session_has_ever_been_active(session: &Value) -> bool {
+    session
+        .get("lastActiveAt")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn require_zmx() -> ZmxEndpointResult<GxserverResolvedTool> {

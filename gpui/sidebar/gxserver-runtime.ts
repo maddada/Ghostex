@@ -17836,12 +17836,13 @@ function createGpuiSidebarSettings(runtimeSettings?: GpuiSidebarRuntimeSettings)
 
 /*
 CDXC:MobileKeepAwake 2026-08-19:
-gxserver answers a declined automatic sleep with `declined: "keptAwake"` and an
-untouched session, which is NOT a failure — another client is attached to that
-terminal. The sweep treats it as "leave this row alone" and moves on.
+gxserver answers a declined automatic sleep with an untouched session and a
+reason, which is NOT a failure: `keptAwake` means another client is attached to
+that terminal, `neverActive` means nobody has prompted it yet. The sweep treats
+either as "leave this row alone" and moves on.
 */
 function gxserverSleepWasDeclined(result: GxserverSleepSessionResult | undefined): boolean {
-  return result?.declined === "keptAwake";
+  return result?.declined !== undefined;
 }
 
 export function createGpuiAutoSleepAgentSessionIds({
@@ -18024,6 +18025,19 @@ function shouldAutoSleepGpuiPresentationAgentSession({
     return false;
   }
   if (session.actions.sleep !== true || !isGpuiAutoSleepAgentTerminalSession(session)) {
+    return false;
+  }
+  /*
+  CDXC:AutoSleepNeverActive 2026-08-22:
+  A session nobody has prompted yet is not "idle for 15 minutes", it has no idle
+  clock at all: `lastActiveAt` below is the daemon's `createdAt` fallback, so an
+  untouched terminal looks stale the moment it ages past the threshold. Sleeping
+  one is destructive — the agent published its session id at startup but wrote no
+  transcript, so the stored resume reference points at a conversation that never
+  existed and the woken terminal cannot get back to that agent. gxserver declines
+  the same sweep with `declined: "neverActive"`; this keeps the sweep from asking.
+  */
+  if (session.hasEverBeenActive !== true) {
     return false;
   }
   if (
