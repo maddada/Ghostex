@@ -68,6 +68,7 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
   startLocalAgentSessionAndSendPrompt(projectId: string, sessionId: string, prompt?: string, renameCommand?: string): Promise<void>;
   createAgentSession(agentId: string, groupId?: string | undefined): Promise<void>;
   searchPreviousSessionsByText(): void;
+  handleGpuiOsIntegrationCommand(payload: unknown): Promise<void>;
   createOsIntegrationTerminal(input: {
     command?: string;
     cwd?: string;
@@ -699,6 +700,47 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       actionId: "openFindPrompts",
       type: "runGhostexHotkeyAction",
     });
+  },
+
+  /*
+  GPUI port of the macOS OS-integration sidebar router (`handleNativeCliCommand`
+  "createQuickTerminal" / "openPaths" in native-sidebar.tsx). Rust owns URL and
+  file parsing, the script Run/Edit/Cancel consent dialog, existence checks,
+  and git-root resolution; this handler only registers daemon projects and
+  creates/focuses sessions through existing reviewed paths. Payloads are
+  first-party fixed shapes from the Rust bridge (bounded action enum plus
+  path/command/title strings); unknown actions surface an honest toast instead
+  of dropping silently.
+
+  CDXC:GxserverRuntimeSplit 2026-08-22:
+  This method was deleted by accident on 2026-08-20 (the Search-by-Text change
+  overwrote its body with `searchPreviousSessionsByText`) while both bridge call
+  sites in `core.ts` stayed, so every `ghostex://` URL, Finder Open-With, and
+  Find "launch session" threw `not a function` in the sidebar. Restored verbatim
+  as a module method; the desktop typecheck gate is what surfaced it.
+  */
+  async handleGpuiOsIntegrationCommand(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
+    const record =
+      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : undefined;
+    const action = normalizeNonEmptyString(record?.action);
+    if (!record || !action) {
+      return;
+    }
+    if (action === "createQuickTerminal") {
+      await this.createOsIntegrationTerminal({
+        command: normalizeNonEmptyString(record.command),
+        cwd: normalizeNonEmptyString(record.cwd),
+        title: normalizeNonEmptyString(record.title),
+      });
+      return;
+    }
+    if (action === "openProjectPaths") {
+      await this.openOsIntegrationProjectPaths(
+        Array.isArray(record.projects) ? record.projects : [],
+      );
+      return;
+    }
+    this.postSidebarActionToast("warning", "Unsupported OS integration action.");
   },
 
   /*

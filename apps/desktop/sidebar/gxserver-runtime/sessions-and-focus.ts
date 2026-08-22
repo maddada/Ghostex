@@ -895,7 +895,17 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       projectId: reference.projectId,
       sessionId: reference.sessionId,
     });
-    this.patchPresentationSession(reference.projectId, reference.sessionId, flags);
+    /*
+    `/api/updateSession` clears a tag with an explicit `null`, but a
+    presentation session models "no tag" as an absent field. Translate the
+    clear so the optimistic patch writes the same shape the daemon will send
+    back, and leave the field untouched when the caller did not name it.
+    */
+    const { sessionTag, ...presentationFlags } = flags;
+    this.patchPresentationSession(reference.projectId, reference.sessionId, {
+      ...presentationFlags,
+      ...(sessionTag === undefined ? {} : { sessionTag: sessionTag ?? undefined }),
+    });
   },
 
   /*
@@ -1016,7 +1026,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     CDXC:GPUISidebarSessionFocus 2026-06-26-04:42:
     GPUI local session focus should follow the macOS sidebar rule that a click selects the target within the current visible workspace projection instead of replacing all visible ownership with a singleton. Preserve live local visible ids and remote ids, materialize the current project's projected visible row, then add the clicked session so last-activity resorting cannot make a second session steal focus back.
     */
-    const liveLocalSessionIds = new Set(
+    const liveLocalSessionIds = new Set<string>(
       (this.presentation?.sessions ?? []).map((session) => session.sessionId),
     );
     const nextVisibleSessionIds = new Set(

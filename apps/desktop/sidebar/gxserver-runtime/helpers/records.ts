@@ -85,8 +85,8 @@ export async function readJson(response: Response): Promise<unknown> {
 
 export function isGxserverRpcSuccess<TResult>(value: unknown): value is GpuiGxserverRpcSuccess<TResult> {
   return (
-    Boolean(value) &&
     typeof value === "object" &&
+    value !== null &&
     (value as Partial<GpuiGxserverRpcSuccess<TResult>>).ok === true &&
     (value as Partial<GpuiGxserverRpcSuccess<TResult>>).product === "gxserver" &&
     "result" in value

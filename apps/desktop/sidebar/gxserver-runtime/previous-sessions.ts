@@ -62,8 +62,8 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
                 query: message.query,
                 sessionTags,
               })
-              .catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
+              .catch((): GxserverPresentationSearchResponse => ({ results: [] }))
+          : Promise.resolve<GxserverPresentationSearchResponse>({ results: [] }),
         ...remoteMachines.map((machine) =>
           this.requestRemoteGxserver<GxserverPresentationSearchResponse>(
             machine.machineId,
@@ -76,7 +76,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
               query: message.query,
               sessionTags,
             },
-          ).catch(() => ({ results: [] })),
+          ).catch((): GxserverPresentationSearchResponse => ({ results: [] })),
         ),
       ]);
       /*
@@ -94,7 +94,12 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       this.postPreviousSessionsResult(
         message.requestId,
         message.query,
-        [...localResponse.results.map(gxserverSearchResultToPreviousSessionItem), ...remoteItems]
+        [
+          ...localResponse.results.map((result) =>
+            gxserverSearchResultToPreviousSessionItem(result),
+          ),
+          ...remoteItems,
+        ]
           .sort(comparePreviousSessionItemsByClosedTime),
         localResponse.cursor ?? remoteResponses.find((response) => response.cursor)?.cursor,
       );

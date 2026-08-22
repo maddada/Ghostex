@@ -1018,7 +1018,13 @@ export type SidebarPlayCompletionSoundMessage = {
 export type SidebarOrderSyncKind = "agent" | "command";
 
 export type SidebarOrderSyncResultMessage = {
-  itemIds: string[];
+  /**
+   * The daemon answers an order mutation with `itemIds?: readonly string[]`
+   * (`GxserverSidebarHudSettingsMutationResult`); this message only relays that
+   * confirmation, so it carries the same read-only array instead of forcing
+   * every host to copy it.
+   */
+  itemIds: readonly string[];
   kind: SidebarOrderSyncKind;
   requestId: string;
   status: "error" | "success";

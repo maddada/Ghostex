@@ -78,7 +78,12 @@ export function createGpuiRemotePresentationSidebarGroups({
     if (!presentation) {
       return [];
     }
-    const projectsById = new Map(
+    /*
+    Keyed by plain string: the lookup key is decoded out of a remote
+    presentation group id, which is an opaque string rather than a
+    `GxserverProjectId` the compiler can vouch for.
+    */
+    const projectsById = new Map<string, GxserverPresentationSnapshot["projects"][number]>(
       presentation.projects.map((project) => [project.projectId, project]),
     );
     const orderedGroups = orderGpuiRemotePresentationGroups(

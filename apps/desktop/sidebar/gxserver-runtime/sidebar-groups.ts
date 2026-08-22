@@ -1045,7 +1045,12 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     presentation: GxserverPresentationSnapshot,
     projectProjection: GpuiPresentationProjectProjectionMetadata,
   ): SidebarSessionGroup[] {
-    const projectsById = new Map(
+    /*
+    Keyed by plain string: the lookup key is decoded out of a presentation group
+    id, which is an opaque string rather than a `GxserverProjectId` the compiler
+    can vouch for.
+    */
+    const projectsById = new Map<string, GxserverPresentationSnapshot["projects"][number]>(
       presentation.projects.map((project) => [project.projectId, project]),
     );
     const sessionsByProject = new Map<string, Map<string, GxserverPresentationSession>>();
@@ -1304,7 +1309,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     presentation: GxserverPresentationSnapshot,
     projectProjection: GpuiPresentationProjectProjectionMetadata,
   ): void {
-    const projectIds = new Set(presentation.projects.map((project) => project.projectId));
+    const projectIds = new Set<string>(presentation.projects.map((project) => project.projectId));
     if (
       this.quickAutomationsOverviewOpen &&
       this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID

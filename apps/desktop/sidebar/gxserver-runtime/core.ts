@@ -486,11 +486,19 @@ export class GpuiSidebarRuntime {
       reached `handleSidebarMessage`/gxserver and no `/rename` was staged in
       the terminal. Route exactly these known command types to the runtime's
       own sidebar-message handler instead.
+
+      CDXC:GxserverRuntimeSplit 2026-08-22:
+      `removeProject` (Settings → Projects → Remove) is dispatched by Rust over
+      this same bridge and belongs in that list: it too has no inbound React
+      branch, so it was reaching the message source and dying there. The union
+      in `GpuiSidebarHostMessage` is what makes the remaining fall-through
+      provably an extension-to-sidebar message.
       */
       if (
         message.type === "renameSession" ||
         message.type === "scheduleDelayedSend" ||
         message.type === "cancelDelayedSend" ||
+        message.type === "removeProject" ||
         message.type === "toggleCloseAfterDone"
       ) {
         void this.handleSidebarMessage(message);

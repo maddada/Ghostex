@@ -92,6 +92,28 @@ export type GpuiSidebarRuntimeSettingsSnapshot = {
   showBetaFeatures: boolean;
 };
 
+/**
+ * Everything Rust's `dispatch_gpui_sidebar_host_message` can hand to
+ * `onSidebarHostMessage`. Beside the extension-to-sidebar messages the React
+ * app consumes, Rust also forwards exactly these sidebar-owned commands, which
+ * the runtime answers itself through `handleSidebarMessage` — the React app has
+ * no inbound branch for them, so relaying one into the message source would
+ * silently drop it. Keep this union in step with the Rust dispatch sites.
+ */
+export type GpuiSidebarHostMessage =
+  | ExtensionToSidebarMessage
+  | Extract<
+      SidebarToExtensionMessage,
+      {
+        type:
+          | "cancelDelayedSend"
+          | "removeProject"
+          | "renameSession"
+          | "scheduleDelayedSend"
+          | "toggleCloseAfterDone";
+      }
+    >;
+
 export type GhostexGpuiSidebarBridge = {
   browserTabs?: readonly GpuiBrowserTabSummary[];
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
@@ -130,7 +152,7 @@ export type GhostexGpuiSidebarBridge = {
   onOsIntegrationCommand?: (payload: unknown) => void;
   onProjectBoardConversationRequest?: (payload: unknown) => void;
   onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
-  onSidebarHostMessage?: (message: ExtensionToSidebarMessage | SidebarToExtensionMessage) => void;
+  onSidebarHostMessage?: (message: GpuiSidebarHostMessage) => void;
   onStatusPetActivation?: (payload: unknown) => void;
   onTitlebarGitAction?: (payload: unknown) => void;
   onWorktreeModalCommand?: (payload: unknown) => void;

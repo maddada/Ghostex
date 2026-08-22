@@ -32,6 +32,7 @@ import {
   haveSameSidebarProjectDiffStats,
   isGpuiConfirmedOpenPullRequest,
   isGpuiConfirmedOpenRemotePullRequest,
+  isGpuiRemotePendingGitCommitRequest,
   isMissingGpuiBeadsDatabaseError,
   mergeGpuiGitChangedFiles,
   normalizeGpuiGitHubRemoteUrl,
@@ -321,7 +322,12 @@ export const gpuiSidebarRuntimeGitMethods = {
   */
   getVisibleProjectDiffStatsRefreshTargets(this: GpuiSidebarRuntime): GpuiProjectDiffStatsRefreshTarget[] {
     const targetsByKey = new Map<string, GpuiProjectDiffStatsRefreshTarget>();
-    const localProjectsById = new Map(
+    /*
+    Keyed by plain string: the lookup keys come from rendered group metadata
+    (`projectContext.editor.projectId`), which is an opaque id string rather
+    than a `GxserverProjectId` the compiler can vouch for.
+    */
+    const localProjectsById = new Map<string, GxserverProjectDomainState>(
       this.domainProjects.map((project) => [project.projectId, project]),
     );
     for (const group of this.latestGroups) {
@@ -1387,7 +1393,7 @@ export const gpuiSidebarRuntimeGitMethods = {
       this.publishHudPatch();
       return;
     }
-    if (pending.remoteReference) {
+    if (isGpuiRemotePendingGitCommitRequest(pending)) {
       await this.confirmRemoteSidebarGitCommit(pending, message);
       return;
     }
@@ -1673,7 +1679,7 @@ export const gpuiSidebarRuntimeGitMethods = {
       this.publishHudPatch();
       return;
     }
-    if (pending.remoteReference) {
+    if (isGpuiRemotePendingGitCommitRequest(pending)) {
       await this.confirmRemoteSidebarGitDirectMerge(pending, message);
       return;
     }

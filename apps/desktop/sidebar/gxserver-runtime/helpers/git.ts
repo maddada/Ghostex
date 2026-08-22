@@ -14,7 +14,9 @@ import {
 } from "../constants";
 import type {
   GpuiGitCommitModalCommand,
+  GpuiPendingGitCommitRequest,
   GpuiRemoteCreatePullRequestResult,
+  GpuiRemoteProjectReference,
   GpuiWorktreeMetadata,
 } from "../types-and-protocol";
 import type {
@@ -531,6 +533,18 @@ export function chunkUntrackedLineCountPaths(paths: readonly string[]): string[]
     chunks.push(paths.slice(start, start + GPUI_UNTRACKED_LINE_COUNT_BATCH_SIZE));
   }
   return chunks;
+}
+
+/*
+A pending commit request carries `remoteReference` only for remote projects, and
+the remote confirm handlers require it. A bare `if (pending.remoteReference)`
+narrows the property but not the request, so state that relationship once here
+instead of at every remote branch.
+*/
+export function isGpuiRemotePendingGitCommitRequest(
+  pending: GpuiPendingGitCommitRequest,
+): pending is GpuiPendingGitCommitRequest & { remoteReference: GpuiRemoteProjectReference } {
+  return pending.remoteReference !== undefined;
 }
 
 export function haveSameSidebarProjectDiffStats(
