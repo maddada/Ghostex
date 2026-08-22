@@ -1,6 +1,7 @@
 import { DragDropProvider, type DragDropEventHandlers } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -177,7 +178,7 @@ import {
   SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_VERSION_OPTIONS,
-  TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS,
+  WEB_LINK_OPEN_TARGET_OPTIONS,
   applySidebarSettingsPreset,
   areDiagnosticLoggingSettingsEqual,
   getSessionTitleGenerationCommandPreview,
@@ -219,7 +220,7 @@ import {
   type SidebarSide,
   type SidebarVersion,
   type TerminalBackgroundImageFit,
-  type TerminalDevServerOpenTarget,
+  type WebLinkOpenTarget,
   type TerminalCursorStyle,
   type ghostexSettingsPatch,
   type ghostexSettingsUpdateSource,
@@ -533,6 +534,22 @@ type SettingsSidebarPageSection = {
   active: boolean;
   id: string;
   onSelect: () => void;
+  /*
+   * CDXC:SettingsNavigation 2026-08-19:
+   * General groups several rendered section headers each ("Tools" holds
+   * Browser, Editor, and Dev Servers), and those headers had no rail entry at
+   * all. They expand as a third level under the active group instead of being
+   * promoted to top-level destinations, which would undo the deliberate
+   * "fewer sidebar destinations" grouping.
+   */
+  subsections?: readonly SettingsSidebarPageSubsection[];
+  title: string;
+};
+
+type SettingsSidebarPageSubsection = {
+  active: boolean;
+  id: string;
+  onSelect: () => void;
   title: string;
 };
 
@@ -746,16 +763,18 @@ const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<
     "terminalScrollToBottomWhenTyping",
   ],
   tools: [
-    "openTerminalLinksInApp",
+    "webLinkOpenTarget",
     "codeServerLinkVscodeUserConfig",
     "codeServerUseVscodeInsidersUserConfig",
     "showUntrackedProjectDiffWhenNoTrackedChanges",
     /*
      * CDXC:TerminalDevServers 2026-06-23-19:22:
-     * Dev-server discovery preferences belong under Terminal settings because they govern terminal-output detection and launch choices, while remaining separate from Ghostty config-backed terminal emulator controls. Keep the launch control to system default versus internal browser instead of presenting per-browser checkboxes.
+     * Dev-server discovery preferences belong under Terminal settings because they govern terminal-output detection, while remaining separate from Ghostty config-backed terminal emulator controls.
+     *
+     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * Where a detected URL opens is no longer a Dev Servers row; it reads the Browser section's single web-link target.
      */
     "terminalDevServerDetectionEnabled",
-    "terminalDevServerOpenTarget",
     "terminalDevServerIgnoredPortRules",
   ],
   notifications: [
@@ -837,7 +856,6 @@ const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   ],
   terminalDevServers: [
     "terminalDevServerDetectionEnabled",
-    "terminalDevServerOpenTarget",
     "terminalDevServerIgnoredPortRules",
   ],
   builtInFeatures: [
@@ -846,7 +864,7 @@ const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     "automateViewTabHidden",
     "docsViewTabHidden",
   ],
-  browser: ["openTerminalLinksInApp"],
+  browser: ["webLinkOpenTarget"],
   editor: [
     "codeServerLinkVscodeUserConfig",
     "codeServerUseVscodeInsidersUserConfig",
@@ -889,6 +907,97 @@ const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   storage: ["ghostexFolderStats"],
   beta: ["showBetaFeatures"],
 } satisfies Record<MainSettingsScrollTargetId, readonly string[]>;
+
+type MainSettingsSubsectionId =
+  | "appIcon"
+  | "autoSleep"
+  | "beta"
+  | "browser"
+  | "debugging"
+  | "editor"
+  | "power"
+  | "sessionCards"
+  | "sidebar"
+  | "sidebarTags"
+  | "storage"
+  | "terminal"
+  | "terminalBehavior"
+  | "terminalDevServers"
+  | "terminalScrolling"
+  | "theming";
+
+type MainSettingsSubsectionNavigationItem = {
+  id: MainSettingsSubsectionId;
+  title: string;
+};
+
+/*
+ * CDXC:SettingsNavigation 2026-08-19:
+ * The rail rows for each General group, in the order the sections render on the
+ * page. A group's own anchor is listed first so its header (Browser under
+ * Tools, Terminal under Terminal) is reachable by name rather than only as the
+ * side effect of clicking the group. Groups with a single section stay flat and
+ * are omitted here.
+ */
+const MAIN_SETTINGS_SUBSECTION_NAVIGATION: Partial<
+  Record<MainSettingsSectionId, readonly MainSettingsSubsectionNavigationItem[]>
+> = {
+  advanced: [
+    { id: "beta", title: "Experimental" },
+    { id: "debugging", title: "Debugging" },
+  ],
+  appearance: [
+    { id: "theming", title: "Theming" },
+    { id: "appIcon", title: "App Icon" },
+  ],
+  sidebar: [
+    { id: "sidebar", title: "Sidebar" },
+    { id: "sessionCards", title: "Session Cards" },
+    { id: "sidebarTags", title: "Sidebar Tags" },
+  ],
+  system: [
+    { id: "autoSleep", title: "Auto Sleep" },
+    { id: "power", title: "Power" },
+    { id: "storage", title: "Storage" },
+  ],
+  terminal: [
+    { id: "terminal", title: "Terminal" },
+    { id: "terminalBehavior", title: "Terminal Behavior" },
+    { id: "terminalScrolling", title: "Terminal Scrolling" },
+  ],
+  tools: [
+    { id: "browser", title: "Browser" },
+    { id: "editor", title: "Editor" },
+    { id: "terminalDevServers", title: "Dev Servers" },
+  ],
+};
+
+const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: Partial<
+  Record<MainSettingsScrollTargetId, MainSettingsSectionId>
+> = Object.fromEntries(
+  (
+    Object.entries(MAIN_SETTINGS_SUBSECTION_NAVIGATION) as Array<
+      [MainSettingsSectionId, readonly MainSettingsSubsectionNavigationItem[]]
+    >
+  ).flatMap(([sectionId, subsections]) =>
+    subsections.map((subsection) => [subsection.id, sectionId] as const),
+  ),
+);
+
+/*
+ * CDXC:SettingsNavigation 2026-08-19:
+ * Scroll tracking now reports the exact section header in view so a nested row
+ * can highlight itself. The rail's top-level row still highlights by group, so
+ * map the tracked anchor back to the group that owns it.
+ */
+function getMainSettingsSectionGroupId(
+  scrollTargetId: MainSettingsScrollTargetId,
+): MainSettingsSectionId {
+  return (
+    MAIN_SETTINGS_SUBSECTION_PARENT_IDS[scrollTargetId] ??
+    (scrollTargetId as MainSettingsSectionId)
+  );
+}
 
 /**
  * CDXC:SidebarSessionRename 2026-06-26-06:27:
@@ -1372,7 +1481,7 @@ export function SettingsModal({
   const showAdvancedSettings = draft.showAdvancedSettings;
   const [settingsSearchQuery, setSettingsSearchQuery] = useState("");
   const [activeMainSettingsSectionId, setActiveMainSettingsSectionId] =
-    useState<MainSettingsSectionId>("sidebar");
+    useState<MainSettingsScrollTargetId>("sidebar");
   const [activeHotkeySettingsSectionId, setActiveHotkeySettingsSectionId] =
     useState<HotkeySettingsSectionId>("general");
   const [expandedSettingsSidebarPages, setExpandedSettingsSidebarPages] = useState<
@@ -1751,10 +1860,11 @@ export function SettingsModal({
     ),
     browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", [
       {
-        key: "openTerminalLinksInApp",
+        key: "webLinkOpenTarget",
+        options: WEB_LINK_OPEN_TARGET_OPTIONS,
         subtitle:
-          "Open Command-clicked terminal web links as tabs in the project Browser view instead of the system browser.",
-        title: "Open terminal links in embedded browser",
+          "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
+        title: "Open links in",
       },
     ]),
     editor: getSettingsSectionSearch(settingsSearchQuery, "Editor", [
@@ -2437,12 +2547,6 @@ export function SettingsModal({
         title: "Detect running servers in terminals",
       },
       {
-        key: "terminalDevServerOpenTarget",
-        options: TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS,
-        subtitle: "Open detected server URLs in the system default browser or internal browser.",
-        title: "Open detected servers in",
-      },
-      {
         key: "terminalDevServerIgnoredPortRules",
         options: [
           { label: "9229", value: "9229" },
@@ -2727,7 +2831,7 @@ export function SettingsModal({
     terminalScrolling: ghosttyScrollingSectionRef,
     theming: themingSectionRef,
   };
-  const scrollMainSettingsSectionIntoView = (sectionId: MainSettingsSectionId) => {
+  const scrollMainSettingsSectionIntoView = (sectionId: MainSettingsScrollTargetId) => {
     getMainSettingsSectionRef(sectionId, mainSettingsSectionRefs).current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
@@ -2736,6 +2840,7 @@ export function SettingsModal({
   const visibleMainSettingsSectionNavigation: Array<
     SettingsSectionNavigationItem<MainSettingsSectionId> & {
       searchResult: SettingsSectionSearchResult;
+      subsections: readonly MainSettingsSubsectionNavigationItem[];
     }
   > =
     (isFirstLaunchSetup
@@ -2748,19 +2853,41 @@ export function SettingsModal({
           ...mainSettingsSectionNavigation,
         ]
       : mainSettingsSectionNavigation
-    ).filter((section) =>
-      section.id === "agents"
-        ? mainSectionVisible("agents", settingsSearch.sidebar)
-        : mainSectionVisible(section.id, section.searchResult),
+    )
+      .filter((section) =>
+        section.id === "agents"
+          ? mainSectionVisible("agents", settingsSearch.sidebar)
+          : mainSectionVisible(section.id, section.searchResult),
+      )
+      .map((section) => ({
+        ...section,
+        /*
+         * CDXC:SettingsNavigation 2026-08-19:
+         * A nested row must not outlive the section it points at, so hide the
+         * ones a search query, Show Advanced, or an unavailable capability
+         * (Power without experimental features, App Icon off macOS) already
+         * removed from the page.
+         */
+        subsections: (MAIN_SETTINGS_SUBSECTION_NAVIGATION[section.id] ?? []).filter((subsection) =>
+          mainSubsectionVisible(subsection.id, settingsSearch[subsection.id]),
+        ),
+      }));
+  const getMainSettingsSectionMeasurementItems = (): SettingsSectionMeasurementItem<MainSettingsScrollTargetId>[] =>
+    visibleMainSettingsSectionNavigation.flatMap((section) =>
+      (section.subsections.length > 0
+        ? section.subsections.map((subsection) => subsection.id)
+        : [section.id as MainSettingsScrollTargetId]
+      ).map((scrollTargetId) => ({
+        id: scrollTargetId,
+        ref: getMainSettingsSectionRef(scrollTargetId, mainSettingsSectionRefs),
+      })),
     );
-  const getMainSettingsSectionMeasurementItems = (): SettingsSectionMeasurementItem<MainSettingsSectionId>[] =>
-    visibleMainSettingsSectionNavigation.map((section) => ({
-      id: section.id,
-      ref: getMainSettingsSectionRef(section.id, mainSettingsSectionRefs),
-    }));
+  const activeMainSettingsGroupId = getMainSettingsSectionGroupId(activeMainSettingsSectionId);
   const hasVisibleMainSettings = visibleMainSettingsSectionNavigation.length > 0;
   const visibleMainSettingsSectionIds = visibleMainSettingsSectionNavigation
-    .map((section) => section.id)
+    .map((section) =>
+      [section.id, ...section.subsections.map((subsection) => subsection.id)].join(">"),
+    )
     .join("|");
   const hotkeyDefinitionsById = useMemo<HotkeySettingsDefinitionById>(
     () => new Map(GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition])),
@@ -2850,13 +2977,32 @@ export function SettingsModal({
       icon: IconSettings,
       id: "settings",
       sections: visibleMainSettingsSectionNavigation.map((section) => ({
-        active: activeTab === "settings" && activeMainSettingsSectionId === section.id,
+        active: activeTab === "settings" && activeMainSettingsGroupId === section.id,
         id: section.id,
         onSelect: () => {
           setActiveMainSettingsSectionId(section.id);
           setActiveTab("settings");
           requestAnimationFrame(() => scrollMainSettingsSectionIntoView(section.id));
         },
+        /*
+         * CDXC:SettingsNavigation 2026-08-19:
+         * A group whose first anchor carries the group's own name (Sidebar,
+         * Terminal) would otherwise render "Sidebar > Sidebar". Drop that row
+         * from the rail only: scroll tracking still measures the anchor, so
+         * reading that header keeps the group row highlighted.
+         */
+        subsections: section.subsections
+          .filter((subsection) => subsection.title !== section.title)
+          .map((subsection) => ({
+            active: activeTab === "settings" && activeMainSettingsSectionId === subsection.id,
+            id: subsection.id,
+            onSelect: () => {
+              setActiveMainSettingsSectionId(subsection.id);
+              setActiveTab("settings");
+              requestAnimationFrame(() => scrollMainSettingsSectionIntoView(subsection.id));
+            },
+            title: subsection.title,
+          })),
         title: section.title,
       })),
       title: "General",
@@ -4057,20 +4203,31 @@ export function SettingsModal({
             {mainSubsectionVisible("browser", settingsSearch.browser) ? (
             <SettingsSection sectionRef={browserSectionRef} title="Browser">
               {/* CDXC:BrowserPanes 2026-05-27-07:24: Settings no longer exposes Chrome Canary attachment. Browser actions always open in workspace browser panes, leaving this section focused on pane behavior controls. */}
-              {mainSettingVisible(settingsSearch.browser, "openTerminalLinksInApp") ? (
+              {mainSettingVisible(settingsSearch.browser, "webLinkOpenTarget") ? (
               /*
                * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
                * Command-clicked terminal web links route into the project
                * Browser view by default, and the in-app toast points users at
-               * this toggle. Keep it a normal visible Browser setting so the
+               * this control. Keep it a normal visible Browser setting so the
                * toast's "change in settings" hint stays discoverable.
+               *
+               * CDXC:GPUISessionChatLinks 2026-08-18:
+               * The same control also routes web links clicked in session chat,
+               * so one Browser setting covers every agent-sent web link.
+               *
+               * CDXC:WebLinkOpenTarget 2026-08-19:
+               * Detected dev-server rows read it too. This replaced a Browser
+               * toggle plus a Dev Servers dropdown that answered the same
+               * question with opposite defaults; a select rather than a toggle
+               * because the destination, not an on/off state, is the choice.
                */
-              <ToggleField
-                checked={draft.openTerminalLinksInApp}
-                description="Open Command-clicked terminal web links as tabs in the project Browser view instead of the system browser."
-                label="Open terminal links in embedded browser"
-                {...getSettingModificationProps("openTerminalLinksInApp")}
-                onChange={(checked) => updateDraft("openTerminalLinksInApp", checked)}
+              <SelectField
+                description="Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser."
+                label="Open links in"
+                {...getSettingModificationProps("webLinkOpenTarget")}
+                onChange={(value) => updateDraft("webLinkOpenTarget", value as WebLinkOpenTarget)}
+                options={WEB_LINK_OPEN_TARGET_OPTIONS}
+                value={draft.webLinkOpenTarget}
               />
               ) : null}
             </SettingsSection>
@@ -4673,7 +4830,7 @@ export function SettingsModal({
 
             {mainSubsectionVisible("terminalDevServers", settingsSearch.terminalDevServers) ? (
               <SettingsSection
-                description="Choose how Ghostex discovers running dev servers, where detected server URLs open, and which ports stay hidden."
+                description="Choose how Ghostex discovers running dev servers and which ports stay hidden. Detected URLs follow Browser → Open links in."
                 sectionRef={terminalDevServersSectionRef}
                 title="Dev Servers"
               >
@@ -4693,24 +4850,6 @@ export function SettingsModal({
                     onChange={(checked) =>
                       updateDraft("terminalDevServerDetectionEnabled", checked)
                     }
-                  />
-                ) : null}
-                {mainSettingVisible(
-                  settingsSearch.terminalDevServers,
-                  "terminalDevServerOpenTarget",
-                ) ? (
-                  <SelectField
-                    description="Open detected server URLs in the system default browser or internal browser."
-                    label="Open detected servers in"
-                    {...getSettingModificationProps("terminalDevServerOpenTarget")}
-                    onChange={(value) =>
-                      updateDraft(
-                        "terminalDevServerOpenTarget",
-                        value as TerminalDevServerOpenTarget,
-                      )
-                    }
-                    options={TERMINAL_DEV_SERVER_OPEN_TARGET_OPTIONS}
-                    value={draft.terminalDevServerOpenTarget}
                   />
                 ) : null}
                 {mainSettingVisible(
@@ -5666,16 +5805,40 @@ function SettingsSidebarNavigation({
               {hasSections && expanded ? (
                 <div className="settings-sidebar-subsection-list">
                   {page.sections?.map((section) => (
-                    <Button
-                      className="settings-section-sidebar-button settings-sidebar-subsection-button"
-                      data-active={section.active ? "true" : "false"}
-                      key={section.id}
-                      onClick={section.onSelect}
-                      type="button"
-                      variant="ghost"
-                    >
-                      {section.title}
-                    </Button>
+                    <Fragment key={section.id}>
+                      <Button
+                        className="settings-section-sidebar-button settings-sidebar-subsection-button"
+                        data-active={section.active ? "true" : "false"}
+                        onClick={section.onSelect}
+                        type="button"
+                        variant="ghost"
+                      >
+                        {section.title}
+                      </Button>
+                      {/*
+                       * CDXC:SettingsNavigation 2026-08-19:
+                       * Nested rows belong to the section being read, so they
+                       * appear under the active group only. Showing every
+                       * group's rows at once would turn a nine-row rail into a
+                       * twenty-row one and bury the categories.
+                       */}
+                      {section.active && section.subsections?.length ? (
+                        <div className="settings-sidebar-nested-subsection-list">
+                          {section.subsections.map((subsection) => (
+                            <Button
+                              className="settings-section-sidebar-button settings-sidebar-subsection-button settings-sidebar-nested-subsection-button"
+                              data-active={subsection.active ? "true" : "false"}
+                              key={subsection.id}
+                              onClick={subsection.onSelect}
+                              type="button"
+                              variant="ghost"
+                            >
+                              {subsection.title}
+                            </Button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </div>
               ) : null}

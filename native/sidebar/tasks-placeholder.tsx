@@ -87,6 +87,7 @@ import {
   boardColumnNameError,
   boardStatusBeadsValue,
   boardStatusLabel,
+  boardTagFilterOptions,
   buildAgentWorkPrompt,
   buildBoardColumns,
   managedBoardColumnNames,
@@ -118,6 +119,7 @@ import {
   readWorkflowStatuses,
   removeDescriptionImageReference,
   resolveAssignedAgentId,
+  resolveBoardTagFilter,
   isDescriptionImageSource,
   sortBoardTickets,
   ticketCreatorName,
@@ -130,6 +132,7 @@ import {
   type BoardEstimateFilter,
   type BoardPriorityFilter,
   type BoardSortOption,
+  type BoardTagFilter,
   type ProjectBoardCommentMetadata,
   type ProjectBoardViewPreferences,
   type BeadsIssue,
@@ -668,6 +671,7 @@ function ProjectBoardApp() {
   const [estimateFilter, setEstimateFilter] = useState<BoardEstimateFilter>(
     storedViewPreferences.estimateFilter,
   );
+  const [tagFilter, setTagFilter] = useState<BoardTagFilter>(storedViewPreferences.tagFilter);
   const [sortOption, setSortOption] = useState<BoardSortOption>(storedViewPreferences.sortOption);
   const [detail, setDetail] = useState<DetailDraft>(createEmptyDetailDraft);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -919,12 +923,12 @@ function ProjectBoardApp() {
     try {
       window.localStorage.setItem(
         PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
-        JSON.stringify({ estimateFilter, priorityFilter, sortOption }),
+        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter }),
       );
     } catch {
       // Keep the current in-memory preferences when localStorage is unavailable.
     }
-  }, [estimateFilter, priorityFilter, sortOption]);
+  }, [estimateFilter, priorityFilter, sortOption, tagFilter]);
 
   const openNewTicket = useCallback((status: BoardStatusKey = "todo") => {
     setNewTicket((current) => ({ ...current, status }));
@@ -1446,9 +1450,25 @@ function ProjectBoardApp() {
     };
   }, [activeSurfaceTab, experimentalFeaturesEnabled, loadAutomationState, loadConversationState, loadTickets]);
 
+  const tagFilterSelectItems = useMemo(
+    () =>
+      boardTagFilterOptions(tickets).map((tag) => ({
+        label: tag === "all" ? "All tags" : tag,
+        value: tag,
+      })),
+    [tickets],
+  );
+  const activeTagFilter = useMemo(
+    () =>
+      resolveBoardTagFilter(
+        tagFilter,
+        tagFilterSelectItems.map((item) => item.value),
+      ),
+    [tagFilter, tagFilterSelectItems],
+  );
   const filteredTickets = useMemo(
-    () => filterBoardTickets(tickets, searchQuery, priorityFilter, estimateFilter),
-    [estimateFilter, priorityFilter, searchQuery, tickets],
+    () => filterBoardTickets(tickets, searchQuery, priorityFilter, estimateFilter, activeTagFilter),
+    [activeTagFilter, estimateFilter, priorityFilter, searchQuery, tickets],
   );
 
   const ticketsByColumn = useMemo(() => {
@@ -2971,6 +2991,18 @@ function ProjectBoardApp() {
               ))}
             </SelectContent>
           </Select>
+          <select
+            aria-label="Filter by tag"
+            className="project-board-filter-select project-board-native-filter-select"
+            onChange={(event) => setTagFilter(event.currentTarget.value as BoardTagFilter)}
+            value={activeTagFilter}
+          >
+            {tagFilterSelectItems.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <select
             aria-label="Sort tickets"
             className="project-board-filter-select project-board-native-filter-select"

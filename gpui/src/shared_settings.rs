@@ -62,7 +62,7 @@ const DEFAULT_TERMINAL_SCROLLBAR: &str = "system";
 const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_DISCRETE: f64 = 1.0;
 const DEFAULT_TERMINAL_MOUSE_SCROLL_MULTIPLIER_PRECISION: f64 = 1.0;
 const DEFAULT_TERMINAL_SCROLL_TO_BOTTOM_WHEN_TYPING: bool = true;
-const DEFAULT_OPEN_TERMINAL_LINKS_IN_APP: bool = true;
+const DEFAULT_WEB_LINKS_OPEN_IN_APP: bool = true;
 const DEFAULT_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
 const MIN_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
 const MAX_TERMINAL_PANE_PADDING_PX: f64 = 64.0;
@@ -877,9 +877,17 @@ impl SharedSidebarSettingsSnapshot {
             .unwrap_or(DEFAULT_TERMINAL_CLIPBOARD_PASTE_PROTECTION)
     }
 
-    pub fn open_terminal_links_in_app(&self) -> bool {
-        strict_bool_field(&self.object, "openTerminalLinksInApp")
-            .unwrap_or(DEFAULT_OPEN_TERMINAL_LINKS_IN_APP)
+    /*
+    CDXC:WebLinkOpenTarget 2026-08-19:
+    Command-clicked terminal links, session chat links, and detected dev-server
+    rows share one destination. The settings file is written by the sidebar, so
+    an install that has not saved settings since the merge still carries the two
+    legacy keys: read them in the same precedence the TypeScript normalizer
+    uses, or every one of those users would silently jump to whichever default
+    this accessor happened to pick.
+    */
+    pub fn web_links_open_in_app(&self) -> bool {
+        web_links_open_in_app_from_object(&self.object)
     }
 
     pub fn terminal_pane_padding_px(&self) -> (f32, f32) {
@@ -2199,6 +2207,27 @@ fn shared_settings_iso8601_utc_millis_like(value: &str) -> bool {
 
 fn strict_bool_field(object: &Map<String, Value>, key: &str) -> Option<bool> {
     object.get(key)?.as_bool()
+}
+
+pub fn web_links_open_in_app_from_object(object: &Map<String, Value>) -> bool {
+    if let Some(target) = object.get("webLinkOpenTarget").and_then(Value::as_str) {
+        match target {
+            "internal-browser" => return true,
+            "system-default-browser" => return false,
+            _ => {}
+        }
+    }
+    if let Some(open_in_app) = strict_bool_field(object, "openTerminalLinksInApp") {
+        return open_in_app;
+    }
+    match object
+        .get("terminalDevServerOpenTarget")
+        .and_then(Value::as_str)
+    {
+        Some("internal-browser") => true,
+        Some("system-default-browser") => false,
+        _ => DEFAULT_WEB_LINKS_OPEN_IN_APP,
+    }
 }
 
 fn normalize_keep_awake_duration_minutes(value: Option<&Value>) -> SharedKeepAwakeDurationMinutes {
