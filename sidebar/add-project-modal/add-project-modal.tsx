@@ -8,8 +8,10 @@ import {
   IconCornerLeftUp,
   IconDeviceDesktop,
   IconFolder,
+  IconFolderCheck,
   IconFolderPlus,
   IconFolderRoot,
+  IconGitBranch,
   IconLink,
   IconSearch,
   IconServer,
@@ -24,7 +26,9 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CommandDialog } from "@/components/ui/command";
+import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 import { AppTooltip } from "../app-tooltip";
@@ -42,6 +46,7 @@ import {
   resolveProjectPathForDispatch,
 } from "../remote-project-picker/remote-project-paths";
 import { filterBrowseEntries } from "../remote-project-picker/remote-command-palette-logic";
+import { isRepositoryCloneBranchNameInputValid } from "../../shared/repository-clone";
 import {
   ADD_PROJECT_ROOT_BROWSE_PATH,
   addProjectEmptyStateMessage,
@@ -63,6 +68,7 @@ import type {
   AddProjectBrowseEntry,
   AddProjectBrowseResult,
   AddProjectCloneJob,
+  AddProjectClonePreview,
   AddProjectMachineOption,
   AddProjectModalProps,
   AddProjectProviderId,
@@ -119,15 +125,27 @@ const ADD_PROJECT_ACTION_BUTTON_CLASS =
 const ADD_PROJECT_PATH_BAR_CLASS =
   "h-10 bg-input/30 has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0";
 
-type AddProjectBusyKind = "add" | "clone" | "createFolder" | "lookup";
+type AddProjectBusyKind = "add" | "clone" | "createFolder" | "lookup" | "preview";
 
 interface AddProjectCloneFlow {
   readonly remoteUrl: string;
   readonly repository: AddProjectRepositoryInfo | null;
   readonly repositoryInput: string;
   readonly source: AddProjectSourceId;
-  readonly step: "confirm" | "repository";
+  readonly step: "destination" | "repository" | "review";
 }
+
+interface AddProjectCloneOptions {
+  readonly branchName: string;
+  readonly cloneMainOnly: boolean;
+  readonly shallowClone: boolean;
+}
+
+const DEFAULT_CLONE_OPTIONS: AddProjectCloneOptions = {
+  branchName: "",
+  cloneMainOnly: false,
+  shallowClone: false,
+};
 
 type AddProjectView =
   | { readonly kind: "machines" }
@@ -200,6 +218,9 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   const [isLoadingMachines, setIsLoadingMachines] = useState(true);
   const [viewStack, setViewStack] = useState<readonly AddProjectView[]>([]);
   const [cloneFlow, setCloneFlow] = useState<AddProjectCloneFlow | null>(null);
+  const [cloneOptions, setCloneOptions] = useState<AddProjectCloneOptions>(DEFAULT_CLONE_OPTIONS);
+  const [clonePreview, setClonePreview] = useState<AddProjectClonePreview | null>(null);
+  const [cloneDestinationPath, setCloneDestinationPath] = useState("");
   const [query, setQuery] = useState("");
   const [highlightedItemValue, setHighlightedItemValue] = useState<string | null>(null);
   const [browseGeneration, setBrowseGeneration] = useState(0);
@@ -272,8 +293,10 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     (typeof navigator === "undefined" ? "" : navigator.platform);
   const canPopView = viewStack.length > 1;
   const isRepositoryStep = cloneFlow?.step === "repository";
-  const isCloneDestinationStep = cloneFlow?.step === "confirm";
-  const isBrowsing = !isRepositoryStep && isFilesystemBrowseQuery(query, platform);
+  const isCloneDestinationStep = cloneFlow?.step === "destination";
+  const isCloneReviewStep = cloneFlow?.step === "review";
+  const isBrowsing =
+    !isRepositoryStep && !isCloneReviewStep && isFilesystemBrowseQuery(query, platform);
   const isNewFolderStep = newFolderName !== null;
 
   const browseDirectoryPath = isBrowsing ? getBrowseDirectoryPath(query) : "";
@@ -415,9 +438,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     !relativePathNeedsActiveProject;
 
   const submitActionLabel = isCloneDestinationStep
-    ? willCreateProjectPath
-      ? "Create & Clone"
-      : "Clone"
+    ? "Continue"
     : willCreateProjectPath
       ? "Create & Add"
       : "Add";
@@ -439,6 +460,9 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
   const popView = useCallback(() => {
     setCloneFlow(null);
+    setCloneOptions(DEFAULT_CLONE_OPTIONS);
+    setClonePreview(null);
+    setCloneDestinationPath("");
     setViewStack((stack) => (stack.length <= 1 ? stack : stack.slice(0, -1)));
     setHighlightedItemValue(null);
     setQuery("");
@@ -482,6 +506,9 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     const targetMachine =
       machines.find((option) => option.machineId === targetMachineId) ?? null;
     setCloneFlow(null);
+    setCloneOptions(DEFAULT_CLONE_OPTIONS);
+    setClonePreview(null);
+    setCloneDestinationPath("");
     pushView({
       initialQuery: ensureBrowseDirectoryPath(
         startDirectory ?? addProjectInitialBrowseQuery(targetMachine),
@@ -492,6 +519,9 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   }
 
   function startCloneFlow(targetMachineId: string, source: AddProjectSourceId): void {
+    setCloneOptions(DEFAULT_CLONE_OPTIONS);
+    setClonePreview(null);
+    setCloneDestinationPath("");
     setCloneFlow({
       remoteUrl: "",
       repository: null,
@@ -508,7 +538,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     readonly repositoryInput: string;
     readonly source: AddProjectSourceId;
   }): void {
-    setCloneFlow({ ...next, step: "confirm" });
+    setCloneFlow({ ...next, step: "destination" });
     setHighlightedItemValue(null);
     setBrowseResult(null);
     setQuery(ensureBrowseDirectoryPath(addProjectInitialBrowseQuery(machine)));
@@ -622,19 +652,58 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     }
   }
 
-  async function submitCloneDestination(rawPath: string): Promise<void> {
-    if (busy || !cloneFlow || cloneFlow.step !== "confirm" || !machineId) {
+  async function openCloneReview(rawPath: string): Promise<void> {
+    if (busy || !cloneFlow || cloneFlow.step !== "destination" || !machineId) {
       return;
     }
     const destinationPath = validateProjectPath(rawPath);
     if (!destinationPath) {
       return;
     }
+    setBusy("preview");
+    setErrorMessage(null);
+    try {
+      const preview = await propsRef.current.previewClone({
+        ...cloneOptions,
+        destinationPath,
+        machineId,
+        remoteUrl: cloneFlow.remoteUrl,
+      });
+      if (!isMountedRef.current) {
+        return;
+      }
+      setCloneDestinationPath(destinationPath);
+      setClonePreview(preview);
+      setCloneFlow({ ...cloneFlow, step: "review" });
+    } catch (error) {
+      if (isMountedRef.current) {
+        setErrorMessage(describeError(error, "Unable to review the clone destination."));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setBusy(null);
+      }
+    }
+  }
+
+  async function submitClone(): Promise<void> {
+    if (
+      busy ||
+      !cloneFlow ||
+      cloneFlow.step !== "review" ||
+      !machineId ||
+      !clonePreview ||
+      clonePreview.destinationBlocked ||
+      !isRepositoryCloneBranchNameInputValid(cloneOptions.branchName)
+    ) {
+      return;
+    }
     setBusy("clone");
     setErrorMessage(null);
     try {
       const handle = await propsRef.current.startClone({
-        destinationPath,
+        ...cloneOptions,
+        destinationPath: cloneDestinationPath,
         machineId,
         remoteUrl: cloneFlow.remoteUrl,
       });
@@ -720,10 +789,22 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
   function submitResolvedPath(): void {
     if (isCloneDestinationStep) {
-      void submitCloneDestination(resolvedAddProjectPath);
+      void openCloneReview(resolvedAddProjectPath);
       return;
     }
     void submitAddProject(resolvedAddProjectPath);
+  }
+
+  function returnToCloneDestination(): void {
+    if (!cloneFlow || cloneFlow.step !== "review" || busy) {
+      return;
+    }
+    setCloneFlow({ ...cloneFlow, step: "destination" });
+    setClonePreview(null);
+    setCloneDestinationPath("");
+    setErrorMessage(null);
+    setHighlightedItemValue(null);
+    setBrowseGeneration((generation) => generation + 1);
   }
 
   function cancelClone(): void {
@@ -981,7 +1062,8 @@ function AddProjectModalBody(props: AddProjectModalProps) {
       })
     : addProjectEmptyStateMessage({
         cloneSource: cloneFlow?.source ?? null,
-        cloneStep: cloneFlow?.step ?? null,
+        cloneStep:
+          cloneFlow?.step === "review" ? "destination" : (cloneFlow?.step ?? null),
         hasMachines: machines.length > 0,
         isLoadingMachines,
         relativePathNeedsActiveProject,
@@ -1007,11 +1089,261 @@ function AddProjectModalBody(props: AddProjectModalProps) {
       ? "Adding"
       : busy === "clone"
         ? "Cloning"
-        : busy === "createFolder"
-          ? "Creating"
-          : busy === "lookup"
-            ? "Working"
-            : null;
+        : busy === "preview"
+          ? "Reviewing"
+          : busy === "createFolder"
+            ? "Creating"
+            : busy === "lookup"
+              ? "Working"
+              : null;
+
+  if (isCloneReviewStep && cloneFlow && clonePreview) {
+    const hasInvalidBranchName = !isRepositoryCloneBranchNameInputValid(
+      cloneOptions.branchName,
+    );
+    const destinationDescription = clonePreview.destinationBlocked
+      ? (clonePreview.warning ?? "Choose a different destination before cloning.")
+      : clonePreview.destinationExists && clonePreview.destinationIsEmpty
+        ? "Existing empty folder. The repository will be cloned directly into it."
+        : "This folder will be created for the repository.";
+    const canClone =
+      !hasInvalidBranchName && !clonePreview.destinationBlocked && busy === null;
+
+    return (
+      <div
+        className="flex h-full min-h-0 w-full min-w-0 flex-col"
+        data-add-project-clone-step="review"
+        data-add-project-modal=""
+      >
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <Button
+                aria-label="Back to clone destination"
+                className="mt-0.5 size-8 shrink-0 rounded-none"
+                disabled={busy !== null}
+                onClick={returnToCloneDestination}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <IconArrowLeft aria-hidden="true" className="size-4" />
+              </Button>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-foreground">Review clone</h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Confirm the destination and adjust optional Git settings.
+                </p>
+              </div>
+              {machine ? (
+                <span className="ml-auto inline-flex min-w-0 shrink-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                  <IconFolderPlus aria-hidden="true" className="size-3 shrink-0" />
+                  <span className="max-w-32 truncate">{machine.label}</span>
+                </span>
+              ) : null}
+            </div>
+
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <div
+                className="flex min-w-0 items-start gap-2.5 border border-border/60 bg-muted/15 px-3 py-2.5"
+                data-add-project-field="reviewRepository"
+              >
+                <span className="mt-0.5 shrink-0 text-muted-foreground/80">
+                  {sourceIcon(cloneFlow.source)}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Repository
+                  </span>
+                  <span className="mt-1 truncate text-sm text-foreground">
+                    {cloneFlow.repository?.nameWithOwner ?? cloneFlow.repositoryInput}
+                  </span>
+                  <span className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {cloneFlow.repository?.url ?? cloneFlow.remoteUrl}
+                  </span>
+                </span>
+              </div>
+
+              <div
+                className={cn(
+                  "flex min-w-0 items-start gap-2.5 border bg-muted/15 px-3 py-2.5",
+                  clonePreview.destinationBlocked
+                    ? "border-destructive/50"
+                    : "border-border/60",
+                )}
+                data-add-project-field="reviewDestination"
+              >
+                <IconFolderCheck
+                  aria-hidden="true"
+                  className="mt-0.5 size-4 shrink-0 text-muted-foreground/80"
+                />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Destination
+                  </span>
+                  <span
+                    className="mt-1 break-all text-sm text-foreground"
+                    title={clonePreview.destinationPath}
+                  >
+                    {clonePreview.destinationPath}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 text-xs leading-relaxed",
+                      clonePreview.destinationBlocked
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {destinationDescription}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="border border-border/60 bg-muted/10 px-3 py-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-foreground">Clone options</span>
+                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Optional
+                </span>
+              </div>
+
+              <label className="block min-w-0">
+                <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <IconGitBranch aria-hidden="true" className="size-3.5" />
+                  Branch
+                </span>
+                <Input
+                  aria-invalid={hasInvalidBranchName || undefined}
+                  autoComplete="off"
+                  className="h-9"
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    setCloneOptions((current) => ({
+                      ...current,
+                      branchName: event.currentTarget.value,
+                    }));
+                    setErrorMessage(null);
+                  }}
+                  placeholder="Default branch"
+                  spellCheck={false}
+                  value={cloneOptions.branchName}
+                />
+                <span
+                  className={cn(
+                    "mt-1.5 block text-xs",
+                    hasInvalidBranchName ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {hasInvalidBranchName
+                    ? "Enter a valid Git branch name."
+                    : "Leave empty to use the repository default branch."}
+                </span>
+              </label>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="flex min-w-0 items-start gap-2.5 border border-border/50 px-3 py-2.5 hover:bg-muted/30">
+                  <Checkbox
+                    checked={cloneOptions.cloneMainOnly}
+                    className="mt-0.5 rounded-none"
+                    disabled={busy !== null}
+                    onCheckedChange={(checked) =>
+                      setCloneOptions((current) => ({
+                        ...current,
+                        cloneMainOnly: checked === true,
+                      }))
+                    }
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-foreground">
+                      Clone branch only
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                      Fetch only the selected or default branch.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex min-w-0 items-start gap-2.5 border border-border/50 px-3 py-2.5 hover:bg-muted/30">
+                  <Checkbox
+                    checked={cloneOptions.shallowClone}
+                    className="mt-0.5 rounded-none"
+                    disabled={busy !== null}
+                    onCheckedChange={(checked) =>
+                      setCloneOptions((current) => ({
+                        ...current,
+                        shallowClone: checked === true,
+                      }))
+                    }
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-foreground">
+                      Shallow clone
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                      Fetch only the latest commit history.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {errorMessage ? (
+              <div
+                className="flex items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                data-add-project-field="error"
+                role="alert"
+              >
+                <IconAlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+                <span className="min-w-0 break-words">{errorMessage}</span>
+              </div>
+            ) : null}
+
+            {isSlow && isCloning ? (
+              <div
+                className="flex items-center gap-2 border border-border/60 px-3 py-2 text-xs text-muted-foreground"
+                data-add-project-field="notice"
+                role="status"
+              >
+                <span>Still cloning. The machine may be reconnecting.</span>
+                {props.cancelCloneJob ? (
+                  <button
+                    className="underline underline-offset-2 hover:text-foreground"
+                    data-add-project-field="cloneCancel"
+                    onClick={cancelClone}
+                    type="button"
+                  >
+                    Cancel clone
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className="flex shrink-0 items-center gap-3 border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground"
+          data-add-project-field="footer"
+        >
+          <AddProjectFooterHint keys="Esc" label="Close" />
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              disabled={busy !== null}
+              onClick={returnToCloneDestination}
+              type="button"
+              variant="outline"
+            >
+              Back
+            </Button>
+            <Button disabled={!canClone} onClick={() => void submitClone()} type="button">
+              {isCloning ? "Cloning..." : "Clone & Add"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     /*

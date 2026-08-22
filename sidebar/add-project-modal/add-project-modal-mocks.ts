@@ -14,6 +14,8 @@ import type {
   AddProjectCloneJob,
   AddProjectCloneJobHandle,
   AddProjectCloneJobInput,
+  AddProjectClonePreview,
+  AddProjectClonePreviewInput,
   AddProjectCloneStartInput,
   AddProjectCreateDirectoryInput,
   AddProjectCreateDirectoryResult,
@@ -244,6 +246,26 @@ export function createAddProjectStoryMocks(
         url: `https://${input.provider}.com/${input.repository}`,
       };
     },
+    previewClone: async (
+      input: AddProjectClonePreviewInput,
+    ): Promise<AddProjectClonePreview> => {
+      record("previewClone", input);
+      await settle(null);
+      const normalizedDestination = input.destinationPath.replace(/\/+$/u, "");
+      const separatorIndex = normalizedDestination.lastIndexOf("/");
+      return {
+        ...(input.branchName ? { branchName: input.branchName } : {}),
+        cloneMainOnly: input.cloneMainOnly,
+        cloneUrl: input.remoteUrl,
+        destinationBlocked: false,
+        destinationExists: false,
+        destinationFolderName: normalizedDestination.slice(separatorIndex + 1),
+        destinationPath: normalizedDestination,
+        parentPath: normalizedDestination.slice(0, separatorIndex) || "/",
+        repositoryName: normalizedDestination.slice(separatorIndex + 1),
+        shallowClone: input.shallowClone,
+      };
+    },
     readCloneJob: async (input: AddProjectCloneJobInput): Promise<AddProjectCloneJob> => {
       record("readCloneJob", input);
       await settle(null);
@@ -318,4 +340,3 @@ function expandStoryHome(value: string, home: string): string {
 function trimStoryTrailingSeparator(value: string): string {
   return value.length > 1 && value.endsWith("/") ? value.slice(0, -1) : value;
 }
-

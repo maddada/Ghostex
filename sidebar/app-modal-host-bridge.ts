@@ -6,7 +6,6 @@ import type { SidebarAgentIcon } from "../shared/sidebar-agents";
 
 export type AppModalKind =
   | "addProject"
-  | "addRepository"
   | "agentConfig"
   | "agentsHub"
   | "commandPalette"
@@ -43,7 +42,6 @@ export type OpenAppModalMessage =
       modal: Exclude<
         AppModalKind,
         | "addProject"
-        | "addRepository"
         | "agentConfig"
         | "commandPalette"
         | "delayedSend"
@@ -133,12 +131,6 @@ export type OpenAppModalMessage =
       projectId: string;
       projectName: string;
       projectPath: string;
-      type: "open";
-    }
-  | {
-      modal: "addRepository";
-      remoteMachineId?: string;
-      remoteMachineName?: string;
       type: "open";
     }
   | {

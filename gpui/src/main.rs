@@ -144,7 +144,10 @@ const SIDEBAR_DIVIDER_HOVER_DELAY: Duration = Duration::from_millis(50);
 const SIDEBAR_DIVIDER_HOVER_FADE_DURATION: Duration = Duration::from_millis(180);
 const COMMAND_ACTION_STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const CEF_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0E0E0E;
-const CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF111111;
+const CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0A0A0A;
+/* Find keeps the older near-black its own page paints; only the chat surface
+   moved. */
+const CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF111111;
 const CEF_LIGHT_PREPAINT_BACKGROUND_COLOR: u32 = 0xFFFDFDFD;
 /// Matches `ghostexEditorProtocolVersion` in editor/macos DaemonSupport.swift.
 const GHOSTEX_EDITOR_PROTOCOL_VERSION: u64 = 1;
@@ -1237,8 +1240,6 @@ const APP_MODAL_HOST_FIT_CONTENT_MAX_WINDOW_HEIGHT: f32 = 850.0;
  */
 const APP_MODAL_HOST_WORKTREE_WINDOW_WIDTH: f32 = 640.0;
 const APP_MODAL_HOST_WORKTREE_WINDOW_HEIGHT: f32 = 640.0;
-const APP_MODAL_HOST_ADD_REPOSITORY_WINDOW_WIDTH: f32 = 640.0;
-const APP_MODAL_HOST_ADD_REPOSITORY_WINDOW_HEIGHT: f32 = 660.0;
 const APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT: f32 = 600.0;
 const APP_MODAL_HOST_PORTLESS_SETUP_WINDOW_WIDTH: f32 = 640.0;
 const APP_MODAL_HOST_PORTLESS_SETUP_WINDOW_HEIGHT: f32 = 340.0;
@@ -1689,11 +1690,35 @@ struct RunConfiguredGhostexHotkey {
     action_id: String,
 }
 
+/*
+CDXC:Hotkeys 2026-08-22:
+Cmd-K clears the focused terminal, matching the `clear_screen` binding
+ghostty ships by default, so the terminal owns that chord outright and no
+configured command may take it over. This mirrors the reserved-chord list in
+shared/ghostex-hotkeys.ts: a chord persisted before the reservation falls
+back to its action's default, and the chord itself never registers a gpui
+binding. macOS only, because that is the only platform ghostty binds
+`clear_screen` on, and elsewhere "cmd+k" is how the shared model spells
+Ctrl+K. Written in gpui keystroke syntax so every shared-settings spelling
+normalizes onto it.
+*/
+const GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES: &[&str] = &["cmd-k"];
+
+fn gpui_hotkey_is_reserved(key: &str) -> bool {
+    cfg!(target_os = "macos")
+        && gpui_keystroke_from_shared_hotkey(key).is_some_and(|keystroke| {
+            GPUI_RESERVED_GHOSTEX_HOTKEY_KEYSTROKES.contains(&keystroke.as_str())
+        })
+}
+
 fn gpui_migrated_hotkey_for_action<'a>(
     action_id: &str,
     key: &'a str,
     default_key: &'a str,
 ) -> &'a str {
+    if gpui_hotkey_is_reserved(key) {
+        return default_key;
+    }
     if action_id == "toggleChatView"
         && (key.trim().eq_ignore_ascii_case("ctrl+shift+j")
             || key.trim().eq_ignore_ascii_case("cmd+alt+j")
@@ -2045,6 +2070,11 @@ fn gpui_native_hotkey_text(
 
 #[cfg(target_os = "macos")]
 fn gpui_configured_hotkey_action_id_for_native_text(hotkey_text: &str) -> Option<String> {
+    if gpui_hotkey_is_reserved(hotkey_text) {
+        // Reserved chords belong to the focused terminal, so the native
+        // dispatch layer resolves no action and the key travels onward.
+        return None;
+    }
     let hotkey_text = normalized_gpui_hotkey_text(hotkey_text)?;
     let snapshot = shared_settings::shared_sidebar_settings_snapshot();
     let persisted_hotkeys = snapshot
@@ -2215,7 +2245,7 @@ fn gpui_configured_hotkey_key_bindings_from_settings() -> Vec<KeyBinding> {
         ),
     ];
     let mut push_binding = |action_id: &str, key: &str| {
-        if key.trim().is_empty() {
+        if key.trim().is_empty() || gpui_hotkey_is_reserved(key) {
             return;
         }
         let Some(keystroke) = gpui_keystroke_from_shared_hotkey(key) else {
@@ -3088,7 +3118,6 @@ impl CommandPaneTabSleepScope {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GpuiAppModalKind {
     AddProject,
-    AddRepository,
     Settings,
     Hotkeys,
     MissingProjectFolder,
@@ -3124,7 +3153,6 @@ impl GpuiAppModalKind {
     fn from_modal_id(value: &str) -> Option<Self> {
         match value {
             "addProject" => Some(Self::AddProject),
-            "addRepository" => Some(Self::AddRepository),
             "settings" => Some(Self::Settings),
             "hotkeys" => Some(Self::Hotkeys),
             "missingProjectFolder" => Some(Self::MissingProjectFolder),
@@ -3161,7 +3189,6 @@ impl GpuiAppModalKind {
     fn modal_id(self) -> &'static str {
         match self {
             Self::AddProject => "addProject",
-            Self::AddRepository => "addRepository",
             Self::Settings => "settings",
             Self::Hotkeys => "hotkeys",
             Self::MissingProjectFolder => "missingProjectFolder",
@@ -3197,7 +3224,6 @@ impl GpuiAppModalKind {
     fn window_title(self) -> &'static str {
         match self {
             Self::AddProject => "Ghostex Add Project",
-            Self::AddRepository => "Ghostex Clone Repository",
             Self::Settings => "Ghostex Settings",
             Self::Hotkeys => "Ghostex Hotkeys",
             Self::MissingProjectFolder => "Ghostex Project Folder Missing",
@@ -3285,10 +3311,6 @@ impl GpuiAppModalKind {
             Self::AddProject => size(
                 px(APP_MODAL_HOST_ADD_PROJECT_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_ADD_PROJECT_WINDOW_HEIGHT),
-            ),
-            Self::AddRepository => size(
-                px(APP_MODAL_HOST_ADD_REPOSITORY_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_ADD_REPOSITORY_WINDOW_HEIGHT),
             ),
             Self::RemoteProjectPicker => size(
                 px(APP_MODAL_HOST_REMOTE_PROJECT_PICKER_WINDOW_WIDTH),
@@ -3430,10 +3452,6 @@ impl GpuiAppModalKind {
                 "type": "open",
             }),
             Self::UpdateAvailable => serde_json::json!({
-                "modal": self.modal_id(),
-                "type": "open",
-            }),
-            Self::AddRepository => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
             }),
@@ -29119,6 +29137,10 @@ impl GhostexGpuiApp {
                                 && visible_tab_ids.contains(&tab.id),
                             "projectId": project_id,
                             "tabId": tab.id.0.to_string(),
+                            "faviconUrl": tab
+                                .runtime_favicon_fetch
+                                .as_ref()
+                                .map(|source| source.url.as_str()),
                             "title": tab.display_title(),
                             "url": tab.address_value(),
                         })
@@ -32877,21 +32899,6 @@ impl GhostexGpuiApp {
             "addProjectDialogRequest" => {
                 if let Some(command) = message.as_object() {
                     self.handle_gpui_add_project_dialog_request_message(command, cx);
-                }
-            }
-            "previewRepositoryClone" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_preview_remote_repository_clone_message(command, cx);
-                }
-            }
-            "cloneRepository" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_start_remote_repository_clone_message(command, cx);
-                }
-            }
-            "cancelRepositoryClone" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_cancel_remote_repository_clone_message(command, cx);
                 }
             }
             "pickWorkspaceFolder" => {
@@ -42245,15 +42252,6 @@ impl GhostexGpuiApp {
             "addProjectDialogRequest" => {
                 self.handle_gpui_add_project_dialog_request_message(command, cx);
             }
-            "previewRepositoryClone" => {
-                self.handle_gpui_preview_remote_repository_clone_message(command, cx);
-            }
-            "cloneRepository" => {
-                self.handle_gpui_start_remote_repository_clone_message(command, cx);
-            }
-            "cancelRepositoryClone" => {
-                self.handle_gpui_cancel_remote_repository_clone_message(command, cx);
-            }
             "pickReplacementProjectFolder" => {
                 let Some(project_id) = command
                     .get("projectId")
@@ -45392,7 +45390,7 @@ impl GhostexGpuiApp {
         let prepaint_background = if theme == "light" {
             CEF_LIGHT_PREPAINT_BACKGROUND_COLOR
         } else {
-            CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR
+            CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR
         };
         let background = if theme == "light" {
             rgb(0xfdfdfd).into()
@@ -45547,7 +45545,7 @@ impl GhostexGpuiApp {
         let background = if chat_theme == "light" {
             rgb(0xfdfdfd).into()
         } else {
-            rgb(0x111111).into()
+            rgb(0x0a0a0a).into()
         };
         /*
         CDXC:GPUISessionChatContextMenu 2026-08-21:
@@ -93032,6 +93030,7 @@ enum GpuiAddProjectDialogOperation {
     DiscoverSourceControl,
     ListMachines,
     LookupRepository,
+    PreviewClone,
     ReadCloneJob,
     StartClone,
 }
@@ -93046,6 +93045,7 @@ impl GpuiAddProjectDialogOperation {
             "discoverSourceControl" => Some(Self::DiscoverSourceControl),
             "listMachines" => Some(Self::ListMachines),
             "lookupRepository" => Some(Self::LookupRepository),
+            "previewClone" => Some(Self::PreviewClone),
             "readCloneJob" => Some(Self::ReadCloneJob),
             "startClone" => Some(Self::StartClone),
             _ => None,
@@ -93061,6 +93061,7 @@ impl GpuiAddProjectDialogOperation {
             Self::DiscoverSourceControl => "discoverSourceControl",
             Self::ListMachines => "listMachines",
             Self::LookupRepository => "lookupRepository",
+            Self::PreviewClone => "previewClone",
             Self::ReadCloneJob => "readCloneJob",
             Self::StartClone => "startClone",
         }
@@ -93075,6 +93076,7 @@ impl GpuiAddProjectDialogOperation {
             Self::DiscoverSourceControl => Some("/api/discoverSourceControl"),
             Self::ListMachines => None,
             Self::LookupRepository => Some("/api/lookupRepository"),
+            Self::PreviewClone => Some("/api/previewRepositoryClone"),
             Self::ReadCloneJob => Some("/api/readRepositoryCloneJob"),
             Self::StartClone => Some("/api/startRepositoryClone"),
         }
@@ -93085,7 +93087,7 @@ impl GpuiAddProjectDialogOperation {
             Self::Add | Self::StartClone => GPUI_ADD_PROJECT_DIALOG_ADD_TIMEOUT,
             Self::Browse => GPUI_ADD_PROJECT_DIALOG_BROWSE_TIMEOUT,
             Self::DiscoverSourceControl => GPUI_ADD_PROJECT_DIALOG_DISCOVERY_TIMEOUT,
-            Self::LookupRepository => GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT,
+            Self::LookupRepository | Self::PreviewClone => GPUI_ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT,
             Self::CancelCloneJob
             | Self::CreateDirectory
             | Self::ReadCloneJob
@@ -93145,7 +93147,7 @@ fn gpui_add_project_dialog_params(
             forwarded.insert("provider".to_string(), serde_json::json!(provider));
             forwarded.insert("repository".to_string(), serde_json::json!(repository));
         }
-        GpuiAddProjectDialogOperation::StartClone => {
+        GpuiAddProjectDialogOperation::PreviewClone | GpuiAddProjectDialogOperation::StartClone => {
             let remote_url = gpui_add_project_dialog_bounded_text(params, "remoteUrl", 4_096)?;
             let destination_path =
                 gpui_remote_path_like_string_from_command(params, "destinationPath", false)?;
@@ -93154,6 +93156,25 @@ fn gpui_add_project_dialog_params(
                 serde_json::json!(destination_path),
             );
             forwarded.insert("remoteUrl".to_string(), serde_json::json!(remote_url));
+            if let Some(branch_name) =
+                gpui_add_project_dialog_bounded_text(params, "branchName", 1_024)
+            {
+                forwarded.insert("branchName".to_string(), serde_json::json!(branch_name));
+            }
+            if params
+                .get("cloneMainOnly")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                forwarded.insert("cloneMainOnly".to_string(), serde_json::json!(true));
+            }
+            if params
+                .get("shallowClone")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                forwarded.insert("shallowClone".to_string(), serde_json::json!(true));
+            }
         }
         GpuiAddProjectDialogOperation::CancelCloneJob
         | GpuiAddProjectDialogOperation::ReadCloneJob => {
@@ -93182,7 +93203,9 @@ fn gpui_add_project_dialog_translate_local_windows_paths(
     let fields: &[&str] = match operation {
         GpuiAddProjectDialogOperation::Add => &["path"],
         GpuiAddProjectDialogOperation::Browse => &["partialPath", "cwd"],
-        GpuiAddProjectDialogOperation::StartClone => &["destinationPath"],
+        GpuiAddProjectDialogOperation::PreviewClone | GpuiAddProjectDialogOperation::StartClone => {
+            &["destinationPath"]
+        }
         GpuiAddProjectDialogOperation::CreateDirectory => &["parentPath"],
         GpuiAddProjectDialogOperation::CancelCloneJob
         | GpuiAddProjectDialogOperation::DiscoverSourceControl
@@ -110976,7 +110999,7 @@ fn gpui_session_chat_background_color() -> Hsla {
     {
         rgb(0xfdfdfd).into()
     } else {
-        rgb(0x111111).into()
+        rgb(0x0a0a0a).into()
     }
 }
 

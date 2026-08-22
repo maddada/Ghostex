@@ -131,10 +131,32 @@ export interface AddProjectRepositoryInfo {
   readonly url: string;
 }
 
-export interface AddProjectCloneStartInput {
+export interface AddProjectCloneRequestInput {
+  readonly branchName: string;
+  readonly cloneMainOnly: boolean;
   readonly destinationPath: string;
   readonly machineId: string;
   readonly remoteUrl: string;
+  readonly shallowClone: boolean;
+}
+
+export type AddProjectClonePreviewInput = AddProjectCloneRequestInput;
+export type AddProjectCloneStartInput = AddProjectCloneRequestInput;
+
+export interface AddProjectClonePreview {
+  readonly branchName?: string;
+  readonly cloneMainOnly: boolean;
+  readonly cloneUrl: string;
+  readonly destinationBlocked: boolean;
+  readonly destinationExists: boolean;
+  readonly destinationExistsKind?: "directory" | "file" | "other";
+  readonly destinationFolderName: string;
+  readonly destinationIsEmpty?: boolean;
+  readonly destinationPath: string;
+  readonly parentPath: string;
+  readonly repositoryName: string;
+  readonly shallowClone: boolean;
+  readonly warning?: string;
 }
 
 export interface AddProjectCloneJobHandle {
@@ -178,6 +200,7 @@ export interface AddProjectModalCallbacks {
   readonly lookupRepository: (
     input: AddProjectRepositoryLookupInput,
   ) => Promise<AddProjectRepositoryInfo>;
+  readonly previewClone: (input: AddProjectClonePreviewInput) => Promise<AddProjectClonePreview>;
   readonly readCloneJob: (input: AddProjectCloneJobInput) => Promise<AddProjectCloneJob>;
   readonly startClone: (input: AddProjectCloneStartInput) => Promise<AddProjectCloneJobHandle>;
 }

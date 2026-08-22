@@ -81,10 +81,10 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
 }
 
 /*
-CDXC:AddRepository 2026-06-07-16:06:
-The Clone Repository modal accepts an optional branch name. Empty means Git
-uses the repository default branch, usually main or master; typed names must be
-valid ref-like branch names before the modal enables Clone & Add.
+CDXC:AddProjectCloneReview 2026-08-22:
+The unified Add Project confirmation step accepts an optional branch name.
+Empty means Git uses the repository default branch, usually main or master;
+typed names must be valid ref-like branch names before Clone & Add is enabled.
 */
 export function isRepositoryCloneBranchNameInputValid(input: string): boolean {
   const branchName = input.trim();

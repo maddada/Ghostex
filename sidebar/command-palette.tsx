@@ -10,7 +10,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconChevronUp,
-  IconDownload,
   IconEdit,
   IconExternalLink,
   IconFolderOpen,
@@ -102,12 +101,6 @@ type HotkeyPaletteCommand = {
 
 type BuiltInPaletteCommand =
   | HotkeyPaletteCommand
-  | {
-      hotkey: '';
-      kind: 'cloneRepository';
-      searchText: string;
-      title: string;
-    }
   | {
       commandId: AppModalPaletteCommandId;
       hotkey: '';
@@ -512,12 +505,6 @@ export function CommandPalette({
       searchText: `${petTitle} pet overlay ${petOverlayEnabled ? 'hide sleep' : 'show wake'}`,
       title: petTitle,
     };
-    const cloneRepositoryCommand: BuiltInPaletteCommand = {
-      hotkey: '',
-      kind: 'cloneRepository',
-      searchText: 'Clone Repository add project git clone github codeberg repository',
-      title: 'Clone Repository',
-    };
     const openTargetCommands = createOpenTargetPaletteCommands(openTargetSettings);
     /*
      * CDXC:CommandPalette 2026-06-18-03:32:
@@ -534,7 +521,6 @@ export function CommandPalette({
      */
     return [
       ...hotkeyCommands,
-      cloneRepositoryCommand,
       ...APP_MODAL_PALETTE_COMMANDS,
       ...SIDEBAR_MESSAGE_PALETTE_COMMANDS,
       ...openTargetCommands,
@@ -728,11 +714,6 @@ export function CommandPalette({
       });
       return;
     }
-    if (command.kind === 'cloneRepository') {
-      onOpenChange(false);
-      openAppModal({ modal: 'addRepository', type: 'open' });
-      return;
-    }
     if (command.kind === 'appModal') {
       if (command.modal === 'previousSessions') {
         openQuickAccess('recentSessions');
@@ -846,8 +827,7 @@ export function CommandPalette({
           Actions group so users can run them from the palette and bind them in
           Hotkeys without needing a sidebar row context.
 
-          CDXC:AddRepository 2026-05-29-11:45:
-          Clone Repository should be available from the command palette as a Ghostex built-in command and open the same full-window clone modal as the Projects header button, without going through configurable project actions. */}
+          */}
       <Command
         className='quick-access-surface'
         shouldFilter={false}
@@ -1007,9 +987,6 @@ function ProjectCommandRow({
 }
 
 function BuiltInCommandIcon({ command }: { command: BuiltInPaletteCommand }) {
-  if (command.kind === 'cloneRepository') {
-    return <IconDownload aria-hidden='true' />;
-  }
   if (command.kind === 'appModal') {
     return <AppModalCommandIcon modal={command.modal} />;
   }

@@ -7,12 +7,12 @@ import type {
   AddProjectBrowseResult,
   AddProjectCloneJob,
   AddProjectCloneJobHandle,
+  AddProjectClonePreview,
   AddProjectCreateDirectoryResult,
   AddProjectMachineOption,
   AddProjectRepositoryInfo,
   AddProjectSourceControlDiscovery,
 } from "../../sidebar/add-project-modal/types";
-import { AddRepositoryModal } from "../../sidebar/add-repository-modal";
 import { AgentConfigModal, type AgentConfigDraft } from "../../sidebar/agent-config-modal";
 import { AgentsHubModal } from "../../sidebar/agents-hub-modal";
 import { CommandPalette } from "../../sidebar/command-palette";
@@ -100,7 +100,6 @@ import "../../sidebar/styles.css";
 
 type AppModalKind =
   | "addProject"
-  | "addRepository"
   | "agentConfig"
   | "agentsHub"
   | "commandPalette"
@@ -153,7 +152,6 @@ const GPUI_APP_MODAL_HOST_ID = "gpui";
  * this path because it remains a user-resizable fixed-size native window.
  */
 const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, string>> = {
-  addRepository: ".add-repository-modal-shadcn",
   agentConfig: ".agent-config-modal-shadcn",
   delayedSend: ".delayed-send-modal-shadcn",
   deleteWorktree: ".worktree-delete-modal-shadcn",
@@ -420,11 +418,6 @@ type ExportTranscriptResultModalState = {
 type RemoteGxserverInstallState = {
   remoteMachineId: string;
   remoteMachineName: string;
-};
-
-type AddRepositoryModalState = {
-  remoteMachineId?: string;
-  remoteMachineName?: string;
 };
 
 type DelayedSendModalState = {
@@ -943,6 +936,36 @@ function readAddProjectCloneHandle(value: unknown): AddProjectCloneJobHandle {
   return { jobId: readAddProjectRequiredString(job, "jobId") };
 }
 
+function readAddProjectClonePreview(value: unknown): AddProjectClonePreview {
+  const preview = readAddProjectResultObject(value, "preview");
+  const destinationExistsKind = preview.destinationExistsKind;
+  if (
+    destinationExistsKind !== undefined &&
+    destinationExistsKind !== "directory" &&
+    destinationExistsKind !== "file" &&
+    destinationExistsKind !== "other"
+  ) {
+    throw new Error("The machine returned an unexpected clone destination.");
+  }
+  return {
+    ...(typeof preview.branchName === "string" ? { branchName: preview.branchName } : {}),
+    cloneMainOnly: preview.cloneMainOnly === true,
+    cloneUrl: readAddProjectRequiredString(preview, "cloneUrl"),
+    destinationBlocked: preview.destinationBlocked === true,
+    destinationExists: preview.destinationExists === true,
+    ...(destinationExistsKind ? { destinationExistsKind } : {}),
+    destinationFolderName: readAddProjectRequiredString(preview, "destinationFolderName"),
+    ...(typeof preview.destinationIsEmpty === "boolean"
+      ? { destinationIsEmpty: preview.destinationIsEmpty }
+      : {}),
+    destinationPath: readAddProjectRequiredString(preview, "destinationPath"),
+    parentPath: readAddProjectRequiredString(preview, "parentPath"),
+    repositoryName: readAddProjectRequiredString(preview, "repositoryName"),
+    shallowClone: preview.shallowClone === true,
+    ...(typeof preview.warning === "string" ? { warning: preview.warning } : {}),
+  };
+}
+
 function readAddProjectCloneJob(value: unknown): AddProjectCloneJob {
   const job = readAddProjectResultObject(value, "job");
   const state = readAddProjectRequiredString(job, "state");
@@ -986,7 +1009,6 @@ function AppModalHost() {
     activeModal,
     activeModalRequestId,
     addProject,
-    addRepository,
     agentsHubCatalog,
     agentsHubFileContent,
     config,
@@ -1748,6 +1770,31 @@ function AppModalHost() {
           )
         }
         onClose={closeModal}
+        previewClone={async ({
+          branchName,
+          cloneMainOnly,
+          destinationPath,
+          machineId,
+          remoteUrl,
+          shallowClone,
+        }) =>
+          readAddProjectClonePreview(
+            await requestAddProjectDialogOperation(
+              "previewClone",
+              ADD_PROJECT_DIALOG_LOOKUP_TIMEOUT_MS,
+              {
+                machineId,
+                params: {
+                  branchName,
+                  cloneMainOnly,
+                  destinationPath,
+                  remoteUrl,
+                  shallowClone,
+                },
+              },
+            ),
+          )
+        }
         readCloneJob={async ({ jobId, machineId }) =>
           readAddProjectCloneJob(
             await requestAddProjectDialogOperation(
@@ -1757,12 +1804,28 @@ function AppModalHost() {
             ),
           )
         }
-        startClone={async ({ destinationPath, machineId, remoteUrl }) =>
+        startClone={async ({
+          branchName,
+          cloneMainOnly,
+          destinationPath,
+          machineId,
+          remoteUrl,
+          shallowClone,
+        }) =>
           readAddProjectCloneHandle(
             await requestAddProjectDialogOperation(
               "startClone",
               ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS,
-              { machineId, params: { destinationPath, remoteUrl } },
+              {
+                machineId,
+                params: {
+                  branchName,
+                  cloneMainOnly,
+                  destinationPath,
+                  remoteUrl,
+                  shallowClone,
+                },
+              },
             ),
           )
         }
@@ -2381,60 +2444,6 @@ function AppModalHost() {
         }}
         path={exportTranscriptResult?.path ?? ""}
       />
-      <AddRepositoryModal
-        isOpen={activeModal === "addRepository"}
-        remoteMachineId={addRepository.remoteMachineId}
-        remoteMachineName={addRepository.remoteMachineName}
-        onCancel={closeModal}
-        onClone={(request) => {
-          /*
-           * CDXC:AddRepository 2026-06-01-10:33:
-           * Clone & Add should leave the dialog immediately and move long-running
-           * Git feedback into the app toast layer, including cancellation. Native
-           * owns clone progress and final success/error toasts after this message.
-           */
-          vscode.postMessage({
-            branchName: request.branchName,
-            cloneMainOnly: request.cloneMainOnly,
-            folderPath: request.folderPath,
-            newFolderName: request.newFolderName,
-            remoteMachineId: addRepository.remoteMachineId,
-            repositoryInput: request.repositoryInput,
-            requestId: request.requestId,
-            shallowClone: request.shallowClone,
-            type: "cloneRepository",
-          });
-          closeModal();
-        }}
-        onCloneSuccess={closeModal}
-        onRemoteBrowse={
-          addRepository.remoteMachineId
-            ? async (input) => {
-                if (!addRepository.remoteMachineId) {
-                  return null;
-                }
-                const requestId = createRemoteProjectRequestId("browse");
-                vscode.postMessage({
-                  partialPath: input.partialPath,
-                  remoteMachineId: addRepository.remoteMachineId,
-                  requestId,
-                  type: "browseRemoteProjectDirectories",
-                });
-                return waitForRemoteProjectDirectoryBrowseResult(requestId);
-              }
-            : undefined
-        }
-        onPreview={(request) => {
-          vscode.postMessage({
-            folderPath: request.folderPath,
-            newFolderName: request.newFolderName,
-            remoteMachineId: addRepository.remoteMachineId,
-            repositoryInput: request.repositoryInput,
-            requestId: request.requestId,
-            type: "previewRepositoryClone",
-          });
-        }}
-      />
       <AgentConfigModal
         draft={config.agentDraft ?? createEmptyAgentDraft()}
         isOpen={activeModal === "agentConfig" && config.agentDraft !== undefined}
@@ -2498,7 +2507,6 @@ function useModalStateFromNative() {
    * AppKit hide the warmed host instead of showing it to the user.
    */
   const [activeModalRequestId, setActiveModalRequestId] = useState<string>();
-  const [addRepository, setAddRepository] = useState<AddRepositoryModalState>({});
   const [agentsHubCatalog, setAgentsHubCatalog] = useState<AgentsHubCatalogMessage>();
   const [agentsHubFileContent, setAgentsHubFileContent] =
     useState<AgentsHubFileContentMessage>();
@@ -2547,7 +2555,6 @@ function useModalStateFromNative() {
   const clearActiveModalState = useCallback(() => {
     setActiveModal(undefined);
     setActiveModalRequestId(undefined);
-    setAddRepository({});
     setConfig({});
     setDelayedSend(undefined);
     setFirstUserMessage(undefined);
@@ -3091,20 +3098,6 @@ function useModalStateFromNative() {
             setAgentsHubCatalog(undefined);
             setAgentsHubFileContent(undefined);
           }
-          if (message.modal === "addRepository") {
-            setAddRepository({
-              remoteMachineId:
-                typeof message.remoteMachineId === "string" && message.remoteMachineId.trim()
-                  ? message.remoteMachineId
-                  : undefined,
-              remoteMachineName:
-                typeof message.remoteMachineName === "string" && message.remoteMachineName.trim()
-                  ? message.remoteMachineName
-                  : undefined,
-            });
-          } else {
-            setAddRepository({});
-          }
           setActiveModalRequestId(
             typeof message.requestId === "string" ? message.requestId : undefined,
           );
@@ -3284,7 +3277,6 @@ function useModalStateFromNative() {
     activeModal,
     activeModalRequestId,
     addProject,
-    addRepository,
     agentsHubCatalog,
     agentsHubFileContent,
     config,
@@ -3500,8 +3492,6 @@ function isModalRenderable({
       return false;
     case "addProject":
       return addProject !== undefined;
-    case "addRepository":
-      return true;
     case "agentConfig":
       return config.agentDraft !== undefined;
     case "agentsHub":

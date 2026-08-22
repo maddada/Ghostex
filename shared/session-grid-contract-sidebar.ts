@@ -1396,6 +1396,7 @@ export type SidebarAddProjectDialogOperation =
   | "discoverSourceControl"
   | "listMachines"
   | "lookupRepository"
+  | "previewClone"
   | "readCloneJob"
   | "startClone";
 
@@ -1407,6 +1408,8 @@ export type SidebarAddProjectDialogOperation =
  * it impossible for a new field to reach a daemon without being named here.
  */
 export type SidebarAddProjectDialogRequestParams = {
+  readonly branchName?: string;
+  readonly cloneMainOnly?: boolean;
   readonly createIfMissing?: boolean;
   readonly cwd?: string;
   readonly destinationPath?: string;
@@ -1419,6 +1422,7 @@ export type SidebarAddProjectDialogRequestParams = {
   readonly provider?: string;
   readonly remoteUrl?: string;
   readonly repository?: string;
+  readonly shallowClone?: boolean;
 };
 
 export type SidebarToExtensionMessage =
@@ -1988,69 +1992,6 @@ export type SidebarToExtensionMessage =
       params?: SidebarAddProjectDialogRequestParams;
       requestId: string;
       type: "addProjectDialogRequest";
-    }
-  | {
-      /**
-       * CDXC:RemoteClone 2026-06-02-23:38:
-       * Connected Remote machine headers expose Clone Repository beside Add
-       * Project, but the command must stay machine-scoped. Do not route this
-       * through the local clone modal without a remote gxserver target.
-       */
-      remoteMachineId: string;
-      type: "openRemoteCloneRepository";
-    }
-  | {
-      /**
-       * CDXC:AddRepository 2026-06-01-10:28:
-       * Reference-only repository clones can request main-only and shallow Git
-       * options from the modal. Keep both flags explicit in the native bridge
-       * contract so the UI state determines the exact clone command.
-       *
-       * CDXC:AddRepository 2026-06-02-13:41:
-       * The full-window Clone Repository modal sends clone requests through the
-       * native sidebar UI bridge, but gxserver owns preview, git clone execution,
-       * cancellation, and the canonical project returned after clone success.
-       *
-       * CDXC:AddRepository 2026-06-07-16:06:
-       * Clone Repository carries an optional branch name through the same bridge.
-       * Empty means gxserver lets Git use the repository default branch; typed
-       * names are validated server-side before Git starts.
-       */
-      branchName?: string;
-      cloneMainOnly?: boolean;
-      folderPath: string;
-      newFolderName?: string;
-      remoteMachineId?: string;
-      repositoryInput: string;
-      requestId: string;
-      shallowClone?: boolean;
-      type: "cloneRepository";
-    }
-  | {
-      /**
-       * CDXC:AddRepository 2026-06-01-11:18:
-       * Repository clone destination preview is routed through gxserver so the
-       * modal can warn about an existing default folder without reimplementing
-       * filesystem and repository parsing logic in the macOS UI layer.
-       */
-      folderPath: string;
-      newFolderName?: string;
-      remoteMachineId?: string;
-      repositoryInput: string;
-      requestId: string;
-      type: "previewRepositoryClone";
-    }
-  | {
-      /**
-       * CDXC:AddRepository 2026-06-02-13:41:
-       * Repository clone progress moved from the modal to a persistent toast.
-       * The toast Cancel action must target the active clone request instead of
-       * only dismissing UI, so the native sidebar can ask gxserver to cancel the
-       * corresponding clone job.
-      */
-      remoteMachineId?: string;
-      requestId: string;
-      type: "cancelRepositoryClone";
     }
   | {
       type: "createSessionInGroup";

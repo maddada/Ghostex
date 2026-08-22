@@ -186,7 +186,7 @@ export function addProjectSubmitActionLabel(input: AddProjectSubmitLabelInput): 
 }
 
 export interface AddProjectEmptyStateInput {
-  readonly cloneStep: "confirm" | "repository" | null;
+  readonly cloneStep: "destination" | "repository" | null;
   readonly cloneSource: AddProjectSourceId | null;
   readonly isLoadingMachines: boolean;
   readonly hasMachines: boolean;
@@ -211,11 +211,11 @@ export function addProjectEmptyStateMessage(input: AddProjectEmptyStateInput): s
     }
     return "Enter a repository path and press Enter to look it up.";
   }
-  if (input.cloneStep === "confirm" && input.willCreateProjectPath) {
-    return "Press Enter to create this folder and clone into it.";
+  if (input.cloneStep === "destination" && input.willCreateProjectPath) {
+    return "Press Enter to review this new clone destination.";
   }
-  if (input.cloneStep === "confirm") {
-    return "Choose a destination path and press Enter to clone.";
+  if (input.cloneStep === "destination") {
+    return "Choose a destination path and press Enter to review the clone.";
   }
   if (input.unsupportedWindowsPath) {
     return "Windows-style paths are only supported on Windows machines.";

@@ -19,6 +19,8 @@ import type {
   AddProjectCloneJob,
   AddProjectCloneJobHandle,
   AddProjectCloneJobInput,
+  AddProjectClonePreview,
+  AddProjectClonePreviewInput,
   AddProjectCloneStartInput,
   AddProjectCreateDirectoryInput,
   AddProjectCreateDirectoryResult,
@@ -34,6 +36,7 @@ import type {
   GxserverProjectDirectoryBrowseResult,
   GxserverProjectDomainState,
   GxserverRepositoryCloneJobRpcResult,
+  GxserverRepositoryClonePreviewRpcResult,
 } from "@/shared/gxserver-protocol";
 import { useCallback, useEffect, useState } from "react";
 import type { OpenAddProjectModalDetail } from "./action-events";
@@ -176,13 +179,34 @@ export function AddProjectModalHost() {
           input.machineId,
           "/api/startRepositoryClone",
           {
+            branchName: input.branchName,
+            cloneMainOnly: input.cloneMainOnly,
             destinationPath: input.destinationPath,
             remoteUrl: input.remoteUrl,
+            shallowClone: input.shallowClone,
           },
         ),
         "Starting the clone timed out. The machine may still be reconnecting.",
       );
       return { jobId: job.jobId };
+    },
+    [],
+  );
+
+  const previewClone = useCallback(
+    async (input: AddProjectClonePreviewInput): Promise<AddProjectClonePreview> => {
+      const { preview } = await rpcForMachine<GxserverRepositoryClonePreviewRpcResult>(
+        input.machineId,
+        "/api/previewRepositoryClone",
+        {
+          branchName: input.branchName,
+          cloneMainOnly: input.cloneMainOnly,
+          destinationPath: input.destinationPath,
+          remoteUrl: input.remoteUrl,
+          shallowClone: input.shallowClone,
+        },
+      );
+      return preview;
     },
     [],
   );
@@ -221,6 +245,7 @@ export function AddProjectModalHost() {
       listMachineOptions={listMachineOptions}
       lookupRepository={lookupRepository}
       onClose={() => setModalState(undefined)}
+      previewClone={previewClone}
       readCloneJob={readCloneJob}
       startClone={startClone}
     />

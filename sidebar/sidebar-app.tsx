@@ -16,7 +16,6 @@ import {
   IconCloud,
   IconCoffee,
   IconDeviceMobile,
-  IconDownload,
   IconEdit,
   IconFilter2,
   IconFileSearch,
@@ -161,6 +160,7 @@ import {
   useDismissSidebarTooltipsOnScroll,
 } from "./app-tooltip";
 import { useScrollGlowState } from "./use-scroll-glow-state";
+import { AgentMenuChatIndicator } from "./agent-menu-chat-indicator";
 import type { WebviewApi } from "./webview-api";
 import { createDisplaySessionLayout } from "../shared/active-sessions-sort";
 import {
@@ -5823,10 +5823,6 @@ export function SidebarApp({
                           groupsById[groupId]?.isChatCollection !== true &&
                           groupsById[groupId]?.remoteMachineContext === undefined,
                       )}
-                      onAddRepository={() => {
-                        dismissAppModalForSidebarNavigation("SettingsDismissal:addRepository");
-                        openAppModal({ modal: "addRepository", type: "open" });
-                      }}
                       onAddProject={() => openAddProjectModal()}
                       onToggleShowHidden={() => setShowHiddenSidebarItems((current) => !current)}
                       showHidden={showHiddenSidebarItems}
@@ -6043,7 +6039,7 @@ export function SidebarApp({
                     <div className="reference-remote-section-list">
                       {/*
 	                     * CDXC:RemoteMachines 2026-06-02-23:47:
-	                     * Saved Remote machines render as peer sidebar sections beside local Projects. Until the SSH/gxserver connection is active, each machine remains visible and exposes Reload instead of Add Project or Clone Repository.
+	                     * Saved Remote machines render as peer sidebar sections beside local Projects. Until the SSH/gxserver connection is active, each machine remains visible and exposes Reload instead of Add Project.
 	                     *
 	                     * CDXC:RemoteMachines 2026-06-09-19:02:
 	                     * Remote machine section rows must collapse like Quick and Projects and use the same section-header styling, including the visible chevron and hover actions.
@@ -6210,13 +6206,6 @@ export function SidebarApp({
                                 }
                               : undefined
                           }
-                          onCloneRepository={() => {
-                            dismissAppModalForSidebarNavigation("SettingsDismissal:remoteCloneRepository");
-                            vscode.postMessage({
-                              remoteMachineId: machine.id,
-                              type: "openRemoteCloneRepository",
-                            });
-                          }}
                           onEdit={() => {
                             dismissAppModalForSidebarNavigation("SettingsDismissal:remoteEditSettings");
                             openAppModal({
@@ -7116,7 +7105,6 @@ function SidebarReferenceSectionHeader({
   containsActiveSession = false,
   dragHandleRef,
   onAddProject,
-  onAddRepository,
   onBulkProjectToggle,
   onConfigureAgents,
   onCreateBrowserChat,
@@ -7150,7 +7138,6 @@ function SidebarReferenceSectionHeader({
   containsActiveSession?: boolean;
   dragHandleRef?: (element: Element | null) => void;
   onAddProject?: () => void;
-  onAddRepository?: () => void;
   onBulkProjectToggle?: () => void;
   onConfigureAgents?: () => void;
   onCreateBrowserChat?: () => void;
@@ -7186,13 +7173,9 @@ function SidebarReferenceSectionHeader({
    * CDXC:SidebarReference 2026-05-08-01:41
    * Reference-mode Chats and Projects are collapsible section headers. Chats
    * exposes browser-chat and new-chat controls on hover, while Projects expose
-   * clone-repository, add-project, and expand/collapse-all controls on hover so the compact
-   * Codex.app-style list keeps management actions nearby.
-   *
-   * CDXC:AddRepository 2026-05-29-11:45:
-   * The Projects header needs a Download-icon Clone Repository action immediately
-   * to the left of Add Project. It opens the full-window clone dialog while the
-   * existing plus button remains the native folder picker for local projects.
+   * add-project and expand/collapse-all controls on hover so the compact
+   * Codex.app-style list keeps management actions nearby. Add Project owns both
+   * folder selection and repository cloning through its source picker.
    *
    * CDXC:SidebarReference 2026-05-08-02:21
    * The project bulk control is one stateful text button: "Collapse All" while
@@ -7265,7 +7248,6 @@ function SidebarReferenceSectionHeader({
   const hasTagFilters = selectedSessionTagFilters.length > 0;
   const hasActions =
     onAddProject ||
-    onAddRepository ||
     onBulkProjectToggle ||
     onConfigureAgents ||
     onCreateBrowserChat ||
@@ -7551,18 +7533,6 @@ function SidebarReferenceSectionHeader({
               <IconEdit aria-hidden="true" size={14} stroke={1.9} />
             </SidebarFixedTooltipButton>
           ) : null}
-          {onAddRepository ? (
-            <SidebarFixedTooltipButton
-              aria-label="Clone Repository"
-              className="reference-sidebar-section-action reference-sidebar-hover-action-tooltip"
-              onClick={onAddRepository}
-              tooltip="Clone Repository"
-              tooltipAlign="end"
-              type="button"
-            >
-              <IconDownload aria-hidden="true" size={14} stroke={2} />
-            </SidebarFixedTooltipButton>
-          ) : null}
           {onAddProject ? (
             <SidebarFixedTooltipButton
               aria-label="Add project"
@@ -7772,6 +7742,7 @@ function SidebarReferenceSectionHeader({
         >
           {agents.map((agent) => (
             <button
+              aria-label={agent.name}
               aria-pressed={primaryAgent?.agentId === agent.agentId}
               className="session-context-menu-item group-control-menu-item group-agent-menu-item"
               data-selected={String(primaryAgent?.agentId === agent.agentId)}
@@ -7782,9 +7753,7 @@ function SidebarReferenceSectionHeader({
             >
               <ProjectAgentLauncherIcon agent={agent} colorMode="brand" />
               <span className="group-agent-menu-label">{agent.name}</span>
-              {primaryAgent?.agentId === agent.agentId ? (
-                <IconCheck aria-hidden="true" className="session-context-menu-icon" size={14} />
-              ) : null}
+              <AgentMenuChatIndicator agent={agent} />
             </button>
           ))}
           {agents.length > 0 ? (
@@ -7860,7 +7829,6 @@ function RemoteMachineSidebarSection({
   machine,
   onAddProject,
   onBulkProjectToggle,
-  onCloneRepository,
   onEdit,
   onReconnect,
   onSetActiveSessionsSortMode,
@@ -7891,7 +7859,6 @@ function RemoteMachineSidebarSection({
   machine: RemoteMachineSettings;
   onAddProject: () => void;
   onBulkProjectToggle?: () => void;
-  onCloneRepository: () => void;
   onEdit: () => void;
   onReconnect: () => void;
   onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
@@ -7982,7 +7949,6 @@ function RemoteMachineSidebarSection({
         containsActiveSession={containsActiveSession}
         dragHandleRef={sortable.handleRef}
         onAddProject={isConnected ? onAddProject : undefined}
-        onAddRepository={isConnected ? onCloneRepository : undefined}
         onBulkProjectToggle={onBulkProjectToggle}
         onEdit={onEdit}
         onSetActiveSessionsSortMode={onSetActiveSessionsSortMode}
