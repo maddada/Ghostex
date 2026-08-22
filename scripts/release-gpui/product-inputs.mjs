@@ -79,8 +79,10 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   },
   { path: "ghostex-web", why: "Web app; released separately, never part of a GPUI release artifact." },
   { path: "mobile-chat", why: "Mobile chat bundle source; consumed by the mobile submodule build, not by release jobs." },
-  { path: "plans", why: "Planning documents; metadata only." },
-  { path: "src", why: "Deprecated macOS Swift app; not a release target." },
+  {
+    path: "mobile-find",
+    why: "Mobile Find Prompts bundle source; consumed by the mobile submodule build, not by release jobs.",
+  },
   {
     path: "zehn",
     why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the zehn-rs crate compiled into gxserver.",
@@ -133,6 +135,11 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "components.json" },
   { pathspec: "lib/**" },
   { pathspec: "native/sidebar/**" },
+  /*
+   * sidebar/brand-icons.tsx inlines these SVGs into every CEF surface, so an
+   * editor icon changes the built bundle even though src/ holds no app.
+   */
+  { pathspec: "src/assets/**" },
   { pathspec: "ghostty/**" },
   { pathspec: ":(exclude)ghostty/.zig-cache" },
   { pathspec: ":(exclude)ghostty/zig-out" },
