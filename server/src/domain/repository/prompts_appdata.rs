@@ -1,0 +1,675 @@
+use std::collections::{HashMap, HashSet};
+
+use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{json, Map, Value};
+
+use crate::domain::repository::project::MAX_ID_GENERATION_ATTEMPTS;
+use crate::domain::{
+    now_iso, optional_trimmed_string_param, required_string_param, sql_error, DomainRepository,
+    DomainResult, DomainStateError,
+};
+
+impl<'a> DomainRepository<'a> {
+    pub fn read_app_user_data(&self) -> DomainResult<Value> {
+        /*
+        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        Scratch Pad and Pinned Prompts hydrate through one gxserver-owned
+        product-data snapshot. Return only the exact shared React fields and do
+        not derive values from GPUI product-state files, presentation labels,
+        terminal text, project paths, command text, URLs, or logs.
+        */
+        read_app_user_data_state(self.db)
+    }
+
+    pub fn save_scratch_pad(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        /*
+        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        Scratch Pad autosave stores freeform user text in gxserver state and
+        returns the refreshed app-user-data snapshot. The daemon must not log or
+        echo note content outside the authenticated RPC response.
+        */
+        let content = required_string_param(params, "content")?;
+        let timestamp = now_iso();
+        let created_at = self
+            .db
+            .query_row(
+                "SELECT createdAt FROM app_user_data WHERE itemKind = 'scratchPad' AND itemId = 'global'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .unwrap_or_else(|| timestamp.clone());
+        self.db
+            .execute(
+                r#"
+                INSERT INTO app_user_data (
+                  itemKind, itemId, content, title, createdAt, updatedAt
+                ) VALUES (
+                  'scratchPad', 'global', ?1, NULL, ?2, ?3
+                )
+                ON CONFLICT(itemKind, itemId) DO UPDATE SET
+                  content = excluded.content,
+                  updatedAt = excluded.updatedAt
+                "#,
+                params![content, created_at, timestamp],
+            )
+            .map_err(sql_error)?;
+        read_app_user_data_state(self.db)
+    }
+
+    pub fn save_pinned_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        /*
+        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        Pinned Prompt saves mirror the existing SidebarPinnedPrompt behavior:
+        create or update by promptId, preserve createdAt, stamp updatedAt on
+        save, normalize empty titles from content, and treat an empty content
+        save as removing that prompt instead of storing an unusable row.
+        */
+        let content = required_string_param(params, "content")?;
+        let title = required_string_param(params, "title")?;
+        let supplied_prompt_id = optional_trimmed_string_param(params, "promptId")?;
+        if content.is_empty() {
+            if let Some(prompt_id) = supplied_prompt_id {
+                self.db
+                    .execute(
+                        "DELETE FROM app_user_data WHERE itemKind = 'pinnedPrompt' AND itemId = ?1",
+                        [prompt_id],
+                    )
+                    .map_err(sql_error)?;
+            }
+            return read_app_user_data_state(self.db);
+        }
+
+        let prompt_id = match supplied_prompt_id {
+            Some(prompt_id) => prompt_id,
+            None => create_unique_app_pinned_prompt_id(self.db)?,
+        };
+        let timestamp = now_iso();
+        let created_at = self
+            .db
+            .query_row(
+                "SELECT createdAt FROM app_user_data WHERE itemKind = 'pinnedPrompt' AND itemId = ?1",
+                [&prompt_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .unwrap_or_else(|| timestamp.clone());
+        let normalized_title = normalize_app_pinned_prompt_title(title, content);
+        self.db
+            .execute(
+                r#"
+                INSERT INTO app_user_data (
+                  itemKind, itemId, content, title, createdAt, updatedAt
+                ) VALUES (
+                  'pinnedPrompt', ?1, ?2, ?3, ?4, ?5
+                )
+                ON CONFLICT(itemKind, itemId) DO UPDATE SET
+                  content = excluded.content,
+                  title = excluded.title,
+                  updatedAt = excluded.updatedAt
+                "#,
+                params![prompt_id, content, normalized_title, created_at, timestamp],
+            )
+            .map_err(sql_error)?;
+        read_app_user_data_state(self.db)
+    }
+
+    pub fn save_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        /*
+        CDXC:StashedPrompts 2026-07-29-00:00:
+        Stash saves are fired best-effort by the prompt-editor CLI after every
+        save-and-close, so the same text can arrive repeatedly. Re-saving
+        content that already exists for the same project bumps that row's
+        updatedAt instead of inserting a duplicate, and the queue is capped by
+        recency. Prompt bodies must never be logged or echoed outside the
+        authenticated RPC response.
+        */
+        let content = required_string_param(params, "content")?;
+        if content.trim().is_empty() {
+            return Err(DomainStateError::bad_request("content must not be empty."));
+        }
+        if content.chars().count() > MAX_STASHED_PROMPT_CONTENT_CHARS {
+            return Err(DomainStateError::bad_request(format!(
+                "content must be at most {MAX_STASHED_PROMPT_CONTENT_CHARS} characters."
+            )));
+        }
+        let project_id = optional_trimmed_string_param(params, "projectId")?;
+        let requested_prompt_id = optional_trimmed_string_param(params, "promptId")?;
+        let session_id = optional_trimmed_string_param(params, "sessionId")?;
+        let cwd = optional_trimmed_string_param(params, "cwd")?;
+        let timestamp = now_iso();
+        if let Some(prompt_id) = requested_prompt_id {
+            let updated = self
+                .db
+                .execute(
+                    r#"
+                    UPDATE stashed_prompts
+                    SET content = ?2,
+                        updatedAt = ?3
+                    WHERE promptId = ?1
+                    "#,
+                    params![prompt_id, content, timestamp],
+                )
+                .map_err(sql_error)?;
+            if updated == 0 {
+                return Err(DomainStateError::not_found(
+                    "Saved prompt does not exist.",
+                ));
+            }
+            let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
+                DomainStateError::corrupt_state("Saved prompt vanished during update.")
+            })?;
+            return Ok(json!({ "created": false, "prompt": prompt }));
+        }
+        let existing_prompt_id: Option<String> = self
+            .db
+            .query_row(
+                r#"
+                SELECT promptId FROM stashed_prompts
+                WHERE content = ?1 AND COALESCE(projectId, '') = COALESCE(?2, '')
+                ORDER BY updatedAt DESC
+                LIMIT 1
+                "#,
+                params![content, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+        let (prompt_id, created) = match existing_prompt_id {
+            Some(prompt_id) => {
+                self.db
+                    .execute(
+                        r#"
+                        UPDATE stashed_prompts
+                        SET sessionId = COALESCE(?2, sessionId),
+                            cwd = COALESCE(?3, cwd),
+                            updatedAt = ?4
+                        WHERE promptId = ?1
+                        "#,
+                        params![prompt_id, session_id, cwd, timestamp],
+                    )
+                    .map_err(sql_error)?;
+                (prompt_id, false)
+            }
+            None => {
+                let prompt_id = create_unique_stashed_prompt_id(self.db)?;
+                self.db
+                    .execute(
+                        r#"
+                        INSERT INTO stashed_prompts (
+                          promptId, content, projectId, sessionId, cwd, createdAt, updatedAt
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+                        "#,
+                        params![prompt_id, content, project_id, session_id, cwd, timestamp],
+                    )
+                    .map_err(sql_error)?;
+                self.db
+                    .execute(
+                        r#"
+                        DELETE FROM stashed_prompts
+                        WHERE promptId NOT IN (
+                          SELECT promptId FROM stashed_prompts
+                          ORDER BY updatedAt DESC, promptId DESC
+                          LIMIT ?1
+                        )
+                        "#,
+                        params![MAX_STASHED_PROMPTS],
+                    )
+                    .map_err(sql_error)?;
+                (prompt_id, true)
+            }
+        };
+        let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
+            DomainStateError::corrupt_state("Stashed prompt vanished during save.")
+        })?;
+        Ok(json!({ "created": created, "prompt": prompt }))
+    }
+
+    pub fn list_stashed_prompts(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        /*
+        CDXC:StashedPrompts 2026-07-29-00:00:
+        The default modal scope is "this project and its worktrees". Current
+        worktree sessions already carry the parent projectId, and legacy
+        worktree checkouts registered as their own project carry
+        worktree.parentProjectId, so the family of a projectId is: its root
+        (itself, or its parent for a legacy worktree project) plus every
+        project whose worktree.parentProjectId is that root.
+        */
+        let scope_project_id = optional_trimmed_string_param(params, "projectId")?;
+        let family = match scope_project_id {
+            Some(project_id) => Some(stashed_prompt_project_family(self.db, &project_id)?),
+            None => None,
+        };
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
+                       s.createdAt, s.updatedAt, p.name, p.identityIconJson,
+                       p.path, p.worktreeJson
+                FROM stashed_prompts s
+                LEFT JOIN projects p ON p.projectId = s.projectId
+                ORDER BY s.updatedAt DESC, s.promptId DESC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let prompts = statement
+            .query_map([], stashed_prompt_json_from_row)
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?
+            .into_iter()
+            .filter(|prompt| match &family {
+                None => true,
+                Some(family) => prompt
+                    .get("projectId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|project_id| family.contains(project_id)),
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({ "prompts": prompts }))
+    }
+
+    pub fn delete_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        let prompt_id = required_string_param(params, "promptId")?;
+        let deleted = self
+            .db
+            .execute(
+                "DELETE FROM stashed_prompts WHERE promptId = ?1",
+                [prompt_id],
+            )
+            .map_err(sql_error)?;
+        Ok(json!({ "deleted": deleted > 0 }))
+    }
+
+    /*
+    CDXC:GlobalActions 2026-08-01-16:00:
+    Global Actions are daemon-owned rather than project-owned, so every client
+    reads one list instead of a per-project column. Rows come back in sortOrder
+    with commandId as the tiebreak, so two actions saved in the same tick still
+    order deterministically across reads.
+    */
+    pub fn list_global_sidebar_commands(&self) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT definitionJson FROM global_sidebar_commands
+                ORDER BY sortOrder ASC, commandId ASC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let stored_definitions = statement
+            .query_map([], |row| row.get::<_, String>("definitionJson"))
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        Ok(stored_definitions
+            .into_iter()
+            .filter_map(|definition| serde_json::from_str::<Value>(&definition).ok())
+            .collect())
+    }
+
+    pub fn save_global_sidebar_command(
+        &self,
+        command_id: &str,
+        definition: &Value,
+    ) -> DomainResult<()> {
+        let timestamp = now_iso();
+        let definition_json = serde_json::to_string(definition).map_err(|error| {
+            DomainStateError::corrupt_state(format!(
+                "Global action definition could not be serialized: {error}"
+            ))
+        })?;
+        /*
+        A new action lands after everything currently stored; an edit keeps the
+        position it already had. COALESCE over MAX gives the first row
+        sortOrder 1 without a separate empty-table branch.
+        */
+        self.db
+            .execute(
+                r#"
+                INSERT INTO global_sidebar_commands (
+                  commandId, definitionJson, sortOrder, createdAt, updatedAt
+                )
+                VALUES (
+                  ?1,
+                  ?2,
+                  COALESCE(
+                    (SELECT sortOrder FROM global_sidebar_commands WHERE commandId = ?1),
+                    (SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM global_sidebar_commands)
+                  ),
+                  ?3,
+                  ?3
+                )
+                ON CONFLICT(commandId) DO UPDATE SET
+                  definitionJson = excluded.definitionJson,
+                  updatedAt = excluded.updatedAt
+                "#,
+                params![command_id, definition_json, timestamp],
+            )
+            .map_err(sql_error)?;
+        Ok(())
+    }
+
+    pub fn delete_global_sidebar_command(&self, command_id: &str) -> DomainResult<()> {
+        self.db
+            .execute(
+                "DELETE FROM global_sidebar_commands WHERE commandId = ?1",
+                [command_id],
+            )
+            .map_err(sql_error)?;
+        Ok(())
+    }
+
+    /*
+    Reorder assigns positions from the ids the client sent, in order. Ids the
+    client did not mention keep their relative order after the listed ones
+    rather than being dropped, so a client on an older list cannot silently
+    delete an action it had not loaded yet.
+    */
+    pub fn order_global_sidebar_commands(&self, command_ids: &[String]) -> DomainResult<()> {
+        let timestamp = now_iso();
+        /*
+        One reorder is many row writes, so it takes the writer reservation before
+        reading the stored ids and commits or rolls back as a unit, mirroring
+        `update_session_order`. Without the transaction a failure partway leaves
+        some rows on the new sortOrder and some on the old — an interleaved list
+        that the server would then echo back as the confirmed order. Taking
+        BEGIN IMMEDIATE before the SELECT also closes the read-then-write race
+        against a concurrent save or delete, which would otherwise keep a stale
+        sortOrder that this reorder never accounted for.
+        */
+        self.db
+            .execute_batch("BEGIN IMMEDIATE TRANSACTION")
+            .map_err(sql_error)?;
+        let result = (|| -> DomainResult<()> {
+            let stored_ids = {
+                let mut statement = self
+                    .db
+                    .prepare(
+                        r#"
+                        SELECT commandId FROM global_sidebar_commands
+                        ORDER BY sortOrder ASC, commandId ASC
+                        "#,
+                    )
+                    .map_err(sql_error)?;
+                let stored_ids = statement
+                    .query_map([], |row| row.get::<_, String>("commandId"))
+                    .map_err(sql_error)?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(sql_error)?;
+                stored_ids
+            };
+            /*
+            A repeated id would otherwise consume two index positions — the
+            append guard below skips the duplicate, but the write loop would
+            still assign it twice — so requested ids are deduplicated first.
+            */
+            let mut next_order: Vec<String> = Vec::with_capacity(stored_ids.len());
+            for command_id in command_ids {
+                if stored_ids.contains(command_id) && !next_order.contains(command_id) {
+                    next_order.push(command_id.clone());
+                }
+            }
+            for command_id in stored_ids {
+                if !next_order.contains(&command_id) {
+                    next_order.push(command_id);
+                }
+            }
+            for (index, command_id) in next_order.iter().enumerate() {
+                self.db
+                    .execute(
+                        r#"
+                        UPDATE global_sidebar_commands
+                        SET sortOrder = ?2, updatedAt = ?3
+                        WHERE commandId = ?1
+                        "#,
+                        params![command_id, (index + 1) as f64, timestamp],
+                    )
+                    .map_err(sql_error)?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                if let Err(error) = self.db.execute_batch("COMMIT") {
+                    let _ = self.db.execute_batch("ROLLBACK");
+                    return Err(sql_error(error));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.db.execute_batch("ROLLBACK");
+                Err(error)
+            }
+        }
+    }
+}
+
+fn read_app_user_data_state(db: &Connection) -> DomainResult<Value> {
+    let scratch_pad_content = db
+        .query_row(
+            "SELECT content FROM app_user_data WHERE itemKind = 'scratchPad' AND itemId = 'global'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(sql_error)?
+        .unwrap_or_default();
+    let mut statement = db
+        .prepare(
+            r#"
+            SELECT itemId, content, title, createdAt, updatedAt
+            FROM app_user_data
+            WHERE itemKind = 'pinnedPrompt'
+            ORDER BY updatedAt DESC, itemId ASC
+            "#,
+        )
+        .map_err(sql_error)?;
+    let pinned_prompts = statement
+        .query_map([], |row| {
+            let prompt_id: String = row.get(0)?;
+            let content: String = row.get(1)?;
+            let title: Option<String> = row.get(2)?;
+            let created_at: String = row.get(3)?;
+            let updated_at: String = row.get(4)?;
+            let normalized_title =
+                normalize_app_pinned_prompt_title(title.as_deref().unwrap_or(""), &content);
+            Ok(json!({
+                "content": content,
+                "createdAt": created_at,
+                "promptId": prompt_id,
+                "title": normalized_title,
+                "updatedAt": updated_at,
+            }))
+        })
+        .map_err(sql_error)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    Ok(json!({
+        "pinnedPrompts": pinned_prompts,
+        "scratchPadContent": scratch_pad_content,
+    }))
+}
+
+fn create_unique_app_pinned_prompt_id(db: &Connection) -> DomainResult<String> {
+    let millis = chrono::Utc::now().timestamp_millis();
+    for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        let candidate = if attempt == 0 {
+            format!("gxserver-prompt-{millis}")
+        } else {
+            format!("gxserver-prompt-{millis}-{attempt}")
+        };
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM app_user_data WHERE itemKind = 'pinnedPrompt' AND itemId = ?1)",
+                [&candidate],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if !exists {
+            return Ok(candidate);
+        }
+    }
+    Err(DomainStateError::corrupt_state(
+        "Could not allocate a unique pinned prompt id.",
+    ))
+}
+
+fn normalize_app_pinned_prompt_title(title_candidate: &str, content: &str) -> String {
+    let trimmed_title = title_candidate.trim();
+    if !trimmed_title.is_empty() {
+        return trimmed_title.to_string();
+    }
+    content
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.chars().take(80).collect::<String>())
+        .filter(|line| !line.is_empty())
+        .unwrap_or_else(|| "Untitled Prompt".to_string())
+}
+
+const MAX_STASHED_PROMPTS: i64 = 200;
+
+const MAX_STASHED_PROMPT_CONTENT_CHARS: usize = 200_000;
+
+fn create_unique_stashed_prompt_id(db: &Connection) -> DomainResult<String> {
+    let millis = chrono::Utc::now().timestamp_millis();
+    for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        let candidate = if attempt == 0 {
+            format!("gxserver-stash-{millis}")
+        } else {
+            format!("gxserver-stash-{millis}-{attempt}")
+        };
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM stashed_prompts WHERE promptId = ?1)",
+                [&candidate],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if !exists {
+            return Ok(candidate);
+        }
+    }
+    Err(DomainStateError::corrupt_state(
+        "Could not allocate a unique stashed prompt id.",
+    ))
+}
+
+fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+    let prompt_id: String = row.get(0)?;
+    let content: String = row.get(1)?;
+    let project_id: Option<String> = row.get(2)?;
+    let session_id: Option<String> = row.get(3)?;
+    let cwd: Option<String> = row.get(4)?;
+    let created_at: String = row.get(5)?;
+    let updated_at: String = row.get(6)?;
+    let project_name: Option<String> = row.get(7)?;
+    let identity_icon_json: Option<String> = row.get(8)?;
+    let project_path: Option<String> = row.get(9)?;
+    let worktree_json: Option<String> = row.get(10)?;
+    /*
+    CDXC:StashedPrompts 2026-07-29:
+    Stash rows label their origin project with the same icon priority as the
+    sidebar. Publish the user-selected identity fields plus the cached icon
+    discovered from the repository; the client ranks those fields and falls
+    back to a folder glyph.
+    */
+    let identity_icon = identity_icon_json
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<Value>(value).ok());
+    let project_icon = identity_icon
+        .as_ref()
+        .and_then(|icon| icon.get("icon").cloned());
+    let project_icon_data_url = identity_icon
+        .as_ref()
+        .and_then(|icon| icon.get("iconDataUrl").and_then(Value::as_str))
+        .map(str::to_string);
+    let project = json!({
+        "path": project_path,
+        "worktree": worktree_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<Value>(value).ok()),
+    });
+    let project_discovered_icon_data_url = crate::project_icon::project_icon_key(&project)
+        .as_deref()
+        .and_then(crate::project_icon::published_project_icon_data_url);
+    Ok(json!({
+        "content": content,
+        "createdAt": created_at,
+        "cwd": cwd,
+        "projectIcon": project_icon,
+        "projectIconDataUrl": project_icon_data_url,
+        "projectDiscoveredIconDataUrl": project_discovered_icon_data_url,
+        "projectId": project_id,
+        "projectName": project_name,
+        "promptId": prompt_id,
+        "sessionId": session_id,
+        "updatedAt": updated_at,
+    }))
+}
+
+fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Option<Value>> {
+    db.query_row(
+        r#"
+        SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
+               s.createdAt, s.updatedAt, p.name, p.identityIconJson,
+               p.path, p.worktreeJson
+        FROM stashed_prompts s
+        LEFT JOIN projects p ON p.projectId = s.projectId
+        WHERE s.promptId = ?1
+        "#,
+        [prompt_id],
+        stashed_prompt_json_from_row,
+    )
+    .optional()
+    .map_err(sql_error)
+}
+
+fn stashed_prompt_project_family(
+    db: &Connection,
+    project_id: &str,
+) -> DomainResult<HashSet<String>> {
+    let mut statement = db
+        .prepare("SELECT projectId, worktreeJson FROM projects")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            let project_id: String = row.get(0)?;
+            let worktree_json: Option<String> = row.get(1)?;
+            Ok((project_id, worktree_json))
+        })
+        .map_err(sql_error)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    let parent_by_project: HashMap<String, String> = rows
+        .iter()
+        .filter_map(|(id, worktree_json)| {
+            let parent = serde_json::from_str::<Value>(worktree_json.as_deref()?)
+                .ok()?
+                .get("parentProjectId")?
+                .as_str()
+                .filter(|parent| !parent.is_empty())?
+                .to_string();
+            Some((id.clone(), parent))
+        })
+        .collect();
+    let root = parent_by_project
+        .get(project_id)
+        .cloned()
+        .unwrap_or_else(|| project_id.to_string());
+    let mut family: HashSet<String> = HashSet::new();
+    family.insert(project_id.to_string());
+    family.insert(root.clone());
+    for (id, parent) in &parent_by_project {
+        if parent == &root {
+            family.insert(id.clone());
+        }
+    }
+    Ok(family)
+}
