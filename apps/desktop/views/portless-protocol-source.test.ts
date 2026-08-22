@@ -13,10 +13,15 @@ const sidebarContractSource = readFileSync(
   new URL("../../../packages/shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",
 );
-const portlessRustSource = readFileSync(
-  new URL("../../../server/src/portless.rs", import.meta.url),
-  "utf8",
-);
+// server/src/portless.rs was split into server/src/portless/{mod,types,status,
+// sync,admin,slug,launchd,listener_discovery,repository,tests}.rs. The
+// assertions below span struct/fn definitions that now live in types.rs and
+// status.rs, in that relative order, so concatenate just those two to keep
+// checking the same content.
+const portlessRustSource = [
+  readFileSync(new URL("../../../server/src/portless/types.rs", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../server/src/portless/status.rs", import.meta.url), "utf8"),
+].join("\n");
 const presentationRustSource = readFileSync(
   new URL("../../../server/src/presentation.rs", import.meta.url),
   "utf8",
