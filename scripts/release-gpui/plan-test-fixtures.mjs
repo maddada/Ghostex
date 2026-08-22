@@ -63,7 +63,7 @@ const FIXTURE_FILES = {
       name: "ghostex",
       packageManager: "bun@1.3.10",
       private: true,
-      scripts: { "release:test": "vitest run --config vitest.release.config.ts" },
+      scripts: { "release:test": "vitest run --config scripts/release-gpui/vitest.release.config.ts" },
       version: "7.7.0",
     },
     null,

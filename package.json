@@ -31,7 +31,7 @@
     "release:plan": "node scripts/release-gpui/plan-cli.mjs",
     "release:classify": "node scripts/release-gpui/failure-classification.mjs",
     "release:references:verify": "node scripts/release-gpui/verify-reference-contract.mjs",
-    "release:test": "vitest run --config vitest.release.config.ts",
+    "release:test": "vitest run --config scripts/release-gpui/vitest.release.config.ts",
     "build:editor": "bun apps/editor/scripts/build-editor-web.mjs && bash apps/editor/scripts/build-editor-app.sh",
     "gxserver:remote-linux": "node server/package-remote-linux.mjs --arch all",
     "gxserver:remote-linux:release": "scripts/build-remote-gxserver-linux-release.sh",

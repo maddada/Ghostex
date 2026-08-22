@@ -174,9 +174,10 @@ Options:
   --skip-brew-fetch  Skip final brew fetch checks.
   --skip-sparkle     Do not update or validate Sparkle appcasts.
   --skip-android     Do not build/upload the signed Android APK.
-  --gpui             Also build, sign, notarize, and publish the GPUI app
-                     (ghostex-gpui-<version>-arm64.dmg + appcast-gpui.xml)
-                     on the same version/tag. Not reconstructed by --resume.
+  --gpui             Retired 2026-08-23: fails fast with a ReleaseError. Used to
+                     also build, sign, notarize, and publish the GPUI app
+                     (ghostex-gpui-<version>-arm64.dmg + appcast-gpui.xml) on the
+                     same version/tag. The current pipeline is scripts/release-gpui.
   --resume [version] Resume an already-created release and finish missing Homebrew/Android/notes steps.
   --from <phase>     Resume from a phase using build/release-state/v<version>.json.
                      Phases: preflight, prepare-remote-linux, publish-macos,
@@ -1392,9 +1393,21 @@ async function preflight(version, buildVersion, options) {
         `Build version ${buildVersion} must be greater than the latest Sparkle build ${previousBuild}.`,
       );
     }
-    if (options.gpui && !existsSync(path.join(repoRoot, config.gpuiFeed))) {
+    /*
+     * CDXC:ReleaseAutomation 2026-08-23:
+     * --gpui used to merge into repository-root appcast-gpui.xml, a separate
+     * Sparkle feed for the GPUI app's own bundle id. That feed was retired
+     * (deleted with appcast-x86_64.xml); the current pipeline publishes the
+     * single appcast.xml through scripts/release-gpui instead. This whole
+     * legacy --gpui publish path has no successor in this file, so fail fast
+     * and explicitly rather than trying to merge into a feed that no longer
+     * exists (see buildArch, which fails the same way for the same reason).
+     */
+    if (options.gpui) {
       throw new ReleaseError(
-        `--gpui needs ${config.gpuiFeed} at the repository root (generate_appcast merges into the existing feed).`,
+        `--gpui is unreachable: it published a separate ${config.gpuiFeed} Sparkle feed, retired on 2026-08-23. ` +
+          "This script's macOS release pipeline has no successor for that feed; the current pipeline publishes " +
+          "appcast.xml through scripts/release-gpui.",
       );
     }
   }
@@ -1830,7 +1843,8 @@ async function buildAndPackage(version, buildVersion, options = {}) {
    CDXC:MacRelease 2026-06-10-09:47:
    Release automation intentionally builds only the Apple Silicon app. Do not
    add Intel release legs back here; old Intel artifacts remain available from
-   their existing GitHub releases and appcast-x86_64.xml history.
+   their existing GitHub releases. The historical appcast-x86_64.xml feed that
+   tracked them was retired on 2026-08-23.
    */
   const built = [];
   for (const entry of releaseArchitectures) {

@@ -66,8 +66,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "CLAUDE.md", why: "Agent instructions; metadata only." },
   { path: "LICENSE", why: "Metadata only." },
   { path: "README.md", why: "Metadata only." },
-  { path: "appcast-gpui.xml", why: "Sparkle feed output, not a build input." },
-  { path: "appcast-x86_64.xml", why: "Historical Sparkle feed output, not a build input." },
   { path: "appcast.xml", why: "Sparkle feed output written by the publisher, not a build input." },
   { path: "claude-code-codex-keybindings.json", why: "Developer keybindings; not packaged." },
   { path: "favicon.png", why: "Web asset for local tooling; not packaged by any release job." },
@@ -86,8 +84,10 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
     path: ".dependencies/zehn",
     why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the packages/find crate compiled into gxserver.",
   },
-  { path: "vitest.config.ts", why: "Test runner configuration; release:test uses vitest.release.config.ts." },
-  { path: "vitest.release.config.ts", why: "Runs in prepare only; cannot change artifact bytes." },
+  {
+    path: "vitest.config.ts",
+    why: "Test runner configuration; release:test uses scripts/release-gpui/vitest.release.config.ts.",
+  },
 ]);
 
 /*

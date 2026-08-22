@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
-    <channel>
-        <title>Ghostex GPUI Updates</title>
-        <link>https://github.com/maddada/Ghostex/releases</link>
-        <description>Sparkle appcast for Ghostex GPUI macOS releases.</description>
-    </channel>
-</rss>
