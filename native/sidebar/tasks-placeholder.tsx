@@ -1792,8 +1792,19 @@ function ProjectBoardApp() {
     const bothConfig = beginBoardColumnRename(boardColumnConfigRef.current, from, nextName);
     await runBeads({ action: "configSet", value: bothConfig });
     boardColumnConfigRef.current = bothConfig;
-    for (const ticket of tickets.filter((candidate) => candidate.boardStatus === from)) {
-      await runBeads({ action: "updateStatus", issueId: ticket.id, status: nextName });
+    setBoardColumnConfig(bothConfig);
+    const ticketsToMove = tickets.filter((candidate) => candidate.boardStatus === from);
+    for (const [index, ticket] of ticketsToMove.entries()) {
+      try {
+        await runBeads({ action: "updateStatus", issueId: ticket.id, status: nextName });
+      } catch (error) {
+        const unmovedIds = ticketsToMove.slice(index).map((ticket) => ticket.id);
+        await loadTickets({ mode: "manual" });
+        const failure = beadsErrorMessage(error instanceof Error ? error.message : "");
+        throw new Error(
+          `Could not finish renaming ${from} to ${nextName}. ${unmovedIds.length === 1 ? "Ticket" : "Tickets"} ${unmovedIds.join(", ")} did not move. ${failure}`,
+        );
+      }
     }
     await writeBoardColumnConfig(removeBoardColumn(bothConfig, from));
   };
