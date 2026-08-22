@@ -57,13 +57,6 @@ pub const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}"; // Ctrl+U — clear towar
 pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear toward end
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
-/*
-Terminal-picker answering (see session_chat_resume_prompt). One arrow press per
-row, then a settle before Enter so the TUI has repainted the new highlight —
-the same measured discipline the message body uses for its own delayed Enter.
-*/
-const SESSION_CHAT_PICKER_ROW_STEP_MS: u64 = 150;
-const SESSION_CHAT_PICKER_CONFIRM_DELAY_MS: u64 = 300;
 const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
@@ -417,35 +410,22 @@ pub fn build_session_chat_key_steps(key: &str) -> Option<Vec<SessionChatSendStep
 }
 
 /*
-CDXC:SessionChatTerminalPicker 2026-08-21:
-Answering an on-screen picker (Claude Code's resume-usage chooser today): walk
-the highlight `row_moves` rows — positive means Down — then confirm. The move
-count is derived by the caller from a capture taken at ANSWER time, never from
-the detection that painted the card, because the user can arrow the highlight
-around in the terminal in between.
+CDXC:SessionChatTerminalPicker 2026-08-22:
+Answering an on-screen picker (Claude Code's resume-usage chooser today): type
+the chosen row's NUMBER, and nothing else.
 
-No clear burst and no bracketed paste: these are keystrokes for a dialog that
-owns the input line, not text for a composer.
+This used to walk the highlight with arrow keys and confirm with Enter, which
+always answered row 1. Measured on a zmx pty: `ESC [ B` written into that picker
+does not move the highlight at all, so every walk was a no-op and the trailing
+Enter committed whatever was already highlighted. The digit both selects and
+commits — no Enter, no settle, nothing to pace. Same behaviour, same fix, and
+same reason as Claude's AskUserQuestion selector above.
+
+One verbatim write: no clear burst and no bracketed paste, because this is a
+keystroke for a dialog that owns the input line, not text for a composer.
 */
-pub fn build_terminal_picker_answer_steps(row_moves: i32) -> Vec<SessionChatSendStep> {
-    let (row_key, presses) = if row_moves >= 0 {
-        (ASK_NEXT_ROW, row_moves as usize)
-    } else {
-        (ASK_PREVIOUS_ROW, row_moves.unsigned_abs() as usize)
-    };
-    let mut steps = Vec::with_capacity(presses * 2 + 2);
-    for _ in 0..presses {
-        steps.push(SessionChatSendStep::Write(row_key.to_string()));
-        // Every press trails its own settle, the last one included: the pause
-        // before Enter is therefore row-step + confirm-delay, which is the
-        // cadence this picker was measured against.
-        steps.push(SessionChatSendStep::SleepMs(SESSION_CHAT_PICKER_ROW_STEP_MS));
-    }
-    steps.push(SessionChatSendStep::SleepMs(
-        SESSION_CHAT_PICKER_CONFIRM_DELAY_MS,
-    ));
-    steps.push(SessionChatSendStep::Write(ASK_ENTER.to_string()));
-    steps
+pub fn build_terminal_picker_answer_steps(answer_key: &str) -> Vec<SessionChatSendStep> {
+    vec![SessionChatSendStep::Write(answer_key.to_string())]
 }
 
 /// Keystroke groups written 1000ms apart; raw groups go verbatim, text groups
@@ -742,7 +722,7 @@ async fn write_session_chat_payload(
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
     let zmx_name = zmx_name.to_string();
     let capture = tokio::task::spawn_blocking(move || {
-        crate::zmx::read_zmx_session_history_text_by_name(&zmx_name)
+        crate::zmx::read_zmx_session_screen_capture(&zmx_name)
     })
     .await
     .ok()?

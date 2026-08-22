@@ -23,20 +23,31 @@ row, which silently compacts the conversation the user was about to continue.
 Which row the user wants is NOT ours to decide (summary vs full session is a
 usage-limit trade-off only they can make), so this module no longer answers the
 picker. It DESCRIBES it: the prose above the rows, every row in screen order,
-and which row the TUI highlights right now. `session_chat_notice.rs` turns that
-into the input-blocking `resumePrompt` terminal notice the chat surfaces render
-as an answer picker, and `answerSessionChatPrompt`'s `terminalChoice` lane
-walks the highlight onto the row the user picked.
+its printed number, and which row the TUI highlights right now.
+`session_chat_notice.rs` turns that into the input-blocking `resumePrompt`
+terminal notice the chat surfaces render as an answer picker, and
+`answerSessionChatPrompt`'s `terminalChoice` lane types the chosen row's NUMBER.
 
 Detection lives here (server side) so every chat client — gpui, ghostex-web
 and the RN mobile app — inherits it from one implementation.
 
+Answering by number, measured 2026-08-22 against Claude Code on a zmx pty:
+writing the legacy Down arrow (`ESC [ B`) into this picker does NOTHING — the
+highlight does not move — so an arrow-walk-then-Enter answer confirmed the
+HIGHLIGHTED row every time, which is row 1, whatever the user picked. Writing
+the digit `2` both selected and committed row 2 with no Enter at all. This is
+the same finding as Claude's AskUserQuestion selector (see
+`build_claude_ask_answer_keys`, bug STA-1860, "delivered every non-first pick as
+the first option"), and the same fix: drive these selectors by their stable
+1-based number, never by navigation.
+
+The number comes off the ROW, not from its position in the run, because the
+row order and the "Don't ask me again" row are Claude's to change.
+
 Matching is deliberately narrow: the picker only counts when a run of
 consecutive numbered rows carries BOTH canonical labels, one of those rows is
 the highlighted one, and the "Enter to confirm" footer follows the run inside
-the scanned tail window. The number of arrow presses is derived from where the
-highlight actually sits, never assumed, because the row order and the
-"Don't ask me again" row are Claude's to change.
+the scanned tail window.
 */
 
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
@@ -73,6 +84,9 @@ pub const SESSION_CHAT_RESUME_PROMPT_KIND: &str = "resumePrompt";
 /// One row of an on-screen picker, in the order it is painted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChatTerminalPickerRow {
+    /// The number the TUI printed on this row, which is also the key that
+    /// selects it. Read off the screen, never inferred from the position.
+    pub number: u32,
     pub label: String,
     /// True for the row the TUI highlights right now (the one a bare Enter
     /// would confirm).
@@ -92,11 +106,16 @@ pub struct SessionChatTerminalPicker {
 }
 
 impl SessionChatTerminalPicker {
-    /// Rows to travel from the highlighted row to `target`: positive means Down
-    /// presses, negative means Up, 0 means Enter alone. `None` when `target` is
-    /// not a row this picker painted, so an answer can never be guessed at.
-    pub fn row_moves_to(&self, target: usize) -> Option<i32> {
-        (target < self.rows.len()).then(|| target as i32 - self.selected_index as i32)
+    /*
+    The keystroke that picks row `target`: its printed number, as one digit.
+    `None` when `target` is not a row this picker painted, or when its number
+    cannot be typed as a single key — an answer is never guessed at, and the
+    card's "Open terminal" action is the honest fallback for a picker this
+    build cannot drive.
+    */
+    pub fn answer_key(&self, target: usize) -> Option<String> {
+        let number = self.rows.get(target)?.number;
+        (1..=9).contains(&number).then(|| number.to_string())
     }
 }
 
@@ -104,6 +123,7 @@ impl SessionChatTerminalPicker {
 struct PickerRow {
     /// Index of the row inside the scanned window.
     line: usize,
+    number: u32,
     label: String,
     selected: bool,
 }
@@ -118,9 +138,9 @@ fn strip_box_border(line: &str) -> &str {
         .trim()
 }
 
-/// `❯ 2. Resume full session as-is` → (selected, label). Rows that are not a
-/// numbered picker row return `None`.
-fn parse_picker_row(line: &str) -> Option<(bool, String)> {
+/// `❯ 2. Resume full session as-is` → (selected, number, label). Rows that are
+/// not a numbered picker row return `None`.
+fn parse_picker_row(line: &str) -> Option<(bool, u32, String)> {
     let trimmed = strip_box_border(line);
     let mut rest = trimmed;
     let mut selected = false;
@@ -134,12 +154,13 @@ fn parse_picker_row(line: &str) -> Option<(bool, String)> {
     if digits.is_empty() {
         return None;
     }
+    let number: u32 = digits.parse().ok()?;
     let rest = rest[digits.len()..].strip_prefix('.')?;
     let label = rest.trim();
     if label.is_empty() {
         return None;
     }
-    Some((selected, label.to_string()))
+    Some((selected, number, label.to_string()))
 }
 
 /// The last `SESSION_CHAT_RESUME_PROMPT_SCAN_LINES` non-blank lines, oldest
@@ -169,7 +190,7 @@ fn picker_runs(window: &[String]) -> Vec<Vec<PickerRow>> {
     let mut current: Vec<PickerRow> = Vec::new();
     for (line, text) in window.iter().enumerate() {
         match parse_picker_row(text) {
-            Some((selected, label)) => {
+            Some((selected, number, label)) => {
                 if current
                     .last()
                     .is_some_and(|previous: &PickerRow| previous.line + 1 != line)
@@ -178,6 +199,7 @@ fn picker_runs(window: &[String]) -> Vec<Vec<PickerRow>> {
                 }
                 current.push(PickerRow {
                     line,
+                    number,
                     label,
                     selected,
                 });
@@ -270,6 +292,7 @@ pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerm
             rows: run
                 .into_iter()
                 .map(|row| SessionChatTerminalPickerRow {
+                    number: row.number,
                     label: row.label,
                     selected: row.selected,
                 })
