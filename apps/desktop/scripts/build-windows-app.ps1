@@ -63,7 +63,7 @@ finally {
 
 # 2) Rust binaries (bootstrap, main app, CEF helper, and installer launcher). Requires MSVC toolchain, cmake,
 # and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
-# libghostty-vt (GHOSTEX_ZIG override honored by gpui/build.rs).
+# libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
 Push-Location $GpuiDir
 try {
     cargo build --release --bin ghostex-gpui-cef-bootstrap --bin ghostex-gpui --bin ghostex-gpui-cef-helper --bin ghostex-windows-installer
@@ -212,7 +212,7 @@ elseif ($RequireWslArchive) {
 if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     $ComponentVersion = $env:GHOSTEX_CODE_SERVER_COMPONENT_VERSION
     if (-not $ComponentVersion) {
-        $ComponentVersion = (& node (Join-Path $RepoRoot "scripts/release-gpui/code-server-component-identity.mjs") --root (Join-Path $RepoRoot "code-server")).Trim()
+        $ComponentVersion = (& node (Join-Path $RepoRoot "scripts/release-gpui/code-server-component-identity.mjs") --root (Join-Path $RepoRoot ".dependencies/code-server")).Trim()
         if ($LASTEXITCODE -ne 0 -or -not $ComponentVersion) {
             throw "Could not resolve the code-server component payload identity"
         }

@@ -270,7 +270,9 @@ describe('active WSL2 code-server consumer contract', () => {
     const launcher = repoFile('scripts/start-gpui.mjs');
 
     expect(launcher).toContain('isWsl ? "build-windows-app-wsl.sh" : "build-windows-app.ps1"');
-    expect(launcher).toContain('codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, "code-server") })');
+    expect(launcher).toContain(
+      'codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, ".dependencies/code-server") })'
+    );
     expect(launcher).toContain(
       'codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)'
     );
