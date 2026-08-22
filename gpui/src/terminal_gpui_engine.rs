@@ -234,16 +234,16 @@ pub(crate) struct GpuiEngineTerminalRecord {
 /// system install. Idempotent per process; call once at startup.
 pub(crate) fn register_gpui_terminal_engine_fonts(cx: &App) {
     let fonts: Vec<std::borrow::Cow<'static, [u8]>> = vec![
-        include_bytes!("../../ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf")
+        include_bytes!("../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf")
             .as_slice()
             .into(),
-        include_bytes!("../../ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf")
+        include_bytes!("../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf")
             .as_slice()
             .into(),
-        include_bytes!("../../ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf")
+        include_bytes!("../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf")
             .as_slice()
             .into(),
-        include_bytes!("../../ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf")
+        include_bytes!("../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf")
             .as_slice()
             .into(),
     ];
@@ -409,7 +409,7 @@ fn gpui_engine_shell_integration_resources_dir() -> Option<PathBuf> {
         return Some(contents_dir.join("Resources"));
     }
 
-    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ghostty/src"))
+    Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.dependencies/ghostty/src"))
 }
 
 #[cfg(not(target_os = "windows"))]

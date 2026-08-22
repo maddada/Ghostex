@@ -78,14 +78,14 @@ if [[ "${GHOSTEX_RELEASE_SKIP_SUBMODULES:-0}" != "1" ]]; then
   if [[ "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" == "1" ]]; then
     requested=(mobile)
   else
-    requested=(code-server zmx)
+    requested=(.dependencies/code-server .dependencies/zmx)
   fi
   if [[ "${GHOSTEX_RELEASE_INCLUDE_ANDROID:-0}" == "1" && "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" != "1" ]]; then
     requested+=(mobile)
   fi
   git -c "safe.directory=$REPO_ROOT" -C "$REPO_ROOT" submodule update --init --depth=1 -- "${requested[@]}"
   if [[ "${GHOSTEX_RELEASE_ANDROID_ONLY:-0}" != "1" ]]; then
-    git -C "$REPO_ROOT/code-server" submodule update --init --depth=1 -- lib/vscode
+    git -C "$REPO_ROOT/.dependencies/code-server" submodule update --init --depth=1 -- lib/vscode
   fi
 fi
 

@@ -119,7 +119,7 @@ describe("release product input map", () => {
      * gitlink, so it can never appear in this repository's tree. The workflow
      * files the rewiring workstream created now exist and are required.
      */
-    expect([...new Set(allowed)]).toEqual(["code-server/.node-version"]);
+    expect([...new Set(allowed)]).toEqual([".dependencies/code-server/.node-version"]);
   });
 
   test("uses only supported pathspec syntax", () => {

@@ -127,9 +127,9 @@ async function buildLinuxPackageForArch({ arch, options }) {
       sourceDirty: await gitSourceDirty(repoRoot),
       sourceRevision: await gitOutput(repoRoot, ['rev-parse', 'HEAD'], 'unknown'),
       tuiBin: options.tuiBin ? path.resolve(repoRoot, options.tuiBin) : '',
-      tuiRoot: path.resolve(repoRoot, options.tuiRoot || 'tui2'),
+      tuiRoot: path.resolve(repoRoot, options.tuiRoot || '.dependencies/tui2'),
       tuiZigBin: options.tuiZigBin || process.env.TUI_ZIG || zmxZigBin,
-      zmxRoot: path.resolve(repoRoot, options.zmxRoot || 'zmx'),
+      zmxRoot: path.resolve(repoRoot, options.zmxRoot || '.dependencies/zmx'),
       zmxZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
     };

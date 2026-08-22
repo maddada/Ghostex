@@ -39,7 +39,7 @@ fi
 PREFIX="$1"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-GHOSTTY_DIR="$ROOT_DIR/ghostty"
+GHOSTTY_DIR="$ROOT_DIR/.dependencies/ghostty"
 REQUIRED_ZIG_MINOR="0.16"
 
 zig_matches() {

@@ -96,7 +96,7 @@ describe("release fingerprint algorithm", () => {
 
   test("propagates a gxserver change into every desktop product through composition", () => {
     const before = fingerprintsAt(repo.commit("checkpoint"));
-    repo.setGitlink("zmx", "2222222222222222222222222222222222222222");
+    repo.setGitlink(".dependencies/zmx", "2222222222222222222222222222222222222222");
     const after = fingerprintsAt(repo.commit("zmx pin bump"));
     const moved = changed(before, after);
     for (const product of [
@@ -130,7 +130,7 @@ describe("release fingerprint algorithm", () => {
 
   test("propagates a code-server pin change into macOS and Windows but not Linux packages", () => {
     const before = fingerprintsAt(repo.commit("checkpoint"));
-    repo.setGitlink("code-server", "4444444444444444444444444444444444444444");
+    repo.setGitlink(".dependencies/code-server", "4444444444444444444444444444444444444444");
     const after = fingerprintsAt(repo.commit("code-server pin bump"));
     const moved = changed(before, after);
     expect(moved).toContain("code-server");

@@ -49,7 +49,7 @@ const FIXTURE_FILES = {
   "components.json": "{\"style\":\"default\"}\n",
   "components/ui/button.tsx": "export const Button = () => null;\n",
   "ghostex-paths/src/lib.rs": "pub fn home() {}\n",
-  "ghostty/src/main.zig": "pub fn main() void {}\n",
+  ".dependencies/ghostty/src/main.zig": "pub fn main() void {}\n",
   "gpui/Cargo.toml": "[package]\nname = \"ghostex-gpui\"\n",
   "gpui/src/main.rs": "fn main() {}\n",
   "gxserver-rs/src/constants.rs": "pub const GXSERVER_PROTOCOL_VERSION: u32 = 42;\n",
@@ -104,7 +104,7 @@ const FIXTURE_FILES = {
   "sidebar/sidebar-app.tsx": "export const SidebarApp = () => null;\n",
   "skills/ghostex-cli/SKILL.md": "# skill\n",
   "tsconfig.json": "{\"compilerOptions\":{}}\n",
-  "tui2/src/main.rs": "fn main() {}\n",
+  ".dependencies/tui2/src/main.rs": "fn main() {}\n",
 };
 
 function git(dir, args) {

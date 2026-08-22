@@ -277,7 +277,7 @@ pub fn find_ghostex_source_root(start_path: Option<&Path>) -> Option<PathBuf> {
     );
     loop {
         if file_exists_sync(&current.join("scripts").join("ghostex-cli.mjs"))
-            && file_exists_sync(&current.join("tui2").join("Cargo.toml"))
+            && file_exists_sync(&current.join(".dependencies").join("tui2").join("Cargo.toml"))
         {
             return Some(current);
         }
@@ -655,7 +655,7 @@ pub fn resolve_ghostex_tui_launch(flags: &Flags) -> CliResult<Launch> {
         }
     }
     Err(CliError::Other(
-        "Ghostex TUI binary was not found. Build the TUI with `cargo build --bin ghostex-tui --manifest-path tui2/Cargo.toml`, pass `--tui-bin <path>`, or set GHOSTEX_TUI_BIN.".to_string(),
+        "Ghostex TUI binary was not found. Build the TUI with `cargo build --bin ghostex-tui --manifest-path .dependencies/tui2/Cargo.toml`, pass `--tui-bin <path>`, or set GHOSTEX_TUI_BIN.".to_string(),
     ))
 }
 
@@ -672,11 +672,13 @@ pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
         return Some(simple(&bundled_bin));
     }
     let debug_bin = root
+        .join(".dependencies")
         .join("tui2")
         .join("target")
         .join("debug")
         .join("ghostex-tui");
     let release_bin = root
+        .join(".dependencies")
         .join("tui2")
         .join("target")
         .join("release")
@@ -687,7 +689,7 @@ pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
     if file_exists_sync(&debug_bin) {
         return Some(simple(&debug_bin));
     }
-    let manifest_path = root.join("tui2").join("Cargo.toml");
+    let manifest_path = root.join(".dependencies").join("tui2").join("Cargo.toml");
     if !file_exists_sync(&manifest_path) {
         return None;
     }
@@ -1322,13 +1324,14 @@ mod tests {
         let root = temp_root("tui");
         assert!(resolve_ghostex_tui_launch_from_root(&root).is_none());
 
-        touch(&root.join("tui2").join("Cargo.toml"));
+        touch(&root.join(".dependencies").join("tui2").join("Cargo.toml"));
         let launch = resolve_ghostex_tui_launch_from_root(&root).expect("cargo launch");
         assert_eq!(launch.command, "cargo");
         assert_eq!(launch.args[0], "run");
         assert_eq!(launch.args.last().map(String::as_str), Some("--no-session"));
 
         let debug = root
+            .join(".dependencies")
             .join("tui2")
             .join("target")
             .join("debug")
@@ -1339,6 +1342,7 @@ mod tests {
         assert_eq!(launch.args, vec!["--ghostex", "--no-session"]);
 
         let release = root
+            .join(".dependencies")
             .join("tui2")
             .join("target")
             .join("release")
@@ -1471,7 +1475,7 @@ mod tests {
     fn find_ghostex_source_root_walks_up_to_marker_pair() {
         let root = temp_root("source-root");
         touch(&root.join("scripts").join("ghostex-cli.mjs"));
-        touch(&root.join("tui2").join("Cargo.toml"));
+        touch(&root.join(".dependencies").join("tui2").join("Cargo.toml"));
         let nested = root.join("a").join("b");
         std::fs::create_dir_all(&nested).expect("mkdir");
         let canonical_root = std::fs::canonicalize(&root).expect("canonical root");

@@ -138,7 +138,7 @@ describe("Scenario B — Android-only change", () => {
 describe("Scenario C — gxserver-only change", () => {
   const baselineRelease = baselineAt(repo.head);
   const sourceSha = (() => {
-    repo.setGitlink("zmx", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    repo.setGitlink(".dependencies/zmx", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
     return repo.commit("zmx submodule bump");
   })();
   const plan = planAt(sourceSha, { baselines: [baselineRelease], version: "7.7.0" });

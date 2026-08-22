@@ -22,15 +22,15 @@ fi
 # CDXC:AgentHistorySearch 2026-08-20: zehn is no longer a Zig submodule that this
 # script builds and stages as Web/bin/zehn. Prompt-history search is a Rust crate
 # compiled into gxserver, so there is nothing to build, cache, or copy here.
-ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/zmx}"
+ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/gxserver-rs}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
 # CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
-TUI_ROOT="${TUI_ROOT:-$REPO_ROOT/tui2}"
+TUI_ROOT="${TUI_ROOT:-$REPO_ROOT/.dependencies/tui2}"
 CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-}}" ]] && CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=1
-CODE_SERVER_ROOT="${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-$REPO_ROOT/code-server}}"
+CODE_SERVER_ROOT="${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-$REPO_ROOT/.dependencies/code-server}}"
 CODE_SERVER_APP_NODE_VERSION="${CODE_SERVER_APP_NODE_VERSION:-}"
 if [[ -z "$CODE_SERVER_APP_NODE_VERSION" && -f "$CODE_SERVER_ROOT/.node-version" ]]; then
 	CODE_SERVER_APP_NODE_VERSION="$(tr -d '[:space:]' <"$CODE_SERVER_ROOT/.node-version")"
@@ -382,8 +382,8 @@ resolve_code_server_root() {
 		fi
 		return 1
 	fi
-	if [[ -f "$REPO_ROOT/code-server/package.json" ]]; then
-		(cd "$REPO_ROOT/code-server" && pwd)
+	if [[ -f "$REPO_ROOT/.dependencies/code-server/package.json" ]]; then
+		(cd "$REPO_ROOT/.dependencies/code-server" && pwd)
 		return 0
 	fi
 	return 1
@@ -1780,7 +1780,7 @@ if [[ -z "$CODE_SERVER_ROOT" ]]; then
 code-server source is required to package the embedded Source-tab runtime.
 
 Set CODE_SERVER_ROOT or GHOSTEX_CODE_SERVER_ROOT to a code-server checkout, or place it at:
-  $REPO_ROOT/code-server
+  $REPO_ROOT/.dependencies/code-server
 EOF
 		exit 1
 	fi

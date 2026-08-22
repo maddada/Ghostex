@@ -79,17 +79,17 @@ fn main() {
         // way the app will in P1e.
         cx.text_system()
             .add_fonts(vec![
-                include_bytes!("../../../ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf")
+                include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf")
                     .as_slice()
                     .into(),
-                include_bytes!("../../../ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf")
+                include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf")
                     .as_slice()
                     .into(),
-                include_bytes!("../../../ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf")
+                include_bytes!("../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf")
                     .as_slice()
                     .into(),
                 include_bytes!(
-                    "../../../ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf"
+                    "../../../.dependencies/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf"
                 )
                 .as_slice()
                 .into(),

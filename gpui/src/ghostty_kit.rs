@@ -6,9 +6,9 @@ use std::{
 };
 
 pub const REPO_RELATIVE_GHOSTTYKIT_HEADER: &str =
-    "../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
+    "../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
 pub const REPO_RELATIVE_GHOSTTYKIT_ARCHIVE: &str =
-    "../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
+    "../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 
 /*
 CDXC:GPUIGhosttyKitAdapter 2026-06-22-20:35:

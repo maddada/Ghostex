@@ -85,7 +85,7 @@ const explicitWindowsWslArchive = process.env.GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHI
 const explicitWindowsWslCodeServerArchive =
   process.env.GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE?.trim();
 const windowsCodeServerIdentity = targetsWindows
-  ? await codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, "code-server") })
+  ? await codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, ".dependencies/code-server") })
   : undefined;
 const windowsCodeServerNames = windowsCodeServerIdentity
   ? codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)

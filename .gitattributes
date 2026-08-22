@@ -1,6 +1,6 @@
-ghostty/** -linguist-vendored
-ghostty/** -linguist-generated
-ghostty/** -linguist-documentation
+.dependencies/ghostty/** -linguist-vendored
+.dependencies/ghostty/** -linguist-generated
+.dependencies/ghostty/** -linguist-documentation
 
 # Keep text files LF-normalized in every checkout. Ghostex development currently
 # targets Unix-style line endings, including when the repository lives on Windows.

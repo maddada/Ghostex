@@ -74,10 +74,10 @@ jobs:
         with:
           bun-version: 1.3.10
       - name: Restore the code-server identity input
-        run: git submodule update --init --depth=1 -- code-server
+        run: git submodule update --init --depth=1 -- .dependencies/code-server
       - name: Resolve immutable code-server component identity
         id: code_server_identity
-        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
       - name: Probe the published component tag
         id: probe
         env:
@@ -147,7 +147,7 @@ jobs:
             --platform "linux-${{ inputs.arch }}"
       - name: Restore the code-server build tree
         if: ${{ steps.probe.outputs.action == 'build' }}
-        run: git -C code-server submodule update --init --depth=1 -- lib/vscode
+        run: git -C .dependencies/code-server submodule update --init --depth=1 -- lib/vscode
       - name: Install WSL Source build dependencies
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
@@ -157,22 +157,22 @@ jobs:
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
           PATCH="$PWD/scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch"
-          git -C code-server apply --check "$PATCH"
-          git -C code-server apply "$PATCH"
+          git -C .dependencies/code-server apply --check "$PATCH"
+          git -C .dependencies/code-server apply "$PATCH"
       - uses: actions/setup-node@v4
         if: ${{ steps.probe.outputs.action == 'build' }}
         with:
-          node-version-file: code-server/.node-version
+          node-version-file: .dependencies/code-server/.node-version
           cache: npm
           cache-dependency-path: |
-            code-server/package-lock.json
-            code-server/lib/vscode/package-lock.json
+            .dependencies/code-server/package-lock.json
+            .dependencies/code-server/lib/vscode/package-lock.json
       - name: Build the code-server runtime
         if: ${{ steps.probe.outputs.action == 'build' }}
         run: |
-          scripts/release-gpui/retry.sh 3 5 -- npm --prefix code-server ci
+          scripts/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
           (
-            cd code-server
+            cd .dependencies/code-server
             npm run build
             OS=linux \
               ARCH="${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}" \
@@ -197,15 +197,15 @@ jobs:
               exit 1
             fi
           }
-          require_executable code-server/release/lib/node
-          require_file code-server/release/out/node/entry.js
-          require_file code-server/release/out/node/routes/health.js
-          require_file code-server/release/lib/vscode/out/server-main.js
-          require_file code-server/release/lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json
-          require_executable code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
-          require_file code-server/release/lib/vscode/node_modules/node-pty/build/Release/pty.node
-          grep -F promptEditorIpcReady code-server/release/out/node/routes/health.js >/dev/null
-          code-server/release/lib/node code-server/release/out/node/entry.js --version >/dev/null
+          require_executable .dependencies/code-server/release/lib/node
+          require_file .dependencies/code-server/release/out/node/entry.js
+          require_file .dependencies/code-server/release/out/node/routes/health.js
+          require_file .dependencies/code-server/release/lib/vscode/out/server-main.js
+          require_file .dependencies/code-server/release/lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json
+          require_executable .dependencies/code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
+          require_file .dependencies/code-server/release/lib/vscode/node_modules/node-pty/build/Release/pty.node
+          grep -F promptEditorIpcReady .dependencies/code-server/release/out/node/routes/health.js >/dev/null
+          .dependencies/code-server/release/lib/node .dependencies/code-server/release/out/node/entry.js --version >/dev/null
       - name: Package and publish the immutable component
         if: ${{ steps.probe.outputs.action == 'build' }}
         env:
@@ -214,7 +214,7 @@ jobs:
           ARCHIVE="$OUTPUT_DIR/${{ steps.code_server_identity.outputs.archive_name }}"
           mkdir -p "$OUTPUT_DIR"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-            -C code-server/release \
+            -C .dependencies/code-server/release \
             -czf "$ARCHIVE" .
           archive_sha256="$(sha256sum "$ARCHIVE" | awk '{ print $1 }')"
           printf '%s  %s\n' "$archive_sha256" "$(basename "$ARCHIVE")" >"$ARCHIVE.sha256"

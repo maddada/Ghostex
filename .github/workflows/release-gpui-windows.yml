@@ -85,18 +85,18 @@ jobs:
         with:
           bun-version: 1.3.10
       - name: Restore code-server source identity input
-        run: git submodule update --init --depth=1 -- code-server
+        run: git submodule update --init --depth=1 -- .dependencies/code-server
       - name: Resolve immutable code-server component identity
         id: code_server_identity
         shell: bash
-        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform "linux-${{ inputs.arch }}" --github-output >> "$GITHUB_OUTPUT"
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
         run: |
           {
             printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
-            printf 'zig=%s\n' "$(git rev-parse HEAD:ghostty)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
           } >> "$GITHUB_OUTPUT"
       - name: Restore Cargo registry cache
         uses: actions/cache@v6

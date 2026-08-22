@@ -55,7 +55,7 @@ jobs:
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 .release-automation/scripts/release-gpui/prepare-references.sh
       - name: Resolve immutable code-server component identity
         id: code_server_identity
-        run: node .release-automation/scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
+        run: node .release-automation/scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - name: Build gxserver Linux x64
         env:
           GHOSTEX_RELEASE_AUTOMATION_ROOT: ${{ github.workspace }}/.release-automation
@@ -72,20 +72,20 @@ jobs:
       - name: Apply Ghostex code-server build patches
         run: |
           PATCH="$PWD/.release-automation/scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch"
-          git -C code-server apply --check "$PATCH"
-          git -C code-server apply "$PATCH"
+          git -C .dependencies/code-server apply --check "$PATCH"
+          git -C .dependencies/code-server apply "$PATCH"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version-file: code-server/.node-version
+          node-version-file: .dependencies/code-server/.node-version
           cache: npm
           cache-dependency-path: |
-            code-server/package-lock.json
-            code-server/lib/vscode/package-lock.json
+            .dependencies/code-server/package-lock.json
+            .dependencies/code-server/lib/vscode/package-lock.json
       - name: Build code-server Linux x64 prerequisite
         run: |
-          npm --prefix code-server ci
+          npm --prefix .dependencies/code-server ci
           (
-            cd code-server
+            cd .dependencies/code-server
             npm run build
             OS=linux ARCH=amd64 VSCODE_TARGET=linux-x64 VERSION="$(node -p 'require("./package.json").version')" npm run build:vscode
             KEEP_MODULES=1 OS=linux ARCH=amd64 VSCODE_TARGET=linux-x64 npm run release
@@ -98,16 +98,16 @@ jobs:
             lib/vscode/extensions/git/node_modules/@vscode/fs-copyfile/package.json \
             lib/vscode/node_modules/@vscode/ripgrep/bin/rg \
             lib/vscode/node_modules/node-pty/build/Release/pty.node; do
-            [[ -f "code-server/release/$required_entry" ]] || { echo "Linux x64 code-server runtime is missing $required_entry" >&2; exit 1; }
+            [[ -f ".dependencies/code-server/release/$required_entry" ]] || { echo "Linux x64 code-server runtime is missing $required_entry" >&2; exit 1; }
           done
-          test -x code-server/release/lib/node
-          test -x code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
-          grep -F promptEditorIpcReady code-server/release/out/node/routes/health.js >/dev/null
-          code-server/release/lib/node code-server/release/out/node/entry.js --version >/dev/null
+          test -x .dependencies/code-server/release/lib/node
+          test -x .dependencies/code-server/release/lib/vscode/node_modules/@vscode/ripgrep/bin/rg
+          grep -F promptEditorIpcReady .dependencies/code-server/release/out/node/routes/health.js >/dev/null
+          .dependencies/code-server/release/lib/node .dependencies/code-server/release/out/node/entry.js --version >/dev/null
           OUTPUT="build/release-gpui/${{ inputs.version }}/code-server-linux-x64"
           ARCHIVE="$OUTPUT/${{ steps.code_server_identity.outputs.archive_name }}"
           mkdir -p "$OUTPUT"
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C code-server/release -czf "$ARCHIVE" .
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C .dependencies/code-server/release -czf "$ARCHIVE" .
           archive_sha256="$(sha256sum "$ARCHIVE" | awk '{ print $1 }')"
           printf '%s  %s\n' "$archive_sha256" "$(basename "$ARCHIVE")" > "$ARCHIVE.sha256"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

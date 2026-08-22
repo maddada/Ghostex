@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Sync the vendored ghostty/ tree with upstream and re-apply the Ghostex
-# patch series in ghostty-patches/. See ghostty-patches/README.md.
+# Sync the vendored .dependencies/ghostty/ tree with upstream and re-apply the
+# Ghostex patch series in .dependencies/ghostty-patches/. See
+# .dependencies/ghostty-patches/README.md.
 #
 # Usage:
 #   scripts/sync-ghostty.sh <upstream-ref>   # sync to ref (e.g. origin/main or a SHA)
@@ -8,11 +9,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GHOSTTY_DIR="$ROOT_DIR/ghostty"
-PATCH_DIR="$ROOT_DIR/ghostty-patches"
+GHOSTTY_DIR="$ROOT_DIR/.dependencies/ghostty"
+PATCH_DIR="$ROOT_DIR/.dependencies/ghostty-patches"
 UPSTREAM_URL="https://github.com/ghostty-org/ghostty.git"
 
-# Per-patch file manifest. Keep in sync with ghostty-patches/README.md.
+# Per-patch file manifest. Keep in sync with .dependencies/ghostty-patches/README.md.
 patch_files() {
   case "$1" in
     0001-build-lib-vt-shared-option-and-themes-install)
@@ -70,7 +71,7 @@ regen() {
     done
     echo "  $name.patch ($(wc -l < "$PATCH_DIR/$name.patch" | tr -d ' ') lines)"
   done
-  echo "Done. Review with: git diff ghostty-patches/"
+  echo "Done. Review with: git diff .dependencies/ghostty-patches/"
 }
 
 sync() {
@@ -82,7 +83,7 @@ sync() {
   clone_upstream "$workdir"
   local sha
   sha="$(git -C "$workdir/upstream" rev-parse "$ref^{commit}")"
-  echo "Syncing ghostty/ to upstream $sha"
+  echo "Syncing .dependencies/ghostty/ to upstream $sha"
 
   # Stage pristine upstream + patches in a temp tree first so a conflicting
   # patch aborts before the real tree is touched.
@@ -93,7 +94,7 @@ sync() {
       echo "" >&2
       echo "PATCH FAILED: $name.patch" >&2
       echo "Rebase it by hand: apply the others, port the change onto the new" >&2
-      echo "upstream code in ghostty/, then run: scripts/sync-ghostty.sh --regen" >&2
+      echo "upstream code in .dependencies/ghostty/, then run: scripts/sync-ghostty.sh --regen" >&2
       exit 1
     fi
   done
@@ -111,12 +112,12 @@ sync() {
 
   cat <<EOF
 
-Synced to $sha. Now verify (see ghostty-patches/README.md):
-  1. cd ghostty && zig build test-lib-vt
+Synced to $sha. Now verify (see .dependencies/ghostty-patches/README.md):
+  1. cd .dependencies/ghostty && zig build test-lib-vt
   2. cd gpui && cargo check
-  3. Re-audit gpui/src/ghostty_vt.rs + ghostty_kit.rs against ghostty/include/
+  3. Re-audit gpui/src/ghostty_vt.rs + ghostty_kit.rs against .dependencies/ghostty/include/
      (implicit C enums renumber when upstream inserts entries!)
-  4. cd ghostty && zig build -Demit-xcframework -Dxcframework-target=universal \\
+  4. cd .dependencies/ghostty && zig build -Demit-xcframework -Dxcframework-target=universal \\
        -Demit-macos-app=false -Doptimize=ReleaseSafe
 EOF
 }

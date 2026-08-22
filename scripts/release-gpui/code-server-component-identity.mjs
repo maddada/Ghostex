@@ -103,7 +103,7 @@ export function codeServerComponentNames(componentVersion, platform) {
 
 async function main() {
   const args = process.argv.slice(2);
-  let codeServerRoot = 'code-server';
+  let codeServerRoot = '.dependencies/code-server';
   let githubOutput = false;
   let platform;
   for (let index = 0; index < args.length; index += 1) {

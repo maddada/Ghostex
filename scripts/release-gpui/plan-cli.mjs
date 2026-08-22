@@ -404,7 +404,7 @@ export async function collectComponentTagState({ baselines, identities, repo }) 
  * out, which is exactly the state the `prepare` job arranges.
  */
 export function resolveCodeServerIdentity({ repoRoot }) {
-  const root = path.join(repoRoot, "code-server");
+  const root = path.join(repoRoot, ".dependencies/code-server");
   if (!existsSync(path.join(root, "package.json"))) return null;
   const result = spawnSync(
     "node",

@@ -43,7 +43,7 @@ if [[ "$SKIP_PREPARE_REFERENCES" != "1" ]]; then
   "$SCRIPT_DIR/prepare-references.sh"
 fi
 if [[ "$USE_PREPARED_RUNTIME" != "1" ]]; then
-  CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+  CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/.dependencies/code-server")"
   CODE_SERVER_LINUX_X64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-x64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-x64.tar.gz}"
   CODE_SERVER_LINUX_ARM64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-arm64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-arm64.tar.gz}"
   [[ -f "$CODE_SERVER_LINUX_X64_ARCHIVE" ]] || { echo "macOS release requires Linux x64 code-server archive: $CODE_SERVER_LINUX_X64_ARCHIVE" >&2; exit 1; }
@@ -53,7 +53,7 @@ if [[ ! -x "$REMOTE_ROOT/x64/package/bin/gxserver" || ! -x "$REMOTE_ROOT/arm64/p
   "$REPO_ROOT/scripts/build-remote-gxserver-linux-release.sh" --arch all
 fi
 
-GHOSTTY_ROOT="$REPO_ROOT/ghostty"
+GHOSTTY_ROOT="$REPO_ROOT/.dependencies/ghostty"
 GHOSTTY_KIT="$GHOSTTY_ROOT/macos/GhosttyKit.xcframework"
 if [[ "$USE_PREBUILT_RUST" != "1" && ! -d "$GHOSTTY_KIT" ]]; then
   GHOSTTY_ZIG="${GHOSTEX_ZIG:-${ZIG:-}}"

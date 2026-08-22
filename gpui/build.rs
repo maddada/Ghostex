@@ -8,9 +8,9 @@ use std::{
 };
 
 const GHOSTTYKIT_HEADER: &str =
-    "../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
+    "../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/Headers/ghostty.h";
 const GHOSTTYKIT_ARCHIVE: &str =
-    "../ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
+    "../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 const GPUI_MACOS_DEPLOYMENT_TARGET_FLAG: &str = "-mmacosx-version-min=13.0";
 const LIBGHOSTTY_VT_BUILD_SCRIPT: &str = "scripts/build-libghostty-vt.sh";
 const WINDOWS_APP_ICON_SOURCE: &str = "resources/AppIcon.appiconset/icon_512x512.png";
@@ -66,7 +66,7 @@ linking, the same mechanism used for the GhosttyKit archive below.
 */
 fn build_libghostty_vt(manifest_dir: &Path) -> LibGhosttyVtBuild {
     let script = manifest_dir.join(LIBGHOSTTY_VT_BUILD_SCRIPT);
-    let ghostty_dir = manifest_dir.join("../ghostty");
+    let ghostty_dir = manifest_dir.join("../.dependencies/ghostty");
     println!("cargo:rerun-if-changed={}", script.display());
     emit_libghostty_vt_rerun_hints(&ghostty_dir);
 
@@ -133,7 +133,7 @@ fn build_libghostty_vt_with_zig(
     manifest_dir: &Path,
     archive_relative_path: &str,
 ) -> LibGhosttyVtBuild {
-    let ghostty_dir = manifest_dir.join("../ghostty");
+    let ghostty_dir = manifest_dir.join("../.dependencies/ghostty");
     emit_libghostty_vt_rerun_hints(&ghostty_dir);
 
     let zig = env::var("GHOSTEX_ZIG").unwrap_or_else(|_| "zig".to_string());

@@ -346,7 +346,7 @@ EOF
     exit 1
   fi
   (
-    cd "$REPO_ROOT/zmx"
+    cd "$REPO_ROOT/.dependencies/zmx"
     "$WSL_ZIG" build \
       --cache-dir "$WSL_ZMX_CACHE_DIR" \
       -Doptimize=ReleaseSafe \
@@ -582,7 +582,7 @@ stage_current_wsl_runtime_archive() {
 
 WSL_GXSERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE:-}"
 WSL_CODE_SERVER_ARCHIVE="${GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE:-}"
-CODE_SERVER_VERSION="$(node "$REPO_ROOT/scripts/release-gpui/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+CODE_SERVER_VERSION="$(node "$REPO_ROOT/scripts/release-gpui/code-server-component-identity.mjs" --root "$REPO_ROOT/.dependencies/code-server")"
 if [[ -z "$CODE_SERVER_VERSION" ]]; then
   echo "Could not resolve the code-server component payload identity." >&2
   exit 1

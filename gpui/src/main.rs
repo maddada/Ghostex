@@ -111699,15 +111699,15 @@ fn source_code_server_repo_root_candidates() -> Vec<PathBuf> {
     if let Ok(repo_root) = env::var("ghostex_REPO_ROOT") {
         let repo_root = repo_root.trim();
         if !repo_root.is_empty() {
-            append(PathBuf::from(repo_root).join("code-server"));
+            append(PathBuf::from(repo_root).join(".dependencies/code-server"));
         }
     }
     if let Ok(cwd) = env::current_dir() {
-        append(cwd.join("code-server"));
+        append(cwd.join(".dependencies/code-server"));
     }
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(repo_root) = manifest_dir.parent() {
-        append(repo_root.join("code-server"));
+        append(repo_root.join(".dependencies/code-server"));
         #[cfg(target_os = "macos")]
         append(repo_root.join("gpui/runtime/macos/Web/code-server"));
     }

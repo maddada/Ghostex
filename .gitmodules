@@ -1,15 +1,15 @@
 # CDXC:ZmxPersistence 2026-05-20-09:57: Keep the Ghostex-managed zmx fork as a pinned submodule because native zmx pane refresh depends on a first-party zmx IPC protocol that older PATH installs do not implement.
 [submodule "zmx"]
-	path = zmx
+	path = .dependencies/zmx
 	url = https://github.com/maddada/zmx.git
 # CDXC:CrossPlatformExternalCheckout 2026-06-14-12:50: Keep the cross-platform Electron app outside this repository at `~/dev/prev/crossplatform` so the parent repo no longer pins or initializes it as a submodule.
 # CDXC:AgentHistorySearch 2026-05-29-12:27: Pin zehn as a first-party submodule so Ghostex can bundle the reviewed prompt-history search binary and expose it through `gx find` and `gx f` instead of depending on an arbitrary PATH install. `gx search` is intentionally not a public alias.
 [submodule "zehn"]
-	path = zehn
+	path = .dependencies/zehn
 	url = https://github.com/maddada/zehn.git
 # CDXC:CodeServerSubmodule 2026-06-07-11:20: Keep the embedded legacy code-server checkout under the Ghostex repo as a pinned fork submodule so the native code-server launcher resolves a reviewed Ghostex-specific branch instead of maintainer-local ~/dev/custom/code-server state.
 [submodule "code-server"]
-	path = code-server
+	path = .dependencies/code-server
 	url = https://github.com/maddada/code-server.git
 	branch = ghostex
 # CDXC:T3CodeExternalCheckout 2026-08-07: The T3 Code fork checkout moved out of this repository to ~/dev/references/t3code as a reference-only project; packaging no longer requires it (see CDXC:T3CodeDisabled).
@@ -33,10 +33,4 @@
 	path = .dependencies/gpui-component
 	url = https://github.com/maddada/gpui-component.git
 	branch = ghostex
-	ignore = dirty
-# Beads is retained as a source reference at the official v1.1.2 tag. Ghostex
-# packaging consumes the checksum-verified release archives, not this checkout.
-[submodule ".dependencies/beads"]
-	path = .dependencies/beads
-	url = https://github.com/gastownhall/beads.git
 	ignore = dirty

@@ -317,16 +317,16 @@ validate_build_toolchain_dependencies() {
 
 # CDXC:GPUIGhosttyKitLocalPrereq 2026-08-10:
 # gpui/build.rs links the repo-local GhosttyKit static archive by exact path
-# (gpui/build.rs links ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
+# (gpui/build.rs links .dependencies/ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
 # The dev path never builds it; the release pipeline does. Detecting the absence
 # up front avoids a long Rust compile that only fails at link time.
 validate_ghosttykit_archive() {
-	local ghostty_kit="$REPO_ROOT/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
+	local ghostty_kit="$REPO_ROOT/.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
 	if [[ ! -f "$ghostty_kit/ghostty-internal.a" || ! -f "$ghostty_kit/Headers/ghostty.h" ]]; then
 		echo "Missing repo-local GhosttyKit static archive: $ghostty_kit" >&2
 		echo "gpui/build.rs links this archive by exact path; the dev build does not build it." >&2
 		echo "Build it from the vendored Ghostty source with:" >&2
-		echo "  (cd \"$REPO_ROOT/ghostty\" && ZIG=\${ZIG:-\$(command -v zig)} && \\" >&2
+		echo "  (cd \"$REPO_ROOT/.dependencies/ghostty\" && ZIG=\${ZIG:-\$(command -v zig)} && \\" >&2
 		echo "     env DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
 		echo "       SDKROOT=\"\$(DEVELOPER_DIR=\"\$(xcode-select -p)\" xcrun --sdk macosx --show-sdk-path)\" \\" >&2
 		echo "       GHOSTTY_METAL_DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
@@ -1067,9 +1067,9 @@ rsync -a --delete "$GPUI_DIR/dist/sidebar/" "$APP_PATH/Contents/Resources/sideba
 # running foreground command.
 rm -rf "$APP_PATH/Contents/Resources/shell-integration"
 mkdir -p "$APP_PATH/Contents/Resources/shell-integration/zsh"
-install -m 0644 "$REPO_ROOT/ghostty/src/shell-integration/zsh/.zshenv" \
+install -m 0644 "$REPO_ROOT/.dependencies/ghostty/src/shell-integration/zsh/.zshenv" \
 	"$APP_PATH/Contents/Resources/shell-integration/zsh/.zshenv"
-install -m 0644 "$REPO_ROOT/ghostty/src/shell-integration/zsh/ghostty-integration" \
+install -m 0644 "$REPO_ROOT/.dependencies/ghostty/src/shell-integration/zsh/ghostty-integration" \
 	"$APP_PATH/Contents/Resources/shell-integration/zsh/ghostty-integration"
 rm -rf "$SOUND_DEST_DIR"
 mkdir -p "$SOUND_DEST_DIR"

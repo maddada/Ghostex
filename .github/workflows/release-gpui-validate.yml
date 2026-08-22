@@ -69,7 +69,7 @@ jobs:
         run: |
           {
             printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
-            printf 'zig=%s\n' "$(git rev-parse HEAD:ghostty)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
           } >> "$GITHUB_OUTPUT"
       - name: Restore Cargo registry cache
         uses: actions/cache@v6

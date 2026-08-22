@@ -73,7 +73,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "favicon.png", why: "Web asset for local tooling; not packaged by any release job." },
   { path: "ghostex-history", why: "Local history CLI; not packaged by any release job." },
   {
-    path: "ghostty-patches",
+    path: ".dependencies/ghostty-patches",
     why: "Source-sync overlay only; release jobs compile the already-patched tracked ghostty tree.",
   },
   { path: "ghostex-web", why: "Web app; released separately, never part of a GPUI release artifact." },
@@ -83,7 +83,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
     why: "Mobile Find Prompts bundle source; consumed by the mobile submodule build, not by release jobs.",
   },
   {
-    path: "zehn",
+    path: ".dependencies/zehn",
     why: "Retired Zig prompt-history source; kept as reference only. The shipped implementation is the zehn-rs crate compiled into gxserver.",
   },
   { path: "vitest.config.ts", why: "Test runner configuration; release:test uses vitest.release.config.ts." },
@@ -139,9 +139,9 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
    * editor icon changes the built bundle even though src/ holds no app.
    */
   { pathspec: "src/assets/**" },
-  { pathspec: "ghostty/**" },
-  { pathspec: ":(exclude)ghostty/.zig-cache" },
-  { pathspec: ":(exclude)ghostty/zig-out" },
+  { pathspec: ".dependencies/ghostty/**" },
+  { pathspec: ":(exclude).dependencies/ghostty/.zig-cache" },
+  { pathspec: ":(exclude).dependencies/ghostty/zig-out" },
   { pathspec: ".dependencies/zed" },
   { pathspec: ".dependencies/cef-rs" },
   { pathspec: ".dependencies/gpui-component" },
@@ -160,9 +160,9 @@ const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: "ghostex-paths/**" },
   { pathspec: "zehn-rs/**" },
   { pathspec: ":(exclude)zehn-rs/target" },
-  { pathspec: "tui2/**" },
-  { pathspec: ":(exclude)tui2/target" },
-  { pathspec: "zmx" },
+  { pathspec: ".dependencies/tui2/**" },
+  { pathspec: ":(exclude).dependencies/tui2/target" },
+  { pathspec: ".dependencies/zmx" },
   { pathspec: "scripts/build-remote-gxserver-linux-release.sh" },
   { pathspec: "scripts/beads-release.mjs" },
   { pathspec: "scripts/build-pinned-beads-release.mjs" },
@@ -349,11 +349,11 @@ const COMPOSED_NODES = {
       { pathspec: "scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch" },
       { pathspec: ".github/workflows/release-gpui-code-server.yml" },
       /* Lives inside the code-server gitlink, so it never appears in this tree. */
-      { pathspec: "code-server/.node-version", allowMissing: true },
+      { pathspec: ".dependencies/code-server/.node-version", allowMissing: true },
     ],
     kind: "component",
     pathspecs: [
-      { pathspec: "code-server" },
+      { pathspec: ".dependencies/code-server" },
       { pathspec: "scripts/release-gpui/code-server-component-identity.mjs" },
       { pathspec: "scripts/release-gpui/patches/code-server-ripgrep-target-validation.patch" },
       { pathspec: "scripts/release-gpui/verify-code-server-archive.mjs" },

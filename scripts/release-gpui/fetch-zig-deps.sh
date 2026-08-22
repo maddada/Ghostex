@@ -14,7 +14,8 @@
 # the hash pinned in build.zig.zon and refuses a mismatch, and a hash mismatch is
 # classified FATAL, so it can never be retried into acceptance.
 #
-# Usage: scripts/release-gpui/fetch-zig-deps.sh [root ...]      (default: ghostty zmx)
+# Usage: scripts/release-gpui/fetch-zig-deps.sh [root ...]      (default: ghostty zmx; each
+# root is resolved under .dependencies/)
 
 set -euo pipefail
 
@@ -38,7 +39,7 @@ zig_for_root() {
 FETCHED=0
 SKIPPED=()
 for root in "${ROOTS[@]}"; do
-  ROOT_DIR="$REPO_ROOT/$root"
+  ROOT_DIR="$REPO_ROOT/.dependencies/$root"
   if [[ ! -f "$ROOT_DIR/build.zig.zon" ]]; then
     # Submodules are only checked out for the jobs that build them; a missing
     # root is not an error, it is a job that does not need those packages.

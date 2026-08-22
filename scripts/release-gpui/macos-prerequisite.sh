@@ -17,7 +17,7 @@ rm -f "$OUTPUT"
 
 case "$COMPONENT" in
   ghosttykit)
-    GHOSTTY_ROOT="$REPO_ROOT/ghostty"
+    GHOSTTY_ROOT="$REPO_ROOT/.dependencies/ghostty"
     GHOSTTY_ZIG="${GHOSTEX_ZIG:-${ZIG:-}}"
     [[ -x "$GHOSTTY_ZIG" ]] || { echo "Zig 0.16.0 is required to build GhosttyKit" >&2; exit 1; }
     [[ "$("$GHOSTTY_ZIG" version)" == "0.16.0" ]] || { echo "GhosttyKit requires Zig 0.16.0" >&2; exit 1; }
@@ -29,7 +29,7 @@ case "$COMPONENT" in
         GHOSTTY_METAL_DEVELOPER_DIR="$DEVELOPER_DIR" \
         "$GHOSTTY_ZIG" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false
     )
-    SLICE="ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
+    SLICE=".dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64"
     [[ -f "$REPO_ROOT/$SLICE/ghostty-internal.a" && -f "$REPO_ROOT/$SLICE/Headers/ghostty.h" ]] || {
       echo "GhosttyKit macOS slice is incomplete" >&2
       exit 1
@@ -40,7 +40,7 @@ case "$COMPONENT" in
     VERSION="${GHOSTEX_RELEASE_VERSION:-}"
     release_gpui_require_version "$VERSION"
     REMOTE_ROOT="$REPO_ROOT/build/remote-gxserver-linux"
-    CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/code-server")"
+    CODE_SERVER_COMPONENT_VERSION="$(node "$SCRIPT_DIR/code-server-component-identity.mjs" --root "$REPO_ROOT/.dependencies/code-server")"
     CODE_SERVER_LINUX_X64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-x64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-x64.tar.gz}"
     CODE_SERVER_LINUX_ARM64_ARCHIVE="${GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE:-$REPO_ROOT/build/runtime-artifacts/code-server-arm64/code-server-$CODE_SERVER_COMPONENT_VERSION-linux-arm64.tar.gz}"
     [[ -f "$CODE_SERVER_LINUX_X64_ARCHIVE" ]] || { echo "macOS runtime preparation requires Linux x64 code-server archive: $CODE_SERVER_LINUX_X64_ARCHIVE" >&2; exit 1; }

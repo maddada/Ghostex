@@ -32,8 +32,6 @@ export default defineConfig({
       "**/DerivedData/**",
       "**/target/**",
       ".dependencies/**",
-      "code-server/**",
-      "ghostty/**",
       "mobile/android/.gradle/**",
       "mobile/android/**/build/**",
       "storybook-static/**",

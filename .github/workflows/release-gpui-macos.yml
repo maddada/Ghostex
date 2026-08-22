@@ -81,16 +81,16 @@ jobs:
           cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Restore embedded source checkouts
         run: |
-          git submodule update --init --depth=1 -- code-server
-          git -C code-server submodule update --init --depth=1 -- lib/vscode
+          git submodule update --init --depth=1 -- .dependencies/code-server
+          git -C .dependencies/code-server submodule update --init --depth=1 -- lib/vscode
       - name: Resolve immutable code-server component identity
         id: code_server_identity
-        run: node scripts/release-gpui/code-server-component-identity.mjs --root code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
+        run: node scripts/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: code-server/package-lock.json
+          cache-dependency-path: .dependencies/code-server/package-lock.json
       # CDXC:ReleaseChangeAwarePlanning 2026-08-13: the runtime artifacts used to
       # be downloaded here, behind a `needs: gxserver_*` edge that added ~22 min
       # to the critical path. macos.sh consumes them only in
@@ -101,7 +101,7 @@ jobs:
         run: |
           {
             printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
-            printf 'zig=%s\n' "$(git rev-parse HEAD:ghostty)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
           } >> "$GITHUB_OUTPUT"
       - name: Restore Cargo registry cache
         uses: actions/cache@v6
@@ -159,7 +159,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
-          scripts/release-gpui/retry.sh 3 5 -- npm --prefix code-server ci
+          scripts/release-gpui/retry.sh 3 5 -- npm --prefix .dependencies/code-server ci
       - name: Pre-fetch Zig package dependencies
         run: scripts/release-gpui/fetch-zig-deps.sh ghostty
       - name: Build pinned embedded-Dolt Beads

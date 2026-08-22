@@ -1,9 +1,9 @@
 node_modules/
 build/
-!tui2/vendor/libghostty-vt/src/build/
-!tui2/vendor/libghostty-vt/src/build/**
-!tui2/vendor/libghostty-vt/src/apprt/gtk/build/
-!tui2/vendor/libghostty-vt/src/apprt/gtk/build/**
+!.dependencies/tui2/vendor/libghostty-vt/src/build/
+!.dependencies/tui2/vendor/libghostty-vt/src/build/**
+!.dependencies/tui2/vendor/libghostty-vt/src/apprt/gtk/build/
+!.dependencies/tui2/vendor/libghostty-vt/src/apprt/gtk/build/**
 dist/
 out/
 artifacts/
@@ -27,7 +27,7 @@ editor/macos/.build/
 ghostex-paths/target/
 ghostex-paths/Cargo.lock
 tmp/
-ghostty/zig-pkg/
+.dependencies/ghostty/zig-pkg/
 .zig-cache/
 # CDXC:PublicRelease 2026-04-27-05:36: Keep generated Storybook output,
 # native build products, and runtime logs out of the public repository while
