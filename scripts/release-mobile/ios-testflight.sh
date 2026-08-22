@@ -10,7 +10,7 @@ release_gpui_require_version "$VERSION"
 REPO_ROOT="$(release_gpui_repo_root)"
 OUTPUT="${2:-$(release_gpui_default_output "$REPO_ROOT" "$VERSION" ios-testflight)}"
 BUILD_NUMBER="$(release_gpui_build_number "$VERSION")"
-MOBILE_ROOT="$REPO_ROOT/mobile"
+MOBILE_ROOT="$REPO_ROOT/apps/mobile/app"
 BUNDLE_ID="com.maddada.ghostex.ios"
 TEAM_ID="KTKP595G3B"
 

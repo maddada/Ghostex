@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-type TitlebarHostModule = typeof import("../native/sidebar/titlebar-host");
+type TitlebarHostModule = typeof import("../apps/desktop/views/titlebar-host");
 
 const RESOURCE_PROCESS_TABLE = [
   "100 1 7.4 314572 /Applications/Ghostex.app/Contents/MacOS/Ghostex",
@@ -152,7 +152,7 @@ function ProductionTitlebarPanel({ panel }: { panel: "resources" | "tips" }) {
 
   useEffect(() => {
     installTitlebarStoryHost(panel);
-    void import("../native/sidebar/titlebar-host").then((module: TitlebarHostModule) => {
+    void import("../apps/desktop/views/titlebar-host").then((module: TitlebarHostModule) => {
       setHost(() => module.GhostexTitlebarHost);
     });
   }, [panel]);

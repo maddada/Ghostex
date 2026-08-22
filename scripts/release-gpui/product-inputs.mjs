@@ -71,15 +71,15 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: "appcast.xml", why: "Sparkle feed output written by the publisher, not a build input." },
   { path: "claude-code-codex-keybindings.json", why: "Developer keybindings; not packaged." },
   { path: "favicon.png", why: "Web asset for local tooling; not packaged by any release job." },
-  { path: "ghostex-history", why: "Local history CLI; not packaged by any release job." },
+  { path: "apps/history-cli", why: "Local history CLI; not packaged by any release job." },
   {
     path: ".dependencies/ghostty-patches",
     why: "Source-sync overlay only; release jobs compile the already-patched tracked ghostty tree.",
   },
-  { path: "ghostex-web", why: "Web app; released separately, never part of a GPUI release artifact." },
-  { path: "mobile-chat", why: "Mobile chat bundle source; consumed by the mobile submodule build, not by release jobs." },
+  { path: "apps/web", why: "Web app; released separately, never part of a GPUI release artifact." },
+  { path: "apps/mobile/views/chat", why: "Mobile chat bundle source; consumed by the mobile submodule build, not by release jobs." },
   {
-    path: "mobile-find",
+    path: "apps/mobile/views/find",
     why: "Mobile Find Prompts bundle source; consumed by the mobile submodule build, not by release jobs.",
   },
   {
@@ -120,9 +120,9 @@ export const SHARED_BASE_VALUES = Object.freeze({
  * shared React trees, and patches gpui/zed/cef-rs from .dependencies gitlinks.
  */
 const DESKTOP_APP_PATHSPECS = Object.freeze([
-  { pathspec: "gpui/**" },
-  { pathspec: ":(exclude)gpui/build" },
-  { pathspec: ":(exclude)gpui/target" },
+  { pathspec: "apps/desktop/**" },
+  { pathspec: ":(exclude)apps/desktop/build" },
+  { pathspec: ":(exclude)apps/desktop/target" },
   { pathspec: "ghostex-paths/**" },
   { pathspec: "zehn-rs/**" },
   { pathspec: ":(exclude)zehn-rs/target" },
@@ -133,7 +133,7 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: "components/**" },
   { pathspec: "components.json" },
   { pathspec: "lib/**" },
-  { pathspec: "native/sidebar/**" },
+  { pathspec: "apps/desktop/views/**" },
   /*
    * sidebar/brand-icons.tsx inlines these SVGs into every CEF surface, so an
    * editor icon changes the built bundle even though src/ holds no app.
@@ -369,7 +369,7 @@ const PRODUCT_LIST = [
   gxserverProduct("arm64"),
   {
     /*
-     * §4.5: mobile/ is a self-contained submodule with its own lockfile, so
+     * §4.5: apps/mobile/app is a self-contained submodule with its own lockfile, so
      * shared/** and sidebar/** are deliberately excluded. Add them and bump the
      * algorithm revision if mobile ever imports from the parent repo.
      */
@@ -378,7 +378,7 @@ const PRODUCT_LIST = [
     id: "android",
     kind: "product",
     pathspecs: [
-      { pathspec: "mobile" },
+      { pathspec: "apps/mobile/app" },
       { pathspec: "scripts/release-mobile/android.sh" },
       { pathspec: "scripts/release-gpui/android.sh" },
       { pathspec: ".github/workflows/release-gpui-android.yml" },
@@ -417,12 +417,12 @@ const PRODUCT_LIST = [
       /*
        * The Ctrl+G Monaco prompt editor ships as Contents/Resources/
        * GhostexEditor.app, built from the Swift package plus the Monaco web
-       * payload. editor/desktop/** is the Linux/Windows wry variant and is
+       * payload. apps/editor/desktop/** is the Linux/Windows wry variant and is
        * deliberately excluded: it cannot change the macOS artifact.
        */
-      { pathspec: "editor/macos/**" },
-      { pathspec: "editor/web/**" },
-      { pathspec: "editor/scripts/**" },
+      { pathspec: "apps/editor/macos/**" },
+      { pathspec: "apps/editor/web/**" },
+      { pathspec: "apps/editor/scripts/**" },
       { pathspec: "scripts/release-gpui/macos.sh" },
       { pathspec: "scripts/release-gpui/macos-notary.sh" },
       { pathspec: "scripts/release-gpui/macos-finalize.sh" },

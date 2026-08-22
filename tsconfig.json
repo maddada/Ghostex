@@ -25,9 +25,9 @@
     "src/**/*",
     "shared/**/*",
     "sidebar/**/*",
-    "native/sidebar/**/*",
-    "mobile-chat/**/*",
-    "mobile-find/**/*"
+    "apps/desktop/views/**/*",
+    "apps/mobile/views/chat/**/*",
+    "apps/mobile/views/find/**/*"
   ],
   "exclude": [
     "node_modules",

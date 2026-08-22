@@ -807,7 +807,7 @@ pub fn resolve_ghostex_history_launch() -> CliResult<Launch> {
         }
     }
     Err(CliError::Other(
-        "ghostex-history was not found. Build or reinstall Ghostex so Web/bin/ghostex-history is staged, run from a source checkout with ghostex-history/Cargo.toml, or set GHOSTEX_HISTORY_BIN.".to_string(),
+        "ghostex-history was not found. Build or reinstall Ghostex so Web/bin/ghostex-history is staged, run from a source checkout with apps/history-cli/Cargo.toml, or set GHOSTEX_HISTORY_BIN.".to_string(),
     ))
 }
 
@@ -822,7 +822,7 @@ pub fn resolve_ghostex_history_launch_from_root(root: &Path) -> Option<Launch> {
     if file_exists_sync(&bundled_bin) {
         return Some(plain(&bundled_bin));
     }
-    let manifest_path = root.join("ghostex-history").join("Cargo.toml");
+    let manifest_path = root.join("apps").join("history-cli").join("Cargo.toml");
     if file_exists_sync(&manifest_path) {
         /*
         Local `gx h` should reflect source edits immediately. Prefer Cargo over
@@ -843,12 +843,14 @@ pub fn resolve_ghostex_history_launch_from_root(root: &Path) -> Option<Launch> {
         });
     }
     let debug_bin = root
-        .join("ghostex-history")
+        .join("apps")
+        .join("history-cli")
         .join("target")
         .join("debug")
         .join("ghostex-history");
     let release_bin = root
-        .join("ghostex-history")
+        .join("apps")
+        .join("history-cli")
         .join("target")
         .join("release")
         .join("ghostex-history");
@@ -1288,7 +1290,8 @@ mod tests {
         assert!(resolve_ghostex_history_launch_from_root(&root).is_none());
 
         let release = root
-            .join("ghostex-history")
+            .join("apps")
+            .join("history-cli")
             .join("target")
             .join("release")
             .join("ghostex-history");
@@ -1297,7 +1300,7 @@ mod tests {
         assert_eq!(launch.command, release.to_string_lossy());
         assert!(launch.args.is_empty());
 
-        let manifest = root.join("ghostex-history").join("Cargo.toml");
+        let manifest = root.join("apps").join("history-cli").join("Cargo.toml");
         touch(&manifest);
         let launch = resolve_ghostex_history_launch_from_root(&root).expect("cargo launch");
         assert_eq!(launch.command, "cargo");

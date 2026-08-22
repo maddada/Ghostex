@@ -102,7 +102,7 @@ exit 1
   test('the macOS and Linux packagers stage and smoke-test the packaged binary', async () => {
     const [beadsBuilder, macosPackager, linuxPackager, macosWorkflow, runtimeWorkflow] = await Promise.all([
       readFile(path.join(repoRoot, 'scripts', 'build-pinned-beads-release.mjs'), 'utf8'),
-      readFile(path.join(repoRoot, 'gpui', 'scripts', 'prepare-macos-runtime.sh'), 'utf8'),
+      readFile(path.join(repoRoot, 'apps', 'desktop', 'scripts', 'prepare-macos-runtime.sh'), 'utf8'),
       readFile(path.join(repoRoot, 'gxserver-rs', 'package-remote-linux.mjs'), 'utf8'),
       readFile(path.join(repoRoot, '.github', 'workflows', 'release-gpui-macos.yml'), 'utf8'),
       readFile(path.join(repoRoot, '.github', 'workflows', 'release-gpui-gxserver.yml'), 'utf8'),

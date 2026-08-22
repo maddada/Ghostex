@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghostex Titlebar Panel</title>
+    <style>
+      html,
+      body {
+        background: #0e0e0e;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      CDXC:GPUITitlebarTips 2026-06-24-23:17:
+      GPUI titlebar dropdown panels reuse the production React titlebar host from native/sidebar/titlebar-host.tsx. Keep this CEF wrapper thin so the info dropdown renders the same Tips panel as macOS without AppKit/Swift windows, duplicated GPUI tips data, placeholder UI, or dev-server-only assets.
+
+      CDXC:GPUIResourcesTitlebar 2026-07-09:
+      Do NOT re-add a page-level `ghostexNativeHost` shim here. The CEF shell
+      installs the real `ghostexNativeHost` bridge at V8 context creation for
+      this surface (see gpui/src/cef/shell.rs), and it owns
+      closeTitlebarDropdownPanel, titlebarDropdownPanelReady, runProcess, and
+      every Resources action. The old close-only shim ran after the bridge
+      install, replaced it, and silently swallowed all of those messages,
+      which left the Resources panel invisible and every ps/lsof poll timing
+      out.
+    -->
+    <script type="module" src="./views/titlebar-host.tsx"></script>
+  </body>
+</html>

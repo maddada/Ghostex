@@ -14,7 +14,7 @@
 	branch = ghostex
 # CDXC:T3CodeExternalCheckout 2026-08-07: The T3 Code fork checkout moved out of this repository to ~/dev/references/t3code as a reference-only project; packaging no longer requires it (see CDXC:T3CodeDisabled).
 [submodule "mobile"]
-	path = mobile
+	path = apps/mobile/app
 	url = https://github.com/maddada/ghostex-mobile.git
 # CDXC:GPUIDependencies 2026-08-02: Keep external GPUI build inputs inside the
 # Ghostex checkout. Gitlinks pin reviewed revisions, and the dependencies with

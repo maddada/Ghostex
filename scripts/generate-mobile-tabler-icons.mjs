@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tablerRoot = path.join(repoRoot, "node_modules", "@tabler", "icons", "icons");
-const outFile = path.join(repoRoot, "mobile", "src", "assets", "tablerIcons.generated.tsx");
+const outFile = path.join(repoRoot, "apps", "mobile", "app", "src", "assets", "tablerIcons.generated.tsx");
 
 /**
  * Session tag glyphs, mirroring SIDEBAR_SESSION_TAG_ICONS in

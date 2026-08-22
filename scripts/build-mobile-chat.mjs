@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
 CDXC:SessionChatMobileWebview 2026-07-31:
-Builds mobile-chat/session-chat-main.tsx (the shared Session Chat page the
+Builds apps/mobile/views/chat/session-chat-main.tsx (the shared Session Chat page the
 React Native app hosts in a webview) into a real asset directory that ships
 inside the app bundle.
 
@@ -16,7 +16,7 @@ The page now ships as a directory the app loads by URL, so relative
 subresources resolve:
 
   * Android: android/build.gradle in modules/ghostex-native merges
-    mobile/assets/webview into the APK assets root, so the page is at
+    apps/mobile/app/assets/webview into the APK assets root, so the page is at
     file:///android_asset/session-chat/index.html.
   * iOS: the GhostexNative podspec copies the same directory into the app
     bundle, so the page is at <Bundle.main>/session-chat/index.html.
@@ -45,25 +45,29 @@ import {
 } from "./shiki-classic-assets.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const entry = path.join(repoRoot, "mobile-chat", "session-chat-main.tsx");
+const entry = path.join(repoRoot, "apps", "mobile", "views", "chat", "session-chat-main.tsx");
 /**
  * Both native projects reference this directory in place (Android through a
  * gradle assets.srcDir, iOS through the podspec's resources), so its name is
  * load-bearing on both platforms and in src/chat/SessionChatWebView.tsx.
  */
 export const SESSION_CHAT_ASSET_DIR_NAME = "session-chat";
-const webviewAssetsDir = path.join(repoRoot, "mobile", "assets", "webview");
+const webviewAssetsDir = path.join(repoRoot, "apps", "mobile", "app", "assets", "webview");
 const outDir = path.join(webviewAssetsDir, SESSION_CHAT_ASSET_DIR_NAME);
 const legacyHtmlModule = path.join(
   repoRoot,
+  "apps",
   "mobile",
+  "app",
   "src",
   "chat",
   "session-chat-html.generated.ts",
 );
 const agentsOutFile = path.join(
   repoRoot,
+  "apps",
   "mobile",
+  "app",
   "src",
   "chat",
   "session-chat-agents.generated.ts",

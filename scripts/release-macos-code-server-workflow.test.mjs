@@ -138,8 +138,8 @@ describe('phased macOS code-server prerequisite contract', () => {
     const orchestratorWorkflow = workflow('release-gpui.yml');
     const prerequisiteScript = repoFile('scripts/release-gpui/macos-prerequisite.sh');
     const localReleaseScript = repoFile('scripts/release-gpui/macos.sh');
-    const prepareRuntimeScript = repoFile('gpui/scripts/prepare-macos-runtime.sh');
-    const windowsBuildScript = repoFile('gpui/scripts/build-windows-app.ps1');
+    const prepareRuntimeScript = repoFile('apps/desktop/scripts/prepare-macos-runtime.sh');
+    const windowsBuildScript = repoFile('apps/desktop/scripts/build-windows-app.ps1');
 
     for (const arch of ['x64', 'arm64']) {
       expect(reusableWorkflow).toContain(`linux-${arch}.tar.gz`);
@@ -197,7 +197,7 @@ describe('phased macOS code-server prerequisite contract', () => {
   });
 
   test('publishes and authenticates the exact Darwin component archive before reuse', () => {
-    const prepareRuntimeScript = repoFile('gpui/scripts/prepare-macos-runtime.sh');
+    const prepareRuntimeScript = repoFile('apps/desktop/scripts/prepare-macos-runtime.sh');
     const localReleaseScript = repoFile('scripts/release-gpui/macos.sh');
     const downloadIndex = prepareRuntimeScript.indexOf('gh release download "$component_tag"');
     const verifierIndex = prepareRuntimeScript.indexOf(
@@ -234,8 +234,8 @@ describe('phased macOS code-server prerequisite contract', () => {
 
 describe('active WSL2 code-server consumer contract', () => {
   test('shares one complete archive payload contract between release and installed consumers', () => {
-    const nativeVerifier = repoFile('gpui/src/component_store.rs');
-    const windowsConsumer = repoFile('gpui/src/windows_terminal_backend.rs');
+    const nativeVerifier = repoFile('apps/desktop/src/component_store.rs');
+    const windowsConsumer = repoFile('apps/desktop/src/windows_terminal_backend.rs');
 
     expect(CODE_SERVER_ARCHIVE_CONTRACT.requiredEntries).toEqual(
       expect.arrayContaining([
@@ -260,7 +260,7 @@ describe('active WSL2 code-server consumer contract', () => {
       expect.arrayContaining(['lib/node', 'lib/vscode/node_modules/@vscode/ripgrep/bin/rg'])
     );
     expect(CODE_SERVER_ARCHIVE_CONTRACT.readinessSignal).toBe('promptEditorIpcReady');
-    expect(nativeVerifier).toContain('include_str!("../../shared/code-server-archive-contract.json")');
+    expect(nativeVerifier).toContain('include_str!("../../../shared/code-server-archive-contract.json")');
     expect(nativeVerifier).toContain('verify_installed_windows_code_server_component');
     expect(windowsConsumer).toContain('verify_code_server_archive');
     expect(windowsConsumer).toContain('code_server_payload_shell_validation_script');
@@ -282,7 +282,7 @@ describe('active WSL2 code-server consumer contract', () => {
   });
 
   test('authenticates the exact source-derived archive before WSL staging or component repackaging', () => {
-    const consumer = repoFile('gpui/scripts/build-windows-app-wsl.sh');
+    const consumer = repoFile('apps/desktop/scripts/build-windows-app-wsl.sh');
     const identityIndex = consumer.indexOf('code-server-component-identity.mjs');
     const verifierIndex = consumer.indexOf('verify-code-server-archive.mjs');
     const stagingIndex = consumer.indexOf('stage_verified_code_server_archive "$WSL_CODE_SERVER_ARCHIVE"');
@@ -314,7 +314,7 @@ describe('active WSL2 code-server consumer contract', () => {
   });
 
   test('native Windows reseals the exact archive and sidecar and publishes both', () => {
-    const builder = repoFile('gpui/scripts/build-windows-app.ps1');
+    const builder = repoFile('apps/desktop/scripts/build-windows-app.ps1');
     const publisher = repoFile('scripts/release-gpui/windows.ps1');
     const verifierIndex = builder.indexOf('verify-code-server-archive.mjs');
     const archiveCopyIndex = builder.indexOf(
@@ -332,9 +332,9 @@ describe('active WSL2 code-server consumer contract', () => {
   });
 
   test('authenticates every configured, bundled, and on-demand archive before WSL extraction or reuse', () => {
-    const componentStore = repoFile('gpui/src/component_store.rs');
-    const main = repoFile('gpui/src/main.rs');
-    const windowsConsumer = repoFile('gpui/src/windows_terminal_backend.rs');
+    const componentStore = repoFile('apps/desktop/src/component_store.rs');
+    const main = repoFile('apps/desktop/src/main.rs');
+    const windowsConsumer = repoFile('apps/desktop/src/windows_terminal_backend.rs');
     const verifyIndex = windowsConsumer.indexOf('crate::component_store::verify_code_server_archive(');
     const extractIndex = windowsConsumer.indexOf('tar -xzf - -C', verifyIndex);
     const outerSidecarDownloadIndex = componentStore.indexOf('if let Some(sidecar_name) = &asset.sha256_sidecar_name');
@@ -378,7 +378,7 @@ describe('active WSL2 code-server consumer contract', () => {
       'mv -f -- "$marker_next" "$marker_path"\nfalse',
     ],
   ])('rolls back a WSL Source install failure %s', async (_label, needle, injected) => {
-    const windowsConsumer = repoFile('gpui/src/windows_terminal_backend.rs');
+    const windowsConsumer = repoFile('apps/desktop/src/windows_terminal_backend.rs');
     const installerSection = windowsConsumer.slice(
       windowsConsumer.indexOf('fn install_packaged_source_runtime('),
       windowsConsumer.indexOf('fn ensure_source_runtime_installed(')

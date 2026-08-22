@@ -33,10 +33,10 @@ if ($LASTEXITCODE -ne 0) { throw "GPUI reference preparation failed" }
 $env:GHOSTEX_WINDOWS_ARCH = $Arch
 $env:GHOSTEX_GPUI_MARKETING_VERSION = $Version
 $env:GHOSTEX_ON_DEMAND_ASSETS = "1"
-& (Join-Path $RepoRoot "gpui/scripts/build-windows-app.ps1")
+& (Join-Path $RepoRoot "apps/desktop/scripts/build-windows-app.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Windows GPUI build failed" }
 
-$AppDir = Join-Path $RepoRoot "gpui/build/windows/Ghostex"
+$AppDir = Join-Path $RepoRoot "apps/desktop/build/windows/Ghostex"
 foreach ($required in @("Ghostex.exe", "ghostex-gpui-runtime.exe", "ghostex-gpui-cef-helper.exe")) {
     if (-not (Test-Path (Join-Path $AppDir $required))) {
         throw "Windows staged app is missing $required"
@@ -201,7 +201,7 @@ if (-not $GeneratedInstaller -or -not $GeneratedPortable) {
 }
 $Installer = Join-Path $Output "ghostex-$Version-windows-$Arch.exe"
 $Archive = Join-Path $Output "ghostex-$Version-windows-$Arch-portable.zip"
-$InstallerLauncher = Join-Path $RepoRoot "gpui/target/release/ghostex-windows-installer.exe"
+$InstallerLauncher = Join-Path $RepoRoot "apps/desktop/target/release/ghostex-windows-installer.exe"
 if (-not (Test-Path $InstallerLauncher)) {
     throw "Windows build did not produce the Ghostex installer launcher"
 }

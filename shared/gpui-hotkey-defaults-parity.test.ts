@@ -15,7 +15,7 @@ import { DEFAULT_ghostex_HOTKEYS } from "./ghostex-hotkeys";
  * one side without the other fails here.
  */
 
-const gpuiMainSource = readFileSync(new URL("../gpui/src/main.rs", import.meta.url), "utf8");
+const gpuiMainSource = readFileSync(new URL("../apps/desktop/src/main.rs", import.meta.url), "utf8");
 
 function gpuiDefaultHotkeys(): Record<string, string> {
   const start = gpuiMainSource.indexOf("const GPUI_DEFAULT_GHOSTEX_HOTKEYS");

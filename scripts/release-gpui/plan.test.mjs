@@ -55,7 +55,7 @@ describe("bootstrap release", () => {
 describe("Scenario A — desktop-only change", () => {
   const baselineRelease = baselineAt(repo.head);
   const sourceSha = (() => {
-    repo.write("gpui/src/main.rs", "fn main() { println!(\"desktop change\"); }\n");
+    repo.write("apps/desktop/src/main.rs", "fn main() { println!(\"desktop change\"); }\n");
     return repo.commit("desktop-only change");
   })();
   const plan = planAt(sourceSha, { baselines: [baselineRelease], version: "7.8.0" });
@@ -80,7 +80,7 @@ describe("Scenario A — desktop-only change", () => {
       tier: "release",
     });
     expect(plan.products.android.reason).toMatch(/all relevant inputs match v7\.7\.0/u);
-    expect(plan.products["macos-arm64"].reason).toMatch(/gpui\/\*\*/u);
+    expect(plan.products["macos-arm64"].reason).toMatch(/apps\/desktop\/\*\*/u);
   });
 
   test("still publishes every in-scope product and reports the reuse jobs", () => {
@@ -104,14 +104,14 @@ describe("Scenario B — Android-only change", () => {
   const previousCommit = repo.head;
   const baselineRelease = baselineAt(previousCommit);
   const sourceSha = (() => {
-    repo.setGitlink("mobile", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    repo.setGitlink("apps/mobile/app", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     return repo.commit("mobile submodule bump");
   })();
 
   test("builds Android and reuses both gxservers", () => {
     const plan = planAt(sourceSha, { baselines: [baselineRelease], version: "7.8.0" });
     expect(plan.products.android.action).toBe("build");
-    expect(plan.products.android.reason).toMatch(/mobile/u);
+    expect(plan.products.android.reason).toMatch(/apps\/mobile\/app/u);
     expect(plan.products["gxserver-linux-x64"].action).toBe("reuse");
     expect(plan.products["gxserver-linux-arm64"].action).toBe("reuse");
   });
@@ -188,7 +188,7 @@ describe("Scenario D — Windows-only fix after a partial failure", () => {
   });
 
   test("still rebuilds every desktop product when the fix lands in shared GPUI source", () => {
-    repo.write("gpui/src/main.rs", "fn main() { /* shared fix */ }\n");
+    repo.write("apps/desktop/src/main.rs", "fn main() { /* shared fix */ }\n");
     const sharedFixCommit = repo.commit("shared source fix");
     const plan = planAt(sharedFixCommit, { reuseFromRunId: sourceRun.runId, sourceRun, version: "7.8.0" });
     for (const product of ["macos-arm64", "linux-deb-x64", "linux-rpm-x64", "windows-x64", "windows-arm64"]) {
@@ -250,7 +250,7 @@ describe("Scenario D — Windows-only fix after a partial failure", () => {
 /*
  * The pinned Beads payload is embedded in both gxserver packages and signed into
  * the macOS bd tarball, so moving the pin has to invalidate all three. It is the
- * clearest example of composition doing its job: nothing under `gpui/**` moved,
+ * clearest example of composition doing its job: nothing under `apps/desktop/**` moved,
  * yet the DMG must be rebuilt.
  */
 describe("Beads pin change", () => {

@@ -22,7 +22,7 @@ const commandPaletteSource = readFileSync(
   new URL("./command-palette.tsx", import.meta.url),
   "utf8",
 );
-const gpuiMainSource = readFileSync(new URL("../gpui/src/main.rs", import.meta.url), "utf8");
+const gpuiMainSource = readFileSync(new URL("../apps/desktop/src/main.rs", import.meta.url), "utf8");
 const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
 const commandPaletteSearchSource = readFileSync(
   new URL("./command-palette-session-search.ts", import.meta.url),
@@ -32,7 +32,7 @@ const commandInputSource = readFileSync(
   new URL("../components/ui/command.tsx", import.meta.url),
   "utf8",
 );
-const modalHostSource = readFileSync(new URL("../native/sidebar/modal-host.tsx", import.meta.url), "utf8");
+const modalHostSource = readFileSync(new URL("../apps/desktop/views/modal-host.tsx", import.meta.url), "utf8");
 const sessionGridContractSource = readFileSync(
   new URL("../shared/session-grid-contract-sidebar.ts", import.meta.url),
   "utf8",

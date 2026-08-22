@@ -21,9 +21,9 @@ if [[ ! -x "$REPO_ROOT/build/remote-gxserver-linux/x64/package/bin/gxserver" ]];
 fi
 GHOSTEX_ON_DEMAND_ASSETS=1 \
 GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
-  "$REPO_ROOT/gpui/scripts/build-linux-app.sh"
+  "$REPO_ROOT/apps/desktop/scripts/build-linux-app.sh"
 
-APP_DIR="$REPO_ROOT/gpui/build/linux/Ghostex"
+APP_DIR="$REPO_ROOT/apps/desktop/build/linux/Ghostex"
 [[ -x "$APP_DIR/Ghostex" ]] || { echo "Linux build is missing Ghostex" >&2; exit 1; }
 [[ -x "$APP_DIR/ghostex-gpui-runtime" ]] || { echo "Linux build is missing its internal GPUI runtime" >&2; exit 1; }
 [[ ! -e "$APP_DIR/libcef.so" ]] || { echo "Linux release build still bundles libcef.so" >&2; exit 1; }
@@ -51,7 +51,7 @@ mkdir -p \
   "$PACKAGE_ROOT/usr/share/applications" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps"
 cp -a "$APP_DIR/." "$PACKAGE_ROOT/opt/ghostex/"
-cp "$REPO_ROOT/gpui/resources/AppIcon.appiconset/icon_256x256.png" \
+cp "$REPO_ROOT/apps/desktop/resources/AppIcon.appiconset/icon_256x256.png" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'
 #!/usr/bin/env bash

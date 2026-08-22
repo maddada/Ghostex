@@ -57,11 +57,11 @@ case "$COMPONENT" in
     GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
     GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
     GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
-      "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
+      "$REPO_ROOT/apps/desktop/scripts/prepare-macos-runtime.sh"
     for required_path in \
-      "gpui/runtime/macos/Web/on-demand-resources.json" \
-      "gpui/runtime/macos/Web/gxserver/bin/gxserver" \
-      "gpui/runtime/macos/CLI/ghostex" \
+      "apps/desktop/runtime/macos/Web/on-demand-resources.json" \
+      "apps/desktop/runtime/macos/Web/gxserver/bin/gxserver" \
+      "apps/desktop/runtime/macos/CLI/ghostex" \
       "build/on-demand-components/components.json" \
       "build/on-demand-assets/$VERSION/gxserver-linux-x64.tar.gz" \
       "build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz" \
@@ -69,19 +69,19 @@ case "$COMPONENT" in
       [[ -e "$REPO_ROOT/$required_path" ]] || { echo "Prepared runtime is missing $required_path" >&2; exit 1; }
     done
     node "$REPO_ROOT/scripts/release-gpui/on-demand-manifest.mjs" validate-macos \
-      --manifest "$REPO_ROOT/gpui/runtime/macos/Web/on-demand-resources.json"
+      --manifest "$REPO_ROOT/apps/desktop/runtime/macos/Web/on-demand-resources.json"
     tar -cf "$OUTPUT" -C "$REPO_ROOT" \
-      gpui/runtime/macos \
+      apps/desktop/runtime/macos \
       "build/on-demand-assets/$VERSION" \
       build/on-demand-components
     ;;
   rust)
-    export CEF_PATH="$REPO_ROOT/gpui/build/cef-cache"
+    export CEF_PATH="$REPO_ROOT/apps/desktop/build/cef-cache"
     (
       cd "$REPO_ROOT/gpui"
       cargo build --release --bins
     )
-    for binary_path in gpui/target/release/ghostex-gpui gpui/target/release/ghostex-gpui-cef-helper; do
+    for binary_path in apps/desktop/target/release/ghostex-gpui apps/desktop/target/release/ghostex-gpui-cef-helper; do
       [[ -x "$REPO_ROOT/$binary_path" ]] || { echo "Rust build is missing $binary_path" >&2; exit 1; }
       /usr/bin/lipo -archs "$REPO_ROOT/$binary_path" | tr ' ' '\n' | grep -Fxq arm64 || {
         echo "Rust build produced a non-arm64 binary: $binary_path" >&2
@@ -95,8 +95,8 @@ case "$COMPONENT" in
     CEF_RELATIVE="${CEF_FRAMEWORK#"$REPO_ROOT/"}"
     CEF_VERSION_HEADER_RELATIVE="${CEF_VERSION_HEADER#"$REPO_ROOT/"}"
     tar -cf "$OUTPUT" -C "$REPO_ROOT" \
-      gpui/target/release/ghostex-gpui \
-      gpui/target/release/ghostex-gpui-cef-helper \
+      apps/desktop/target/release/ghostex-gpui \
+      apps/desktop/target/release/ghostex-gpui-cef-helper \
       "$CEF_RELATIVE" \
       "$CEF_VERSION_HEADER_RELATIVE"
     ;;

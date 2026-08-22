@@ -18,13 +18,13 @@ import { describe, expect, test } from "vitest";
  * `shared/gpui-hotkey-defaults-parity.test.ts`.
  */
 
-const gpuiMainSource = readFileSync(new URL("../gpui/src/main.rs", import.meta.url), "utf8");
+const gpuiMainSource = readFileSync(new URL("../apps/desktop/src/main.rs", import.meta.url), "utf8");
 const gpuiRuntimeSource = readFileSync(
-  new URL("../gpui/sidebar/gxserver-runtime.ts", import.meta.url),
+  new URL("../apps/desktop/sidebar/gxserver-runtime.ts", import.meta.url),
   "utf8",
 );
 const modalHostSource = readFileSync(
-  new URL("../native/sidebar/modal-host.tsx", import.meta.url),
+  new URL("../apps/desktop/views/modal-host.tsx", import.meta.url),
   "utf8",
 );
 

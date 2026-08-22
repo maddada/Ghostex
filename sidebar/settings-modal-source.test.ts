@@ -781,7 +781,7 @@ describe("settings modal source", () => {
      * can open the AppKit file picker from the modal-host surface.
      */
     const modalHostSource = readFileSync(
-      new URL("../native/sidebar/modal-host.tsx", import.meta.url),
+      new URL("../apps/desktop/views/modal-host.tsx", import.meta.url),
       "utf8",
     );
 

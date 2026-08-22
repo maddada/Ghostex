@@ -161,7 +161,7 @@ describe("release product input map", () => {
       expect(specs(desktop)).toContain("shared/**");
       expect(specs(desktop)).toContain("sidebar/**");
       expect(specs(desktop)).toContain("components/**");
-      expect(specs(desktop)).toContain("native/sidebar/**");
+      expect(specs(desktop)).toContain("apps/desktop/views/**");
       /* Rule 4: patched dependency gitlinks. */
       expect(specs(desktop)).toContain(".dependencies/cef-rs");
       /* Rule 10: the graph and manifest definitions invalidate everything. */

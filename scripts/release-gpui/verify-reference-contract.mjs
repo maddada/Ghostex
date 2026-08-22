@@ -68,7 +68,7 @@ function verifyContract(checkout, revision) {
     join(checkout, "crates/ui/src/tooltip.rs"),
     "utf8",
   );
-  const applicationSources = rustSourcesUnder(join(repoRoot, "gpui/src"));
+  const applicationSources = rustSourcesUnder(join(repoRoot, "apps/desktop/src"));
   const { available, missing } = missingManagedTooltipPlacements(
     librarySource,
     applicationSources,

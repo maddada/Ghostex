@@ -13,7 +13,7 @@ name: GPUI release - Windows compile validation
 # Deliberately NOT a source of build outputs (§Q7). `cargo check` emits .rmeta
 # that `cargo build` cannot link, so any "validation feeds packaging" scheme
 # would be a lie or a second full build. The only handoff is warm dependency
-# caches: ~/.cargo/registry, ~/.cargo/git, gpui/target, the CEF cache, and the
+# caches: ~/.cargo/registry, ~/.cargo/git, apps/desktop/target, the CEF cache, and the
 # Zig global cache. Do not "optimize" this into an artifact handoff.
 #
 # Risk R6: the ARM64 leg cross-compiles from windows-2025. If the ARM64 CEF
@@ -78,13 +78,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-reg-windows-${{ hashFiles('gpui/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
+          key: cargo-reg-windows-${{ hashFiles('apps/desktop/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
           restore-keys: cargo-reg-windows-
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
         with:
-          path: gpui/build/cef-cache
+          path: apps/desktop/build/cef-cache
           key: cef-windows-${{ steps.cache_keys.outputs.cef }}
       - name: Restore Zig package cache
         uses: actions/cache@v6
@@ -97,9 +97,9 @@ jobs:
         uses: actions/cache@v6
         id: target_cache
         with:
-          path: gpui/target
-          key: cargo-check-windows-${{ hashFiles('gpui/Cargo.lock') }}-${{ steps.cache_keys.outputs.cef }}
-          restore-keys: cargo-check-windows-${{ hashFiles('gpui/Cargo.lock') }}-
+          path: apps/desktop/target
+          key: cargo-check-windows-${{ hashFiles('apps/desktop/Cargo.lock') }}-${{ steps.cache_keys.outputs.cef }}
+          restore-keys: cargo-check-windows-${{ hashFiles('apps/desktop/Cargo.lock') }}-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
@@ -123,11 +123,11 @@ jobs:
       # restored Zig package cache serves the same purpose on this runner.
       - name: Type-check the Windows x64 desktop tree
         shell: bash
-        run: cargo check --locked --all-targets --manifest-path gpui/Cargo.toml --target x86_64-pc-windows-msvc
+        run: cargo check --locked --all-targets --manifest-path apps/desktop/Cargo.toml --target x86_64-pc-windows-msvc
       - name: Type-check the Windows ARM64 desktop tree
         if: ${{ inputs.arm64_target }}
         shell: bash
-        run: cargo check --locked --all-targets --manifest-path gpui/Cargo.toml --target aarch64-pc-windows-msvc
+        run: cargo check --locked --all-targets --manifest-path apps/desktop/Cargo.toml --target aarch64-pc-windows-msvc
       - name: Type-check the Windows gxserver tree
         shell: bash
         run: cargo check --locked --all-targets --manifest-path gxserver-rs/Cargo.toml --target x86_64-pc-windows-msvc

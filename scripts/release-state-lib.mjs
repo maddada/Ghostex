@@ -403,10 +403,10 @@ function sourcePathAffectsPackage(file, packageName) {
   ) {
     return false;
   }
-  if (file === "mobile") {
+  if (file === "apps/mobile/app") {
     return packageName === "android";
   }
-  if (file.startsWith("gpui/") || file.startsWith("sidebar/")) {
+  if (file.startsWith("apps/desktop/") || file.startsWith("sidebar/")) {
     return packageName === "macos-arm64";
   }
   return true;

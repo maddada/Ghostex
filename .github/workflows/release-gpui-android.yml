@@ -64,7 +64,7 @@ jobs:
           gh api meta --jq '.ssh_keys[]' | sed 's/^/github.com /' > "$RUNNER_TEMP/mobile-ssh/known_hosts"
           git config submodule.mobile.url git@github.com:maddada/ghostex-mobile.git
           GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/mobile-ssh/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/mobile-ssh/known_hosts" \
-            git submodule update --init --depth 1 mobile
+            git submodule update --init --depth 1 apps/mobile/app
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -76,7 +76,7 @@ jobs:
             "build-tools;36.0.0" \
             "ndk;29.0.14206865"
       - name: Install React Native dependencies
-        working-directory: mobile
+        working-directory: apps/mobile/app
         run: bun install --frozen-lockfile
       - name: Restore Gradle build cache
         uses: actions/cache@v6
@@ -84,7 +84,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: react-native-android-gradle-${{ runner.os }}-${{ hashFiles('mobile/bun.lock', 'mobile/package.json') }}
+          key: react-native-android-gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/app/bun.lock', 'apps/mobile/app/package.json') }}
           restore-keys: react-native-android-gradle-${{ runner.os }}-
       - name: Restore external Android signing keystore
         env:

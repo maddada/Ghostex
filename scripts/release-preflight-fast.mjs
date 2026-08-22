@@ -22,7 +22,7 @@ import {
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const githubRepo = "maddada/Ghostex";
 const subrepoCandidates = [
-  "mobile", "tui", ".dependencies/tui2", "crossplatform", ".dependencies/zmx",
+  "apps/mobile/app", "tui", ".dependencies/tui2", "crossplatform", ".dependencies/zmx",
 ];
 
 const highConfidenceSecretPatterns = [
@@ -415,7 +415,7 @@ async function checkReleaseTests() {
 }
 
 async function checkCargo() {
-  for (const crate of ["gxserver-rs", "gpui"]) {
+  for (const crate of ["gxserver-rs", "apps/desktop"]) {
     const result = await runCommand(`cargo check --manifest-path '${path.join(repoRoot, crate, "Cargo.toml")}'`, {
       timeoutMs: 15 * 60 * 1000,
     });

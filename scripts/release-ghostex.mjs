@@ -1710,12 +1710,12 @@ async function buildGpuiArch(version, buildVersion, entry) {
     GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES: "1",
     GHOSTEX_REQUIRE_SPARKLE: "1",
   };
-  await runWithHeartbeat("/bin/bash gpui/scripts/build-macos-app.sh", {
+  await runWithHeartbeat("/bin/bash apps/desktop/scripts/build-macos-app.sh", {
     label: "GPUI app build",
     env,
     timeoutMs: releaseTimeouts.buildArchMs,
   });
-  const appPath = path.join(repoRoot, "gpui", "build", "macos", `${config.gpuiAppName}.app`);
+  const appPath = path.join(repoRoot, "apps", "desktop", "build", "macos", `${config.gpuiAppName}.app`);
   if (!existsSync(appPath)) {
     throw new ReleaseError(`GPUI build did not produce an app bundle at ${appPath}`);
   }
@@ -2352,7 +2352,7 @@ async function buildAndUploadAndroidRelease(version, buildVersion) {
     "set -a",
     `source ${shellQuote(config.androidSigningEnvFile)}`,
     "set +a",
-    `cd ${shellQuote(path.join(repoRoot, "mobile"))}`,
+    `cd ${shellQuote(path.join(repoRoot, "apps", "mobile", "app"))}`,
     "bun install --frozen-lockfile",
     `cd ${shellQuote(repoRoot)}`,
     `scripts/release-gpui/android.sh ${shellQuote(version)}`,

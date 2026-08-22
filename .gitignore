@@ -22,8 +22,8 @@ tmp/imagegen/
 .agents/skills/
 .agents/skills/ghostex-release-to-brew/SKILL.md
 storybook-static/
-gpui/runtime/
-editor/macos/.build/
+apps/desktop/runtime/
+apps/editor/macos/.build/
 ghostex-paths/target/
 ghostex-paths/Cargo.lock
 tmp/
@@ -51,7 +51,7 @@ tmp/
 # downloads/*.apk ignore remains as a guard for stale local scripts.
 # CDXC:RepoSafety 2026-07-01-02:45: Ghostty Zig package fetches can materialize under ghostty/zig-pkg during release builds. Keep that generated dependency cache out of release commits while source dependencies stay pinned by build.zig.zon.
 # CDXC:RepoSafety 2026-07-06: The standalone GhostexEditor SwiftPM build writes
-# compiler outputs under editor/macos/.build. Keep those local build products
+# compiler outputs under apps/editor/macos/.build. Keep those local build products
 # ignored so release commits contain source changes only.
 # CDXC:RepoSafety 2026-08-05: The standalone ghostex-paths library writes Cargo
 # build output and a library-local lockfile. Keep those generated files out of

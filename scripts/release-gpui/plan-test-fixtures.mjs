@@ -50,12 +50,12 @@ const FIXTURE_FILES = {
   "components/ui/button.tsx": "export const Button = () => null;\n",
   "ghostex-paths/src/lib.rs": "pub fn home() {}\n",
   ".dependencies/ghostty/src/main.zig": "pub fn main() void {}\n",
-  "gpui/Cargo.toml": "[package]\nname = \"ghostex-gpui\"\n",
-  "gpui/src/main.rs": "fn main() {}\n",
+  "apps/desktop/Cargo.toml": "[package]\nname = \"ghostex-gpui\"\n",
+  "apps/desktop/src/main.rs": "fn main() {}\n",
   "gxserver-rs/src/constants.rs": "pub const GXSERVER_PROTOCOL_VERSION: u32 = 42;\n",
   "lib/utils.ts": "export const cn = () => \"\";\n",
   "media/sounds/zap.mp3": "sound\n",
-  "native/sidebar/modal-host.tsx": "export const ModalHost = () => null;\n",
+  "apps/desktop/views/modal-host.tsx": "export const ModalHost = () => null;\n",
   "package.json": `${JSON.stringify(
     {
       dependencies: { react: "19.0.0" },

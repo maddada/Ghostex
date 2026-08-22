@@ -12,7 +12,7 @@ import {
 import { defaultScope } from "./product-inputs.mjs";
 import { createFixtureRepo } from "./plan-test-fixtures.mjs";
 
-const repo = createFixtureRepo({ files: { "gpui/target/release/ghostex": "compiled output\n" } });
+const repo = createFixtureRepo({ files: { "apps/desktop/target/release/ghostex": "compiled output\n" } });
 afterAll(() => repo.dispose());
 
 function fingerprintsAt(sha, { scope = defaultScope(), version = "7.7.0" } = {}) {
@@ -64,7 +64,7 @@ describe("release fingerprint algorithm", () => {
 
   test("ignores tracked paths inside a declared exclusion", () => {
     const before = fingerprintsAt(repo.head ?? base);
-    repo.write("gpui/target/release/ghostex", "different compiled output\n");
+    repo.write("apps/desktop/target/release/ghostex", "different compiled output\n");
     const after = fingerprintsAt(repo.commit("build output churn"));
     expect(changed(before, after)).toEqual([]);
   });
@@ -88,7 +88,7 @@ describe("release fingerprint algorithm", () => {
 
   test("tracks submodule pins through gitlinks without a checkout", () => {
     const before = fingerprintsAt(repo.commit("checkpoint"));
-    repo.setGitlink("mobile", "1111111111111111111111111111111111111111");
+    repo.setGitlink("apps/mobile/app", "1111111111111111111111111111111111111111");
     const after = fingerprintsAt(repo.commit("mobile pin bump"));
     const moved = changed(before, after);
     expect(moved).toEqual(["android"]);

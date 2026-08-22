@@ -10,7 +10,7 @@ release_gpui_require_version "$VERSION"
 REPO_ROOT="$(release_gpui_repo_root)"
 OUTPUT="${2:-$(release_gpui_default_output "$REPO_ROOT" "$VERSION" android)}"
 BUILD_NUMBER="$(release_gpui_build_number "$VERSION")"
-MOBILE_ROOT="$REPO_ROOT/mobile"
+MOBILE_ROOT="$REPO_ROOT/apps/mobile/app"
 
 release_gpui_require_command bun
 release_gpui_require_command java

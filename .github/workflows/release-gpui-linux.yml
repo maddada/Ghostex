@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      CEF_PATH: ${{ github.workspace }}/gpui/build/cef-cache
+      CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
       GHOSTEX_LINUX_PACKAGE_ROOT: ${{ github.workspace }}/build/release-gpui/linux-package-root
       GHOSTEX_LINUX_PACKAGE_ROOT_READY: '1'
       GHOSTEX_RELEASE_PLAN: ${{ inputs.plan }}
@@ -91,13 +91,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-reg-linux-${{ hashFiles('gpui/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
+          key: cargo-reg-linux-${{ hashFiles('apps/desktop/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
           restore-keys: cargo-reg-linux-
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
         with:
-          path: gpui/build/cef-cache
+          path: apps/desktop/build/cef-cache
           key: cef-linux-x64-${{ steps.cache_keys.outputs.cef }}
       - name: Restore Zig package cache
         uses: actions/cache@v6

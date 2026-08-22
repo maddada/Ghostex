@@ -80,13 +80,13 @@ fi
 # Prepare the GPUI-owned runtime tree and seal the on-demand checksums without
 # invoking the retired Swift host build.
 if [[ "$USE_PREPARED_RUNTIME" == "1" ]]; then
-  PREPARED_WEB="$REPO_ROOT/gpui/runtime/macos/Web"
+  PREPARED_WEB="$REPO_ROOT/apps/desktop/runtime/macos/Web"
   for required_path in \
     "$PREPARED_WEB/bin/zmx" \
     "$PREPARED_WEB/on-demand-resources.json" \
     "$PREPARED_WEB/gxserver/bin/gxserver" \
     "$PREPARED_WEB/portless/dist/cli.js" \
-    "$REPO_ROOT/gpui/runtime/macos/CLI/ghostex" \
+    "$REPO_ROOT/apps/desktop/runtime/macos/CLI/ghostex" \
     "$REPO_ROOT/build/on-demand-components/components.json" \
     "$REPO_ROOT/build/on-demand-assets/$VERSION/gxserver-linux-x64.tar.gz" \
     "$REPO_ROOT/build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz" \
@@ -109,7 +109,7 @@ else
   GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
   GHOSTEX_CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
   GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
-    "$REPO_ROOT/gpui/scripts/prepare-macos-runtime.sh"
+    "$REPO_ROOT/apps/desktop/scripts/prepare-macos-runtime.sh"
 fi
 
 GHOSTEX_MACOS_ARCH=arm64 \
@@ -126,7 +126,7 @@ GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE="$REMOTE_ROOT/arm64/package" \
 GHOSTEX_ON_DEMAND_ASSETS=1 \
 GHOSTEX_GPUI_SIGN_IDENTITY="$SIGNING_IDENTITY" \
 GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG=--timestamp \
-  "$REPO_ROOT/gpui/scripts/build-macos-app.sh"
+  "$REPO_ROOT/apps/desktop/scripts/build-macos-app.sh"
 
 COMPONENT_MANIFEST="$REPO_ROOT/build/on-demand-components/components.json"
 for component in code-server cef; do
@@ -150,7 +150,7 @@ process.stdout.write(version);
   "${PUBLISH_ARGS[@]}"
 done
 
-APP_PATH="$REPO_ROOT/gpui/build/macos/Ghostex.app"
+APP_PATH="$REPO_ROOT/apps/desktop/build/macos/Ghostex.app"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 [[ -d "$APP_PATH" ]] || { echo "GPUI build did not produce $APP_PATH" >&2; exit 1; }
 [[ "$(plutil -extract CFBundleIdentifier raw "$INFO_PLIST")" == "com.madda.ghostex.host" ]]

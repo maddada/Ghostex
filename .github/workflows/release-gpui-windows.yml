@@ -105,13 +105,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: cargo-reg-windows-${{ inputs.arch }}-${{ hashFiles('gpui/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
+          key: cargo-reg-windows-${{ inputs.arch }}-${{ hashFiles('apps/desktop/Cargo.lock', 'gxserver-rs/Cargo.lock') }}
           restore-keys: cargo-reg-windows-${{ inputs.arch }}-
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
         with:
-          path: gpui/build/cef-cache
+          path: apps/desktop/build/cef-cache
           key: cef-windows-${{ inputs.arch }}-${{ steps.cache_keys.outputs.cef }}
       - name: Restore Zig package cache
         uses: actions/cache@v6

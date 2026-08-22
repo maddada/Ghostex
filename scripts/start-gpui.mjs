@@ -25,7 +25,7 @@ import {
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const appVersion = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
-const gpuiDir = path.join(repoRoot, "gpui");
+const gpuiDir = path.join(repoRoot, "apps", "desktop");
 const appName = "Ghostex";
 const bundleId = "com.madda.ghostex.gpui";
 const isDarwin = process.platform === "darwin";
