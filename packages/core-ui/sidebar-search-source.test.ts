@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
+const referenceChromeSource = readFileSync(
+  new URL("./sidebar-app/reference-chrome.tsx", import.meta.url),
+  "utf8",
+);
 
 function sourceBetween(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -20,7 +23,7 @@ describe("sidebar search source", () => {
      * surface instead of being duplicated inside the sidebar row.
      */
     const searchItemSource = sourceBetween(
-      sidebarAppSource,
+      referenceChromeSource,
       "function SidebarReferenceSearchNavItem({",
       "function SidebarReferenceNavButton({",
     );

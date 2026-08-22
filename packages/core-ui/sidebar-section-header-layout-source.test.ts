@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-const sidebarAppSource = readFileSync(new URL("./sidebar-app.tsx", import.meta.url), "utf8");
+const referenceChromeSource = readFileSync(
+  new URL("./sidebar-app/reference-chrome.tsx", import.meta.url),
+  "utf8",
+);
 const groupPanelsSource = readFileSync(new URL("./styles/group-panels.css", import.meta.url), "utf8");
 
 function sourceBetween(source: string, start: string, end: string): string {
@@ -55,7 +58,7 @@ describe("reference sidebar section header layout source", () => {
      * painting underneath their hover action buttons in the narrow native
      * sidebar.
      */
-    expect(sidebarAppSource).toMatch(
+    expect(referenceChromeSource).toMatch(
       /<span\s+className="reference-sidebar-section-title">\s*\{title\}\s*<\/span>/u,
     );
 

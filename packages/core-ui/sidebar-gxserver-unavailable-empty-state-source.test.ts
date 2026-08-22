@@ -23,7 +23,7 @@ describe("gxserver unavailable sidebar empty state source", () => {
     const constantsSource = sourceBetween(
       sidebarAppSource,
       "const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID",
-      "const SIDEBAR_UI_COLLAPSE_STATE_STORAGE_KEY",
+      "const MIN_SESSION_SEARCH_QUERY_LENGTH",
     );
     const timerSource = sourceBetween(
       sidebarAppSource,
