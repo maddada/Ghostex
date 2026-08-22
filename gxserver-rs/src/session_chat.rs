@@ -63,6 +63,9 @@ const BOUNDARY_FINGERPRINT_BYTES: u64 = 64;
 const RECONCILIATION_INTERVAL: Duration = Duration::from_millis(1_000);
 const INITIAL_RESOLVE_POLL: Duration = Duration::from_millis(500);
 const MAX_RESOLVE_POLL: Duration = Duration::from_millis(5_000);
+/// How long a subscribe waits for its one model/effort probe before emitting
+/// the snapshot anyway. See `CDXC:SessionChatSeedDetection`.
+const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(500);
 /// A working session whose transcript has been silent this long is tailing a
 /// file the agent has moved on from; re-resolve the path.
 const STALE_TRANSCRIPT_IDLE: Duration = Duration::from_millis(10_000);
@@ -221,9 +224,18 @@ pub fn resolve_session_chat_transcript_agent(
     match agent?.trim().to_ascii_lowercase().as_str() {
         "claude" | "openclaude" => Some(SessionChatTranscriptAgent::Claude),
         "codex" => Some(SessionChatTranscriptAgent::Codex),
-        "grok" => Some(SessionChatTranscriptAgent::Grok),
+        "grok" | "grok-build" => Some(SessionChatTranscriptAgent::Grok),
         "pi" | "omp" => Some(SessionChatTranscriptAgent::Pi),
         _ => None,
+    }
+}
+
+pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static str> {
+    match resolve_session_chat_transcript_agent(agent)? {
+        SessionChatTranscriptAgent::Claude => Some("claude"),
+        SessionChatTranscriptAgent::Codex => Some("codex"),
+        SessionChatTranscriptAgent::Grok => Some("grok"),
+        SessionChatTranscriptAgent::Pi => Some("pi"),
     }
 }
 
@@ -245,7 +257,8 @@ pub fn session_chat_lifecycle_decoder(
     match agent {
         SessionChatTranscriptAgent::Claude => Some(decode_claude_turn_lifecycle),
         SessionChatTranscriptAgent::Codex => Some(decode_codex_turn_lifecycle),
-        SessionChatTranscriptAgent::Grok | SessionChatTranscriptAgent::Pi => None,
+        SessionChatTranscriptAgent::Grok => Some(decode_grok_turn_lifecycle),
+        SessionChatTranscriptAgent::Pi => None,
     }
 }
 
@@ -1077,22 +1090,129 @@ fn codex_summary_text(summary: Option<&Value>) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Grok decoder (upstream chat spec §2.4)
+// Grok decoder (grok's ACP session-update log)
 // ---------------------------------------------------------------------------
+
+/*
+CDXC:SessionChatGrokUpdates 2026-08-22:
+Grok keeps two logs per session and chat follows the SECOND one.
+
+`chat_history.jsonl` is the persisted conversation, rewritten only when a model
+call finishes. A turn that spends a minute reasoning, or answers in one long
+message, therefore lands in that file all at once: measured 43s of total silence
+for a no-tool answer, and a 78s gap inside a real session's turn, during which
+the chat pane sat on the user's prompt while the terminal streamed the reply.
+That is the "chat is stuck on my message until I switch away and back" report —
+switching remounts and re-reads the file, which by then has the whole turn.
+
+`updates.jsonl` is the ACP session-update stream the TUI itself renders from,
+appended block by block: the prompt, every thought, every assistant message,
+each tool call and its completion, and a `turn_completed` boundary. It holds the
+whole conversation for resumed AND forked sessions (a fork replays the parent's
+turns into it), so it is a complete transcript, not just a live tail. It is also
+the path grok's own hooks report, so `agentSessionPath` now needs no rewriting.
+
+Two things come free with it: grok gets real turn boundaries (it had no
+lifecycle decoder at all, which left the prompt queue's readiness rule guessing),
+and the bootstrap rows chat_history keeps — the `<user_info>`/`<rules>` context
+block and the `<system-reminder>` envelopes, which chat rendered as the user's
+own first messages — do not exist in the update stream at all.
+
+Transcript EXPORT deliberately still reads `chat_history.jsonl`: it is a
+one-shot render of a finished conversation, where the persisted form is the
+better source. See `resolve_export_transcript_path`.
+*/
+
+/// The one text block an ACP `content` value carries, empty ones rejected.
+fn grok_update_text(content: Option<&Value>) -> Option<String> {
+    let text = match content? {
+        Value::String(text) => text.clone(),
+        value => extract_string(as_record(Some(value))?.get("text"))?,
+    };
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn grok_tool_meta(update: &Map<String, Value>) -> Option<&Map<String, Value>> {
+    as_record(as_record(update.get("_meta"))?.get("x.ai/tool"))
+}
+
+/*
+The display label ("Write", "Read", "Edit") rather than the wire name
+("write", "read_file", "search_replace"): it is what grok's own UI shows, and
+the shared edit-tool table that renders a diff from the call's input is keyed by
+exactly those labels.
+*/
+fn grok_tool_name(update: &Map<String, Value>) -> String {
+    grok_tool_meta(update)
+        .and_then(|meta| {
+            extract_string(meta.get("label")).or_else(|| extract_string(meta.get("name")))
+        })
+        .or_else(|| extract_string(update.get("title")))
+        .unwrap_or_else(|| "tool".to_string())
+}
+
+/*
+A completed call carries its output as ACP content entries: `content` for tool
+text (a file read, command output) and `diff` for an edit. `rawOutput` is the
+raw tool struct, used only when neither is present — its
+`tool_output_for_prompt` is the one-line summary the model itself was given.
+*/
+fn grok_tool_result_output(update: &Map<String, Value>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(Value::Array(items)) = update.get("content") {
+        for item in items {
+            let Some(record) = item.as_object() else {
+                continue;
+            };
+            match record.get("type").and_then(Value::as_str) {
+                Some("content") => {
+                    if let Some(text) = grok_update_text(record.get("content")) {
+                        parts.push(text);
+                    }
+                }
+                Some("diff") => {
+                    let path = extract_string(record.get("path")).unwrap_or_default();
+                    let new_text = extract_string(record.get("newText")).unwrap_or_default();
+                    let old_text = extract_string(record.get("oldText")).unwrap_or_default();
+                    let verb = if old_text.trim().is_empty() {
+                        "Wrote"
+                    } else {
+                        "Edited"
+                    };
+                    let lines = new_text.lines().count();
+                    parts.push(format!("{verb} {path} ({lines} lines)"));
+                }
+                _ => {}
+            }
+        }
+    }
+    if !parts.is_empty() {
+        return parts.join("\n\n");
+    }
+    let Some(raw_output) = update.get("rawOutput").filter(|value| !value.is_null()) else {
+        return String::new();
+    };
+    as_record(Some(raw_output))
+        .and_then(|record| {
+            record
+                .values()
+                .filter_map(|value| as_record(Some(value)))
+                .find_map(|inner| extract_string(inner.get("tool_output_for_prompt")))
+        })
+        .unwrap_or_else(|| tool_result_output(Some(raw_output)))
+}
+
+/// The `params.update` payload of one `session/update` line.
+fn grok_session_update(record: &Map<String, Value>) -> Option<&Map<String, Value>> {
+    as_record(as_record(record.get("params"))?.get("update"))
+}
 
 pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
-    let record_type = extract_string(record.get("type"))?;
+    let update = grok_session_update(&record)?;
     let timestamp = parse_timestamp(record.get("timestamp"));
-    let record_id = extract_string(record.get("id"));
-    // Grok rows often omit timestamps and only some carry ids — prefix with the
-    // JSONL position so ids stay unique and ordered.
-    let id = match record_id {
-        Some(record_id) => format!("{fallback_id}:{record_id}"),
-        None => fallback_id.to_string(),
-    };
     let transcript_message = |role, blocks| SessionChatMessage {
-        id: id.clone(),
+        id: fallback_id.to_string(),
         role,
         blocks,
         timestamp,
@@ -1102,83 +1222,50 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
         queued: false,
     };
 
-    match record_type.as_str() {
-        "user" | "assistant" => {
-            if record_type == "user"
-                && (has_non_empty_synthetic_reason(&record)
-                    || is_grok_bootstrap_context(record.get("content")))
-            {
-                return None;
-            }
-            let raw_blocks = claude_content_blocks(record.get("content"));
-            let blocks: Vec<SessionChatBlock> = if record_type == "user" {
-                raw_blocks
-                    .into_iter()
-                    .flat_map(normalize_grok_user_query_block)
-                    .collect()
-            } else {
-                raw_blocks
+    match update.get("sessionUpdate").and_then(Value::as_str)? {
+        "user_message_chunk" => {
+            // Ghostex writes a pasted image into the prompt as its absolute
+            // path, so the same split the persisted rows needed still applies.
+            let blocks = normalize_grok_user_query_block(text_block(grok_update_text(
+                update.get("content"),
+            )?));
+            (!blocks.is_empty()).then(|| transcript_message(SessionChatRole::User, blocks))
+        }
+        "agent_thought_chunk" => Some(transcript_message(
+            SessionChatRole::Reasoning,
+            vec![text_block(grok_update_text(update.get("content"))?)],
+        )),
+        "agent_message_chunk" => Some(transcript_message(
+            SessionChatRole::Assistant,
+            vec![text_block(grok_update_text(update.get("content"))?)],
+        )),
+        "tool_call" => Some(transcript_message(
+            SessionChatRole::Assistant,
+            vec![SessionChatBlock::ToolCall {
+                name: grok_tool_name(update),
+                input: update
+                    .get("rawInput")
+                    .filter(|value| !value.is_null())
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            }],
+        )),
+        /*
+        Only the SETTLED update is a result row. The others re-describe a call
+        that is still running (a resolved title, a partial diff); publishing
+        them would put a second, contentless row under every tool call.
+        */
+        "tool_call_update" => {
+            let is_error = match update.get("status").and_then(Value::as_str)? {
+                "completed" => None,
+                "failed" => Some(true),
+                _ => return None,
             };
-            if blocks.is_empty() {
-                let tool_blocks = grok_tool_call_blocks(record.get("tool_calls"));
-                if tool_blocks.is_empty() {
-                    return None;
-                }
-                return Some(transcript_message(SessionChatRole::Assistant, tool_blocks));
-            }
-            if record_type == "assistant" {
-                let mut combined = blocks;
-                combined.extend(grok_tool_call_blocks(record.get("tool_calls")));
-                return Some(transcript_message(SessionChatRole::Assistant, combined));
-            }
-            Some(transcript_message(SessionChatRole::User, blocks))
-        }
-        "reasoning" => {
-            let text = extract_string(record.get("text"))
-                .or_else(|| grok_summary_text(record.get("summary")))
-                .or_else(|| {
-                    extract_string(as_record(record.get("content")).and_then(|c| c.get("text")))
-                })?;
-            if text.trim().is_empty() {
-                return None;
-            }
-            Some(transcript_message(
-                SessionChatRole::Reasoning,
-                vec![text_block(text)],
-            ))
-        }
-        "backend_tool_call" | "tool_call" => {
-            let name = extract_string(
-                as_record(record.get("kind")).and_then(|kind| kind.get("tool_type")),
-            )
-            .or_else(|| extract_string(record.get("name")))
-            .or_else(|| extract_string(record.get("tool")))
-            .unwrap_or_else(|| "tool".to_string());
-            let input = record
-                .get("kind")
-                .filter(|value| !value.is_null())
-                .or_else(|| record.get("arguments").filter(|value| !value.is_null()))
-                .or_else(|| record.get("input").filter(|value| !value.is_null()))
-                .cloned()
-                .unwrap_or(Value::Null);
-            Some(transcript_message(
-                SessionChatRole::Assistant,
-                vec![SessionChatBlock::ToolCall { name, input }],
-            ))
-        }
-        "tool_result" => {
-            let content = record
-                .get("content")
-                .filter(|value| !value.is_null())
-                .or_else(|| record.get("output").filter(|value| !value.is_null()))
-                .or_else(|| record.get("result").filter(|value| !value.is_null()));
-            let is_error = record.get("is_error") == Some(&Value::Bool(true))
-                || record.get("isError") == Some(&Value::Bool(true));
             Some(transcript_message(
                 SessionChatRole::Tool,
                 vec![SessionChatBlock::ToolResult {
-                    output: tool_result_output(content),
-                    is_error: if is_error { Some(true) } else { None },
+                    output: grok_tool_result_output(update),
+                    is_error,
                 }],
             ))
         }
@@ -1186,98 +1273,34 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
     }
 }
 
-fn grok_tool_call_blocks(value: Option<&Value>) -> Vec<SessionChatBlock> {
-    let Some(Value::Array(items)) = value else {
-        return Vec::new();
-    };
-    let mut blocks: Vec<SessionChatBlock> = Vec::new();
-    for item in items {
-        let Some(record) = item.as_object() else {
-            continue;
-        };
-        let name = extract_string(record.get("name"))
-            .or_else(|| extract_string(record.get("tool")))
-            .unwrap_or_else(|| "tool".to_string());
-        let mut input = record
-            .get("arguments")
-            .filter(|value| !value.is_null())
-            .or_else(|| record.get("input").filter(|value| !value.is_null()))
-            .or_else(|| record.get("args").filter(|value| !value.is_null()))
-            .cloned()
-            .unwrap_or(Value::Null);
-        if let Value::String(text) = &input {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                input = parsed;
+/*
+Grok's turn boundaries, which the persisted history never exposed: a prompt
+opens a turn and `turn_completed` closes it, with `stop_reason` naming a
+cancellation. Chat settles its Working marker on this, and the prompt queue
+uses it to tell a real stop from the pause between two tool calls.
+*/
+pub fn decode_grok_turn_lifecycle(
+    line: &str,
+    fallback_id: &str,
+) -> Option<SessionChatTurnLifecycle> {
+    let record = parse_json_object(line)?;
+    let update = grok_session_update(&record)?;
+    let timestamp = parse_timestamp(record.get("timestamp"));
+    let state = match update.get("sessionUpdate").and_then(Value::as_str)? {
+        "user_message_chunk" => SessionChatTurnLifecycleState::Working,
+        "turn_completed" => match update.get("stop_reason").and_then(Value::as_str) {
+            Some("cancelled" | "canceled" | "interrupted" | "aborted") => {
+                SessionChatTurnLifecycleState::Interrupted
             }
-        }
-        blocks.push(SessionChatBlock::ToolCall { name, input });
-    }
-    blocks
-}
-
-fn grok_summary_text(value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::String(text) => Some(text.clone()),
-        Value::Array(items) => {
-            let parts: Vec<String> = items
-                .iter()
-                .filter_map(|item| {
-                    let record = item.as_object();
-                    extract_string(record.and_then(|inner| inner.get("text"))).or_else(|| {
-                        extract_string(record.and_then(|inner| inner.get("summary_text")))
-                    })
-                })
-                .collect();
-            if parts.is_empty() {
-                None
-            } else {
-                Some(parts.join("\n"))
-            }
-        }
-        _ => None,
-    }
-}
-
-fn has_non_empty_synthetic_reason(record: &Map<String, Value>) -> bool {
-    record
-        .get("synthetic_reason")
-        .and_then(Value::as_str)
-        .is_some_and(|reason| !reason.trim().is_empty())
-}
-
-fn standalone_text_content(content: Option<&Value>) -> Option<String> {
-    match content? {
-        Value::String(text) => Some(text.clone()),
-        Value::Array(items) if items.len() == 1 => {
-            let record = items[0].as_object()?;
-            if record.get("type").and_then(Value::as_str) == Some("text") {
-                record
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn is_grok_bootstrap_context(content: Option<&Value>) -> bool {
-    let Some(text) = standalone_text_content(content) else {
-        return false;
+            _ => SessionChatTurnLifecycleState::Completed,
+        },
+        _ => return None,
     };
-    let normalized = text.trim().to_lowercase();
-    if !normalized.starts_with("<user_info>") {
-        return false;
-    }
-    let Some(end) = normalized.find("</user_info>") else {
-        return false;
-    };
-    let remainder = normalized[end + "</user_info>".len()..].trim().to_string();
-    // Grok 0.2.93 appends a git snapshot; reject ONLY that known envelope.
-    remainder.is_empty()
-        || (remainder.starts_with("<git_status>") && remainder.ends_with("</git_status>"))
+    Some(SessionChatTurnLifecycle {
+        state,
+        turn_id: extract_string(update.get("prompt_id")).unwrap_or_else(|| fallback_id.to_string()),
+        timestamp,
+    })
 }
 
 fn normalize_grok_user_query_block(block: SessionChatBlock) -> Vec<SessionChatBlock> {
@@ -2643,9 +2666,10 @@ pub fn boundary_fingerprint(file_path: &Path, offset: u64) -> std::io::Result<St
 // ---------------------------------------------------------------------------
 
 /// Hook-supplied `agentSessionPath` wins when it points at an existing .jsonl
-/// file; otherwise fall back to the per-agent session-id search. Grok's hook
-/// session file is `updates.jsonl`, while its conversation is stored in
-/// `chat_history.jsonl`, so only the latter is a valid supplied Grok path.
+/// file; otherwise fall back to the per-agent session-id search. Grok's hooks
+/// report `updates.jsonl`, which is exactly the file chat follows
+/// (`CDXC:SessionChatGrokUpdates`), so every agent's supplied path is taken
+/// as-is now.
 pub fn resolve_session_chat_transcript_path(
     agent: SessionChatTranscriptAgent,
     agent_session_id: Option<&str>,
@@ -2656,13 +2680,10 @@ pub fn resolve_session_chat_transcript_path(
         .filter(|value| !value.is_empty())
     {
         let expanded = expand_home(path);
-        let is_agent_transcript = agent != SessionChatTranscriptAgent::Grok
-            || expanded.file_name().and_then(|name| name.to_str()) == Some("chat_history.jsonl");
-        if is_agent_transcript
-            && expanded
-                .extension()
-                .and_then(|extension| extension.to_str())
-                == Some("jsonl")
+        if expanded
+            .extension()
+            .and_then(|extension| extension.to_str())
+            == Some("jsonl")
             && expanded.is_file()
         {
             return Some(expanded);
@@ -2676,7 +2697,7 @@ pub fn resolve_session_chat_transcript_path(
         SessionChatTranscriptAgent::Codex => {
             crate::agent_transcripts::find_codex_transcript(session_id)
         }
-        SessionChatTranscriptAgent::Grok => find_grok_chat_transcript(session_id),
+        SessionChatTranscriptAgent::Grok => find_grok_session_update_log(session_id),
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
     }
 }
@@ -2879,6 +2900,8 @@ fn head_declares_session_id(path: &Path, session_id: &str) -> bool {
 }
 
 const GROK_SESSION_ID_MAX_LENGTH: usize = 128;
+pub const GROK_SESSION_UPDATE_LOG_FILE: &str = "updates.jsonl";
+pub const GROK_CHAT_HISTORY_FILE: &str = "chat_history.jsonl";
 
 fn is_safe_grok_session_id(session_id: &str) -> bool {
     !session_id.is_empty()
@@ -2888,9 +2911,9 @@ fn is_safe_grok_session_id(session_id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
-/// Grok layout: `$GROK_HOME/sessions/<url-encoded-cwd>/<session-id>/chat_history.jsonl`
+/// Grok layout: `$GROK_HOME/sessions/<url-encoded-cwd>/<session-id>/<file>`
 /// (with a `summary.json` sidecar in the same directory).
-fn find_grok_chat_transcript(session_id: &str) -> Option<PathBuf> {
+fn find_grok_session_file(session_id: &str, file_name: &str) -> Option<PathBuf> {
     if !is_safe_grok_session_id(session_id) {
         return None;
     }
@@ -2900,12 +2923,22 @@ fn find_grok_chat_transcript(session_id: &str) -> Option<PathBuf> {
         if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
             continue;
         }
-        let candidate = entry.path().join(session_id).join("chat_history.jsonl");
+        let candidate = entry.path().join(session_id).join(file_name);
         if candidate.is_file() {
             return Some(candidate);
         }
     }
     None
+}
+
+/// Chat reads the live update stream (`CDXC:SessionChatGrokUpdates`).
+fn find_grok_session_update_log(session_id: &str) -> Option<PathBuf> {
+    find_grok_session_file(session_id, GROK_SESSION_UPDATE_LOG_FILE)
+}
+
+/// Export reads the persisted conversation instead.
+pub fn find_grok_chat_history(session_id: &str) -> Option<PathBuf> {
+    find_grok_session_file(session_id, GROK_CHAT_HISTORY_FILE)
 }
 
 // ---------------------------------------------------------------------------
@@ -3876,12 +3909,30 @@ pub struct SessionChatScreenState<'a> {
     pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
     pub activity:
         Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    /*
+    CDXC:SessionChatScreenProbed 2026-08-22:
+    True once a WHOLE screen capture has actually been read for this session.
+
+    Every other screen-derived field omits itself when it has nothing to say,
+    which leaves a client unable to tell "the model is still being detected"
+    from "detection ran and this agent's screen names no model". The composer
+    needs exactly that distinction to decide between a loading skeleton and a
+    plain unset pill — a stopped or sleeping session has no screen at all and
+    must never sit under a spinner waiting for a value that is not coming.
+
+    Same rule as `captured` in SessionChatTerminalDetection, which is where
+    this comes from: only a capture that succeeded whole counts.
+    */
+    pub probed: bool,
 }
 
 fn insert_screen_state(frame: &mut Map<String, Value>, screen: SessionChatScreenState<'_>) {
     insert_optional_terminal_notice(frame, screen.notice);
     if let Some(activity) = screen.activity {
         frame.insert("terminalActivity".to_string(), activity.to_value());
+    }
+    if screen.probed {
+        frame.insert("screenProbed".to_string(), Value::Bool(true));
     }
 }
 
@@ -4217,8 +4268,45 @@ pub async fn run_session_chat_follower(
     let mut published_activity: Option<
         crate::session_chat_terminal_activity::SessionChatTerminalActivity,
     > = None;
+    // CDXC:SessionChatScreenProbed 2026-08-22: latched, not sampled. It answers
+    // "has detection run for this session yet", so a later capture failure (the
+    // session stopped, the daemon went away) must not put the composer back
+    // under a loading skeleton.
+    let mut published_screen_probed = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
+
+    /*
+    CDXC:SessionChatSeedDetection 2026-08-22:
+    Probe once, here, before the first frame goes out.
+
+    The snapshot frame reads detection from the shared cache and never spawns,
+    which was right when a capture cost a login shell and a process. On a cold
+    cache — the first chat open after a gxserver start — that meant the
+    snapshot carried NO model/effort at all, and the client's seed read (which
+    does force a detection) is explicitly outranked by the first frame, so its
+    freshly detected value was discarded. The pills then stayed blank until the
+    startup probe below fired on the second reconcile, a second or more later,
+    and only then snapped to the real model. That flash of "Model"/"Options"
+    turning into "Opus 5"/"High" is what this removes.
+
+    A capture is now a direct socket read (CDXC:SessionChatScreenCapture),
+    ~0.1ms typical and ~6ms against a very large scrollback, so paying for one
+    before the snapshot is cheaper than the frame it rides on. The deadline
+    exists only for a wedged daemon that accepts the connection and never
+    answers: the capture's own read timeout is 5s, and stalling a subscribe
+    that long to populate a pill is not a trade worth making. Missing the
+    deadline is not an error — the startup probe below still runs.
+    */
+    if let Some(reader) = config.options_reader.clone() {
+        let _ = tokio::time::timeout(
+            SEED_OPTION_DETECTION_DEADLINE,
+            tokio::task::spawn_blocking(move || {
+                reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
+            }),
+        )
+        .await;
+    }
 
     loop {
         if resolved.is_none() {
@@ -4249,11 +4337,19 @@ pub async fn run_session_chat_follower(
                         detection.options.as_ref(),
                         SessionChatScreenState {
                             notice: detection.notice.as_ref(),
-                            activity: detection.activity.as_ref(),
+                            activity: live
+                                .working
+                                .then_some(detection.activity.as_ref())
+                                .flatten(),
+                            probed: published_screen_probed || detection.attempted,
                         },
                     );
                     published_notice = detection.notice;
-                    published_activity = detection.activity;
+                    published_activity = if live.working {
+                        detection.activity
+                    } else {
+                        None
+                    };
                     emitted_starting = true;
                 }
                 tokio::select! {
@@ -4347,14 +4443,23 @@ pub async fn run_session_chat_follower(
                     snapshot_detection.options.as_ref(),
                     SessionChatScreenState {
                         notice: snapshot_detection.notice.as_ref(),
-                        activity: snapshot_detection.activity.as_ref(),
+                        activity: live
+                            .working
+                            .then_some(snapshot_detection.activity.as_ref())
+                            .flatten(),
+                        probed: published_screen_probed || snapshot_detection.attempted,
                     },
                 );
+                published_screen_probed = published_screen_probed || snapshot_detection.attempted;
                 if snapshot_detection.options.is_some() {
                     published_options = snapshot_detection.options;
                 }
                 published_notice = snapshot_detection.notice;
-                published_activity = snapshot_detection.activity;
+                published_activity = if live.working {
+                    snapshot_detection.activity
+                } else {
+                    None
+                };
                 published_prompt = prompt;
                 published_working = live.working;
                 published_state_valid = true;
@@ -4428,6 +4533,12 @@ pub async fn run_session_chat_follower(
         both exist, so approvals and richer hook payloads are unaffected.
         */
         let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
+        // A `⏺` row remains in terminal scrollback after Claude stops. It is
+        // live status only while the agent is working, so the ready transition
+        // must clear it even before the next screen sample.
+        if !live.working {
+            published_activity = None;
+        }
         if !published_state_valid
             || effective_prompt != published_prompt
             || live.working != published_working
@@ -4449,6 +4560,7 @@ pub async fn run_session_chat_follower(
                     SessionChatScreenState {
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
+                        probed: published_screen_probed,
                     },
                 );
             }
@@ -4460,11 +4572,16 @@ pub async fn run_session_chat_follower(
         /*
         CDXC:SessionChatDetectedOptions 2026-08-01:
         Model/effort probe: a newly launched agent can paint its footer just
-        after the seed read cached an empty detection. Probe each 1s reconcile
-        for up to ten seconds until both values arrive, then retain the ~30s
+        after the seed probe read an empty screen. Probe each 1s reconcile for
+        up to ten seconds until both values arrive, then retain the ~30s
         steady-state cadence that catches direct TUI changes. The follower only
         exists while subscribed, and a frame is emitted only when the detected
         value actually changed.
+
+        `reconcile_ticks > 1` skips the first pass on purpose: the subscribe's
+        own probe (CDXC:SessionChatSeedDetection) already captured at t=0 and
+        the snapshot frame published it, so probing again immediately would
+        capture the same unchanged screen twice.
 
         CDXC:SessionChatTerminalNotices 2026-08-19:
         The same probe classifies the captured screen, so a trust dialog or an
@@ -4516,7 +4633,7 @@ pub async fn run_session_chat_follower(
             && (startup_probe_due || periodic_probe_due)
         {
             let reader = config.options_reader.clone();
-            let detection = tokio::task::spawn_blocking(move || {
+            let mut detection = tokio::task::spawn_blocking(move || {
                 reader
                     .map(|reader| {
                         reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
@@ -4525,6 +4642,9 @@ pub async fn run_session_chat_follower(
             })
             .await
             .unwrap_or_default();
+            if !published_working {
+                detection.activity = None;
+            }
             let options_changed = detection
                 .options
                 .as_ref()
@@ -4541,7 +4661,15 @@ pub async fn run_session_chat_follower(
                     detection.activity.as_ref(),
                     published_activity.as_ref(),
                 );
-            if options_changed || notice_changed || activity_changed {
+            /*
+            CDXC:SessionChatScreenProbed 2026-08-22: the first successful
+            capture is publishable on its own, even when it changed nothing.
+            An agent whose screen names no model detects nothing forever, and
+            without this the composer would never hear that detection HAD run
+            and would hold its loading skeleton for the life of the session.
+            */
+            let probed_changed = detection.attempted && !published_screen_probed;
+            if options_changed || notice_changed || activity_changed || probed_changed {
                 if options_changed {
                     published_options = detection.options;
                 }
@@ -4551,6 +4679,7 @@ pub async fn run_session_chat_follower(
                 if activity_changed {
                     published_activity = detection.activity;
                 }
+                published_screen_probed = published_screen_probed || detection.attempted;
                 emit_state_frame(
                     &emit,
                     &config,
@@ -4567,6 +4696,7 @@ pub async fn run_session_chat_follower(
                     SessionChatScreenState {
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
+                        probed: published_screen_probed,
                     },
                 );
             }
@@ -6382,24 +6512,23 @@ mod tests {
     }
 
     #[test]
-    fn grok_decoder_unwraps_user_query_and_skips_bootstrap() {
-        assert!(
-            decode_grok_transcript_line(r#"{"type":"system","content":"You are Grok"}"#, "fb",)
-                .is_none()
-        );
+    fn grok_decoder_reads_the_session_update_log() {
+        // Hook plumbing and mode/plan rows are not conversation.
         assert!(decode_grok_transcript_line(
-            r#"{"type":"user","content":[{"type":"text","text":"ctx"}],"synthetic_reason":"startup"}"#,
+            r#"{"timestamp":1787360342,"method":"_x.ai/session/update","params":{"sessionId":"s","update":{"sessionUpdate":"hook_execution","event_name":"stop"}}}"#,
             "fb",
         )
         .is_none());
         let user = decode_grok_transcript_line(
-            r#"{"type":"user","content":[{"type":"text","text":"<user_query>hello there</user_query>"}]}"#,
+            r#"{"timestamp":1787360343,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello there"}}}}"#,
             "fb",
         )
         .expect("user");
+        assert_eq!(user.role, SessionChatRole::User);
         assert_eq!(user.blocks, vec![text_block("hello there")]);
+        assert_eq!(user.timestamp, Some(1_787_360_343_000));
         let pasted = decode_grok_transcript_line(
-            r#"{"type":"user","content":[{"type":"text","text":"<user_query>/tmp/ghostex-paste-1.png what is this</user_query>"}]}"#,
+            r#"{"timestamp":1787360343,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"/tmp/ghostex-paste-1.png what is this"}}}}"#,
             "fb",
         )
         .expect("pasted image");
@@ -6414,13 +6543,83 @@ mod tests {
                 text_block("what is this"),
             ]
         );
-        let assistant = decode_grok_transcript_line(
-            r#"{"type":"assistant","content":"checking","tool_calls":[{"name":"Read","arguments":"{\"path\":\"/a\"}"}]}"#,
+        let thought = decode_grok_transcript_line(
+            r#"{"timestamp":1787360351,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"planning"}}}}"#,
             "fb",
         )
-        .expect("assistant");
-        assert_eq!(assistant.role, SessionChatRole::Assistant);
-        assert_eq!(assistant.blocks.len(), 2);
+        .expect("thought");
+        assert_eq!(thought.role, SessionChatRole::Reasoning);
+        let call = decode_grok_transcript_line(
+            r#"{"timestamp":1787360352,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call","toolCallId":"c1","title":"search_replace","rawInput":{"file_path":"/a"},"_meta":{"x.ai/tool":{"name":"search_replace","label":"Edit"}}}}}"#,
+            "fb",
+        )
+        .expect("tool call");
+        assert_eq!(
+            call.blocks,
+            vec![SessionChatBlock::ToolCall {
+                name: "Edit".to_string(),
+                input: json!({"file_path": "/a"}),
+            }],
+        );
+        // An in-flight update only re-describes the pending call.
+        assert!(decode_grok_transcript_line(
+            r#"{"timestamp":1787360352,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"in_progress","title":"Edit `/a`"}}}"#,
+            "fb",
+        )
+        .is_none());
+        let result = decode_grok_transcript_line(
+            r#"{"timestamp":1787360353,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"file body"}}]}}}"#,
+            "fb",
+        )
+        .expect("tool result");
+        assert_eq!(
+            result.blocks,
+            vec![SessionChatBlock::ToolResult {
+                output: "file body".to_string(),
+                is_error: None,
+            }],
+        );
+        let failed = decode_grok_transcript_line(
+            r#"{"timestamp":1787360353,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"c2","status":"failed","rawOutput":{"Fetch":{"tool_output_for_prompt":"fetch failed"}}}}}"#,
+            "fb",
+        )
+        .expect("failed tool result");
+        assert_eq!(
+            failed.blocks,
+            vec![SessionChatBlock::ToolResult {
+                output: "fetch failed".to_string(),
+                is_error: Some(true),
+            }],
+        );
+    }
+
+    #[test]
+    fn grok_lifecycle_opens_on_the_prompt_and_settles_on_turn_completed() {
+        let working = decode_grok_turn_lifecycle(
+            r#"{"timestamp":1787360343,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"go"}}}}"#,
+            "fb",
+        )
+        .expect("working");
+        assert_eq!(working.state, SessionChatTurnLifecycleState::Working);
+        let completed = decode_grok_turn_lifecycle(
+            r#"{"timestamp":1787360387,"method":"_x.ai/session/update","params":{"sessionId":"s","update":{"sessionUpdate":"turn_completed","prompt_id":"p1","stop_reason":"end_turn"}}}"#,
+            "fb",
+        )
+        .expect("completed");
+        assert_eq!(completed.state, SessionChatTurnLifecycleState::Completed);
+        assert_eq!(completed.turn_id, "p1");
+        let cancelled = decode_grok_turn_lifecycle(
+            r#"{"timestamp":1787360387,"method":"_x.ai/session/update","params":{"sessionId":"s","update":{"sessionUpdate":"turn_completed","prompt_id":"p2","stop_reason":"cancelled"}}}"#,
+            "fb",
+        )
+        .expect("cancelled");
+        assert_eq!(cancelled.state, SessionChatTurnLifecycleState::Interrupted);
+        // Tool traffic is not a boundary.
+        assert!(decode_grok_turn_lifecycle(
+            r#"{"timestamp":1787360352,"method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"done"}}}}"#,
+            "fb",
+        )
+        .is_none());
     }
 
     #[test]

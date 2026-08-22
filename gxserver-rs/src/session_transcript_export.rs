@@ -398,6 +398,15 @@ fn resolve_export_transcript_path(
     agent_session_id: Option<&str>,
     agent_session_path: Option<&str>,
 ) -> Option<PathBuf> {
+    /*
+    CDXC:SessionChatGrokUpdates 2026-08-22: chat follows grok's live
+    `updates.jsonl`, but an export renders a FINISHED conversation, and the
+    parser below reads the persisted `chat_history.jsonl` records. Resolve that
+    file directly rather than the shared chat path.
+    */
+    if agent == SessionChatTranscriptAgent::Grok {
+        return agent_session_id.and_then(crate::session_chat::find_grok_chat_history);
+    }
     let path = resolve_session_chat_transcript_path(agent, agent_session_id, agent_session_path)?;
     if agent != SessionChatTranscriptAgent::Claude {
         return Some(path);

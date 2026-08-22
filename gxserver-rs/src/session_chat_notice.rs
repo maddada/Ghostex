@@ -1176,6 +1176,9 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
+        // Grok is read for its model/effort statusline only; no screen state of
+        // its own has been catalogued, and an empty rule set says exactly that.
+        SessionChatOptionAgent::Grok => &[],
     }
 }
 

@@ -56,25 +56,22 @@ pub const SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS: u64 = 30;
 /*
 CDXC:SessionChatTerminalActivity 2026-08-22:
 Faster tiers for the same probe, picked by what the LAST one found. A capture is
-a zsh + `zmx history` spawn, so these are priced, not chosen for feel:
+a direct zmx socket read, so these are priced, not chosen for feel:
 
-  - a live activity ⇒ 3s. Bounded by the work itself (a compaction is a minute
-    or two), and it is the only cadence at which a percentage is worth
-    publishing at all — at 30s a whole compaction gets two or three samples.
-  - working, nothing found yet ⇒ 15s. This is what discovers an AUTOMATIC
-    compaction, which announces itself to nobody: no command to hang a
-    re-detect on, no transcript record until it finishes. 15s doubles the
-    capture rate for followed-AND-working sessions only (a follower exists just
-    while a chat client is subscribed), and still puts the row on screen for
-    most of a run. 10s was tempting and not worth twice the spawns for five
-    seconds of a two-minute operation.
+  - a live activity ⇒ 1s. Claude replaces its current `⏺` line in place, so
+    this is the cadence at which chat can preserve each visible change. The
+    direct zmx socket capture makes the followed-session sample inexpensive.
+  - working, nothing found yet ⇒ 1s. The next Claude `⏺` line is exactly what
+    this probe is waiting to discover; a 15s activity-discovery tier loses most
+    short status lines before the first sample. This applies only while a chat
+    client follows a session that the agent reports as working.
   - idle ⇒ the original 30s, unchanged.
 
 A user-typed `/compact` does not wait for any of this: it rides the +2s/+6s
 post-dispatch redetect (see `is_session_chat_activity_command_text`).
 */
-pub const SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS: u64 = 3;
-pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 15;
+pub const SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS: u64 = 1;
+pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 1;
 
 /// A newly followed agent may paint its model/effort footer just after the
 /// chat's seed read. Re-detect on each of the first ten 1s reconciles until
@@ -182,9 +179,10 @@ pub struct SessionChatTerminalDetection {
     pub options: Option<SessionChatDetectedOptions>,
     pub notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     /*
-    CDXC:SessionChatTerminalActivity 2026-08-22: long-running work the CLI only
-    reports on screen (compaction). Third reading of the same capture, for the
-    same reason the notice is the second one: it must never cost a spawn.
+    CDXC:SessionChatTerminalActivity 2026-08-22: live work the CLI reports on
+    screen before transcript JSONL catches up (Claude's current `⏺` line and
+    compaction). Third reading of the same capture, for the same reason the
+    notice is the second one: it must never cost a spawn.
     */
     pub activity:
         Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
@@ -192,6 +190,21 @@ pub struct SessionChatTerminalDetection {
     /// the ONLY case where `notice: None` means "the screen is clean" — a failed
     /// or capped capture must never retire a notice.
     pub captured: bool,
+    /*
+    CDXC:SessionChatScreenProbed 2026-08-22:
+    True once a capture was ATTEMPTED for this session, whatever came back.
+
+    Deliberately weaker than `captured`, and for a different consumer. `captured`
+    answers "can I trust an absence?" — only a whole screen proves a notice is
+    gone. `attempted` answers "has the looking happened?", which is what the chat
+    composer needs to stop showing a loading skeleton on its model/effort pills.
+
+    They must not be the same bit: a stopped or sleeping session has no screen to
+    capture, so `captured` is false forever, and a skeleton keyed on it would
+    shimmer for the life of the session. The attempt still happened, and its
+    answer — there is nothing to read — is final until the session runs again.
+    */
+    pub attempted: bool,
 }
 
 /// How a consumer wants its detection served.
@@ -213,18 +226,19 @@ pub type SessionChatOptionsReader = std::sync::Arc<
 // Agent tables
 // ---------------------------------------------------------------------------
 
-/// Agents whose statusline grammar is known. Grok has no pill catalog on the
-/// client and no captured sample, so it detects nothing (structural no-op).
+/// Agents whose statusline grammar is known.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatOptionAgent {
     Claude,
     Codex,
+    Grok,
 }
 
 pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptionAgent> {
     match agent.map(str::trim).unwrap_or_default() {
         "claude" | "openclaude" => Some(SessionChatOptionAgent::Claude),
         "codex" => Some(SessionChatOptionAgent::Codex),
+        "grok" => Some(SessionChatOptionAgent::Grok),
         _ => None,
     }
 }
@@ -470,6 +484,70 @@ fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 }
 
 // ---------------------------------------------------------------------------
+// Grok grammar
+//   ╰──────────────────────── Grok 4.6 (medium) · always-approve ─╯
+// Model and effort share ONE segment, and that segment is drawn INSIDE the
+// bottom border of the composer box — so the rule has to come off the line
+// before it can be read at all, and before `is_divider_line` would skip it.
+// ---------------------------------------------------------------------------
+
+/// The values grok's model catalog offers (`reasoning_efforts` in
+/// `~/.grok/models_cache.json`); mirrors GROK_EFFORTS on the client.
+const GROK_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
+
+/// Box-drawing runs are chrome, not content: fold them to spaces so the
+/// statusline drawn on a border reads like any other line.
+fn strip_box_drawing(line: &str) -> String {
+    line.chars()
+        .map(|ch| {
+            if matches!(ch, '\u{2500}'..='\u{257f}') {
+                ' '
+            } else {
+                ch
+            }
+        })
+        .collect()
+}
+
+/// `Grok 4.6 (medium)`, or `Grok 4.6` on a model with no reasoning effort.
+/// Anything else in the parentheses means this was not the statusline.
+fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
+    let (name, effort) = match segment.split_once('(') {
+        None => (segment.trim(), None),
+        Some((name, rest)) => (name.trim(), Some(rest.strip_suffix(')')?.trim())),
+    };
+    if !name
+        .strip_prefix("Grok")
+        .is_some_and(is_model_version_suffix)
+    {
+        return None;
+    }
+    let effort = match effort {
+        None => None,
+        Some(effort) => Some(
+            GROK_EFFORTS
+                .contains(&effort)
+                .then(|| SessionChatDetectedChoice {
+                    value: effort.to_string(),
+                    label: effort.to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                })?,
+        ),
+    };
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            // The catalog id for the displayed name (`Grok 4.6` ⇒ `grok-4.6`),
+            // which is what grok's own `models_cache.json` keys models by.
+            value: name.to_ascii_lowercase().replace(' ', "-"),
+            label: name.to_string(),
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort,
+        fast: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Detection
 // ---------------------------------------------------------------------------
 
@@ -480,7 +558,15 @@ pub fn detect_session_chat_selection(
     text: &str,
 ) -> Option<SessionChatDetectedSelection> {
     let mut found = SessionChatDetectedSelection::default();
-    for line in scan_window(text).iter().rev() {
+    for scanned in scan_window(text).iter().rev() {
+        // Grok draws its statusline on the composer box's bottom border.
+        let unboxed;
+        let line = if agent == SessionChatOptionAgent::Grok {
+            unboxed = strip_box_drawing(scanned);
+            &unboxed
+        } else {
+            scanned
+        };
         if is_divider_line(line) {
             continue;
         }
@@ -499,6 +585,13 @@ pub fn detect_session_chat_selection(
                 SessionChatOptionAgent::Codex => {
                     if found.model.is_none() && found.effort.is_none() {
                         if let Some(selection) = match_codex_segment(segment) {
+                            found = selection;
+                        }
+                    }
+                }
+                SessionChatOptionAgent::Grok => {
+                    if found.model.is_none() && found.effort.is_none() {
+                        if let Some(selection) = match_grok_segment(segment) {
                             found = selection;
                         }
                     }
@@ -675,6 +768,12 @@ fn read_session_chat_transcript_selection(
         crate::session_chat::resolve_session_chat_transcript_agent(match agent {
             SessionChatOptionAgent::Claude => Some("claude"),
             SessionChatOptionAgent::Codex => Some("codex"),
+            /*
+            Grok's statusline is on screen for the whole session and names both
+            values, and its update-stream rows carry no effort at all, so there
+            is nothing a transcript read could add here.
+            */
+            SessionChatOptionAgent::Grok => return None,
         })?;
     let path = crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,
@@ -744,6 +843,9 @@ pub fn detect_session_chat_terminal_state(
             )
         }),
         captured: screen.is_some(),
+        // We got past the agent check, so a capture was tried. Whether it came
+        // back is `captured`'s business, not this field's.
+        attempted: true,
     }
 }
 
@@ -1029,12 +1131,15 @@ mod tests {
 
     #[test]
     fn agents_without_a_table_detect_nothing() {
-        assert_eq!(session_chat_option_agent(Some("grok")), None);
         assert_eq!(session_chat_option_agent(Some("cursor")), None);
         assert_eq!(session_chat_option_agent(None), None);
         assert_eq!(
             session_chat_option_agent(Some("openclaude")),
             Some(SessionChatOptionAgent::Claude)
+        );
+        assert_eq!(
+            session_chat_option_agent(Some("grok")),
+            Some(SessionChatOptionAgent::Grok)
         );
     }
 
@@ -1129,10 +1234,9 @@ mod tests {
             Some("claude"),
             "please /model opus"
         ));
-        assert!(!is_session_chat_option_command_text(
-            Some("grok"),
-            "/model opus"
-        ));
+        // Grok has a `/model` picker of its own, so typing it still earns the
+        // post-dispatch screen re-read.
+        assert!(is_session_chat_option_command_text(Some("grok"), "/model"));
     }
 
     #[test]
