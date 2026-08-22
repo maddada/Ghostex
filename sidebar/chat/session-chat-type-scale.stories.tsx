@@ -3,28 +3,29 @@ import type { SessionChatMessage } from "../../shared/session-chat";
 import { SessionChatMessageList } from "./session-chat-message-list";
 
 /*
- * CDXC:SessionChatTypeScale 2026-08-22:
- * What the transcript's type scale is, and what it was.
+ * CDXC:SessionChatOneSize 2026-08-22:
+ * The transcript's type scale — one size, and what it replaced.
  *
- * The chat runs on THREE sizes and nothing else:
+ * Every line of reading content is now 0.875rem/14px at 1.625: the answer, the
+ * user's message, the reasoning rows, the tool-run headings, the work toggles,
+ * a table cell, a footnote. The lanes are told apart by COLOUR and weight, not
+ * by size. Headings stay stepped, because a long answer needs structure.
  *
- *   14px / 1.625   prose — an answer, a user message, a reasoning paragraph
- *   12px / 20px    the work lane — tool rows, group toggles, run headings
- *   11px / 1.625   detail under a work row — command output, diffs, tool bodies
+ * Code is the single exception and is expressed as a ratio (`--chat-code-size`,
+ * 0.9em) rather than a second tier. A monospace face set at the same nominal
+ * size as the sans around it reads visibly larger — the mono x-height at 14px
+ * is 7.66px against DM Sans's 7.06px — so matching the number is exactly what
+ * makes the two look mismatched. Being relative, a chip in a sentence and a
+ * fenced block in a work row both track whatever they sit in.
  *
- * It used to run on four, with the leading left to whatever each host happened
- * to inherit. The two panes differ ONLY by the rules that changed — the "before"
- * pane is reverted with story-local CSS in BEFORE_STYLES rather than by a second
- * renderer, so the comparison stays honest:
+ * The "before" pane restores what shipped: four absolute tiers (14 / 13 / 12 /
+ * 11) and two different leadings for the same 14px text. It is reverted with
+ * story-local CSS in BEFORE_STYLES rather than by a second renderer, so the two
+ * panes differ only by the rules that changed.
  *
- *   - the answer's paragraphs took `text-sm`'s own 20px leading while the
- *     user's bubble had 1.625, so the two sides of one conversation set the
- *     same 14px text at different rhythms;
- *   - a 13px tier sat between prose and the work lane holding the reasoning
- *     rows and the completed-work toggle — close enough to both to read as a
- *     mistake rather than a level. Reasoning and answer rows alternate and wear
- *     the same bullet, so that near-miss is what made the transcript look like
- *     it changed its mind about size from block to block.
+ * The pattern to look at is the reasoning → tool run → answer alternation near
+ * the end: three objects under one shared bullet that used to be three
+ * different sizes.
  *
  * Everything here is mock transcript data — no gxserver, no session, no host
  * bridge — so it runs anywhere Storybook does while exercising exactly the
@@ -41,33 +42,35 @@ const USER_TURN = [
   "transcript read as one thing?",
 ].join("\n");
 
-/** An answer: the prose lane, with the headings, chips and code it really uses. */
+/** An answer: prose, with the headings, chips and code a real one uses. */
 const ANSWER = [
-  "The transcript was running on four sizes, not three.",
+  "The transcript was running on four absolute sizes.",
   "",
-  "## What the lanes are",
+  "## What it runs on now",
   "",
-  "Prose is `14px / 1.625` — an answer, your message, a reasoning paragraph.",
-  "The work lane is `12px / 20px`, and detail under a work row is `11px`.",
+  "One. Every line of reading content is `14px / 1.625` — this answer, your",
+  "message, a reasoning paragraph, a tool-run heading, a table cell.",
   "",
-  "### Where it went wrong",
+  "### Why the old scale read as random",
   "",
-  "- `.ghostex-chat-markdown` never declared a line height, so each host",
-  "  inherited its own",
-  "- a 13px tier held the reasoning rows and the completed-work toggle",
-  "- both of those alternate with 14px prose under the *same* bullet",
+  "- `.ghostex-chat-markdown` never declared a line height, so the answer took",
+  "  `20px` while your bubble took `22.75px` — the same text, two rhythms",
+  "- a `13px` tier held the reasoning rows and the completed-work toggle,",
+  "  belonging to neither prose nor the work rows",
+  "- reasoning and answers alternate under the *same* bullet, so a 1px",
+  "  difference between them read as a mistake rather than a level",
   "",
-  "The leading is declared once on the markdown root now, so a size is chosen",
-  "per lane and a rhythm is not:",
+  "Lanes are told apart by colour now, not size. Code is the one exception, and",
+  "it is a ratio rather than a tier:",
   "",
   "```css",
-  ".ghostex-chat-markdown {",
-  "  line-height: 1.625;",
+  ".ghostex-session-chat-scope {",
+  "  --chat-code-size: 0.9em;",
   "}",
   "```",
   "",
-  "> A near-miss between two lanes reads as a mistake. A real gap reads as",
-  "> hierarchy.",
+  "> Monospace set at the sans's own size reads larger — 7.66px of x-height",
+  "> against 7.06px — so matching the number is what makes them look mismatched.",
 ].join("\n");
 
 /*
@@ -93,8 +96,9 @@ const REASONING_TWO = [
 const REASONING_THREE = [
   "**Deciding what the reasoning lane is**",
   "",
-  "Reasoning is the same kind of thing as a tool row — something done on the",
-  "way to the answer — so it belongs in the work lane, not in a tier of its own.",
+  "Reasoning renders as bulleted markdown in the same flow as the answer, under",
+  "the same bullet — so it is the same kind of object and takes the same size.",
+  "Colour is what separates the lanes.",
 ].join("\n");
 
 function turn(
@@ -140,17 +144,18 @@ const MESSAGES: SessionChatMessage[] = [
     "Bash",
     { command: "rg -n 'font-size' sidebar/styles/chat.css" },
     [
-      "sidebar/styles/chat.css:290:  font-size: 0.8125rem;",
-      "sidebar/styles/chat.css:427:  font-size: 0.8125rem;",
-      "sidebar/styles/chat.css:516:  font-size: 0.75rem;",
-      "sidebar/styles/chat.css:608:  font-size: 0.6875rem;",
+      "sidebar/styles/chat.css:322:  font-size: 0.8125rem;",
+      "sidebar/styles/chat.css:461:  font-size: 0.8125rem;",
+      "sidebar/styles/chat.css:550:  font-size: 0.75rem;",
+      "sidebar/styles/chat.css:642:  font-size: 0.6875rem;",
+      "sidebar/styles/chat.css:1273: font-size: 0.75rem;",
     ].join("\n"),
     4_000,
   ),
   turn(
     "assistant-2",
     "assistant",
-    "Four sizes in one sheet. Measuring the live surface before I touch it.",
+    "Four absolute tiers in one sheet. Measuring the live surface before I touch it.",
     5_000,
   ),
   turn("reasoning-2", "reasoning", REASONING_TWO, 6_000),
@@ -159,36 +164,41 @@ const MESSAGES: SessionChatMessage[] = [
     "Read",
     { file_path: "sidebar/styles/chat.css", limit: 40, offset: 1069 },
     [
-      "agent md p:      14px / lh 20px    / w 400",
-      "user bubble p:   14px / lh 22.75px / w 400",
-      "thinking row:    13px / lh 19.5px  / w 400",
-      "work trigger:    12px / lh 20px    / w 400",
-      "completed work:  13px / lh 20px    / w 500",
+      "agent md p:      14px   / lh 20px    / w 400",
+      "user bubble p:   14px   / lh 22.75px / w 400",
+      "thinking row:    13px   / lh 19.5px  / w 400",
+      "work trigger:    12px   / lh 20px    / w 400",
+      "inline code:     12px   mono",
+      "fenced code:     13px   mono",
     ].join("\n"),
     7_000,
   ),
   turn(
     "assistant-3",
     "assistant",
-    "Confirmed: the same 14px text is set at two different leadings.",
+    "Confirmed: the same 14px text was being set at two different leadings.",
     8_000,
   ),
   turn("reasoning-3", "reasoning", REASONING_THREE, 9_000),
   turn(
     "assistant-4",
     "assistant",
-    "Three lanes now, and every bullet you see below belongs to one of them.",
+    "One size now. Every bullet above is the same 14px — only the colour moves.",
     10_000,
   ),
 ];
 
 /*
- * The "before" pane, reverted rule by rule:
+ * The "before" pane, reverted rule by rule to what shipped:
  *
  *  - the markdown root declared no line height, so prose fell back to the
- *    `text-sm` utility's own 20px (the user's bubble kept 1.625 from its own
- *    wrapper, which is exactly the mismatch);
- *  - the reasoning lane and the completed-work toggle sat at 0.8125rem.
+ *    `text-sm` utility's own 20px, while the user's bubble kept 1.625 from its
+ *    own wrapper — the same 14px text at two rhythms;
+ *  - the reasoning lane and the completed-work toggle sat at 0.8125rem (13px),
+ *    a tier that belonged to neither prose nor the work lane;
+ *  - the work rows sat at 0.75rem (12px) and their detail at 0.6875rem (11px);
+ *  - code was pinned to absolute sizes of its own — 0.75rem inline, 0.8125rem
+ *    fenced — instead of tracking the text around it.
  */
 const STORY_STYLES = `
   .chat-type-scale-story {
@@ -240,6 +250,31 @@ const STORY_STYLES = `
   }
   [data-chat-type-scale="before"] .ghostex-chat-completed-work-trigger {
     font-size: 0.8125rem;
+    line-height: 1.25rem;
+  }
+  [data-chat-type-scale="before"] :is(
+      .ghostex-chat-work-trigger,
+      .ghostex-chat-tool-run-toggle
+    ) {
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+  }
+  [data-chat-type-scale="before"] :is(
+      .ghostex-chat-work-detail .ghostex-chat-markdown,
+      .ghostex-chat-tool-body,
+      .ghostex-chat-tool-body-label,
+      .ghostex-chat-diff
+    ) {
+    font-size: 0.6875rem;
+  }
+  [data-chat-type-scale="before"] .ghostex-chat-markdown :not(pre) > code {
+    font-size: 0.75rem;
+  }
+  [data-chat-type-scale="before"] .ghostex-chat-markdown pre code {
+    font-size: 0.8125rem;
+  }
+  [data-chat-type-scale="before"] .ghostex-chat-markdown table {
+    font-size: 0.8125rem;
   }
 `;
 
@@ -281,8 +316,8 @@ export const BeforeAndAfter: StoryObj = {
     <div className="chat-type-scale-story">
       <style>{STORY_STYLES}</style>
       <div className="chat-type-scale-story__panes">
-        <ChatPane before label="before — four sizes, two rhythms" />
-        <ChatPane label="after — three sizes, one rhythm" />
+        <ChatPane before label="before — four absolute tiers, two rhythms" />
+        <ChatPane label="after — one size, code at 0.9em" />
       </div>
     </div>
   ),

@@ -33,6 +33,31 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/*
+CDXC:SessionChatOneSize 2026-08-22:
+The transcript has ONE absolute size. Every line of reading content in it — the
+answer, your message, the reasoning rows, the tool-run headings, the work
+toggles, a table cell, a footnote — is 0.875rem/14px, and the lanes are told
+apart by colour and weight instead. Two paragraphs that look alike must not be
+two sizes; that near-miss is what read as the type changing its mind block to
+block.
+
+Code is the one exception, and it is expressed as a RATIO rather than a second
+tier. A monospace face set at the same nominal size as the sans around it reads
+visibly larger — measured on this surface, the mono x-height at 14px is 7.66px
+against DM Sans's 7.06px, so matching the number is exactly what makes the two
+look mismatched. 0.9em brings them to optical parity and, being relative, keeps
+a chip inside a sentence and a fenced block inside a work row both tracking
+whatever they sit in rather than each picking an absolute of their own.
+
+It also buys back the column budget line-oriented content needs: in a 360px
+companion pane that is 47 columns instead of 42 for a diff or a command dump.
+*/
+.ghostex-session-chat-scope,
+.ghostex-session-chat-popup {
+  --chat-code-size: 0.9em;
+}
+
 /* The user's own chat font setting still wins; this is only what the surface
    falls back to when the setting is empty, which is the default. */
 .ghostex-session-chat-scope,
@@ -316,15 +341,16 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-thinking-row {
   color: var(--muted-foreground);
-  /* CDXC:SessionChatTypeScale 2026-08-22: the work lane, not a tier of its
-     own. Reasoning is the same kind of thing as a tool row — something the
-     agent did on the way to the answer — so it is sized like one. */
-  font-size: 0.75rem;
+  /* CDXC:SessionChatOneSize 2026-08-22: prose. Reasoning renders as bulleted
+     markdown paragraphs in the same flow, under the same bullet, as the answer
+     — so it is the same kind of object and takes the same size. Its lane is
+     told apart by colour (--muted-foreground), not by a size step. */
+  font-size: 0.875rem;
   font-style: normal;
   display: flex;
   flex-direction: column;
   gap: calc(0.375rem + 7px);
-  line-height: 1.25rem;
+  line-height: 1.625;
   min-width: 0;
   padding: 0 0 calc(0.375rem + 7px);
   white-space: pre-wrap;
@@ -456,12 +482,11 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   border-radius: 4px !important;
   color: var(--muted-foreground);
   display: inline-flex;
-  /* CDXC:SessionChatTypeScale 2026-08-22: the work lane, like every other
-     toggle it sits among. */
-  font-size: 0.75rem;
+  /* CDXC:SessionChatOneSize 2026-08-22 */
+  font-size: 0.875rem;
   gap: 0.375rem;
   height: auto;
-  line-height: 1.25rem;
+  line-height: 1.625;
   padding: 0;
 }
 
@@ -547,9 +572,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   color: var(--muted-foreground);
   cursor: pointer;
   display: flex;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   gap: 0.375rem;
-  line-height: 1.25rem;
+  line-height: 1.625;
   min-width: 0;
   padding: 0.125rem;
   text-align: left;
@@ -580,9 +605,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   border-radius: 4px !important;
   color: var(--muted-foreground);
   display: flex;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   gap: 0.375rem;
-  line-height: 1.25rem;
+  line-height: 1.625;
   min-width: 0;
   padding: 0;
   padding-inline: 2px 5px;
@@ -637,9 +662,19 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   padding-top: 0.125rem;
 }
 
-.ghostex-chat-work-detail .ghostex-chat-markdown,
+/*
+CDXC:SessionChatOneSize 2026-08-22:
+Detail under a work row is still prose, so it is still the one size. Only the
+`<pre>` below it is code, and code is sized relatively (see the code rule near
+the markdown block) rather than pinned to a tier of its own.
+*/
+.ghostex-chat-work-detail .ghostex-chat-markdown {
+  font-size: 0.875rem;
+  line-height: 1.625;
+}
+
 .ghostex-chat-tool-body {
-  font-size: 0.6875rem;
+  font-size: var(--chat-code-size);
   line-height: 1.625;
 }
 
@@ -649,7 +684,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-tool-body-label {
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   font-weight: 500;
   margin-bottom: 0.25rem;
 }
@@ -688,7 +723,7 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 .ghostex-chat-diff {
   border-radius: 0.625rem;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: 0.6875rem;
+  font-size: var(--chat-code-size);
   line-height: 1.45;
   overflow-x: auto;
   padding: 0.25rem 0;
@@ -1021,9 +1056,9 @@ so the swap barely moves the composer row.
   color: var(--muted-foreground);
   column-gap: 0.625rem;
   display: grid;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   grid-template-columns: 0.375rem minmax(0, 1fr);
-  line-height: 1.5;
+  line-height: 1.625;
   min-width: 0;
   overflow-wrap: anywhere;
   padding-block-end: calc(0.375rem + 7px);
@@ -1087,7 +1122,7 @@ so the swap barely moves the composer row.
   align-self: flex-start;
   color: var(--muted-foreground);
   display: inline-flex;
-  font-size: 0.6875rem;
+  font-size: 0.875rem;
   font-weight: 500;
   gap: 0.25rem;
   margin-block-start: 0.25rem;
@@ -1270,7 +1305,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: 0.75rem;
+  font-size: var(--chat-code-size);
   padding: 0.1rem 0.35rem;
 }
 
@@ -1298,7 +1333,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   cursor: pointer;
   display: inline-flex;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: 0.75rem;
+  font-size: var(--chat-code-size);
   line-height: 1.4;
   max-width: 100%;
   min-width: 0;
@@ -1470,13 +1505,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   white-space: pre-wrap;
 }
 
-/* Fenced code sits one notch under the 0.875rem prose around it: a monospace
-   face set at the prose size reads visibly larger than the sans next to it, so
-   matching the px number is what makes the sizes look mismatched. Inline code
-   stays relative to its sentence in the rule above. */
 .ghostex-chat-markdown pre code {
   background: transparent;
-  font-size: 0.8125rem;
+  font-size: var(--chat-code-size);
   padding: 0;
 }
 
@@ -1594,7 +1625,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   color: var(--foreground);
   cursor: pointer;
   display: flex;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   gap: 0.375rem;
   /* The whole row is the hit target, so a one-word summary is not a one-word
@@ -1690,13 +1721,14 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 /* GFM footnotes land as a trailing <section data-footnotes> holding an ordered
    list of the definitions. Unstyled that reads as one more numbered list in the
    answer, which is exactly what it is not: it is apparatus below the reply, so
-   it gets the rule, the muted lane and the smaller size that say so. The heading
-   inside it is remark's own visually-hidden "Footnotes" label; the rule is the
-   visible version of it. */
+   it gets the rule and the muted lane that say so. The heading inside it is
+   remark's own visually-hidden "Footnotes" label; the rule is the visible
+   version of it. It is NOT set smaller: it is still prose, and the transcript
+   has one prose size (CDXC:SessionChatOneSize). */
 .ghostex-chat-markdown section[data-footnotes] {
   border-top: 1px solid var(--border);
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   margin-top: 1.25rem;
   padding-top: 0.75rem;
 }
@@ -1940,7 +1972,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    the longest word a column's natural floor. */
 .ghostex-chat-markdown table {
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   min-width: max-content;
   overflow-wrap: normal;
   width: 100%;
