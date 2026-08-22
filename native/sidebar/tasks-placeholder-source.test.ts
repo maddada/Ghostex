@@ -400,7 +400,7 @@ describe("Project Board form event handling", () => {
     /*
      * CDXC:ProjectBoardViewPreferences 2026-08-07:
      * Switching away from the Kanban tab unmounts the board surface, so the toolbar must seed its
-     * priority, estimate, and sort state from the stored preferences and write every later
+     * priority, estimate, sort, and tag state from the stored preferences and write every later
      * selection back. The key and the write are project-independent so the selections follow the
      * user into every board. Search stays out of that payload.
      */
@@ -423,10 +423,11 @@ describe("Project Board form event handling", () => {
       "useState<BoardEstimateFilter>(\n    storedViewPreferences.estimateFilter,\n  );",
     );
     expect(projectBoardSource).toContain("useState<BoardSortOption>(storedViewPreferences.sortOption);");
+    expect(projectBoardSource).toContain("useState<BoardTagFilter>(storedViewPreferences.tagFilter);");
     expect(projectBoardSource).toContain(
-      "try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption }),\n      );\n    } catch {",
+      "try {\n      window.localStorage.setItem(\n        PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,\n        JSON.stringify({ estimateFilter, priorityFilter, sortOption, tagFilter }),\n      );\n    } catch {",
     );
-    expect(projectBoardSource).toContain("}, [estimateFilter, priorityFilter, sortOption]);");
+    expect(projectBoardSource).toContain("}, [estimateFilter, priorityFilter, sortOption, tagFilter]);");
     expect(projectBoardSource).not.toContain("JSON.stringify({ estimateFilter, priorityFilter, searchQuery");
     expect(projectBoardSource).toContain('const [searchQuery, setSearchQuery] = useState("");');
   });
