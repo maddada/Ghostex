@@ -1758,6 +1758,7 @@ fn request_session_rename(
 }
 
 struct AgentMetadataTitle {
+    agent_session_id: Option<String>,
     provider: &'static str,
     title: String,
     updated_at: Option<String>,
@@ -1818,7 +1819,18 @@ fn reconcile_agent_metadata_title(
             session: Some(session),
         });
     }
-    let Some(metadata_title) = read_agent_metadata_title(home_dir, &session) else {
+    let pending_title = read_text_from_map(&runtime_settings, "pendingAgentTitleRequestTitle");
+    let pending_requested_at =
+        read_text_from_map(&runtime_settings, "pendingAgentTitleRequestRequestedAt");
+    let metadata_title = read_agent_metadata_title(home_dir, &session).or_else(|| {
+        read_pending_codex_rename_metadata_title(
+            home_dir,
+            &identity,
+            pending_title.as_deref(),
+            pending_requested_at.as_deref(),
+        )
+    });
+    let Some(metadata_title) = metadata_title else {
         return Ok(AgentTitleReconcileResult {
             changed: false,
             metadata_title_found: false,
@@ -1827,7 +1839,6 @@ fn reconcile_agent_metadata_title(
         });
     };
 
-    let pending_title = read_text_from_map(&runtime_settings, "pendingAgentTitleRequestTitle");
     let pending_status = pending_title.as_deref().map(|pending_title| {
         if titles_match(pending_title, &metadata_title.title) {
             "confirmed"
@@ -1843,6 +1854,9 @@ fn reconcile_agent_metadata_title(
     );
     next_runtime_settings.insert("titleMetadataSource".to_string(), json!("agent-metadata"));
     next_runtime_settings.insert("titleSource".to_string(), json!("terminal-auto"));
+    if let Some(agent_session_id) = metadata_title.agent_session_id.as_deref() {
+        next_runtime_settings.insert("agentSessionId".to_string(), json!(agent_session_id));
+    }
     if let Some(updated_at) = metadata_title.updated_at.as_deref() {
         next_runtime_settings.insert("titleMetadataUpdatedAt".to_string(), json!(updated_at));
     }
@@ -1856,6 +1870,7 @@ fn reconcile_agent_metadata_title(
             != next_runtime_settings.get("titleMetadataSource")
         || runtime_settings.get("titleMetadataProvider")
             != next_runtime_settings.get("titleMetadataProvider")
+        || runtime_settings.get("agentSessionId") != next_runtime_settings.get("agentSessionId")
         || runtime_settings.get("titleMetadataUpdatedAt")
             != next_runtime_settings.get("titleMetadataUpdatedAt")
         || runtime_settings.get("pendingAgentTitleRequestStatus")
@@ -2020,6 +2035,7 @@ fn read_claude_transcript_title(transcript_path: &Path) -> Option<AgentMetadataT
         }
         let title = normalize_metadata_title(entry.get("customTitle"))?;
         return Some(AgentMetadataTitle {
+            agent_session_id: None,
             provider: "claude-transcript",
             title,
             updated_at: None,
@@ -2085,6 +2101,7 @@ fn read_codex_session_index_title_from_path(
                 .or_else(|| entry.get("name")),
         )?;
         return Some(AgentMetadataTitle {
+            agent_session_id: Some(agent_session_id.to_string()),
             provider: "codex-session-index",
             title,
             updated_at: entry
@@ -2094,6 +2111,83 @@ fn read_codex_session_index_title_from_path(
                 .filter(|value| !value.is_empty())
                 .map(str::to_string),
         });
+    }
+    None
+}
+
+/*
+CDXC:GxserverAgentTitles 2026-08-22:
+Plain `codex` launches do not always expose their active rollout through argv,
+an open file descriptor, or a hook before the user renames the session. A
+pending rename still has an exact, independently written confirmation: Codex
+appends that requested title to `session_index.jsonl` after the request time.
+Use only that post-request exact-title record, and adopt its session id, so the
+sidebar can confirm the rename without guessing from transcript recency.
+*/
+fn read_pending_codex_rename_metadata_title(
+    home_dir: &Path,
+    identity: &ResolvedIdentity,
+    pending_title: Option<&str>,
+    pending_requested_at: Option<&str>,
+) -> Option<AgentMetadataTitle> {
+    if identity.agent_id.as_deref() != Some("codex") || identity.agent_session_id.is_some() {
+        return None;
+    }
+    let pending_title = pending_title?.trim();
+    let requested_at = chrono::DateTime::parse_from_rfc3339(pending_requested_at?.trim()).ok()?;
+    for index_path in
+        get_codex_session_index_candidate_paths(home_dir, identity.agent_session_path.as_deref())
+    {
+        let Ok(text) = fs::read_to_string(index_path) else {
+            continue;
+        };
+        for line in text.lines().rev() {
+            let Ok(entry) = serde_json::from_str::<Value>(line.trim()) else {
+                continue;
+            };
+            let Some(entry) = entry.as_object() else {
+                continue;
+            };
+            let Some(title) = normalize_metadata_title(
+                entry
+                    .get("thread_name")
+                    .or_else(|| entry.get("title"))
+                    .or_else(|| entry.get("name")),
+            ) else {
+                continue;
+            };
+            if !titles_match(pending_title, &title) {
+                continue;
+            }
+            let Some(updated_at) = entry
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+            let Ok(updated_at_parsed) = chrono::DateTime::parse_from_rfc3339(updated_at) else {
+                continue;
+            };
+            if updated_at_parsed < requested_at {
+                continue;
+            }
+            let Some(agent_session_id) = entry
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+            return Some(AgentMetadataTitle {
+                agent_session_id: Some(agent_session_id.to_string()),
+                provider: "codex-session-index-pending-rename",
+                title,
+                updated_at: Some(updated_at.to_string()),
+            });
+        }
     }
     None
 }
