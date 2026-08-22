@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from "./types";
 
 /*
@@ -37,35 +36,6 @@ export const TITLEBAR_TIPS_READ_STORAGE_KEY = "ghostex.titlebar.tips.readIds";
 export const KEEP_AWAKE_POWER_CHECK_INTERVAL_MS = 30_000;
 export const KEEP_AWAKE_WORKING_SESSION_GRACE_MS = 20 * 60_000;
 export const KEEP_AWAKE_ADMIN_PROCESS_TIMEOUT_MS = 120_000;
-/**
- * CDXC:NativeWindowChrome 2026-05-25-07:16:
- * The macOS app titlebar should now be 35px tall, not the earlier 45px. Keep the React titlebar height in sync with Swift's native reservation so web controls and AppKit traffic-light centering share one chrome height.
- */
-export const TITLEBAR_HEIGHT = 35;
-export const TITLEBAR_CONTROL_HEIGHT = TITLEBAR_HEIGHT - 1;
-/**
- * CDXC:ProjectEditorCompanion 2026-06-12-03:18:
- * Companion pane collapse/expand is one titlebar toggle immediately left of
- * Agents. Keep both state glyphs at the same footprint so the control
- * reads as part of the mode switcher rather than separate floating chrome.
- *
- * CDXC:ProjectEditorCompanion 2026-06-12-04:23:
- * The toggle icon needs a larger 17x17 footprint after visual review so the
- * anchored companion control has the same presence as the adjacent text tabs.
- */
-export const COMPANION_SIDEPANE_ICON_SIZE = 17;
-/**
- * CDXC:NativeWindowChrome 2026-06-17-18:25:
- * The traffic-light-side titlebar cluster should sit 2px higher after visual
- * review. Keep the left project slot offset named so the sidebar toggle,
- * project identity, and adjacent left-cluster controls move together without
- * changing the 35px titlebar reservation.
- */
-export const TITLEBAR_PROJECT_CLUSTER_TOP = -1;
-export const TITLEBAR_CONTROL_TOP = 1;
-export const TITLEBAR_PROJECT_TOP = TITLEBAR_PROJECT_CLUSTER_TOP;
-export const TITLEBAR_CENTER_CONTROLS_TOP = TITLEBAR_CONTROL_TOP;
-export const TITLEBAR_RIGHT_CONTROLS_TOP = TITLEBAR_CONTROL_TOP;
 export const RESOURCE_POLL_INTERVAL_MS = 5_000;
 export const TITLEBAR_EVENT_LOOP_WATCHDOG_INTERVAL_MS = 2_000;
 export const TITLEBAR_EVENT_LOOP_STALL_THRESHOLD_MS = 1_000;
@@ -90,7 +60,6 @@ export const TITLEBAR_DROPDOWN_RESOURCES_PANEL_WIDTH = 656;
  */
 export const TITLEBAR_DROPDOWN_TIPS_PANEL_WIDTH = 556;
 export const TITLEBAR_DROPDOWN_READING_PANEL_HEIGHT = 650;
-export const TITLEBAR_DROPDOWN_MENU_LABEL_HEIGHT = 22;
 
 export function readTitlebarDropdownPanelKind(): TitlebarDropdownPanelKind | undefined {
   const injectedKind =
@@ -141,63 +110,3 @@ export function createTitlebarDropdownPanelPreferredSize(
  * panel documents fill the WebView and dropdown content scrolls internally.
  */
 export const initialTitlebarDropdownPanelKind = readTitlebarDropdownPanelKind();
-
-export const styles = {
-  centerSlot: {
-    /*
-     * CDXC:TitlebarModeTabs 2026-06-30-12:55:
-     * The six desktop mode tabs need more center-titlebar weight so Agents, Source, Browser, Kanban, Automate, and Docs render as full labels instead of truncating to short ellipses.
-     *
-     * CDXC:TitlebarModeTabs 2026-06-30-17:04:
-     * The expanded six-tab switcher should stay compact after visual review. Cap the centered group at six equal 84px tabs and rely on reduced tab padding, not oversized button width, to keep full labels readable.
-     */
-    alignItems: "center",
-    display: "flex",
-    left: "50%",
-    minWidth: 0,
-    position: "absolute",
-    top: TITLEBAR_CENTER_CONTROLS_TOP,
-    transform: "translateX(-50%)",
-    width: "clamp(0px, calc(100vw - 420px), 504px)",
-  },
-  projectSlot: {
-    alignItems: "center",
-    display: "flex",
-    gap: 0,
-    left: 81,
-    maxWidth: "min(620px, calc(100vw - 350px))",
-    minWidth: 0,
-    position: "absolute",
-    top: TITLEBAR_PROJECT_TOP,
-  },
-  rightSlot: {
-    alignItems: "center",
-    display: "flex",
-    gap: 0,
-    position: "absolute",
-    /*
-     * CDXC:ReactTitlebar 2026-05-30-12:00:
-     * Right-side titlebar controls should sit flush with the window edge.
-     *
-     * CDXC:SidebarTopChrome 2026-06-29-01:43:
-     * Settings and Keep Awake moved to the sidebar shortcut row. Keep the titlebar right slot flush so the remaining project/window controls still align with the window edge.
-     */
-    right: 0,
-    top: TITLEBAR_RIGHT_CONTROLS_TOP,
-  },
-  shell: {
-    background: "transparent",
-    inset: 0,
-    overflow: "visible",
-    position: "fixed",
-  },
-  titlebar: {
-    alignItems: "center",
-    background: "var(--app-titlebar-surface-background, var(--app-titlebar-background))",
-    display: "flex",
-    height: TITLEBAR_HEIGHT,
-    justifyContent: "center",
-    position: "relative",
-    width: "100vw",
-  },
-} satisfies Record<string, CSSProperties>;
