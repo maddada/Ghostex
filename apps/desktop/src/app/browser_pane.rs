@@ -388,6 +388,7 @@ impl GhostexGpuiApp {
         }
     }
 
+    #[allow(dead_code)] // no caller: only the superseded native browser tab strip requested address-bar focus
     pub(crate) fn request_browser_address_focus(
         &mut self,
         pane_id: BrowserPaneId,

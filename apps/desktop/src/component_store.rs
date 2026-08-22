@@ -105,6 +105,7 @@ pub struct ComponentStoreProgress {
 }
 
 impl ComponentStoreProgress {
+    #[allow(dead_code)] // wire shape: the ComponentStoreProgress JSON projection, kept next to the struct it serialises
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "component": self.component,
@@ -428,6 +429,7 @@ impl ComponentStore {
         Ok(Self { manifest, root })
     }
 
+    #[allow(dead_code)] // component-store query builder API kept complete
     pub fn with_root(manifest: OnDemandManifest, root: PathBuf) -> Self {
         Self { manifest, root }
     }
@@ -440,6 +442,7 @@ impl ComponentStore {
         self.manifest.components.get(name)
     }
 
+    #[allow(dead_code)] // component-store query builder API kept complete
     pub fn query(&self, name: &str, version: &str) -> Result<InstalledComponent, String> {
         let platform = current_platform()?;
         self.query_for_platform(name, version, &platform)
@@ -2073,6 +2076,7 @@ pub(crate) fn verify_installed_windows_code_server_component(
     )
 }
 
+#[allow(dead_code)] // no caller: the code-server payload is validated by the runtime spawn path now
 pub(crate) fn code_server_payload_shell_validation_script() -> Result<String, String> {
     let contract = code_server_archive_contract()?;
     let (required_entries, executable_entries) =

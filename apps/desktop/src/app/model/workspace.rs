@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the WorkspaceModel sub-model struct and impl moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -32,6 +31,7 @@ impl WorkspaceModel {
         }
     }
 
+    #[allow(dead_code)] // no caller: the CDXC:GPUIWorkspaceLifecycle sample workspace is not built at startup any more
     pub(crate) fn first_slice_default() -> Self {
         /*
         CDXC:GPUIWorkspaceLifecycle 2026-06-22-05:23:
@@ -140,6 +140,7 @@ impl WorkspaceModel {
         })
     }
 
+    #[allow(dead_code)] // no live caller: startup eligibility is decided by the surface-host mount path
     pub(crate) fn make_mounting_session_startup_eligible(&mut self, session_id: TerminalSessionId) -> bool {
         let Some(session) = self
             .terminal_sessions
@@ -455,6 +456,7 @@ impl WorkspaceModel {
         leaf.tab_group.cycle_active_session(reverse).is_some()
     }
 
+    #[allow(dead_code)] // no caller: tab closing goes through the id-addressed close paths
     pub(crate) fn close_active_tab(&mut self) -> bool {
         /*
         CDXC:GPUIKeyboardFocus 2026-06-22-06:02:

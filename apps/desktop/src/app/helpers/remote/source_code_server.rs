@@ -3,7 +3,6 @@
 // no logic changes). This file holds the remote "source" code-server
 // component runtime spawn/payload/launch and the remote manage-docs resource
 // bridge. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     env, fs,

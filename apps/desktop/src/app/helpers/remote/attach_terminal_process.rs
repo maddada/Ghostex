@@ -2,7 +2,6 @@
 // lines) further divided into responsibility-scoped submodules (pure move,
 // no logic changes). This file holds the remote attach terminal process
 // command construction. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::app::helpers::*;
 use crate::*;

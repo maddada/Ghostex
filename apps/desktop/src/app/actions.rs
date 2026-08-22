@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the gpui Action-derive structs, the actions! macro block, and their scope enums moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 

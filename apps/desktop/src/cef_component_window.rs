@@ -295,6 +295,7 @@ impl GhostexGpuiApp {
             .ok();
     }
 
+    #[allow(dead_code)] // used by the ghostex-gpui-cef-bootstrap binary, which #[path]-includes this module
     pub(super) fn show_cef_startup_failure(
         &mut self,
         message: String,

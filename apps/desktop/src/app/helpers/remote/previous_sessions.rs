@@ -3,7 +3,6 @@
 // no logic changes). This file holds recent-project listing and previous
 // (closed) remote session sourcing, listing, restore, and delete. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::time::Duration;
 

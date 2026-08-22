@@ -2,7 +2,7 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
+
 #![allow(unused_imports)]
 
 use crate::*;

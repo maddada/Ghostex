@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the CommandPaneModel sub-model struct and impl moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -808,6 +807,7 @@ impl CommandPaneModel {
         Some(slot)
     }
 
+    #[allow(dead_code)] // no caller: the live path clears action runs through clear_action_run_for_slot
     pub(crate) fn clear_action_run_for_session(&mut self, session_id: CommandSessionId) -> bool {
         let Some(session) = self.session_mut(session_id) else {
             return false;

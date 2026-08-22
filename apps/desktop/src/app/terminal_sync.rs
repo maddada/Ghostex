@@ -2883,6 +2883,7 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // no live caller: the app-owned terminal startup-host reconcile pipeline is not driven any more (agents terminals mount through the surface-host path)
     pub(crate) fn sync_agents_terminal_startup_host_config_requests(&mut self) {
         let startup_launch_plans = self
             .agents_terminal_startup_coordinator
@@ -2919,6 +2920,7 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // no live caller: the app-owned terminal startup-host reconcile pipeline is not driven any more (agents terminals mount through the surface-host path)
     pub(crate) fn sync_agents_terminal_startup_ghostty_surfaces(
         &mut self,
         startup_launch_plans: &[AgentsTerminalStartupLaunchPlan],
@@ -2952,6 +2954,7 @@ impl GhostexGpuiApp {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // no live caller: the app-owned terminal startup-host reconcile pipeline is not driven any more (agents terminals mount through the surface-host path)
     pub(crate) fn promote_ready_agents_terminal_startup_handoffs(&mut self) {
         let handoff_plans = self
             .agents_terminal_startup_coordinator

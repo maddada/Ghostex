@@ -45,6 +45,7 @@ pub fn refresh_application_menu_hooks() {
     platform::install_application_hooks();
 }
 
+#[allow(dead_code)] // no caller: call sites use platform::focus_native_view directly; kept to mirror cef/unsupported.rs
 pub fn focus_native_view(native_view: *mut c_void) {
     platform::focus_native_view(native_view);
 }

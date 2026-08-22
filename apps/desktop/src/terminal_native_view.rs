@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(target_os = "macos")]
 use std::{
     collections::HashMap,
@@ -87,6 +85,7 @@ impl RealTerminalNativeViewHandle {
     ///
     /// `native_view` must be an existing real AppKit terminal `NSView` that remains valid for the
     /// duration of any executor call using this handle.
+    #[allow(dead_code)] // no caller: the surface host owns native view creation now
     pub(crate) unsafe fn from_existing_native_view(native_view: NonNull<c_void>) -> Self {
         Self { native_view }
     }
@@ -124,6 +123,7 @@ impl TerminalHostParentNativeViewHandle {
     ///
     /// `parent_view` must be an existing real AppKit parent `NSView` that can own the terminal
     /// host child view for the lifetime of the returned owner.
+    #[allow(dead_code)] // no caller: the surface host owns native view creation now
     pub(crate) unsafe fn from_existing_parent_view(parent_view: NonNull<c_void>) -> Self {
         Self { parent_view }
     }
@@ -887,6 +887,7 @@ pub(crate) enum NativeTerminalSurfacePlatformOperation {
     Focus,
 }
 
+#[allow(dead_code)] // no live caller: native terminal platform commands are issued by the surface host
 pub(crate) fn operations_for_native_terminal_platform_command<SlotId>(
     command: NativeTerminalSurfacePlatformCommand<SlotId>,
 ) -> Vec<NativeTerminalSurfacePlatformOperation> {
@@ -920,6 +921,7 @@ impl NativeTerminalSurfaceAppKitExecutor {
         Self { native_view }
     }
 
+    #[allow(dead_code)] // no live caller: native terminal platform commands are issued by the surface host
     pub(crate) fn execute<SlotId>(&self, command: NativeTerminalSurfacePlatformCommand<SlotId>) {
         for operation in operations_for_native_terminal_platform_command(command) {
             self.apply_operation(operation);

@@ -3,7 +3,6 @@
 // no logic changes). This file holds the remote listening-ports discovery
 // and the local browser page rendered for them. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{fs, time::Duration};
 

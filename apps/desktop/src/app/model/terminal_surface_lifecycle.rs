@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -45,6 +44,7 @@ pub(crate) fn confirmed_agents_terminal_ghostty_surface_close_slots(
 
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)] // no caller: the live path uses the same-named GhostexGpuiApp method in app/focus.rs
 pub(crate) fn consume_confirmed_agents_terminal_ghostty_surface_closes(
     workspace: &mut WorkspaceModel,
     runtime_sessions: &AgentsTerminalRuntimeSessionRegistry,

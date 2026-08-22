@@ -3,7 +3,6 @@
 // no logic changes). This file holds the remote gxserver tunnel spawn,
 // authenticated-health wait, and SSH password/token keychain persistence.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashSet,

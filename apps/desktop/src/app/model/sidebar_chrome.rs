@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -22,6 +21,7 @@ pub(crate) enum GpuiSidebarSide {
 
 
 impl GpuiSidebarSide {
+    #[allow(dead_code)] // no caller: sidebar side comes from the persisted shell state, not a settings string
     pub(crate) fn from_settings_value(value: &str) -> Option<Self> {
         match value {
             "left" => Some(Self::Left),
@@ -77,6 +77,7 @@ pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
 }
 
 
+#[allow(dead_code)] // no caller: the body row is laid out inline in render.rs; kept as the CDXC:GPUISidebarSide ordering contract
 pub(crate) fn gpui_sidebar_body_chrome_order(
     side: GpuiSidebarSide,
     sidebar_collapsed: bool,

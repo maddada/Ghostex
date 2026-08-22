@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the free-standing consts/statics (theme, geometry, and protocol tables) moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -1421,8 +1420,6 @@ pub(crate) const PROJECT_EDITOR_COMPANION_MIN_WIDTH: f32 = 280.0;
 pub(crate) const PROJECT_EDITOR_COMPANION_SPLIT_RATIO: f32 = 0.5;
 
 pub(crate) const PROJECT_EDITOR_COMPANION_RESTORE_RAIL_WIDTH: f32 = 32.0;
-
-pub(crate) const PROJECT_EDITOR_PLACEHOLDER_MAX_WIDTH: f32 = 520.0;
 
 pub(crate) const PROJECT_EDITOR_AWAKE_MODE_CAP: usize = 3;
 

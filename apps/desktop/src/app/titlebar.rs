@@ -677,6 +677,7 @@ impl GhostexGpuiApp {
         menu
     }
 
+    #[allow(dead_code)] // no caller: Tips is a titlebar-host CEF panel now; this is the superseded native popup menu
     pub(crate) fn build_gpui_titlebar_tips_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
         let read_ids = gpui_titlebar_tips_read_ids_from_settings();
         let unread_count = GPUI_NATIVE_TITLEBAR_TIPS
@@ -804,6 +805,7 @@ impl GhostexGpuiApp {
         menu
     }
 
+    #[allow(dead_code)] // no caller: Resources is a titlebar-host CEF panel now; this is the superseded native popup menu
     pub(crate) fn build_gpui_titlebar_resources_popup_menu(
         menu: PopupMenu,
         snapshot: GpuiNativeResourcesSnapshot,
@@ -3013,6 +3015,7 @@ impl GhostexGpuiApp {
         .into_any_element()
     }
 
+    #[allow(dead_code)] // no caller: Tips is a titlebar-host CEF panel now; this is the superseded native popover
     pub(crate) fn render_titlebar_tips_popover(
         &self,
         window: &mut Window,
@@ -3091,6 +3094,7 @@ impl GhostexGpuiApp {
         self.set_gpui_titlebar_tips_panel_open(false, window, cx);
     }
 
+    #[allow(dead_code)] // no caller: Resources is a titlebar-host CEF panel now; this is the superseded native popover
     pub(crate) fn render_titlebar_resources_popover(
         &self,
         window: &mut Window,

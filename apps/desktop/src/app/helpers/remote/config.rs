@@ -3,7 +3,6 @@
 // no logic changes). This file holds remote-machine settings parsing and
 // remote sidebar command/repo-clone param builders. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::app::helpers::*;
 use crate::*;

@@ -1,6 +1,5 @@
 // C1 wave-1 extraction: stateless helper functions moved verbatim out of
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::{HashMap, HashSet},
@@ -2149,6 +2148,7 @@ impl GpuiTitlebarAction {
         }
     }
 
+    #[allow(dead_code)] // no caller: the native titlebar menus that used these labels were replaced by CEF panels
     pub(crate) fn menu_label(&self) -> String {
         self.action_title()
             .unwrap_or_else(|| self.command_id.clone())
@@ -2188,6 +2188,7 @@ impl GpuiTitlebarAction {
             .unwrap_or_else(|| self.command_id.clone())
     }
 
+    #[allow(dead_code)] // no caller: the native titlebar menus that used these labels were replaced by CEF panels
     pub(crate) fn action_title(&self) -> Option<String> {
         gpui_normalized_sidebar_command_title(Some(&self.name)).or_else(|| {
             match self.action_type {

@@ -1,6 +1,5 @@
 // C1 wave-1 extraction: stateless helper functions moved verbatim out of
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::{HashMap, HashSet},
@@ -669,79 +668,13 @@ pub(crate) fn project_editor_companion_divider_line_color() -> Hsla {
     rgb(0x000000).opacity(0.0).into()
 }
 
-pub(crate) fn project_editor_placeholder_border_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0x41d7b5).opacity(0.32).into(),
-        TitlebarMode::Browser => rgb(0x58b7ff).opacity(0.32).into(),
-        TitlebarMode::Kanban => rgb(0x8f7aff).opacity(0.34).into(),
-        TitlebarMode::Automate => rgb(0xf0b84a).opacity(0.34).into(),
-        TitlebarMode::Manage => rgb(0xff7ca8).opacity(0.34).into(),
-        TitlebarMode::Agents => workspace_pane_border_color(),
-    }
-}
 
-pub(crate) fn project_editor_placeholder_card_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0x0a352d).into(),
-        TitlebarMode::Browser => rgb(0x0d2033).into(),
-        TitlebarMode::Kanban => rgb(0x182253).into(),
-        TitlebarMode::Automate => rgb(0x3d2c0b).into(),
-        TitlebarMode::Manage => rgb(0x421831).into(),
-        TitlebarMode::Agents => rgb(0x101010).into(),
-    }
-}
 
-pub(crate) fn project_editor_placeholder_card_border_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0x41d7b5).opacity(0.36).into(),
-        TitlebarMode::Browser => rgb(0x58b7ff).opacity(0.36).into(),
-        TitlebarMode::Kanban => rgb(0x8f7aff).opacity(0.38).into(),
-        TitlebarMode::Automate => rgb(0xf0b84a).opacity(0.38).into(),
-        TitlebarMode::Manage => rgb(0xff7ca8).opacity(0.38).into(),
-        TitlebarMode::Agents => workspace_pane_border_color(),
-    }
-}
 
-pub(crate) fn project_editor_placeholder_badge_text_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0xc1fff1).opacity(0.96).into(),
-        TitlebarMode::Browser => rgb(0xc9e6ff).opacity(0.96).into(),
-        TitlebarMode::Kanban => rgb(0xdfdcff).opacity(0.96).into(),
-        TitlebarMode::Automate => rgb(0xffe3ac).opacity(0.96).into(),
-        TitlebarMode::Manage => rgb(0xffd3df).opacity(0.96).into(),
-        TitlebarMode::Agents => rgb(0xffffff).opacity(0.82).into(),
-    }
-}
 
-pub(crate) fn project_editor_placeholder_title_color(_mode: TitlebarMode) -> Hsla {
-    rgb(0xffffff).opacity(0.94).into()
-}
 
-pub(crate) fn project_editor_placeholder_message_color(_mode: TitlebarMode) -> Hsla {
-    rgb(0xf0f2f5).opacity(0.68).into()
-}
 
-pub(crate) fn project_editor_sleeping_placeholder_background_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0x031612).into(),
-        TitlebarMode::Browser => rgb(0x050e17).into(),
-        TitlebarMode::Kanban => rgb(0x090d22).into(),
-        TitlebarMode::Automate => rgb(0x191304).into(),
-        TitlebarMode::Manage => rgb(0x1a0812).into(),
-        TitlebarMode::Agents => workspace_background_color(),
-    }
-}
 
-pub(crate) fn project_editor_sleeping_placeholder_card_color(mode: TitlebarMode) -> Hsla {
-    match mode {
-        TitlebarMode::Source => rgb(0x071f1a).into(),
-        TitlebarMode::Browser => rgb(0x0a1724).into(),
-        TitlebarMode::Kanban => rgb(0x111735).into(),
-        TitlebarMode::Automate => rgb(0x2b2008).into(),
-        TitlebarMode::Manage => rgb(0x2a1020).into(),
-        TitlebarMode::Agents => rgb(0x101010).into(),
-    }
-}
 
 pub(crate) fn command_pane_chrome_color() -> Hsla {
     /*
@@ -2647,6 +2580,7 @@ pub(crate) enum GpuiProjectSettingsMetadataUpdate {
         project_id: String,
         directory: String,
     },
+    #[allow(dead_code)] // no live path: sidebar agent/command metadata is projected by gxserver now
     SidebarCommands {
         project_id: String,
         commands: Vec<GpuiStoredSidebarCommand>,

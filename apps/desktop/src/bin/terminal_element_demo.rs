@@ -17,6 +17,12 @@ Set GHOSTEX_GPUI_VT_DEMO_CMD to run a custom `zsh -c` command instead of the
 built-in showcase.
 */
 
+// This smoke/demo binary `#[path]`-includes shared modules (ghostty_vt, terminal_model,
+// terminal_element, shared_settings, support_logs, ...) but only exercises a slice of
+// them, so most of their items are legitimately unused *here*. The allow is scoped to
+// this demo crate root so the real app binary keeps full dead-code coverage.
+#![allow(dead_code)]
+
 #[path = "../ghostty_vt.rs"]
 mod ghostty_vt;
 #[path = "../shared_settings.rs"]

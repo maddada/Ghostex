@@ -528,6 +528,7 @@ impl Render for GpuiPluginsModalWindow {
 }
 
 impl GhostexGpuiApp {
+    #[allow(dead_code)] // no caller: the Plugins action opens the Settings -> Plugins CEF page instead of this native window
     pub(super) fn open_gpui_plugins_modal_window(&mut self, cx: &mut gpui::Context<Self>) {
         if let Some(handle) = self.plugins_modal_window.clone() {
             if handle

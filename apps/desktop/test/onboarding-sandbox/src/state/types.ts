@@ -155,7 +155,7 @@ export interface SimModalWindow {
   openPayload: Record<string, unknown>;
   /**
    * Set for the ONE modal kind that does not use the React modal host
-   * (`GpuiAppModalKind::uses_react_modal_host`, apps/desktop/src/app/model/types1.rs:529): the
+   * (`GpuiAppModalKind::uses_react_modal_host`, apps/desktop/src/app/model/app_modal_kind.rs): the
    * tutorial video window loads GHOSTEX_TUTORIAL_VIDEO_URL as its top-level
    * document instead of modal-host.html. Such windows have no bridge and no
    * ready/presented handshake — the frame points its iframe straight here.

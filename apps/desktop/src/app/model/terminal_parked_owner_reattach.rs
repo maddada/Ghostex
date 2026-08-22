@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -535,6 +534,7 @@ pub(crate) fn park_agents_terminal_runtime_owner_before_host_detach(
 
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)] // no caller: group moves park runtime owners through the pane-level parking path
 pub(crate) fn park_agents_terminal_runtime_owner_for_group_move(
     workspace: &WorkspaceModel,
     runtime_sessions: &AgentsTerminalRuntimeSessionRegistry,

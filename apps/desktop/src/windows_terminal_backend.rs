@@ -5,6 +5,7 @@
 //! PowerShell support remains a later phase and is never selected as a fallback.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // used by the windows path
 pub(crate) enum WindowsTerminalBackendPreference {
     Automatic,
     Wsl,
@@ -12,12 +13,14 @@ pub(crate) enum WindowsTerminalBackendPreference {
 }
 
 impl WindowsTerminalBackendPreference {
+    #[allow(dead_code)] // used by the windows path
     pub(crate) fn from_settings_value(_value: Option<&str>) -> Self {
         Self::Wsl
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // used by the windows path
 pub(crate) enum ResolvedWindowsTerminalBackend {
     Wsl { distribution: String },
     PowerShell,
@@ -60,6 +63,7 @@ pub(crate) struct WindowsWslGhostexCliStatus {
     pub(crate) move_codex_session_skill_path: Option<String>,
 }
 
+#[allow(dead_code)] // used by the windows path
 pub(crate) fn current_preference() -> WindowsTerminalBackendPreference {
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     WindowsTerminalBackendPreference::from_settings_value(
@@ -1620,12 +1624,15 @@ pub(crate) fn windows_path_for_wsl_path(
 }
 
 #[cfg(not(target_os = "windows"))]
+#[allow(dead_code)] // non-windows no-op stub; only the windows path calls this
 pub(crate) fn auth_token() -> Option<String> {
     None
 }
 
 #[cfg(not(target_os = "windows"))]
+#[allow(dead_code)] // non-windows no-op stub; only the windows path calls this
 pub(crate) fn mark_package_update_required() {}
 
 #[cfg(not(target_os = "windows"))]
+#[allow(dead_code)] // non-windows no-op stub; only the windows path calls this
 pub(crate) fn reset() {}

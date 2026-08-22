@@ -3,7 +3,6 @@
 // no logic changes). This file holds remote typed-operation posting, project
 // path lookup, and opening remote projects/files/PRs in the IDE or browser.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashSet,

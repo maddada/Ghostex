@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /*
 CDXC:GPUILibghosttyVt 2026-07-03:
 Phase 1 GPUI-composited terminals are driven by libghostty-vt (vendored under
@@ -31,6 +29,10 @@ the lifetimes below enforce at compile time.
 
 use std::{ffi::c_void, fmt, marker::PhantomData};
 
+// 1:1 bindings to libghostty-vt's C headers. The enum-value constants and
+// `extern "C"` entry points are kept complete on purpose, so a few of them have
+// no Rust caller yet; that is a property of the binding layer, not dead code.
+#[allow(dead_code)]
 pub mod ffi {
     #![allow(non_camel_case_types)]
 
@@ -1152,6 +1154,7 @@ impl VtTerminal {
     }
 
     /// Full terminal reset (RIS). Dimensions are preserved.
+    #[allow(dead_code)] // public VT wrapper API kept complete over the ghostty_terminal_reset binding
     pub fn reset(&mut self) {
         unsafe { ffi::ghostty_terminal_reset(self.raw) }
     }
@@ -1847,6 +1850,7 @@ impl VtRow<'_> {
 
     /// Convenience readback of the row's text: empty cells become spaces,
     /// wide-character spacers are skipped, trailing whitespace is trimmed.
+    #[allow(dead_code)] // used by the ghostty-vt-smoke / terminal-model-smoke binaries
     pub fn text(&mut self) -> Result<String, VtError> {
         let mut text = String::new();
         let mut codepoints: Vec<u32> = Vec::new();

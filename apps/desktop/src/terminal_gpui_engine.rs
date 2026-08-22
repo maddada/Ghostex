@@ -52,6 +52,7 @@ pub(crate) struct GpuiTerminalEngineConfig {
 }
 
 impl GpuiTerminalEngineConfig {
+    #[allow(dead_code)] // no caller: superseded by the shared-settings theme path used by the engine today
     pub(crate) fn from_shared(settings: &SharedGpuiTerminalEngineSettings) -> Self {
         let cursor_shape = match settings.cursor_style.as_str() {
             "block" => TerminalCursorShape::Block,
@@ -93,6 +94,7 @@ impl GpuiTerminalEngineConfig {
         config
     }
 
+    #[allow(dead_code)] // no caller: superseded by the shared-settings theme path used by the engine today
     pub(crate) fn apply_ghostty_theme(&mut self, name: &str) {
         let Some(theme) = gpui_terminal_theme(name) else {
             return;
@@ -147,6 +149,7 @@ pub(crate) fn terminal_background_image_from_settings(
     })
 }
 
+#[allow(dead_code)] // no constructor: superseded by the shared-settings theme path used by the engine today
 struct GpuiTerminalTheme {
     foreground: Rgb,
     background: Rgb,
@@ -160,6 +163,7 @@ pub(crate) fn ghostty_theme_source(name: &str) -> Option<&'static str> {
     embedded_ghostty_theme_source(name)
 }
 
+#[allow(dead_code)] // no caller: superseded by the shared-settings theme path used by the engine today
 fn gpui_terminal_theme(name: &str) -> Option<GpuiTerminalTheme> {
     let source = ghostty_theme_source(name)?;
     let mut foreground = None;

@@ -3,7 +3,6 @@
 // no logic changes). This file holds the raw remote SSH run helpers, terminal
 // attachment/clipboard-image upload, and SSH client option/target-argument
 // construction. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     env, fs,

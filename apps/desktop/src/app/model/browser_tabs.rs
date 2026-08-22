@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -397,6 +396,7 @@ pub(crate) struct BrowserTab {
 pub(crate) struct BrowserBodyPlaceholder {
     pub(crate) state: BrowserTabState,
     pub(crate) safe_title: Option<String>,
+    #[allow(dead_code)] // placeholder shape: kept alongside safe_title so the browser body placeholder carries the full sanitised tab identity
     pub(crate) safe_url: Option<String>,
     pub(crate) has_cef_surface: bool,
 }
@@ -618,6 +618,7 @@ impl BrowserNavigationHistory {
 
 
 impl BrowserTabModel {
+    #[allow(dead_code)] // no live caller: only the superseded native browser tab strip built a default tab model
     pub(crate) fn shell_default() -> Self {
         Self::shell_default_with_profile(BrowserProfileId::default_profile())
     }
@@ -765,6 +766,7 @@ impl BrowserTabModel {
         Some(tab_id)
     }
 
+    #[allow(dead_code)] // no live caller: only the superseded native browser tab strip added placeholder tabs
     pub(crate) fn add_address_placeholder_tab(&mut self, profile_id: BrowserProfileId) -> BrowserTabId {
         /*
         CDXC:GPUIFocusedNewTabs 2026-06-22-12:51:
@@ -890,6 +892,7 @@ impl BrowserTabModel {
         true
     }
 
+    #[allow(dead_code)] // no live caller: reloads go through the CEF browser chrome
     pub(crate) fn reload_loaded_tab_url(&mut self, tab_id: BrowserTabId, url: String) -> bool {
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
             return false;

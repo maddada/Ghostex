@@ -1,6 +1,5 @@
 // C1 wave-1 extraction: stateless helper functions moved verbatim out of
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashSet,
@@ -548,6 +547,7 @@ pub(crate) fn gpui_random_uuid_string() -> Result<String, String> {
     ))
 }
 
+#[allow(dead_code)] // no caller: gxserver project settings are consumed through the sidebar runtime bridge instead
 pub(crate) fn gpui_project_settings_projects_from_gxserver() -> Vec<serde_json::Value> {
     /*
     CDXC:GPUISettingsProjectMetadata 2026-06-24-11:59:
@@ -2039,6 +2039,7 @@ pub(crate) fn gpui_sidebar_hud_from_gxserver(
     })
 }
 
+#[allow(dead_code)] // no caller: gxserver project settings are persisted through the sidebar runtime bridge instead
 pub(crate) fn gpui_persist_sidebar_agents_to_gxserver_projects(
     domain_projects: &[serde_json::Value],
     agents: &[GpuiStoredSidebarAgent],

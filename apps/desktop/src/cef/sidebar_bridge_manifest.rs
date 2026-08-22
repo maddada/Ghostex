@@ -185,6 +185,7 @@ pub(crate) const APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS: usize = 1024 * 1024;
 pub(crate) const NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.nativeHost.message";
 #[allow(dead_code)]
 pub(crate) const NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS: usize = 1024 * 1024;
+#[allow(dead_code)] // protocol manifest: the extra_info key is part of the CEF bridge contract even where Rust does not read it (matches the neighbouring allows)
 pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_EXTRA_INFO_KEY: &str =
     "ghostexGpuiAppModalHostSurface";
 const APP_MODAL_HOST_BRIDGE_SURFACE_NATIVE_WINDOW: &str = "nativeWindow";
@@ -427,6 +428,7 @@ impl AppModalHostBridgeSurface {
         app_modal_host_bridge_surface_spec(self).exposes_native_window_identity
     }
 
+    #[allow(dead_code)] // protocol manifest: reverse lookup of the CEF extra_info contract, kept alongside the forward mapping
     pub(crate) fn from_extra_info_value(value: &str) -> Option<Self> {
         APP_MODAL_HOST_BRIDGE_SURFACE_SPECS
             .iter()

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 #[cfg(target_os = "macos")]
@@ -48,6 +46,7 @@ where
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // no caller: the surface host owns native view creation now
     pub(crate) fn with_explicit_real_native_view(
         plan: NativeTerminalSurfaceAttachmentPlan<SlotId>,
         real_view: RealTerminalNativeViewHandle,

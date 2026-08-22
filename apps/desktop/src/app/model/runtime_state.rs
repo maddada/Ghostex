@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the keep-awake, remote/gxserver connection, project-context, and source-code-server runtime value types moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -26,6 +25,7 @@ pub(crate) struct GpuiKeepAwakeRuntime {
     pub(crate) runtime_id: u64,
     pub(crate) duration_minutes: shared_settings::SharedKeepAwakeDurationMinutes,
     pub(crate) source: GpuiKeepAwakeRuntimeSource,
+    #[allow(dead_code)] // keep-awake runtime bookkeeping: recorded for diagnostics, nothing reads it back
     pub(crate) started_at: Instant,
     pub(crate) fire_at: Option<Instant>,
     #[cfg(target_os = "macos")]
@@ -96,6 +96,7 @@ impl GpuiRemoteGxserverConnection {
 #[derive(Clone)]
 pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) capabilities: GpuiRemoteGxserverCapabilities,
+    #[allow(dead_code)] // carried from the connection's capability probe; no request builder reads it back today
     pub(crate) code_server_component_platform: Option<String>,
     pub(crate) execution_target: GpuiRemoteExecutionTarget,
     pub(crate) local_port: u16,

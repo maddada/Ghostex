@@ -2214,6 +2214,7 @@ impl GhostexGpuiApp {
         );
     }
 
+    #[allow(dead_code)] // no caller: Clone Repository was folded into the Add Project dialog; this is the standalone clone flow
     pub(crate) fn handle_gpui_preview_remote_repository_clone_message(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -2300,6 +2301,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    #[allow(dead_code)] // no caller: Clone Repository was folded into the Add Project dialog; this is the standalone clone flow
     pub(crate) fn handle_gpui_start_remote_repository_clone_message(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -2436,6 +2438,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    #[allow(dead_code)] // no caller: Clone Repository was folded into the Add Project dialog; this is the standalone clone flow
     pub(crate) fn handle_gpui_cancel_remote_repository_clone_message(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,

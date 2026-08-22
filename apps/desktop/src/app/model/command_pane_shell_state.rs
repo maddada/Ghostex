@@ -2,14 +2,8 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
-
-
-pub(crate) fn command_pane_model_to_shell_state_json(model: &CommandPaneModel) -> serde_json::Value {
-    command_pane_model_to_shell_state_json_with_optional_delayed_send_timers(model, None, None)
-}
 
 
 pub(crate) fn command_pane_model_to_shell_state_json_with_delayed_send_timers(

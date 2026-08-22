@@ -178,6 +178,7 @@ pub fn append_temporary(log: GpuiSupportLog, event: &str, details: serde_json::V
 /// Always-on, privacy-sanitized breadcrumbs for a user-requested reproduction.
 /// Keep callers narrowly scoped and remove them after the underlying issue is
 /// diagnosed; unlike routine support logs these do not depend on Debugging Mode.
+#[allow(dead_code)] // no live caller: its only caller is the superseded titlebar popup repro logger
 pub fn append_repro(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
     append_unconditionally(log, event, details);
 }

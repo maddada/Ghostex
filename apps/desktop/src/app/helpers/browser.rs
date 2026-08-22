@@ -1,6 +1,5 @@
 // C1 wave-1 extraction: stateless helper functions moved verbatim out of
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     fmt, fs,

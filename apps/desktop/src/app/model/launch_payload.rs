@@ -1,7 +1,6 @@
 // C1 wave-3 extraction: the terminal launch-payload and close-confirm value types moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -84,6 +83,7 @@ impl AgentsTerminalStartupLaunchPayloadSource {
         );
     }
 
+    #[allow(dead_code)] // no live caller: the app-owned terminal startup-host reconcile pipeline is not driven any more (agents terminals mount through the surface-host path)
     pub(crate) fn payload_for_launch_plan(
         &self,
         plan: AgentsTerminalStartupLaunchPlan,

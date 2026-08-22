@@ -1038,6 +1038,7 @@ impl GhostexGpuiApp {
         restored
     }
 
+    #[allow(dead_code)] // no caller: Agents delayed send is scheduled through the command-pane delayed-send path
     pub(crate) fn schedule_gpui_agents_delayed_send(
         &mut self,
         session_id: TerminalSessionId,
@@ -1083,6 +1084,7 @@ impl GhostexGpuiApp {
         true
     }
 
+    #[allow(dead_code)] // no caller: Agents delayed send is scheduled through the command-pane delayed-send path
     pub(crate) fn schedule_gpui_agents_send_when_stopped(
         &mut self,
         session_id: TerminalSessionId,

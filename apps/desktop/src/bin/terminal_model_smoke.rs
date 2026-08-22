@@ -10,6 +10,12 @@ single small file. Run with:
     cargo run --bin terminal-model-smoke
 */
 
+// This smoke/demo binary `#[path]`-includes shared modules (ghostty_vt, terminal_model,
+// terminal_element, shared_settings, support_logs, ...) but only exercises a slice of
+// them, so most of their items are legitimately unused *here*. The allow is scoped to
+// this demo crate root so the real app binary keeps full dead-code coverage.
+#![allow(dead_code)]
+
 #[path = "../ghostty_vt.rs"]
 mod ghostty_vt;
 #[path = "../terminal_environment.rs"]

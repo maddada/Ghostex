@@ -333,6 +333,7 @@ fn is_ignored_placeholder_session_title(title: &str) -> bool {
 
 /// Port of the shared contract's `getVisibleTerminalTitle`: returns the
 /// normalized title only when it is trustworthy enough to display.
+#[allow(dead_code)] // no caller since 2026-08-04: tab titles are projected by the sidebar instead of derived from OSC titles; this module is the retained normalisation table
 pub(crate) fn visible_terminal_osc_title(raw: &str) -> Option<String> {
     let normalized = normalize_terminal_title(raw)?;
     if is_path_like_title(&normalized) {

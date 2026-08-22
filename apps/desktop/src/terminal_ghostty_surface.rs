@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     env,
@@ -305,7 +303,9 @@ pub(crate) struct GhosttyKitFunctionTable {
     surface_needs_confirm_quit: unsafe fn(ffi::ghostty_surface_t) -> bool,
     surface_binding_action: unsafe fn(ffi::ghostty_surface_t, *const c_char, usize) -> bool,
     surface_process_exited: unsafe fn(ffi::ghostty_surface_t) -> bool,
+    #[allow(dead_code)] // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
     surface_foreground_pid: unsafe fn(ffi::ghostty_surface_t) -> u64,
+    #[allow(dead_code)] // ghostty surface FFI vtable entry kept complete; nothing reads this metadata back today
     surface_tty_name: unsafe fn(ffi::ghostty_surface_t) -> ffi::ghostty_string_s,
     surface_key_translation_mods:
         unsafe fn(ffi::ghostty_surface_t, ffi::ghostty_input_mods_e) -> ffi::ghostty_input_mods_e,
@@ -1066,6 +1066,7 @@ impl GhosttySurfaceNsViewHandle {
     ///
     /// `nsview` must be an existing real AppKit `NSView` that remains valid until the eventual
     /// Ghostty surface config consumer finishes using the produced FFI struct.
+    #[allow(dead_code)] // no caller: the surface host owns NSView creation now
     pub(crate) unsafe fn from_existing_nsview(nsview: NonNull<c_void>) -> Self {
         Self { nsview }
     }
@@ -1291,6 +1292,7 @@ impl GhosttySurfaceConfigRequest {
         )
     }
 
+    #[allow(dead_code)] // no caller: the live path builds the FFI surface config through the surface host
     pub(crate) fn to_ffi_config(&self) -> ffi::ghostty_surface_config_s {
         assert!(
             self.launch_payload.is_none(),
@@ -1526,8 +1528,10 @@ impl GhosttyRuntimeCallbackState {
 
 pub(crate) struct GhosttyAppOwner {
     app: NonNull<c_void>,
+    #[allow(dead_code)] // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
     config: GhosttyConfigOwner,
     runtime_state: Box<GhosttyRuntimeCallbackState>,
+    #[allow(dead_code)] // ownership handle: held so the ghostty app keeps its config/runtime-config alive for the C side, never read from Rust
     runtime_config: ffi::ghostty_runtime_config_s,
     functions: GhosttyKitFunctionTable,
     latest_focus_state: Option<bool>,
@@ -2185,12 +2189,14 @@ fn scaled_pixel_dimension(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // no constructor: key-binding probing is done by ghostty itself now
 pub(crate) struct GhosttySurfaceKeyBindingStatus {
     binding: bool,
     flags: ffi::ghostty_binding_flags_e,
 }
 
 impl GhosttySurfaceKeyBindingStatus {
+    #[allow(dead_code)] // no live caller: key-binding probing is only reachable from the superseded native key path
     fn from_ffi_result(binding: bool, flags: ffi::ghostty_binding_flags_e) -> Self {
         Self {
             binding,
@@ -2198,10 +2204,12 @@ impl GhosttySurfaceKeyBindingStatus {
         }
     }
 
+    #[allow(dead_code)] // no live caller: key-binding probing is only reachable from the superseded native key path
     pub(crate) fn binding(self) -> bool {
         self.binding
     }
 
+    #[allow(dead_code)] // no live caller: key-binding probing is only reachable from the superseded native key path
     pub(crate) fn flags(self) -> ffi::ghostty_binding_flags_e {
         self.flags
     }
@@ -2257,10 +2265,12 @@ impl GhosttySurfaceMetadataSnapshot {
         self.process_exited
     }
 
+    #[allow(dead_code)] // no live caller: only the superseded startup-host reconcile read surface metadata presence
     pub(crate) fn foreground_process_id_present(self) -> bool {
         self.foreground_process_id_present
     }
 
+    #[allow(dead_code)] // no live caller: only the superseded startup-host reconcile read surface metadata presence
     pub(crate) fn tty_name_present(self) -> bool {
         self.tty_name_present
     }
@@ -2270,6 +2280,7 @@ impl GhosttySurfaceMetadataSnapshot {
     }
 }
 
+#[allow(dead_code)] // no live caller: only reachable from the superseded startup-host reconcile
 fn ghostty_surface_metadata_snapshot(
     functions: GhosttyKitFunctionTable,
     surface: ffi::ghostty_surface_t,
@@ -2401,6 +2412,7 @@ where
         unsafe { (self.functions.surface_size)(self.as_raw()) }
     }
 
+    #[allow(dead_code)] // no live caller: the native ghostty surface host owns this today
     pub(crate) fn metadata_snapshot(&self) -> GhosttySurfaceMetadataSnapshot {
         ghostty_surface_metadata_snapshot(self.functions, self.as_raw())
     }
@@ -2426,6 +2438,7 @@ where
         }
     }
 
+    #[allow(dead_code)] // no live caller: the native ghostty surface host owns this today
     pub(crate) fn key_translation_mods(
         &self,
         mods: ffi::ghostty_input_mods_e,
@@ -2437,6 +2450,7 @@ where
         unsafe { (self.functions.surface_key)(self.as_raw(), event) }
     }
 
+    #[allow(dead_code)] // no live caller: the native ghostty surface host owns this today
     pub(crate) fn key_is_binding(
         &self,
         event: ffi::ghostty_input_key_s,

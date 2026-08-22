@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /*
 CDXC:GPUITerminalElement 2026-07-03:
 P1c GPUI-composited terminal renderer over the P1b terminal model. One
@@ -630,6 +628,7 @@ pub struct TerminalView {
 impl TerminalView {
     /// Spawn the configured process and start pumping model events onto the
     /// gpui foreground. Every Wakeup takes one snapshot and notifies.
+    #[allow(dead_code)] // public TerminalView API kept complete: the app drives this element through terminal_gpui_engine
     pub fn spawn(
         config: TerminalSpawnConfig,
         font: TerminalFontConfig,
@@ -828,6 +827,7 @@ impl TerminalView {
 
     /// Read either the visible viewport or the complete scrollback using the
     /// same soft-wrap joining semantics as native Ghostty readback.
+    #[allow(dead_code)] // public TerminalView API kept complete: the app drives this element through terminal_gpui_engine
     pub fn read_text(&mut self, visible_only: bool) -> Option<String> {
         let rows = if visible_only {
             let frame = self.frame.as_ref()?;
@@ -927,11 +927,13 @@ impl TerminalView {
     }
 
     /// Latest OSC title read back from the terminal, if any.
+    #[allow(dead_code)] // public TerminalView API kept complete: the app drives this element through terminal_gpui_engine
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
     }
 
     /// Latest OSC 7 pwd read back from the terminal, if any.
+    #[allow(dead_code)] // public TerminalView API kept complete: the app drives this element through terminal_gpui_engine
     pub fn pwd(&self) -> Option<&str> {
         self.pwd.as_deref()
     }
@@ -1120,6 +1122,7 @@ impl TerminalView {
     }
 
     /// Whether the in-terminal find is open.
+    #[allow(dead_code)] // public TerminalView API kept complete: the app drives this element through terminal_gpui_engine
     pub fn search_active(&self) -> bool {
         self.search.is_some()
     }
@@ -1602,6 +1605,7 @@ impl TerminalView {
         }
     }
 
+    #[allow(dead_code)] // reached only from the demo binary input path; kept with the rest of the TerminalView input handling
     fn paste_clipboard(&mut self, cx: &mut Context<Self>) {
         let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
             return;

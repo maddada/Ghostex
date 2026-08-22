@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{env, ffi::OsStr, process::Command};
 
 use portable_pty::CommandBuilder;
@@ -41,6 +39,7 @@ fn environment_key_matches(key: &str, expected: &str) -> bool {
     }
 }
 
+#[allow(dead_code)] // no live caller: only the superseded native terminal-environment path used it
 fn environment_os_key_matches(key: &OsStr, expected: &str) -> bool {
     key.to_str()
         .is_some_and(|key| environment_key_matches(key, expected))
@@ -158,6 +157,7 @@ pub(crate) fn remove_session_identity_from_terminal_command_builder(command: &mu
     }
 }
 
+#[allow(dead_code)] // no live caller: only the superseded native terminal-environment path used it
 pub(crate) fn remove_session_identity_from_process_command(command: &mut Command) {
     /*
     CDXC:GPUIGxserverSessionIdentityEnv 2026-07-04:
@@ -170,6 +170,7 @@ pub(crate) fn remove_session_identity_from_process_command(command: &mut Command
     }
 }
 
+#[allow(dead_code)] // no live caller: only the superseded native terminal-environment path used it
 pub(crate) fn apply_color_capable_process_command(command: &mut Command) {
     /*
     CDXC:GPUIGxserverColorEnv 2026-07-04:

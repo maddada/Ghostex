@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -160,6 +159,7 @@ pub(crate) fn command_pane_tab_context_sleep_scope_label(scope: CommandPaneTabSl
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandPaneTabSessionAction {
     Rename,
+    #[allow(dead_code)] // never constructed: kept so the chrome-status enum stays a complete mirror of the tab status vocabulary
     DelayedSend,
     CloseAfterDone,
 }
@@ -1012,6 +1012,7 @@ pub(crate) enum CommandPaneGroupBorderWidth {
 
 
 impl CommandPaneGroupBorderWidth {
+    #[allow(dead_code)] // no caller: group border widths are applied inline in render.rs; kept with the border-width chrome model
     pub(crate) fn px(self) -> u8 {
         match self {
             CommandPaneGroupBorderWidth::Focused => COMMAND_PANE_GROUP_FOCUSED_BORDER_WIDTH,

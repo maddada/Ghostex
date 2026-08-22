@@ -3,7 +3,6 @@
 // no logic changes). This file holds the remote-connect status overlay and
 // the core remote type/config definitions. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     fs,

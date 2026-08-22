@@ -3,7 +3,6 @@
 // no logic changes). This file holds the Command Pane Action execution-text,
 // status-file, and mounted/staged-script helpers. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     env, fs,

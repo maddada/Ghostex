@@ -161,6 +161,7 @@ pub struct GhostexGpuiApp {
     // macOS delivery and Velopack owns Windows delivery; only the Windows
     // backend retains release metadata for the confirmation child window.
     pub(crate) updater_started: bool,
+    #[allow(dead_code)] // read by the windows update path (begin_windows_update_check)
     pub(crate) update_checking: bool,
     pub(crate) update_available: bool,
     pub(crate) update_downloading: bool,

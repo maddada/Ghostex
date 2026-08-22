@@ -6723,6 +6723,7 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
+    #[allow(dead_code)] // no caller: the browser tab strip is drawn by the CEF browser chrome; this native gpui strip (and everything it calls) is the superseded implementation
     pub(crate) fn render_browser_tab_strip(
         &self,
         leaf: &BrowserLeaf,

@@ -1,6 +1,5 @@
 // C1 wave-1 extraction: stateless helper functions moved verbatim out of
 // main.rs (pure move, no logic changes). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashSet,
@@ -761,6 +760,7 @@ pub(crate) fn gpui_sidebar_hud_array_field(
         .ok_or_else(|| GPUI_SIDEBAR_METADATA_GENERIC_ERROR.to_string())
 }
 
+#[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
 pub(crate) fn gpui_sidebar_agent_state_from_domain_projects(
     domain_projects: &[serde_json::Value],
 ) -> (Vec<GpuiStoredSidebarAgent>, Vec<String>) {
@@ -880,6 +880,7 @@ pub(crate) fn gpui_sidebar_agent_button_value(
     serde_json::Value::Object(button)
 }
 
+#[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
 pub(crate) fn gpui_sidebar_command_state_for_active_project(
     domain_projects: &[serde_json::Value],
     active_project_id: &str,
@@ -1569,6 +1570,7 @@ pub(crate) fn gpui_apply_sidebar_agent_metadata_write(
     })
 }
 
+#[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
 pub(crate) fn gpui_next_sidebar_agent_metadata_state(
     stored_agents: Vec<GpuiStoredSidebarAgent>,
     stored_order: Vec<String>,
@@ -1756,6 +1758,7 @@ pub(crate) fn gpui_apply_sidebar_command_metadata_write(
     })
 }
 
+#[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
 pub(crate) fn gpui_sidebar_command_write_active_project_id(write: &GpuiSidebarCommandMetadataWrite) -> &str {
     match write {
         GpuiSidebarCommandMetadataWrite::Save {
@@ -1770,6 +1773,7 @@ pub(crate) fn gpui_sidebar_command_write_active_project_id(write: &GpuiSidebarCo
     }
 }
 
+#[allow(dead_code)] // no caller: sidebar agent/command metadata is projected by gxserver now; kept as the local-state derivation
 pub(crate) fn gpui_next_sidebar_command_metadata_state(
     stored_commands: Vec<GpuiStoredSidebarCommand>,
     stored_order: Vec<String>,

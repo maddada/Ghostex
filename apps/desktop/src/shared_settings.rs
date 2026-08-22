@@ -1260,6 +1260,7 @@ impl SharedGhosttyTerminalConfigValues {
             .collect()
     }
 
+    #[allow(dead_code)] // no caller: the managed ghostty config is written from the settings modal path instead
     fn managed_config_lines(&self) -> Vec<String> {
         self.managed_config_line_entries()
             .into_iter()
@@ -1631,6 +1632,7 @@ fn legacy_settings_object_from_bytes(bytes: &[u8]) -> Option<Map<String, Value>>
     }
 }
 
+#[allow(dead_code)] // no caller: config-backed change detection is done per-setting today
 pub fn ghostty_terminal_config_backed_settings_changed(
     previous_object: &Map<String, Value>,
     next_object: &Map<String, Value>,
@@ -2161,6 +2163,7 @@ fn hash_bytes(bytes: &[u8]) -> u64 {
     hasher.finish()
 }
 
+#[allow(dead_code)] // timestamp formatting helper kept as a pair with shared_settings_civil_from_days
 fn shared_settings_iso8601_utc(time: SystemTime) -> String {
     let duration = time.duration_since(UNIX_EPOCH).unwrap_or_default();
     let total_seconds = duration.as_secs() as i64;
@@ -2190,6 +2193,7 @@ pub(crate) fn shared_settings_civil_from_days(days_since_epoch: i64) -> (i64, i6
     (year, month, day)
 }
 
+#[allow(dead_code)] // timestamp formatting helper kept as a pair with shared_settings_civil_from_days
 fn shared_settings_iso8601_utc_millis_like(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 24

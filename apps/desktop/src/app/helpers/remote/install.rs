@@ -3,7 +3,6 @@
 // no logic changes). This file holds bundled remote-gxserver install probing,
 // packaging, and upload/install execution. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashMap,

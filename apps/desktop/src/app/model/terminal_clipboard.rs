@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -20,11 +19,6 @@ Command runtime clipboard drains need source-level regression evidence that requ
 CDXC:GPUITerminalImagePaste 2026-06-27-10:23:
 GPUI command-pane paste needs a pure normalization helper that keeps Paste previewable images disabled behavior identical to explicit-string-only paste, but when enabled converts only validated local image file references or raw clipboard image bytes into numbered Markdown links. Do not call ClipboardItem::text, do not synthesize non-image paths, and do not persist anything except saved raw image bytes under the resolved Ghostex image directory.
 */
-pub(crate) fn terminal_clipboard_explicit_string_text(item: &ClipboardItem) -> Option<String> {
-    terminal_clipboard_paste_text(item, false, false)
-}
-
-
 pub(crate) fn terminal_clipboard_paste_text(
     item: &ClipboardItem,
     paste_previewable_images_enabled: bool,
@@ -298,13 +292,6 @@ pub(crate) fn gpui_terminal_attachment_markdown_text(
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-
-pub(crate) fn terminal_runtime_clipboard_read_explicit_string_text(
-    read_standard_clipboard: impl FnOnce() -> Option<ClipboardItem>,
-) -> Option<String> {
-    terminal_runtime_clipboard_read_text(read_standard_clipboard, false)
 }
 
 

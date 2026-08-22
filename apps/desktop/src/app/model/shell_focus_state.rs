@@ -2,7 +2,6 @@
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
 // move, no logic changes).
-#![allow(dead_code)]
 
 use crate::*;
 
@@ -66,45 +65,6 @@ pub(crate) fn valid_shell_focus_or_default_with_browser_tabs(
         project_editor_shell,
         browser_tabs,
     ) {
-        return focus;
-    }
-
-    match focus {
-        ShellFocusTarget::CommandPane if command_pane.has_sessions() => focus,
-        _ => default_shell_focus_for_mode(active_mode, agents_workspace, project_editor_shell),
-    }
-}
-
-
-pub(crate) fn valid_non_command_shell_focus(
-    focus: ShellFocusTarget,
-    active_mode: TitlebarMode,
-    agents_workspace: &WorkspaceModel,
-    project_editor_shell: &ProjectEditorShellModel,
-) -> Option<ShellFocusTarget> {
-    match focus {
-        ShellFocusTarget::BrowserPane(_) => None,
-        _ => valid_non_command_shell_focus_with_browser_tabs(
-            focus,
-            active_mode,
-            agents_workspace,
-            project_editor_shell,
-            &BrowserTabModel::shell_default(),
-        ),
-    }
-}
-
-
-pub(crate) fn valid_shell_focus_or_default(
-    focus: ShellFocusTarget,
-    active_mode: TitlebarMode,
-    agents_workspace: &WorkspaceModel,
-    command_pane: &CommandPaneModel,
-    project_editor_shell: &ProjectEditorShellModel,
-) -> ShellFocusTarget {
-    if let Some(focus) =
-        valid_non_command_shell_focus(focus, active_mode, agents_workspace, project_editor_shell)
-    {
         return focus;
     }
 
@@ -207,27 +167,6 @@ pub(crate) fn restored_non_command_shell_focus_or_default_with_browser_tabs(
                 agents_workspace,
                 project_editor_shell,
                 browser_tabs,
-            )
-        })
-        .unwrap_or_else(|| {
-            default_shell_focus_for_mode(active_mode, agents_workspace, project_editor_shell)
-        })
-}
-
-
-pub(crate) fn restored_non_command_shell_focus_or_default(
-    previous_non_command_focus: Option<ShellFocusTarget>,
-    active_mode: TitlebarMode,
-    agents_workspace: &WorkspaceModel,
-    project_editor_shell: &ProjectEditorShellModel,
-) -> ShellFocusTarget {
-    previous_non_command_focus
-        .and_then(|focus| {
-            valid_non_command_shell_focus(
-                focus,
-                active_mode,
-                agents_workspace,
-                project_editor_shell,
             )
         })
         .unwrap_or_else(|| {

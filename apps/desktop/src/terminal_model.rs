@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /*
 CDXC:GPUITerminalModel 2026-07-03:
 P1b portable terminal model: PTY (portable-pty: openpty on Unix, ConPTY on
@@ -227,6 +225,7 @@ pub struct SnapshotCell {
     pub bold: bool,
     pub italic: bool,
     pub faint: bool,
+    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub blink: bool,
     pub inverse: bool,
     pub invisible: bool,
@@ -246,8 +245,10 @@ pub struct SnapshotRow {
     /// is a hint that lets the renderer keep cached layout for clean rows.
     pub dirty: bool,
     /// This row continues onto the next row without a hard newline.
+    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wraps: bool,
     /// This row is the continuation of a soft-wrapped row above it.
+    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wrap_continuation: bool,
     /// One entry per column, spacers included.
     pub cells: Vec<SnapshotCell>,
@@ -260,6 +261,7 @@ pub struct SnapshotRow {
 pub struct TerminalTextRow {
     pub absolute_row: u64,
     pub wraps: bool,
+    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt cell/row attributes even where the gpui renderer ignores them
     pub wrap_continuation: bool,
     pub cells: Vec<TerminalTextCell>,
 }
@@ -271,6 +273,7 @@ pub struct TerminalTextCell {
 }
 
 impl TerminalTextRow {
+    #[allow(dead_code)] // used by the terminal-model-smoke / ghostty-vt-smoke binaries
     pub fn text(&self) -> String {
         self.cells.iter().map(|cell| cell.text.as_str()).collect()
     }
@@ -287,6 +290,7 @@ impl TerminalTextRow {
 impl SnapshotRow {
     /// Row text with spacers skipped and trailing whitespace trimmed.
     /// Convenience for logging/smoke output, not a render path.
+    #[allow(dead_code)] // used by the terminal-model-smoke / ghostty-vt-smoke binaries
     pub fn text(&self) -> String {
         let mut text = String::new();
         for cell in &self.cells {
@@ -326,6 +330,7 @@ pub struct TerminalSnapshot {
     /// Active viewport scrollbar state in rows.
     pub scrollbar: VtScrollbar,
     /// Active 256-color palette (for palette-indexed consumers).
+    #[allow(dead_code)] // snapshot shape: mirrors the libghostty-vt palette even where the gpui renderer resolves colours itself
     pub palette: [Rgb; 256],
 }
 
@@ -833,6 +838,7 @@ impl TerminalModel {
     /// foreground (e.g. an editor launched from the shell). Complements the
     /// prompt check above for hosts that want native-style liveness info.
     /// Unix-only concept (foreground process groups); Windows reports false.
+    #[allow(dead_code)] // public TerminalModel API kept complete alongside kill()
     pub fn foreground_process_active(&self) -> bool {
         #[cfg(unix)]
         {
@@ -888,6 +894,7 @@ impl TerminalModel {
     }
 
     /// Terminate the child process (SIGHUP/kill semantics per platform).
+    #[allow(dead_code)] // public TerminalModel API kept complete alongside foreground_process_active()
     pub fn kill(&mut self) -> std::io::Result<()> {
         self.killer.kill()
     }

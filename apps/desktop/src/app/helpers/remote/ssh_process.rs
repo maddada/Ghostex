@@ -3,7 +3,6 @@
 // no logic changes). This file holds the SSH askpass script, keychain
 // password read, and macOS remote-process spawn/terminate helpers. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
-#![allow(dead_code)]
 
 use std::{
     collections::HashMap,

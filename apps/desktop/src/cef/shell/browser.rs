@@ -954,6 +954,7 @@ impl CefBrowser {
         clear_active_native_view_if_matching(native_view);
     }
 
+    #[allow(dead_code)] // no caller: Select All goes through select_all_in_browser; kept to mirror cef/unsupported.rs
     pub fn select_all(&self) {
         self.focus();
         let browser = self.browser.borrow();

@@ -258,7 +258,7 @@ clone/browse/worktree request messages if they arrive) using
 increment `env.projectCount`.
 
 Modal chrome table: title + size per `SandboxModalKind` mirroring
-`GpuiAppModalKind::window_title/sizes` (`apps/desktop/src/app/model/types1.rs:378`, `:413`):
+`GpuiAppModalKind::window_title/window_size` (`apps/desktop/src/app/model/app_modal_kind.rs`):
 `firstLaunchSetup`/`discoverGhostex` = 1120×850, title "Ghostex Tips" for
 firstLaunchSetup; fit-height modals (see one-shot table in modal-host.tsx:152) get
 `height:"fit"`. Reasonable defaults for the rest; don't over-research.
