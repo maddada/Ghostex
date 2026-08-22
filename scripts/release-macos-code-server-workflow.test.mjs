@@ -335,7 +335,7 @@ describe('active WSL2 code-server consumer contract', () => {
 
   test('authenticates every configured, bundled, and on-demand archive before WSL extraction or reuse', () => {
     const componentStore = repoFile('apps/desktop/src/component_store.rs');
-    const main = repoFile('apps/desktop/src/main.rs');
+    const sourceServer = repoFile('apps/desktop/src/app/helpers/source_server.rs');
     const windowsConsumer = repoFile('apps/desktop/src/windows_terminal_backend.rs');
     const verifyIndex = windowsConsumer.indexOf('crate::component_store::verify_code_server_archive(');
     const extractIndex = windowsConsumer.indexOf('tar -xzf - -C', verifyIndex);
@@ -363,7 +363,7 @@ describe('active WSL2 code-server consumer contract', () => {
     expect(componentStore).toContain('Code-server archive checksum mismatch');
     expect(componentStore).toContain('Code-server archive payload is not executable');
     expect(componentStore).toContain('readiness_found');
-    expect(main).toContain('verify_installed_windows_code_server_component');
+    expect(sourceServer).toContain('verify_installed_windows_code_server_component');
   });
 
   test.each([
