@@ -346,6 +346,53 @@ function plainReasoningTeaser(markdown: string): string {
   );
 }
 
+/**
+ * A first line that is a list item, a table row, or a fence opener means
+ * something to the markdown renderer that plain text on a heading cannot carry,
+ * so it stays in the body.
+ */
+const NON_HOISTABLE_REASONING_LINE = /^\s{0,3}(?:[-+*]\s|\d+[.)]\s|>|\||```|~~~)/;
+
+/**
+ * The disclosure heading carries the reasoning's OWN opening line, never the
+ * word "Thinking". Verbose mode opens every reasoning turn by default, so the
+ * static label produced a column of identical "Thinking" rows that said nothing
+ * while the sentence under each of them said everything.
+ *
+ * The heading therefore OWNS that line and the body renders only what follows
+ * it, so it is never printed twice — and the shape verbose mode actually
+ * produces (a one-line thought in front of a tool call) costs exactly one row
+ * with no body at all.
+ *
+ * Only a first line that is a paragraph of its own is hoisted: it is the whole
+ * markdown, or a blank line ends it. Anything else — a hard-wrapped paragraph
+ * whose sentence continues on the next line, a list, a fenced block — would be
+ * cut mid-thought, so the body keeps all of it and the heading falls back to
+ * the teaser.
+ */
+function splitReasoningHeadline(markdown: string): {
+  headline: string;
+  body: string;
+} {
+  const lines = markdown.split(/\r?\n/);
+  const first = lines.findIndex((line) => line.trim().length > 0);
+  const hoistable =
+    first >= 0 &&
+    (lines[first + 1] ?? "").trim().length === 0 &&
+    !NON_HOISTABLE_REASONING_LINE.test(lines[first] ?? "");
+  const headline = hoistable ? plainReasoningTeaser(lines[first] ?? "") : "";
+  if (headline.length === 0) {
+    return { headline: plainReasoningTeaser(markdown), body: markdown };
+  }
+  return {
+    headline,
+    body: lines
+      .slice(first + 1)
+      .join("\n")
+      .trim(),
+  };
+}
+
 function ReasoningRow({
   isStreaming,
   markdown,
@@ -361,9 +408,9 @@ function ReasoningRow({
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setOpen(verboseMode), [verboseMode]);
 
-  const body = (
+  const renderBody = (value: string) => (
     <SessionChatScrollCap className="ghostex-chat-thinking-body">
-      <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
+      <SessionChatMarkdown isStreaming={isStreaming} markdown={value} />
     </SessionChatScrollCap>
   );
 
@@ -372,6 +419,7 @@ function ReasoningRow({
   // answer it belongs to off the screen. Verbose mode still opens it by
   // default, so nothing is hidden from anyone who wants it.
   if (tools.length > 0) {
+    const { headline, body: detail } = splitReasoningHeadline(markdown);
     return (
       <div className="ghostex-chat-thinking-row is-disclosure">
         <button
@@ -396,11 +444,9 @@ function ReasoningRow({
             />
           </span>
           <span className="ghostex-chat-thinking-text">
-            {/* Open, the body below already opens with this sentence — a
-                static label instead of the teaser avoids saying it twice. */}
-            <span data-ghostex-thinking-text>
-              {open ? "Thinking" : plainReasoningTeaser(markdown)}
-            </span>
+            {/* The reasoning's first line, open or collapsed: expanding a turn
+                reveals what follows it, it does not relabel it. */}
+            <span data-ghostex-thinking-text>{headline}</span>
           </span>
         </button>
         {open ? (
@@ -409,7 +455,7 @@ function ReasoningRow({
             label="Collapse thinking"
             onCollapse={() => setOpen(false)}
           >
-            {body}
+            {detail.length > 0 ? renderBody(detail) : null}
             <SessionChatToolRun blocks={tools} showAllRows />
           </SessionChatExpansion>
         ) : null}
@@ -420,7 +466,7 @@ function ReasoningRow({
   return (
     <div className="ghostex-chat-thinking-row">
       <div className="ghostex-chat-thinking-line">
-        <div data-ghostex-thinking-text>{body}</div>
+        <div data-ghostex-thinking-text>{renderBody(markdown)}</div>
       </div>
     </div>
   );
