@@ -72,7 +72,7 @@ pub const MAX_PROJECT_ICON_PROBES_PER_PASS: usize = 24;
 
 /*
 The icon bytes cap, deliberately the same number gpui applies to browser-tab
-favicons (`BROWSER_FAVICON_IMAGE_MAX_BYTES` in `gpui/src/main.rs`): both feed a
+favicons (`BROWSER_FAVICON_IMAGE_MAX_BYTES` in `apps/desktop/src/app/consts.rs`): both feed a
 16px chrome icon, so a file that is too big to be a tab favicon is too big to be
 a project icon. Base64 inflates 64 KiB to ~87 KB of data URL, which stays under
 the 96 KB data-URL ceiling that same code enforces.

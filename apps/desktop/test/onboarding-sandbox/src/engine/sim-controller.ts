@@ -4,14 +4,14 @@
  *
  * Reference flow (macOS):
  *   main → cx.open_window
- *     ├─ Track A  start_gpui_local_gxserver_bootstrap (gpui/src/main.rs:37884)
+ *     ├─ Track A  start_gpui_local_gxserver_bootstrap (apps/desktop/src/app/os_integration.rs:954)
  *     │    healthy+tools → replay bootstrap → portless check → first-run onboarding
  *     │    any other health → toast + daemon restart → portless check +
  *     │                       first-run onboarding on the healed path
- *     └─ Track B  initialize_cef → sidebar surface ready (gpui/src/main.rs:61678)
+ *     └─ Track B  initialize_cef → sidebar surface ready (apps/desktop/src/app/terminal_sync.rs:5426)
  *                  → first-run onboarding
  *
- * start_gpui_first_run_onboarding (gpui/src/main.rs:37475) returns immediately
+ * start_gpui_first_run_onboarding (apps/desktop/src/app/os_integration.rs:536) returns immediately
  * when `self.sidebar` is None, so a Track A attempt that wins the race against
  * CEF is a pure no-op — nothing is consumed and nothing is shown.
  *
@@ -122,7 +122,7 @@ const SKILL_INSTALL_COMMANDS: Record<string, BundledSkillId> = {
   installMoveCodexSessionSkill: "moveCodexSession",
 };
 
-/** shared/ghostex-agent-skills.ts BundledGhostexAgentSkillId → sandbox skill id. */
+/** packages/shared/ghostex-agent-skills.ts BundledGhostexAgentSkillId → sandbox skill id. */
 const BUNDLED_SKILL_ID_BY_CONTRACT_ID: Record<string, BundledSkillId> = {
   browserUse: "browser",
   embeddedBrowserUse: "embeddedBrowser",
@@ -461,7 +461,7 @@ export function createEngineActions(
           "message",
           `No-op for ${skipped.join(", ")} — CLI missing`,
           "gxserver reports cliMissing for agents whose CLI is not on PATH; the hook file is never written.",
-          "gxserver-rs/src/agent_hooks.rs read_hook_status",
+          "server/src/agent_hooks/api.rs read_hook_status",
         );
       }
       dispatchSidebarStateToOpenModals(createAgentHookStatusMessage(env, agentIds));
@@ -543,7 +543,7 @@ export function createEngineActions(
       "state",
       "updateSettings applied to the simulated settings service",
       `debuggingMode: ${debuggingMode}, session persistence off: ${sessionPersistenceOff}.`,
-      "gpui/src/main.rs handle_gpui_app_modal_update_settings_message",
+      "apps/desktop/src/app/remote_conn.rs:797 handle_gpui_app_modal_update_settings_message",
     );
     const hydrate = createSandboxHydrateMessage(get().env);
     dispatchSidebarStateToOpenModals(hydrate);
@@ -578,7 +578,7 @@ export function createEngineActions(
     emit(
       "flow",
       `Portless setup prompt check (${source}) — compile-time disabled`,
-      "GPUI_PORTLESS_APP_INTEGRATION_ENABLED is false (gpui/src/main.rs:87561), so the check immediately suppresses the prompt for this run and disables Portless state. No modal can ever appear here today.",
+      "GPUI_PORTLESS_APP_INTEGRATION_ENABLED is false (apps/desktop/src/app/helpers/os_cli.rs:260), so the check immediately suppresses the prompt for this run and disables Portless state. No modal can ever appear here today.",
       CODE_REFS.portlessCheck,
     );
     maybeOpenPortlessSetupPrompt(source);
@@ -698,7 +698,7 @@ export function createEngineActions(
       emit(
         "flow",
         "Sandbox extension: respawn-heals is on, so the daemon is restarted anyway",
-        "Real macOS returns immediately on a protocol mismatch (gpui/src/main.rs:38071) — no respawn, no further work this launch.",
+        "Real macOS returns immediately on a protocol mismatch (apps/desktop/src/app/os_integration.rs:954) — no respawn, no further work this launch.",
         CODE_REFS.bootstrap,
       );
       runGxserverRespawn();
@@ -1035,7 +1035,7 @@ export function createEngineActions(
           "state",
           "Flag burned: firstLaunchSetupComplete = true",
           "First-launch setup counts as complete when the dialog closes, however far the user got.",
-          "gpui/src/main.rs complete_first_launch_setup",
+          "apps/desktop/src/app/modals.rs:1353 complete_first_launch_setup",
         );
       }
     }
@@ -1073,7 +1073,7 @@ export function createEngineActions(
       "flow",
       `Launch #${launchCount} — cx.open_window`,
       `Platform: ${env.platform}. Two detached tracks start in parallel.`,
-      "gpui/src/main.rs main",
+      "apps/desktop/src/main.rs main",
     );
     emit(
       "flow",
@@ -1119,7 +1119,7 @@ export function createEngineActions(
       "flow",
       "Quit — every window closed",
       "The state file survives; in-memory suppressions (portless suppressed-until-restart, the modal slot, the Windows followup) reset.",
-      "gpui/src/main.rs quit",
+      "apps/desktop/src/app/modals.rs:2028 flush_gpui_quit_persistence",
     );
     refreshTipsNotices();
   }

@@ -6,7 +6,7 @@
  * V1 drags ONE physical project group inside ONE machine's list, so a drop is a
  * single reordered id list posted through `syncGroupOrder`. A V2 grouped row is
  * a LOGICAL project: it can merge several physical checkouts, on several
- * machines (see `shared/sidebar-v2-logical-project.ts`). There is no single list
+ * machines (see `packages/shared/sidebar-v2-logical-project.ts`). There is no single list
  * to reorder, and `syncGroupOrder` rejects a mixed local/remote id list outright
  * (gxserver-runtime.ts refuses to persist an order that spans machines, because
  * each machine owns its own project order).

@@ -10,8 +10,8 @@ import { buildAgentWorkPrompt } from "./project-board-shared";
  * board sends. There must be exactly one prompt shape: this test renders the
  * TypeScript template with Rust-style placeholders and compares it to the
  * ordered Rust template sequence, so the two copies cannot drift silently.
- * This shared module is active GPUI code: gpui/sidebar/kanban-main.tsx loads
- * native/sidebar/tasks-placeholder.tsx, which imports project-board-shared.ts.
+ * This shared module is active GPUI code: apps/desktop/sidebar/kanban-main.tsx loads
+ * tasks-placeholder.tsx, which imports project-board-shared.ts.
  */
 describe("board start-work prompt parity", () => {
   test("the Rust work-prompt template matches buildAgentWorkPrompt line for line", () => {

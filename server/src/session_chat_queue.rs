@@ -2,7 +2,7 @@
 CDXC:SessionChatPromptQueue 2026-08-21:
 gxserver owns a per-session queue of prompts the user wrote but does not want
 delivered yet, plus the unsent composer draft synced between devices. The wire
-contract is `shared/session-chat-queue.ts` and this file is its Rust mirror:
+contract is `packages/shared/session-chat-queue.ts` and this file is its Rust mirror:
 field names, omission semantics, and reorder rules must match it verbatim.
 
 Ownership split:
@@ -48,7 +48,7 @@ pub const SESSION_CHAT_QUEUE_STATE_FAILED: &str = "failed";
 pub const SESSION_CHAT_QUEUE_RESTART_REASON: &str =
     "gxserver restarted while this prompt was being delivered.";
 
-/// Mirrors `SessionChatQueuedPrompt` in `shared/session-chat-queue.ts`.
+/// Mirrors `SessionChatQueuedPrompt` in `packages/shared/session-chat-queue.ts`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionChatQueuedPrompt {
@@ -63,7 +63,7 @@ pub struct SessionChatQueuedPrompt {
     pub updated_at: String,
 }
 
-/// Mirrors `SessionChatDraft` in `shared/session-chat-queue.ts`.
+/// Mirrors `SessionChatDraft` in `packages/shared/session-chat-queue.ts`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionChatDraft {

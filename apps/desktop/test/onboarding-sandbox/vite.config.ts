@@ -12,7 +12,7 @@ const monacoVsSource = path.join(repoRoot, "node_modules", "monaco-editor", "min
 
 /*
  * The Agents Hub modal loads Monaco at runtime from /monaco/vs via the AMD
- * loader (same reason as ghostex-web/vite.config.ts): serve it straight from
+ * loader (same reason as apps/web/vite.config.ts): serve it straight from
  * node_modules in dev. Dev-server-only app, so no build-time copy is needed.
  */
 function sandboxMonacoVs(): Plugin {

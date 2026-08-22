@@ -23,13 +23,13 @@ and the tutorial video's playback stops working (everything else is unaffected).
 or directly:
 
 ```bash
-bunx vite --config gpui/test/onboarding-sandbox/vite.config.ts
+bunx vite --config apps/desktop/test/onboarding-sandbox/vite.config.ts
 ```
 
 Typecheck:
 
 ```bash
-bunx tsc -p gpui/test/onboarding-sandbox/tsconfig.json --noEmit
+bunx tsc -p apps/desktop/test/onboarding-sandbox/tsconfig.json --noEmit
 ```
 
 Click the Ghostex icon in the fake dock to "launch" the app; use the right-hand control
@@ -41,7 +41,7 @@ file, force-open any modal, and read the annotated event log.
 The onboarding modals are the *real* production React components: each fake NSPanel is an
 iframe pointing at `/modal-window.html?windowId=…`, whose entry
 (`src/modal-window/modal-window-main.ts`) sets up the host contract and then dynamically
-imports `native/sidebar/modal-host.tsx` unchanged.
+imports `apps/desktop/views/modal-host.tsx` unchanged.
 
 Order matters, and the entry is written around it:
 
@@ -49,11 +49,11 @@ Order matters, and the entry is written around it:
    `window.__ghostex_APP_MODAL_HOST_SURFACE__ = "nativeWindow"` (the modal host reads both
    at module scope),
 2. install `window.webkit.messageHandlers.ghostexAppModalHost.postMessage`
-   (`sidebar/app-modal-host-bridge.ts` throws when it is missing, and the host posts
+   (`packages/core-ui/app-modal-host-bridge.ts` throws when it is missing, and the host posts
    `{type:"ready"}` the moment it mounts),
 3. install the `message` listener that re-dispatches inbound details as the
    `ghostex-app-modal-host-message` CustomEvent,
-4. only then `import("@/native/sidebar/modal-host")`, which self-mounts into `#root`.
+4. only then `import("@/apps/desktop/views/modal-host")`, which self-mounts into `#root`.
 
 Transport between the sandbox page and each iframe is same-origin `window.postMessage`
 with an `__onboardingSandbox` marker (the modal host re-emits some transient results over

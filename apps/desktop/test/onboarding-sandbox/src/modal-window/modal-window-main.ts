@@ -1,16 +1,16 @@
 /*
  * Iframe entry for one fake NSPanel (see SPEC.md "The modal pipeline").
  *
- * Everything in this module runs BEFORE the real `native/sidebar/modal-host`
+ * Everything in this module runs BEFORE the real `apps/desktop/views/modal-host`
  * module is imported, because that module:
  *   - reads `window.__ghostex_APP_MODAL_HOST_SURFACE__` / `__ghostex_APP_MODAL_HOST_ID__`
  *     at module scope to pick its native-window body classes, and
  *   - self-mounts `<AppModalHost/>` into `#root`, which immediately posts
  *     `{type:"ready"}` through
  *     `window.webkit.messageHandlers.ghostexAppModalHost.postMessage` —
- *     `sidebar/app-modal-host-bridge.ts` THROWS when that handler is missing.
- * Same ordering contract as `ghostex-web/src/main.tsx` +
- * `ghostex-web/src/app/app-modal-host-shim.ts`, only the transport differs:
+ *     `packages/core-ui/app-modal-host-bridge.ts` THROWS when that handler is missing.
+ * Same ordering contract as `apps/web/src/main.tsx` +
+ * `apps/web/src/app/app-modal-host-shim.ts`, only the transport differs:
  * here outbound messages are forwarded to the sandbox parent page.
  */
 

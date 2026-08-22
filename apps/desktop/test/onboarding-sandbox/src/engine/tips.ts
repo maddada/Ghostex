@@ -1,14 +1,14 @@
 /*
  * Tips & Tricks badge + notices.
  *
- * Tip ids: gpui/src/main.rs:1057 TITLEBAR_TIP_IDS (12 tips, all unread on a
- * fresh profile — gpui/src/main.rs:25658 seeds the badge with the full count).
+ * Tip ids: apps/desktop/src/app/consts.rs:540 TITLEBAR_TIP_IDS (12 tips, all unread on a
+ * fresh profile — apps/desktop/src/app/titlebar.rs:3276 seeds the badge with the full count).
  *
- * Notices: native/sidebar/titlebar-host.tsx:833-975. Only the settings-derived
+ * Notices: apps/desktop/views/titlebar-host.tsx:833-975. Only the settings-derived
  * notices (persistence off, debugging mode) exist before the panel is opened;
  * the CLI and missing-hook notices need `agentHookStatus`/`ghostexCliStatus`,
  * which are requested ONLY when the panel opens
- * (gpui/src/main.rs:31568 request_gpui_titlebar_tips_runtime_status).
+ * (apps/desktop/src/app/modals.rs:939 request_gpui_titlebar_tips_runtime_status).
  */
 import type { SimEnvState, SimTipsNotice } from "../state/types";
 import { SIM_AGENT_IDS } from "../state/types";
@@ -43,7 +43,7 @@ const DEBUGGING_MODE_NOTICE: SimTipsNotice = {
   body: "Ghostex is showing debug UI controls. Routine disk logging is controlled by Diagnostic disk logging scenarios in Settings.",
 };
 
-/** native/sidebar/titlebar-host.tsx createTitlebarGhostexCliNotice:859 */
+/** apps/desktop/views/titlebar/tips-data.ts createTitlebarGhostexCliNotice:150 */
 function ghostexCliNotice(env: SimEnvState): SimTipsNotice | undefined {
   if (env.ghostexCli.installed && env.ghostexCli.gxUsable) {
     return undefined;
@@ -66,7 +66,7 @@ function formatNameList(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
-/** native/sidebar/titlebar-host.tsx createTitlebarMissingAgentHooksNotice:884 */
+/** apps/desktop/views/titlebar/tips-data.ts createTitlebarMissingAgentHooksNotice:174 */
 function missingAgentHooksNotice(env: SimEnvState): SimTipsNotice | undefined {
   const outdated: string[] = [];
   const missing: string[] = [];

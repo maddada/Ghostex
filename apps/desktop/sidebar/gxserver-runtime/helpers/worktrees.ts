@@ -80,7 +80,7 @@ export function gpuiWorktreeFolderSuffix(folderName: string, parentFolderName: s
 CDXC:WorktreeRename 2026-08-09-18:40:
 The branch checkbox defaults on only for a branch gxserver minted or manages —
 `ghostex/<8hex>` or `ghostex/<slug>`, mirroring `is_worktree_temp_branch` and
-`is_managed_worktree_branch` in `gxserver-rs/src/worktree_sessions.rs`. A branch
+`is_managed_worktree_branch` in `server/src/worktree_sessions.rs`. A branch
 the user named is theirs and stays put unless they say otherwise; a branch
 Ghostex named is Ghostex's to keep in step with the folder. Getting this backwards
 would silently rename branches people had pushed.

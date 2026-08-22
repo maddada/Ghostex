@@ -556,7 +556,7 @@ CDXC:SidebarV2LogicalProjects 2026-07-29:
 The auto-settle window a daemon states for ITSELF. `undefined` is preserved as
 "this daemon never said" — the caller decides what that means per machine — and
 anything the daemon publishes is normalized with the exact rule the settings
-schema and gxserver-rs already share: a finite positive number is a window,
+schema and server already share: a finite positive number is a window,
 every other number (0, negatives, NaN) means auto-settle is off, and so does an
 explicit null. A non-number value is treated as unstated rather than as off, so
 a malformed field cannot silently disable a machine's shelf.

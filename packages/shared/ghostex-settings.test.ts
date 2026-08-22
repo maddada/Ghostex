@@ -51,7 +51,7 @@ describe("normalizeghostexSettings", () => {
   /*
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * `sidebarAutoSettleAfterDays` is read by BOTH the client predicate and
-   * gxserver-rs (`normalize_auto_settle_after_days`, straight out of
+   * server (`normalize_auto_settle_after_days`, straight out of
    * native-sidebar-settings.json). These cases are the Rust function's table:
    * if the two ever disagree, the shelf a user sees and the shelf the daemon
    * writes drift apart, which reads as sessions vanishing at random.

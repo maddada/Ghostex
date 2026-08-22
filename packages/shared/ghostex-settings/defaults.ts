@@ -432,7 +432,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   /**
    * CDXC:SidebarV2Lifecycle 2026-07-29:
    * Three days is the agreed default window, and it matches
-   * `DEFAULT_AUTO_SETTLE_AFTER_DAYS` in gxserver-rs so a settings file that has
+   * `DEFAULT_AUTO_SETTLE_AFTER_DAYS` in server so a settings file that has
    * never been written and one that carries the default behave identically.
    */
   sidebarAutoSettleAfterDays: 3,

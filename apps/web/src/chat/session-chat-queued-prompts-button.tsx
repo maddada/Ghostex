@@ -31,7 +31,7 @@ export function SessionChatQueuedPromptsButton({
   /*
   A `failed` row stops the queue draining until the user retries or deletes it,
   so this button has to say "stopped", not just "waiting". #ff6b6b is the same
-  error red the sidebar badge switches to (sidebar/styles/session-cards.css).
+  error red the sidebar badge switches to (packages/core-ui/styles/session-cards.css).
   Only the glyph and the wording change: the button box is untouched, so the
   terminal chrome around it never moves.
   */

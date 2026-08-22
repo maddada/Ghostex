@@ -87,7 +87,7 @@ pub(crate) fn run_agent_metadata_title_sync_once(
 pub(crate) fn spawn_portless_background_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
     /*
     CDXC:PortlessBackgroundSync 2026-06-22-23:40:
-    Phase 9 route sync must run inside gxserver-rs without depending on Resources/sidebar polling, while staying lightweight for startup and shutdown. Run each sync pass off the async worker, retry on a conservative interval, and listen to gxserver's existing shutdown broadcast instead of adding a separate lifecycle channel.
+    Phase 9 route sync must run inside server without depending on Resources/sidebar polling, while staying lightweight for startup and shutdown. Run each sync pass off the async worker, retry on a conservative interval, and listen to gxserver's existing shutdown broadcast instead of adding a separate lifecycle channel.
     */
     let paths = state.paths.clone();
     let logger = state.logger.clone();

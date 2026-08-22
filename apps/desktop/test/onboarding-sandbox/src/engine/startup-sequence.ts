@@ -1,32 +1,32 @@
 /*
  * Copy + code anchors for the startup sequence.
  *
- * Toast copy is verbatim from gpui/src/main.rs
- * start_gpui_local_gxserver_bootstrap (:37884) and
- * start_gpui_first_run_onboarding (:37475) so the sandbox shows the same strings
+ * Toast copy is verbatim from apps/desktop/src/app/os_integration.rs
+ * start_gpui_local_gxserver_bootstrap (:954) and
+ * start_gpui_first_run_onboarding (:536) so the sandbox shows the same strings
  * a user sees on a real launch.
  */
 import type { GxserverHealthScenario } from "../state/types";
 
 export const CODE_REFS = {
-  bootstrap: "gpui/src/main.rs:37884 start_gpui_local_gxserver_bootstrap",
-  cefReady: "gpui/src/main.rs:61678 initialize_cef → sidebar surface ready",
-  firstRun: "gpui/src/main.rs:37475 start_gpui_first_run_onboarding",
-  healthProbe: "gpui/src/main.rs gpui_probe_local_gxserver_health",
-  modalSlot: "gpui/src/main.rs:31669 open_gpui_app_modal_window_inner (app_modal_window)",
-  modalOpen: "gpui/src/main.rs:31595 open_gpui_app_modal_window",
-  modalReady: "gpui/src/main.rs:79424 GpuiAppModalHost::receive_bridge_message",
-  nonReactHost: "gpui/src/main.rs:3267 GpuiAppModalKind::uses_react_modal_host",
-  tutorialVideoUrl: "gpui/src/main.rs:1130 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:GPUITutorialVideo)",
-  persistState: "gpui/src/main.rs persist_gpui_first_run_onboarding_state",
-  portlessCheck: "gpui/src/main.rs:39386 start_gpui_portless_setup_prompt_check",
-  progressiveHooks: "gpui/src/main.rs:38485 run_gpui_progressive_agent_hook_status_task",
-  cliSettingsAction: "gpui/src/main.rs:38548 run_gpui_ghostex_cli_settings_action",
-  sidebarCommand: "gpui/src/main.rs:41345 handle_gpui_app_modal_sidebar_command",
-  tipsRuntimeStatus: "gpui/src/main.rs:31568 request_gpui_titlebar_tips_runtime_status",
-  toast: "gpui/src/main.rs:36970 show_gpui_gxserver_bootstrap_toast",
-  firstLaunchSetup: "gpui/src/main.rs open_gpui_first_launch_setup_with_sidebar_state",
-  addProject: "gpui/src/main.rs handle_gpui_add_project_dialog_request_message",
+  bootstrap: "apps/desktop/src/app/os_integration.rs:954 start_gpui_local_gxserver_bootstrap",
+  cefReady: "apps/desktop/src/app/terminal_sync.rs:5426 initialize_cef → sidebar surface ready",
+  firstRun: "apps/desktop/src/app/os_integration.rs:536 start_gpui_first_run_onboarding",
+  healthProbe: "apps/desktop/src/app/helpers/board_gxserver.rs gpui_probe_local_gxserver_health",
+  modalSlot: "apps/desktop/src/app/modals.rs:1040 open_gpui_app_modal_window_inner (app_modal_window)",
+  modalOpen: "apps/desktop/src/app/modals.rs:966 open_gpui_app_modal_window",
+  modalReady: "apps/desktop/src/app/window/modal_host.rs:159 GpuiAppModalHost::receive_bridge_message",
+  nonReactHost: "apps/desktop/src/app/model/types1.rs:529 GpuiAppModalKind::uses_react_modal_host",
+  tutorialVideoUrl: "apps/desktop/src/app/consts.rs:665 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:GPUITutorialVideo)",
+  persistState: "apps/desktop/src/app/helpers/os_cli.rs:4729 persist_gpui_first_run_onboarding_state",
+  portlessCheck: "apps/desktop/src/app/os_integration.rs:2477 start_gpui_portless_setup_prompt_check",
+  progressiveHooks: "apps/desktop/src/app/os_integration.rs:1565 run_gpui_progressive_agent_hook_status_task",
+  cliSettingsAction: "apps/desktop/src/app/os_integration.rs:1628 run_gpui_ghostex_cli_settings_action",
+  sidebarCommand: "apps/desktop/src/app/delayed_send.rs:1820 handle_gpui_app_modal_sidebar_command",
+  tipsRuntimeStatus: "apps/desktop/src/app/modals.rs:939 request_gpui_titlebar_tips_runtime_status",
+  toast: "apps/desktop/src/app/modals.rs:1987 show_gpui_gxserver_bootstrap_toast",
+  firstLaunchSetup: "apps/desktop/src/app/modals.rs:1361 open_gpui_first_launch_setup_with_sidebar_state",
+  addProject: "apps/desktop/src/app/remote_conn.rs:1812 handle_gpui_add_project_dialog_request_message",
 } as const;
 
 export const GPUI_APP_TOAST_DEFAULT_DURATION_MS = 8_000;

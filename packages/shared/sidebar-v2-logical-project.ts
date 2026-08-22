@@ -8,7 +8,7 @@ Logical project and sidebar grouping helpers.
 
 Cross-machine logical projects: the same repository checked out on this Mac and
 on a remote machine should read as ONE project in the V2 inbox. The grouping key
-is the normalized git remote URL, probed server-side by gxserver-rs (P5) and
+is the normalized git remote URL, probed server-side by gxserver (P5) and
 shipped in the presentation snapshot. Non-git projects never merge — they fall
 back to their physical machine+path key.
 
@@ -383,7 +383,7 @@ export function groupSidebarV2ProjectsByLogicalKey(input: {
  *
  * CDXC:SidebarV2LogicalProjects 2026-07-29:
  * The repository identity is derived from `projectContext.gitRemoteOriginUrl`,
- * which gxserver-rs probes per project and the projection carries verbatim. A
+ * which gxserver probes per project and the projection carries verbatim. A
  * caller may still pass an explicit identity (tests, fixtures); passing `null`
  * forces the physical key, which is how a non-git project is expressed.
  *

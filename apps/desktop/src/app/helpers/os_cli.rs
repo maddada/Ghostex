@@ -212,7 +212,7 @@ pub(crate) const MANAGE_FILE_LIST_MAX_ENTRIES: usize = 1_200;
 pub(crate) const MANAGE_FILE_LIST_MAX_DEPTH: usize = 8;
 /*
 CDXC:DocsRootRecursive 2026-08-09:
-Mirrors `gxserver-rs/src/project_docs.rs`: a mounted Docs directory is a notes
+Mirrors `server/src/project_docs.rs`: a mounted Docs directory is a notes
 tree, not a repo, so it gets its own far larger bounds. They are still bounds,
 and hitting one labels that mount with the cap instead of returning a tree that
 silently stopped.
@@ -230,7 +230,7 @@ pub(crate) const MANAGE_BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] =
     &[MANAGE_DOCS_RELATIVE_PATH, "artifacts", "ai"];
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `gxserver-rs/src/project_docs.rs`: the
+Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `server/src/project_docs.rs`: the
 reserved first path segment that addresses the mounted Docs directory. Every
 other Docs path is project-relative, so one relative path can only ever mean one
 root and no read, save, rename, delete, move, or reveal can resolve out of the

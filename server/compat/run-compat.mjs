@@ -2398,7 +2398,7 @@ function createGitSetupEnv(homeDir, runOptions) {
 function resolveCompatShell() {
   /*
   CDXC:GxserverUbuntu 2026-06-23-07:52:
-  The compat harness must exercise the same gxserver-rs code on macOS and Ubuntu. Keep zsh when present for mac parity, but use bash/sh on Linux sandboxes so tests do not fail before gxserver can prove platform-neutral behavior.
+  The compat harness must exercise the same server code on macOS and Ubuntu. Keep zsh when present for mac parity, but use bash/sh on Linux sandboxes so tests do not fail before gxserver can prove platform-neutral behavior.
   */
   const candidates = (process.platform === "darwin"
     ? ["/bin/zsh", process.env.SHELL, "/usr/bin/zsh", "/bin/bash", "/usr/bin/bash"]

@@ -1,7 +1,7 @@
 /*
  * Fake Ghostex main window. Visual re-mock only — the real SidebarApp is never
  * mounted here (SPEC.md "Desktop UI"). The sidebar pane reproduces the real
- * host-owned empty states from sidebar/sidebar-app.tsx (gxserver unavailable →
+ * host-owned empty states from packages/core-ui/sidebar-app.tsx (gxserver unavailable →
  * "Unable to load sessions." + Load Sessions, zero projects → "No Projects
  * Added." onboarding copy) so onboarding scenarios read correctly.
  */
@@ -114,7 +114,7 @@ export function GhostexWindow({ focused }: { focused: boolean }) {
                 className="sbx-sidebar-empty-state-action"
                 onClick={() =>
                   emitEvent({
-                    codeRef: "sidebar/sidebar-app.tsx onStartGxserver",
+                    codeRef: "packages/core-ui/sidebar-app.tsx onStartGxserver",
                     detail:
                       "Sandbox desktop only reports the click; recovering gxserver is the engine's job.",
                     kind: "message",

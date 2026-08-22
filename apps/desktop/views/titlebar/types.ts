@@ -362,7 +362,7 @@ export type ResolvedOpenTarget =
 CDXC:TitlebarHostBootstrap 2026-08-20-12:40:
 The host bootstrap object used to be declared by the removed macOS
 `native-sidebar.tsx`. GPUI injects only `codeServerRuntime.port` into it (see
-`render_titlebar`'s bootstrap script in gpui/src/main.rs), so this host owns the
+`render_titlebar`'s bootstrap script in apps/desktop/src/app/render.rs), so this host owns the
 declaration for the fields it reads. Keep it a type alias rather than an
 interface: `App` forwards the bootstrap to `createInitialProjectState`, which
 takes `Record<string, unknown>`.

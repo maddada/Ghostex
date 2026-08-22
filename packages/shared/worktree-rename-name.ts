@@ -3,11 +3,11 @@ CDXC:WorktreeRename 2026-08-09-18:40:
 Renaming a worktree types ONE name that becomes two different things: the git
 branch (verbatim, so `feat/kanban-assignee` survives) and the sibling folder
 suffix (slugged, because `/` cannot appear in a directory name). Both rules live
-here, in `shared/`, so the sidebar modal and the gxserver-facing runtime validate
-the same way and `tsconfig.json` actually typechecks them.
+here, in `packages/shared/`, so the sidebar modal and the gxserver-facing runtime
+validate the same way and `tsconfig.json` actually typechecks them.
 
 The character policy is gxserver's own `is_allowed_git_ref`
-(`gxserver-rs/src/typed_operations.rs`) plus the three shapes git rejects that
+(`server/src/typed_operations/values.rs`) plus the three shapes git rejects that
 the allowlist misses (a component starting with `.`, a component ending in
 `.lock`, a trailing `.`) and a length cap. Keeping it identical to the daemon's
 rule means a name the field accepts is a name `git branch -m` accepts, instead of

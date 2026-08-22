@@ -44,7 +44,7 @@ use crate::session_chat_options::{
 };
 
 // ---------------------------------------------------------------------------
-// Wire contract (mirror of shared/session-chat.ts SessionChatTerminalNotice)
+// Wire contract (mirror of packages/shared/session-chat.ts SessionChatTerminalNotice)
 // ---------------------------------------------------------------------------
 
 /// The agent cannot talk to its provider until the user signs in again.

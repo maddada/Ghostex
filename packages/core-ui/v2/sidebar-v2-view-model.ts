@@ -45,7 +45,7 @@ import type { SidebarGroupRecord } from "../sidebar-store";
 /** Inactivity window before an untouched session drops to the Settled shelf.
     Callers pass the user's `sidebarAutoSettleAfterDays`; this is the fallback
     for callers that have no settings yet, and it matches both that setting's
-    default and gxserver-rs's `DEFAULT_AUTO_SETTLE_AFTER_DAYS`. */
+    default and server's `DEFAULT_AUTO_SETTLE_AFTER_DAYS`. */
 export const SIDEBAR_V2_DEFAULT_AUTO_SETTLE_DAYS = 3;
 
 export const SIDEBAR_V2_ALL_SCOPE_ID = "all";

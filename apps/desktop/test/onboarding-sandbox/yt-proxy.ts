@@ -4,10 +4,10 @@
  * Why this exists: `GpuiAppModalKind::WatchGhostexVideo` is the ONE app-modal
  * kind that does not use the React modal host. gpui points that native child
  * window straight at `GHOSTEX_TUTORIAL_VIDEO_URL`
- * (`https://www.youtube.com/watch?v=APdP-j5n4Mw`, gpui/src/main.rs:1130) as the
+ * (`https://www.youtube.com/watch?v=APdP-j5n4Mw`, apps/desktop/src/app/consts.rs:665) as the
  * top-level CEF document, because YouTube rejects the embed player when it is
  * framed from the `file://` modal-host document (CDXC:GPUITutorialVideo,
- * gpui/src/main.rs ~:1124).
+ * apps/desktop/src/app/consts.rs ~:665).
  *
  * The sandbox draws that native window as an iframe, so it must show the same
  * *watch page* — not the embed. YouTube sends `x-frame-options: SAMEORIGIN` on

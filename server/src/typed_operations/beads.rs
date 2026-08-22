@@ -48,7 +48,7 @@ pub(crate) async fn run_beads_action(
     }
     /*
     CDXC:ProjectBoard 2026-06-22-01:09:
-    gxserver-rs must match the TypeScript Beads execution contract: every subprocess-backed Project Board action runs with BD_JSON_ENVELOPE=1, failed board reads still return an empty `issues` array for UI consumers, and board parsing uses the same bounded JSON response rules.
+    server must match the TypeScript Beads execution contract: every subprocess-backed Project Board action runs with BD_JSON_ENVELOPE=1, failed board reads still return an empty `issues` array for UI consumers, and board parsing uses the same bounded JSON response rules.
     */
     let command = build_beads_command(&action, params, context)?.with_env("BD_JSON_ENVELOPE", "1");
     let output = run_process_command(&command, context).await?;

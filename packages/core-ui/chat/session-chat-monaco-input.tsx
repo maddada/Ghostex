@@ -5,7 +5,7 @@
 // "/monaco/vs" served from node_modules by the vite config). There is no ESM
 // import of monaco-editor anywhere in the repo — the AMD route is the only
 // one that survives the gpui single-file CEF bundle (see
-// sidebar/agents-hub-modal.tsx for the precedent) — so all editor access
+// packages/core-ui/agents-hub-modal.tsx for the precedent) — so all editor access
 // goes through minimal structural types instead of monaco's own typings.
 //
 // The mobile single-file WebView bundle never passes a vs base URL (workers

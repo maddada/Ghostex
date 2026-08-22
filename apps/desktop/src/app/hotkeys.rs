@@ -23,7 +23,7 @@ CDXC:Hotkeys 2026-08-22:
 Cmd-K clears the focused terminal, matching the `clear_screen` binding
 ghostty ships by default, so the terminal owns that chord outright and no
 configured command may take it over. This mirrors the reserved-chord list in
-shared/ghostex-hotkeys.ts: a chord persisted before the reservation falls
+packages/shared/ghostex-hotkeys.ts: a chord persisted before the reservation falls
 back to its action's default, and the chord itself never registers a gpui
 binding. macOS only, because that is the only platform ghostty binds
 `clear_screen` on, and elsewhere "cmd+k" is how the shared model spells
@@ -76,7 +76,7 @@ pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str)
             "popOutPane" => Some(("ctrl+shift+o", "cmd+alt+o")),
             // CDXC:NavigationHistory 2026-08-19: same Mac-Control substitution
             // as the Jump to Project entries below, mirroring the
-            // windowsLinuxDefaultKey values in shared/ghostex-hotkeys.ts.
+            // windowsLinuxDefaultKey values in packages/shared/ghostex-hotkeys.ts.
             "navigateHistoryBack" => Some(("cmd+ctrl+[", "cmd+alt+[")),
             "navigateHistoryForward" => Some(("cmd+ctrl+]", "cmd+alt+]")),
             "jumpToProject1" => Some(("cmd+ctrl+1", "cmd+alt+1")),
@@ -211,12 +211,12 @@ pub(crate) fn gpui_key_binding_from_shared_hotkey<A: Action>(
 
 
 /// Default hotkey chords mirrored from `DEFAULT_ghostex_HOTKEYS` in
-/// shared/ghostex-hotkeys.ts (action id → default chord in shared "+"
+/// packages/shared/ghostex-hotkeys.ts (action id → default chord in shared "+"
 /// syntax; an empty chord means the action is intentionally unassigned by
 /// default). macOS never persists defaults — it overlays them at read time
 /// via `normalizeghostexHotkeySettings` — so GPUI mirrors the same read-time
 /// overlay from this table. Kept in lockstep with the TypeScript source by
-/// shared/gpui-hotkey-defaults-parity.test.ts.
+/// packages/shared/gpui-hotkey-defaults-parity.test.ts.
 pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("createSession", "cmd+t"),
     ("openCommandPalette", "cmd+shift+p"),
@@ -245,7 +245,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("exportTranscript", ""),
     ("toggleAgentActions", ""),
     ("toggleChatView", "alt+g"),
-    // CDXC:AgentHistorySearch 2026-08-20: mirrors shared/ghostex-hotkeys.ts.
+    // CDXC:AgentHistorySearch 2026-08-20: mirrors packages/shared/ghostex-hotkeys.ts.
     ("openFindPrompts", "alt+f"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
@@ -257,7 +257,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("popOutPane", "ctrl+shift+o"),
     ("focusPreviousGroup", "cmd+["),
     ("focusNextGroup", "cmd+]"),
-    // CDXC:NavigationHistory 2026-08-19: mirrors shared/ghostex-hotkeys.ts.
+    // CDXC:NavigationHistory 2026-08-19: mirrors packages/shared/ghostex-hotkeys.ts.
     ("navigateHistoryBack", "cmd+ctrl+["),
     ("navigateHistoryForward", "cmd+ctrl+]"),
     ("focusPreviousSession", "cmd+shift+tab"),

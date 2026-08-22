@@ -3261,7 +3261,7 @@ pub(crate) fn gpui_bundled_remote_gxserver_package_is_compatible(
         return true;
     }
     // CDXC:GhostexRustCli 2026-07-13: the public CLI is the native bin/ghostex
-    // built from gxserver-rs; packages with only the old CLI/ghostex-cli.mjs
+    // built from server; packages with only the old CLI/ghostex-cli.mjs
     // Node entrypoint are stale. Linux remote packages no longer ship a Node
     // runtime at all.
     let arch = target.normalized_arch();
@@ -4901,7 +4901,7 @@ pub(crate) fn gpui_ghostex_editor_executable_candidate(candidate: PathBuf) -> Op
 }
 
 /// Socket resolution mirror of the daemon's `resolveSocketPath`
-/// (editor/macos DaemonSupport.swift ↔ scripts/ghostex-cli.mjs): env
+/// (apps/editor/macos DaemonSupport.swift ↔ scripts/ghostex-cli.mjs): env
 /// override, then the shared Ghostex runtime directory.
 #[cfg(unix)]
 pub(crate) fn gpui_ghostex_editor_socket_path() -> PathBuf {

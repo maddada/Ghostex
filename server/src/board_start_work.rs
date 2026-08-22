@@ -179,7 +179,7 @@ pub fn start_board_work(
 
 /*
 Board-project resolution mirrors the shared-mount link-store contract in
-shared/bead-conversation-links.ts: rows that mount the same Beads directory
+packages/shared/bead-conversation-links.ts: rows that mount the same Beads directory
 (projectBoardConfig.beadsDirectory, else the project path) are one board. An
 explicit projectId wins; otherwise every distinct store is probed with
 `bd show` and the bead must live on exactly one of them.
@@ -380,9 +380,9 @@ fn board_prompt_agent_options(projects: &[Value]) -> Vec<Value> {
 
 /*
 CDXC:BoardStartWork 2026-08-07:
-Rust port of `buildAgentWorkPrompt` in native/sidebar/project-board-shared.ts —
+Rust port of `buildAgentWorkPrompt` in apps/desktop/views/project-board-shared.ts —
 the canonical bead work prompt. The endpoint owns this copy for the CLI path;
-`native/sidebar/board-start-work-prompt-parity.test.ts` asserts both templates
+`apps/desktop/views/board-start-work-prompt-parity.test.ts` asserts both templates
 stay line-identical so the Rust and TypeScript prompts cannot drift apart
 silently.
 */
@@ -451,7 +451,7 @@ fn select_link_store_projects(board_project: &Value, projects: &[Value]) -> Vec<
     store_projects
 }
 
-/// Trailing-suffix bead match key from shared/bead-conversation-links.ts:
+/// Trailing-suffix bead match key from packages/shared/bead-conversation-links.ts:
 /// Beads prefix renames rewrite `zmux-95421485` to `ghostex-95421485`, so
 /// links match on the suffix after the last `-`.
 fn bead_link_match_key(bead_id: &str) -> String {
@@ -519,7 +519,7 @@ fn read_active_bead_links(store_projects: &[Value], bead_id: &str) -> Vec<Linked
     references
 }
 
-/// Session-owner resolution order from shared/bead-conversation-links.ts:
+/// Session-owner resolution order from packages/shared/bead-conversation-links.ts:
 /// a `combined-session:` scoped id, then the explicit `sessionProjectId`
 /// written since PR #87, then the legacy zmx persistence name, then the
 /// storing row as the last resort.

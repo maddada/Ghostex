@@ -837,7 +837,7 @@ if (!projectId || !sessionId) {
               hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
               hostComposerBridge={composerBridge}
               hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
-              // Staged next to chat.html by gpui/vite.config.ts (stageMonacoVs).
+              // Staged next to chat.html by apps/desktop/vite.config.ts (stageMonacoVs).
               monacoVsBaseUrl="./monaco/vs"
               sessionKey={`${projectId}:${sessionId}`}
               theme={theme}

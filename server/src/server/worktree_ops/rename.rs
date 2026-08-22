@@ -118,7 +118,7 @@ pub(crate) fn normalize_rename_worktree_project_params(
 /*
 CDXC:WorktreeRename 2026-08-09-18:40:
 The daemon re-validates the typed name with the same nine rules the sidebar field
-enforces (`shared/worktree-rename-name.ts`), because the field is a courtesy and
+enforces (`packages/shared/worktree-rename-name.ts`), because the field is a courtesy and
 this is the boundary. Rules 1-6 are gxserver's existing ref policy; 7-9 are the
 shapes git refuses that the character allowlist alone would let through.
 */

@@ -704,7 +704,7 @@ export function SessionChatView({
         // The app theme zeroes --radius for its square chrome; restore the
         // shadcn default inside the chat so bubbles and cards keep their
         // rounded look. The scope class lifts the SquareTheme border-radius
-        // override (sidebar/styles.css) for controls inside the chat.
+        // override (packages/core-ui/styles.css) for controls inside the chat.
         "ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]",
         theme === "dark" && "dark",
         className,

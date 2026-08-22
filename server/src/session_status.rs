@@ -87,7 +87,7 @@ struct ActivityInput {
 
 /*
 CDXC:SessionStatus 2026-06-21-19:26:
-Rust gxserver-rs must match TypeScript gxserver for working, idle, and attention transitions. Agent hooks are the authoritative explicit activity source, while title-derived spinner state is only trusted through the same suppression, stale-window, and same-title stop rules used by every existing Ghostex client.
+Rust server must match TypeScript gxserver for working, idle, and attention transitions. Agent hooks are the authoritative explicit activity source, while title-derived spinner state is only trusted through the same suppression, stale-window, and same-title stop rules used by every existing Ghostex client.
 */
 pub fn compute_activity_update(
     session: &Value,

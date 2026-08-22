@@ -974,7 +974,7 @@ pub fn resolve_gxserver_cli_launch() -> CliResult<Launch> {
 
 pub fn resolve_gxserver_cli_launch_from_root(root: &Path) -> CliResult<Option<Launch>> {
     /*
-    `gx server ...` must prefer the packaged gxserver-rs binary. Remote Ubuntu
+    `gx server ...` must prefer the packaged gxserver binary. Remote Ubuntu
     packages are standalone gxserver roots rather than macOS Web roots, so
     root/bin/gxserver stays resolvable without a source checkout or PATH
     fallback. JavaScript CLI discovery comes only after the native binary.
@@ -1053,7 +1053,7 @@ pub fn resolve_gxserver_cli_path(cli_path: &Path, explicit: bool) -> PathBuf {
     /*
     Explicit GHOSTEX_GXSERVER_CLI/BIN selections use the current shell and
     source-root hints so developers can point `gx server ...` at either
-    gxserver-rs/target/debug/gxserver or a TypeScript CLI without falling back
+    server/target/debug/gxserver or a TypeScript CLI without falling back
     when the selected path is wrong.
     */
     let source_root = find_ghostex_source_root(None);

@@ -3,7 +3,7 @@
  * The React half of the titlebar Back/Forward pair, used by every React titlebar
  * (the web app today). The gpui desktop titlebar is native GPUI and paints its
  * own pair from the same controller state pushed over its Rust bridge — see
- * `gpui/src/navigation_history`.
+ * `apps/desktop/src/navigation_history`.
  *
  * The buttons are genuinely `disabled` when the trail has nothing in that
  * direction, so keyboard and assistive tech agree with the dimmed pixels.

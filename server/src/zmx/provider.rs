@@ -512,7 +512,7 @@ pub fn parse_zmx_session_process_identities(
 fn build_zmx_process_snapshot_command(zmx_executable_path: &str) -> String {
     /*
     CDXC:GxserverSessionIdentity 2026-06-21-18:25:
-    Rust must copy TypeScript gxserver's live zmx process identity scan so sidebar rows are repaired from actual agent executables after cutover. Capture only bounded process metadata in memory, never persistent logs, and keep parsing centralized in gxserver-rs instead of client fallbacks.
+    Rust must copy TypeScript gxserver's live zmx process identity scan so sidebar rows are repaired from actual agent executables after cutover. Capture only bounded process metadata in memory, never persistent logs, and keep parsing centralized in server instead of client fallbacks.
     */
     format!(
         r#"

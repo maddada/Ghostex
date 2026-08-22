@@ -10,7 +10,7 @@ import type {
 
 /*
 CDXC:GxserverPresentationParity 2026-06-24-10:45:
-GPUI and macOS sidebar clients must apply gxserver presentation deltas through the same platform-neutral reducer. Keep ordering, membership reconciliation, and project-cache updates in shared/ so cross-platform sidebars do not fork session presentation behavior.
+GPUI and macOS sidebar clients must apply gxserver presentation deltas through the same platform-neutral reducer. Keep ordering, membership reconciliation, and project-cache updates in packages/shared/ so cross-platform sidebars do not fork session presentation behavior.
 */
 export function reduceGxserverPresentationDelta(
   presentation: GxserverPresentationSnapshot,

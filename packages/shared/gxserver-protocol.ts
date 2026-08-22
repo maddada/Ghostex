@@ -9,7 +9,7 @@ CDXC:GxserverRendererCommands 2026-06-13-02:24:
 CLI commands that still require visible macOS UI, AppKit, CEF, or sidebar-local workspace state must enter through a typed gxserver command contract. gxserver owns auth, protocol checks, dispatch, timeouts, and the supported action list; the macOS app is only the renderer-side executor for behavior that cannot live in the daemon yet.
 
 CDXC:GxserverProtocol 2026-06-22-16:17:
-Local starts now rely only on gxserver-rs and no longer keep the deleted gxserver/ TypeScript source tree. Keep the TypeScript protocol contract in shared/ so native web builds and Rust daemon packaging consume an app-owned contract without reaching into gxserver/.
+Local starts now rely only on server and no longer keep the deleted gxserver/ TypeScript source tree. Keep the TypeScript protocol contract in packages/shared/ so native web builds and Rust daemon packaging consume an app-owned contract without reaching into gxserver/.
 */
 
 import type {
@@ -159,7 +159,7 @@ export type GxserverEndpointPath =
    * CDXC:NavigationHistory 2026-08-19:
    * Titlebar Back/Forward walks a daemon-owned trail of previously active
    * sessions and projects, shared by the gpui desktop titlebar and the web
-   * titlebar. See shared/navigation-history for the entry/state contract.
+   * titlebar. See packages/shared/navigation-history for the entry/state contract.
    */
   | "/api/readNavigationHistory"
   | "/api/recordNavigationVisit"
@@ -1737,7 +1737,7 @@ export type GxserverUpdateSessionParams = Partial<Omit<GxserverCreateSessionPara
 /*
 CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
 Sidebar V2's settle/snooze commands. gxserver enforces the guards its client
-twin (`shared/sidebar-v2-lifecycle.ts`) mirrors: a working or blocked-on-you
+twin (`packages/shared/sidebar-v2-lifecycle.ts`) mirrors: a working or blocked-on-you
 session cannot be settled, a blocked-on-you session cannot be snoozed, and a
 wake time that is not strictly in the future is rejected rather than silently
 normalized. Every command is idempotent — `changed: false` marks a no-op

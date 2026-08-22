@@ -3,8 +3,8 @@ import { describe, expect, test } from "vitest";
 
 /**
  * The Agents Hub filesystem catalog is scanned by the GPUI native Rust port
- * (GpuiAgentsHubCatalogBuilder in gpui/src/main.rs). Repo policy forbids tests
- * inside gpui/, so this shared source test extracts every home-relative
+ * (GpuiAgentsHubCatalogBuilder in apps/desktop/src/app/helpers/agents_hub.rs). Repo policy forbids tests
+ * inside apps/desktop/, so this shared source test extracts every home-relative
  * catalog root/file path from that scanner and asserts the known provider
  * roots are all still present. Removing or renaming a provider root fails here.
  *

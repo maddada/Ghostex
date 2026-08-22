@@ -293,7 +293,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     TypeScript returns the terminal-title reducer's decision reason for `/api/ingestTerminalTitleEvent`; the follow-up identity reducer only mutates the session and changed flag unless metadata reconciliation later wins. Preserve reasons such as `captured-agent-session-id` even when identity promotion reports `current-title-already-trusted`.
 
     CDXC:GxserverSessionTitles 2026-06-22-07:59:
-    Match TypeScript terminal-title ingestion gates exactly: session kind, visible-title normalization, ellipsized rejection, protected trusted titles, zmx/agent-title trust, and previous title-source reasons all belong in gxserver-rs before status or identity promotion runs.
+    Match TypeScript terminal-title ingestion gates exactly: session kind, visible-title normalization, ellipsized rejection, protected trusted titles, zmx/agent-title trust, and previous title-source reasons all belong in server before status or identity promotion runs.
     */
     if let Some(agent_session_id) = captured_agent_session_id.clone() {
         runtime_settings.insert("agentSessionId".to_string(), json!(agent_session_id));

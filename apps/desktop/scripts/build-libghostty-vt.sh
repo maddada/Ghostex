@@ -5,7 +5,7 @@ set -euo pipefail
 # Phase 1 of the GPUI cross-platform plan renders terminals as GPUI elements
 # driven by libghostty-vt, so cargo builds must produce the static archive
 # from the vendored Ghostty tree instead of depending on a manually built
-# artifact. gpui/build.rs invokes this script with an install prefix inside
+# artifact. apps/desktop/build.rs invokes this script with an install prefix inside
 # OUT_DIR and links {prefix}/lib/libghostty-vt.a directly, mirroring how the
 # GhosttyKit archive is linked.
 #

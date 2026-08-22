@@ -239,7 +239,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             .or_else(|| identity.agent_session_path.clone());
         /*
         CDXC:GxserverSessionIdentity 2026-06-21-18:25:
-        Rust must copy TypeScript gxserver's live zmx process repair before sidebar list/snapshot responses. A running zmx terminal whose foreground process is Codex/Claude/etc. must be promoted to the matching agent row in durable state so macOS shows the same session identity after the gxserver-rs cutover.
+        Rust must copy TypeScript gxserver's live zmx process repair before sidebar list/snapshot responses. A running zmx terminal whose foreground process is Codex/Claude/etc. must be promoted to the matching agent row in durable state so macOS shows the same session identity after the server cutover.
         */
         let changed = apply_live_process_session_identity(
             repository,

@@ -48,7 +48,7 @@ CDXC:GxserverToolchain 2026-06-14-20:37:
 Managed terminal/search tools resolve from Ghostex-pinned development or bundled resources. Project-board operations intentionally resolve the user's machine-installed Beads CLI so Ghostex and shell agents use one binary and one schema owner.
 
 CDXC:GxserverUbuntu 2026-06-23-07:52:
-The same gxserver-rs binary resolves zmx from package-relative resources on macOS and Ubuntu. Beads is the deliberate exception: resolve the user's system `bd` from portable PATH locations so local and remote boards follow the machine operator's installed version.
+The same gxserver binary resolves zmx from package-relative resources on macOS and Ubuntu. Beads is the deliberate exception: resolve the user's system `bd` from portable PATH locations so local and remote boards follow the machine operator's installed version.
 
 CDXC:AgentHistorySearch 2026-08-20:
 Zehn is no longer in this list. Prompt-history search is compiled into gxserver
@@ -318,7 +318,7 @@ fn default_gxserver_root() -> PathBuf {
 fn gxserver_root_from_executable_path(executable_path: &Path) -> Option<PathBuf> {
     /*
     CDXC:GxserverToolchain 2026-06-21-13:59:
-    The macOS app launches gxserver-rs from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx/bd from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
+    The macOS app launches gxserver from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx/bd from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
     */
     let parent = executable_path.parent()?;
     if parent.file_name().and_then(|name| name.to_str()) != Some("bin") {

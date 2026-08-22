@@ -1324,7 +1324,7 @@ pub(crate) fn titlebar_icon_hover_color() -> Hsla {
 }
 
 /// Rust port of `getSidebarTitlebarGradientColors` /
-/// `normalizedSidebarTitlebarTintDirection` in shared/ghostex-settings.ts: the
+/// `normalizedSidebarTitlebarTintDirection` in packages/shared/ghostex-settings.ts: the
 /// tint direction is the background's per-channel deviation from its average,
 /// normalized by its largest channel magnitude (neutral grays stay neutral),
 /// and the two stops sit at +2 and +10 of that direction. Rounding matches JS
@@ -1383,7 +1383,7 @@ pub(crate) const MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 
 pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT: f64 = 95.0;
 
 /// Mirror of `CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS` in
-/// shared/ghostex-settings.ts. Keep both tables in sync.
+/// packages/shared/ghostex-settings.ts. Keep both tables in sync.
 pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 17] = [
     (0x000000, 0x000000),
     (0xffffff, 0x0e0e0e),
@@ -1421,7 +1421,7 @@ pub(crate) fn sidebar_titlebar_background_darkness_for_color(background: u32) ->
 }
 
 /// Rust port of `getSidebarTitlebarBackgroundForDarkness` in
-/// shared/ghostex-settings.ts: resolve the calibrated dark background for the
+/// packages/shared/ghostex-settings.ts: resolve the calibrated dark background for the
 /// selected tint (falling back to the neutral default for same-channel tints,
 /// or default-base + tint-direction * 4 for uncalibrated tints), then scale it
 /// with the Background Contrast slider.
@@ -1463,7 +1463,7 @@ pub(crate) fn sidebar_titlebar_background_for_darkness(darkness_percent: f64, ti
     ])
 }
 
-/// Mirror of the effective-settings resolution in shared/ghostex-settings.ts:
+/// Mirror of the effective-settings resolution in packages/shared/ghostex-settings.ts:
 /// the darkness slider (seeded from a valid legacy saved background color when
 /// the slider key is missing) plus the tint choice produce the chrome
 /// background; the stored `customSidebarTitlebarBackgroundColor` hex itself is

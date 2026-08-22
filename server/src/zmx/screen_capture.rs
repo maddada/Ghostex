@@ -53,7 +53,7 @@ Two behavior notes, both improvements over the spawn:
     go through the spawned path unchanged: they are whole-history consumers,
     not screen-state readers.
 
-The wire format is frozen (see zmx/src/ipc.zig): 8-byte header of a packed
+The wire format is frozen (see .dependencies/zmx/src/ipc.zig): 8-byte header of a packed
 `struct { tag: u8, len: u32 }` — one tag byte, four little-endian length bytes,
 three bytes of backing-integer padding — followed by `len` payload bytes.
 */
@@ -78,7 +78,7 @@ const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
 const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
 
 /// Directory the zmx daemon binds its session sockets in, resolved exactly as
-/// `Cfg.socketDir` does in zmx/src/main.zig. Both ends agree: gxserver exports
+/// `Cfg.socketDir` does in .dependencies/zmx/src/main.zig. Both ends agree: gxserver exports
 /// this same environment into every daemon it launches, and the macOS launchd
 /// supervisor already watches the resulting path as its liveness signal.
 #[cfg(unix)]

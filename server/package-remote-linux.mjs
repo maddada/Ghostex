@@ -78,7 +78,7 @@ async function main() {
 
   /*
    * CDXC:RemoteUbuntuPackaging 2026-06-29-18:58:
-   * Ubuntu remote installs need x64 and arm64 gxserver-rs packages from the same packaging entry point. Keep the default host-arch build for existing single-arch CI, and add explicit --arch all so release builders can produce both deterministic build/remote-gxserver-linux/<arch>/package outputs before macOS and GPUI staging.
+   * Ubuntu remote installs need x64 and arm64 server packages from the same packaging entry point. Keep the default host-arch build for existing single-arch CI, and add explicit --arch all so release builders can produce both deterministic build/remote-gxserver-linux/<arch>/package outputs before macOS and GPUI staging.
    */
   for (const arch of arches) {
     await buildLinuxPackageForArch({ arch, options });
@@ -137,7 +137,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
     /*
      * CDXC:RemoteMachines 2026-06-23-10:07:
      * Ubuntu install must be a first-run package, not an on-host source build.
-     * Build gxserver-rs, zmx, and ghostex-tui and stage the pinned
+     * Build server, zmx, and ghostex-tui and stage the pinned
      * schema-compatible bd release artifact into one package
      * directory so the macOS app
      * can upload it over SSH and start the same Rust control plane without PATH
@@ -155,7 +155,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
      * commit being released before staging them into the app bundle.
      *
      * CDXC:RemoteUbuntuTui 2026-07-01-02:10:
-     * GX 2 is now the canonical remote terminal UI. Build it from `tui2/` while
+     * GX 2 is now the canonical remote terminal UI. Build it from `.dependencies/tui2/` while
      * still staging the package contract as `bin/ghostex-tui`, because
      * `ghostex tui` on Ubuntu and the macOS uploader already resolve that name.
      */
@@ -257,7 +257,7 @@ async function buildPackage({ config, outputDir, workRoot }) {
    * starts, nothing on the remote host consumes the manifest or protocol
    * exports (version identity lives in build-identity.json), and the public
    * `ghostex`/`gx` CLI is now the native Rust bin/ghostex built from the
-   * same gxserver-rs crate, so none of them are staged anymore. `gx` is
+   * same gxserver crate, so none of them are staged anymore. `gx` is
    * created as a symlink by `gxserver setup` at install time.
    */
   await validateLinuxPackage(stageDir, config);

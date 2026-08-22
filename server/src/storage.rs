@@ -1289,7 +1289,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         or re-created is exactly the failure this feature exists to prevent —
         the session is validated per request instead. `position` is dense and
         rewritten on reorder; `state` mirrors the wire contract in
-        shared/session-chat-queue.ts.
+        packages/shared/session-chat-queue.ts.
         */
         sql: r#"
       CREATE TABLE IF NOT EXISTS session_chat_queued_prompts (

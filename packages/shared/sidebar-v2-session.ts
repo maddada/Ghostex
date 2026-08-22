@@ -25,7 +25,7 @@ Concept mapping:
 
 The P2 lifecycle fields (`settledAt`, `settledOverride`, `snoozedUntil`,
 `snoozedAt`) are OPTIONAL here: the logic runs on derived data today and snaps
-to real server state once gxserver-rs publishes it.
+to real server state once gxserver publishes it.
 */
 
 export type SidebarV2Activity = "attention" | "idle" | "working";

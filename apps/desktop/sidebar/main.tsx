@@ -18,7 +18,7 @@ document.body.classList.add("vscode-dark", "native-sidebar-body");
 CDXC:GPUISidebarCollapseRestore 2026-07-09:
 Sidebar collapse and Show more/less state persist through plain localStorage,
 exactly like the macOS sidebar WKWebView: the GPUI sidebar CEF profile has a
-persistent cache_path (see cef_app_ui_profile_cache_path in gpui/src/cef/shell.rs),
+persistent cache_path (see cef_app_ui_profile_cache_path in apps/desktop/src/cef/shell.rs),
 so no Rust-owned state file or startup seeding bridge is needed.
 */
 const rootElement = document.getElementById("root");

@@ -189,7 +189,7 @@ export function ModalWindowFrame({ window: modalWindow }: { window: SimModalWind
                       kind: "modal",
                       label: event.label,
                       detail: event.detail,
-                      codeRef: "gpui/src/main.rs GHOSTEX_TUTORIAL_VIDEO_URL host key injection",
+                      codeRef: "apps/desktop/src/app/consts.rs GHOSTEX_TUTORIAL_VIDEO_URL host key injection",
                     });
                   });
                 }

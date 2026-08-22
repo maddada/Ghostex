@@ -23,7 +23,7 @@ const MAX_ID_CHARS: usize = 256;
 const MAX_TITLE_CHARS: usize = 256;
 const MAX_NEXT_COLLECTION_NUMBER: i64 = 1_000_000;
 
-/// Mirrors SIDEBAR_PROJECT_COLLECTION_COLORS in sidebar/project-collections.ts
+/// Mirrors SIDEBAR_PROJECT_COLLECTION_COLORS in packages/core-ui/project-collections.ts
 /// so server-side fallback colors rotate exactly like the desktop client.
 const SIDEBAR_PROJECT_COLLECTION_COLORS: [&str; 13] = [
     "#4f5663", "#808080", "#7c6df2", "#3aa675", "#d6873f", "#d75b72", "#3f8fc7", "#b36ad4",

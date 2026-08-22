@@ -30,7 +30,7 @@ CDXC:GxserverStorage 2026-06-14-20:37:
 The Rust daemon must use the shared Ghostex XDG/GHOSTEX_HOME path contract: daemon state stays in the resolved state directory, while support-bundle-safe JSONL diagnostics stay in the resolved logs directory.
 
 CDXC:PortlessState 2026-06-22-23:05:
-Ghostex-managed Portless state belongs under Ghostex's resolved gxserver state directory, not ~/.portless. gxserver-rs owns this path so the native root service can read mirrored routes while the user daemon remains the only writer.
+Ghostex-managed Portless state belongs under Ghostex's resolved gxserver state directory, not ~/.portless. server owns this path so the native root service can read mirrored routes while the user daemon remains the only writer.
 */
 pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
     let isolated_agent_home_dir = home_dir.clone().or_else(|| {

@@ -9,7 +9,7 @@ import { SessionChatMessageList } from "./session-chat-message-list";
  * Everything here is mock transcript data — no gxserver, no session, no host
  * bridge — so the story runs anywhere Storybook does and exercises exactly the
  * renderer the real chat uses (SessionChatMessageList -> SessionChatMarkdown),
- * styled by the real sidebar/styles/chat.css.
+ * styled by the real packages/core-ui/styles/chat.css.
  *
  * The transcript deliberately puts every surface that could end up
  * double-muted into one screenshot: the answer's prose and headings, bullet and

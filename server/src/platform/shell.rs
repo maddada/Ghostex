@@ -18,7 +18,7 @@ enum PlatformShellKind {
 
 /*
 CDXC:GxserverUbuntu 2026-06-23-07:52:
-gxserver-rs must run the same command, zmx, hook, and title-generation script contract on macOS and Ubuntu from one Rust codebase. Keep macOS pinned to /bin/zsh for exact existing behavior, while Linux executes the same POSIX script bodies through a deterministic installed shell instead of assuming zsh exists.
+server must run the same command, zmx, hook, and title-generation script contract on macOS and Ubuntu from one Rust codebase. Keep macOS pinned to /bin/zsh for exact existing behavior, while Linux executes the same POSIX script bodies through a deterministic installed shell instead of assuming zsh exists.
 */
 pub fn command_shell() -> PlatformShell {
     #[cfg(target_os = "macos")]

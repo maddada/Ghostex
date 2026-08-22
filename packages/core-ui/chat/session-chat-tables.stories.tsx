@@ -23,10 +23,10 @@ const WIDE_TABLE = [
   "",
   "| Surface | Language | Entry point | Bundler | Ships | Signed | Auto-update | Owner |",
   "| --- | --- | --- | ---: | :---: | :---: | --- | --- |",
-  "| gpui desktop | Rust + React | `gpui/src/main.rs` | vite | macOS, Linux | yes | Sparkle | desktop |",
-  "| Web app | TypeScript | `ghostex-web/src/main.tsx` | vite | static bundle | n/a | page reload | web |",
+  "| gpui desktop | Rust + React | `apps/desktop/src/main.rs` | vite | macOS, Linux | yes | Sparkle | desktop |",
+  "| Web app | TypeScript | `apps/web/src/main.tsx` | vite | static bundle | n/a | page reload | web |",
   "| Mobile | TypeScript | `mobile/index.js` | metro | Android | yes | Play Store | mobile |",
-  "| gxserver | Rust | `gxserver-rs/src/main.rs` | cargo | daemon | no | bundled | server |",
+  "| gxserver | Rust | `server/src/main.rs` | cargo | daemon | no | bundled | server |",
 ].join("\n");
 
 /** Cells with far more prose than a column can hold: the collapse cap's reason. */
@@ -60,7 +60,7 @@ const RICH_TABLE = [
   "| --- | --- | --- |",
   "| Inline code | Run `bun run build` before `release:verify` | backticked, unchanged |",
   "| Web link | [remark-gfm](https://github.com/remarkjs/remark-gfm) | `[label](href)` |",
-  "| File-path chip | `sidebar/chat/session-chat-markdown.tsx:463` | the full path, not the short chip label |",
+  "| File-path chip | `packages/core-ui/chat/session-chat-markdown.tsx:463` | the full path, not the short chip label |",
   "| Emphasis | **bold**, *italic*, ~~struck~~ | with their markers |",
   "| A pipe | a \\| b | escaped |",
 ].join("\n");

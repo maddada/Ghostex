@@ -3,19 +3,20 @@ import { describe, expect, test } from "vitest";
 
 /**
  * CDXC:WorktreeRename 2026-08-09-18:40:
- * `tsconfig.json` covers `src/`, `shared/`, `sidebar/`, `native/sidebar/` and
- * `mobile-chat/` — NOT `gpui/`, and there is no `gpui/tsconfig.json` either. So
- * every edit to `gpui/sidebar/gxserver-runtime.ts` compiles clean no matter what
- * it says, and `gpui/src/main.rs` cannot be cargo-checked in a reasonable time
+ * `tsconfig.json` covers `packages/core-ui/assets/`, `packages/shared/`,
+ * `packages/core-ui/`, `apps/desktop/views/` and `apps/mobile/views/chat/` — NOT
+ * `apps/desktop/`, and there is no `apps/desktop/tsconfig.json` either. So
+ * every edit to `apps/desktop/sidebar/gxserver-runtime.ts` compiles clean no matter what
+ * it says, and `apps/desktop/src/main.rs` cannot be cargo-checked in a reasonable time
  * because its `build.rs` builds GhosttyKit via Zig plus CEF. Repo policy also
- * forbids tests inside `gpui/`.
+ * forbids tests inside `apps/desktop/`.
  *
  * That leaves the rename feature's longest chain unverified by anything, and its
  * failure mode is silent: a field missing from the bridge allowlist is stripped
  * without an error, and a command type missing from the dispatch list simply
  * never reaches the allowlist at all. This test reads those files as text and
  * asserts the hops exist, following the precedent set by
- * `shared/gpui-hotkey-defaults-parity.test.ts`.
+ * `packages/shared/gpui-hotkey-defaults-parity.test.ts`.
  *
  * CDXC:GxserverRuntimeSplit 2026-08-22:
  * `gxserver-runtime.ts` is now a folder. The three hops this file used to find

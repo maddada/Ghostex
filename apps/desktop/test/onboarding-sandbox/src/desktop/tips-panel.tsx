@@ -4,11 +4,11 @@
  * This is a faithful VISUAL RE-MOCK of the real panel (header actions +
  * Notices/Unread/Read sections, verbatim tip copy), not the production
  * component. Mounting the real one was evaluated and rejected:
- * native/sidebar/titlebar-host.tsx does not export TitlebarTipsMenu — only
+ * apps/desktop/views/titlebar-host.tsx does not export TitlebarTipsMenu — only
  * GhostexTitlebarHost — and importing that module runs three module-scope side
  * effects in whatever document imports it: it reads
  * __ghostex_TITLEBAR_PANEL_KIND__ at import time, it appends a global <style>
- * element to document.head, and it imports sidebar/styles.css (generated
+ * element to document.head, and it imports packages/core-ui/styles.css (generated
  * Tailwind + preflight) which would restyle the whole sandbox page, including
  * the control panel another agent owns. It also self-mounts into #root when one
  * exists. An iframe would isolate that, but the iframe HTML entry lives outside

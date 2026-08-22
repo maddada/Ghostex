@@ -722,7 +722,7 @@ pub(crate) struct GpuiBuiltInOpenTargetDefinition {
     pub(crate) commands: &'static [&'static str],
     pub(crate) base_args: &'static [&'static str],
     // Detection probe names mirroring macOSAppNames in
-    // shared/workspace-open-targets.ts; keep both catalogs in sync.
+    // packages/shared/workspace-open-targets.ts; keep both catalogs in sync.
     pub(crate) macos_app_names: &'static [&'static str],
 }
 
@@ -2990,7 +2990,7 @@ pub(crate) fn gpui_home_dir() -> PathBuf {
 
 /// Stash-request markers mirror the CLI's shared state-directory resolution
 /// (see `prompt_stash_request_marker_path` in
-/// gxserver-rs/src/ghostex_cli/editors.rs). One marker per session ref; the
+/// server/src/ghostex_cli/editors.rs). One marker per session ref; the
 /// CLI consumes it on its next `prompt-editor` invocation and treats stale
 /// markers (older than its freshness window) as expired.
 pub(crate) fn gpui_prompt_stash_request_marker_path(project_id: &str, session_id: &str) -> PathBuf {

@@ -1,6 +1,6 @@
 /*
  * Visual re-mock of the tips catalog. Titles/bodies are copied verbatim from
- * TITLEBAR_TIPS in native/sidebar/titlebar-host.tsx so the sandbox panel reads
+ * TITLEBAR_TIPS in apps/desktop/views/titlebar/tips-data.ts so the sandbox panel reads
  * like the real Tips & Tricks dropdown. The real component is not mounted here
  * (see tips-panel.tsx for why), and notices come from the engine via
  * store.tipsNotices.

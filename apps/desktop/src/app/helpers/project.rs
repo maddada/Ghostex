@@ -111,7 +111,7 @@ pub(crate) fn refresh_gpui_visual_settings(settings: &shared_settings::SharedSid
     seed only — since the contrast-slider redesign the sidebar resolves the
     effective chrome background from `customSidebarTitlebarBackgroundDarkness-
     Percent` plus the tint (getSidebarTitlebarBackgroundForDarkness in
-    shared/ghostex-settings.ts). Reading the stale saved hex here made the
+    packages/shared/ghostex-settings.ts). Reading the stale saved hex here made the
     Rust titlebar derive its color (and gradient stops) from a darker base
     than the sidebar actually renders. Mirror the TS resolution instead.
     */
@@ -129,7 +129,7 @@ pub(crate) fn refresh_gpui_visual_settings(settings: &shared_settings::SharedSid
     CDXC:GPUITitlebarGradient 2026-07-22:
     The shared sidebar renders custom chrome as a fixed-strength gradient
     derived from the resolved titlebar background
-    (getSidebarTitlebarGradientColors in shared/ghostex-settings.ts), and the
+    (getSidebarTitlebarGradientColors in packages/shared/ghostex-settings.ts), and the
     titlebar shares those exact stops horizontally: left = the sidebar's top
     stop (darker), right = the sidebar's bottom stop. A flat Rust titlebar
     therefore never matched the gradient sidebar. Mirror the TS derivation

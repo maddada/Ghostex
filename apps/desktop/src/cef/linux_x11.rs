@@ -25,7 +25,7 @@ dependency), and the four requests this adapter needs (ConfigureWindow,
 MapWindow, UnmapWindow, SetInputFocus) are core protocol.
 
 Written without Linux hardware (P3 best-effort bring-up): the pump-state
-machine mirrors gpui/native/macos/GpuiCefAppKitHooks.m semantics 1:1 except
+machine mirrors apps/desktop/native/macos/GpuiCefAppKitHooks.m semantics 1:1 except
 that a gpui foreground task with a cancellable deadline replaces the
 uncancellable dispatch_after generation counter.
 

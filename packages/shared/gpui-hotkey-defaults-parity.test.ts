@@ -4,10 +4,10 @@ import { DEFAULT_ghostex_HOTKEYS } from "./ghostex-hotkeys";
 
 /**
  * GPUI mirrors the shared default hotkey table (DEFAULT_ghostex_HOTKEYS in
- * shared/ghostex-hotkeys.ts) as the Rust constant GPUI_DEFAULT_GHOSTEX_HOTKEYS
- * in gpui/src/main.rs, because macOS overlays defaults at read time and never
+ * packages/shared/ghostex-hotkeys.ts) as the Rust constant GPUI_DEFAULT_GHOSTEX_HOTKEYS
+ * in apps/desktop/src/app/hotkeys.rs, because macOS overlays defaults at read time and never
  * persists them, so fresh GPUI installs must resolve the same defaults
- * natively. Repo policy forbids tests inside gpui/, so this shared test loads
+ * natively. Repo policy forbids tests inside apps/desktop/, so this shared test loads
  * the TypeScript truth directly (the module is importable, unlike the
  * string-embedded scripts the scanner-parity precedent has to regex) and
  * extracts the Rust table from source, then asserts the id → default-chord
@@ -32,7 +32,7 @@ function gpuiDefaultHotkeys(): Record<string, string> {
   return entries;
 }
 
-describe("GPUI default hotkey table parity with shared/ghostex-hotkeys.ts", () => {
+describe("GPUI default hotkey table parity with packages/shared/ghostex-hotkeys.ts", () => {
   test("Rust GPUI_DEFAULT_GHOSTEX_HOTKEYS matches DEFAULT_ghostex_HOTKEYS", () => {
     const gpuiDefaults = gpuiDefaultHotkeys();
 

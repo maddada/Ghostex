@@ -9,7 +9,7 @@ sidebar toggle it never moves, whereas right of the name it slid horizontally
 every time the active project's title changed length.
 
 Ownership is deliberately split:
-- gxserver owns the trail and the cursor (`gxserver-rs/src/navigation_history`).
+- gxserver owns the trail and the cursor (`server/src/navigation_history`).
 - The CEF sidebar runtime owns the conversation with it and the activation of a
   target, because it already owns project/session selection — the web app runs
   the exact same controller, so the two apps cannot drift.
@@ -67,7 +67,7 @@ impl GpuiNavigationHistoryState {
     }
 }
 
-/// Map the shared hotkey action ids (`shared/ghostex-hotkeys.ts`) onto a trail
+/// Map the shared hotkey action ids (`packages/shared/ghostex-hotkeys.ts`) onto a trail
 /// direction, so a keypress and a titlebar click enter the exact same route.
 pub(crate) fn navigation_history_hotkey_direction(action_id: &str) -> Option<&'static str> {
     match action_id {

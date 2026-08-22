@@ -1646,7 +1646,7 @@ pub(crate) fn gpui_resolve_local_gxserver_binary() -> Option<PathBuf> {
     {
         candidates.push(repo_root.join("apps/desktop/runtime/macos/Web/gxserver/bin/gxserver"));
         // Linux dev runs resolve the package produced by
-        // `bun gxserver-rs/package-remote-linux.mjs` before any packaging step.
+        // `bun server/package-remote-linux.mjs` before any packaging step.
         #[cfg(target_os = "linux")]
         {
             #[cfg(target_arch = "x86_64")]
@@ -4242,7 +4242,7 @@ pub(crate) fn load_gpui_gxserver_presentation_focus_state() -> GpuiGxserverPrese
         .unwrap_or_default()
 }
 
-// Revision markers mirror shared/first-launch-setup-settings.ts
+// Revision markers mirror packages/shared/first-launch-setup-settings.ts
 // (FIRST_LAUNCH_SETUP_CURRENT_REVISION / HIGHLIGHTED_FEATURES_CURRENT_REVISION);
 // keep them in sync when the shared revisions bump so both apps replay the
 // refreshed onboarding exactly once.

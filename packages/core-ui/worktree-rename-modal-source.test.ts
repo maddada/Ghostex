@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
  * CDXC:WorktreeRename 2026-08-09-18:40:
  * The rename modal renders inside the native app-modal child window, which this
  * repo has no DOM harness for, so its contract is asserted against source text
- * the way `native/sidebar/tasks-placeholder-source.test.ts` does. What matters
+ * the way `apps/desktop/views/tasks-placeholder-source.test.ts` does. What matters
  * here is not that the file compiles — typecheck already proves that — but that
  * the three things the daemon depends on stay true: the draft carries the flags
  * the runtime computed, submit sends the shared contract message, and Rename is

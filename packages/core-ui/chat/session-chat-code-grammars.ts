@@ -7,7 +7,7 @@
 // chunk, fetched the first time a fence in that language is rendered.
 //
 // gpui's packaged CEF surfaces REPLACE this module at build time
-// (`createCefSingleFileEsbuildPlugin` in gpui/vite.config.ts). Those pages are
+// (`createCefSingleFileEsbuildPlugin` in apps/desktop/vite.config.ts). Those pages are
 // file:// documents, where Chromium refuses module scripts from the opaque
 // origin — the same reason chat.html loads Monaco through its classic AMD
 // loader — so gpui swaps in a `<script src="./shiki-langs/<lang>.js">` loader

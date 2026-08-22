@@ -116,7 +116,7 @@ CDXC:WorktreeRename 2026-08-09-18:40:
 Renaming a worktree types ONE name that becomes two things: the branch keeps it
 verbatim (so `feat/kanban-assignee` is possible) while the folder gets this slug,
 because `/` cannot be part of a directory name. This mirrors
-`worktreeRenameFolderSlug` in `shared/worktree-rename-name.ts` — the daemon slugs
+`worktreeRenameFolderSlug` in `packages/shared/worktree-rename-name.ts` — the daemon slugs
 the name itself rather than accepting a destination path from a renderer, so a
 client can never point the move at a directory the user did not name. Case is
 preserved on purpose: `slugify_branch_title` above lowercases because it slugs a
@@ -696,7 +696,7 @@ mod tests {
     fn rename_folder_slugs_fold_separators_without_lowercasing() {
         /*
         CDXC:WorktreeRename 2026-08-09-18:40:
-        Same table as `shared/worktree-rename-name.test.ts`. The daemon computes
+        Same table as `packages/shared/worktree-rename-name.test.ts`. The daemon computes
         the destination folder itself, so if these two rules ever drift the
         modal's live preview stops describing the folder the user actually gets.
         */

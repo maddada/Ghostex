@@ -3,7 +3,7 @@
 /*
 CDXC:GPUILibghosttyVt 2026-07-03:
 Phase 1 GPUI-composited terminals are driven by libghostty-vt (vendored under
-ghostty/, MIT), whose C API is functionally stable but explicitly NOT
+.dependencies/ghostty/, MIT), whose C API is functionally stable but explicitly NOT
 API-stable. This module is the single choke point over that C API: every
 libghostty-vt symbol, struct layout, and enum value used by Rust lives here so
 a vendored API bump touches one file. Do not declare ghostty_vt symbols in

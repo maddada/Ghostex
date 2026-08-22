@@ -88,7 +88,7 @@ pub(crate) const CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF1111
 
 pub(crate) const CEF_LIGHT_PREPAINT_BACKGROUND_COLOR: u32 = 0xFFFDFDFD;
 
-/// Matches `ghostexEditorProtocolVersion` in editor/macos DaemonSupport.swift.
+/// Matches `ghostexEditorProtocolVersion` in apps/editor/macos DaemonSupport.swift.
 pub(crate) const GHOSTEX_EDITOR_PROTOCOL_VERSION: u64 = 1;
 
 pub(crate) const GHOSTEX_EDITOR_DAEMON_POLL_INTERVAL: Duration = Duration::from_secs(2);

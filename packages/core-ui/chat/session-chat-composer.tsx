@@ -8,7 +8,7 @@
 // both read the token under the caret (see session-chat-composer-trigger.ts),
 // so they open wherever in the draft the mention is being typed. Every picker
 // row carries `data-chat-picker-option`, which keeps the highlighted row's
-// fill out of the dark chat theme's button flattening (sidebar/styles/chat.css)
+// fill out of the dark chat theme's button flattening (packages/core-ui/styles/chat.css)
 // — without it the keyboard selection moves invisibly.
 //
 // Layout (§1.1): input row, then a footer row — session identity/options on
@@ -16,7 +16,7 @@
 // shadcn tokens to sit under the shadcn chat conversation.
 //
 // Maximize lifts the whole field onto a centered overlay (see
-// `.ghostex-chat-composer-maximized` in sidebar/styles/chat.css) so long
+// `.ghostex-chat-composer-maximized` in packages/core-ui/styles/chat.css) so long
 // prompts can be edited without scrolling a 160px-tall input. The field keeps
 // its place in the React tree while maximized — only its box changes — so the
 // monaco instance, caret, undo stack and pending attachments all survive the

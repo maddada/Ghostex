@@ -2,13 +2,13 @@
  * Status payload builders.
  *
  * Every message here is the REAL shared contract type, built the way
- * sidebar/first-launch-setup-modal.stories.tsx:13-35 builds its fixtures (from
+ * packages/core-ui/first-launch-setup-modal.stories.tsx:13-35 builds its fixtures (from
  * DEFAULT_SIDEBAR_AGENTS), so the production modals validate and render them
  * unchanged.
  *
  * Derivation rules mirror:
- * - gxserver-rs/src/agent_hooks.rs read_hook_status (per-agent status + detail)
- * - gpui/src/main.rs gpui_ghostex_cli_status_message (CLI/skill/cua payload)
+ * - server/src/agent_hooks/api.rs read_hook_status (per-agent status + detail)
+ * - apps/desktop/src/app/helpers/os_cli.rs gpui_ghostex_cli_status_message (CLI/skill/cua payload)
  */
 import type {
   SidebarAgentHookStatus,
@@ -50,7 +50,7 @@ export function agentDisplayName(agentId: string): string {
   return DEFAULT_SIDEBAR_AGENTS.find((entry) => entry.agentId === agentId)?.name ?? agentId;
 }
 
-/** gxserver-rs/src/agent_hooks.rs read_hook_status:1205 */
+/** server/src/agent_hooks/api.rs read_hook_status:218 */
 export function deriveAgentHookStatus(env: SimEnvState, agentId: SimAgentId): SidebarAgentHookStatus {
   const agent = env.agents[agentId];
   if (!agent.cliInstalled) {
@@ -65,7 +65,7 @@ export function deriveAgentHookStatus(env: SimEnvState, agentId: SimAgentId): Si
   return "missing";
 }
 
-/** gxserver-rs/src/agent_hooks.rs hook_detail:1225 */
+/** server/src/agent_hooks/api.rs hook_detail:259 */
 function hookDetail(agentId: SimAgentId, status: SidebarAgentHookStatus): string {
   const display = AGENT_CONFIG_PATHS[agentId] ?? `${HOOK_STATE_DIRECTORY}/${agentId}.json`;
   switch (status) {
@@ -110,7 +110,7 @@ export function createAgentHookStatusMessage(
 }
 
 /**
- * gpui/src/main.rs gpui_ordered_agent_hook_status_agent_ids:100982 — priority
+ * apps/desktop/src/app/helpers/agents_hub.rs gpui_ordered_agent_hook_status_agent_ids:2804 — priority
  * agents first (codex, claude, opencode, pi), then everything else requested.
  */
 export function orderedHookStatusAgentIds(

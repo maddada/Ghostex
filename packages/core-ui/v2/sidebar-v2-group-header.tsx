@@ -26,7 +26,7 @@ import type { SidebarV2GroupModel } from "./sidebar-v2-view-model";
  *    it to get a header would mean mounting the V1 list and then suppressing it,
  *    inside the hottest file in the sidebar while other agents work in it.
  * 2. The look does not live in that component; it lives in
- *    `sidebar/styles/groups.css`, in the reference-layout override block keyed on
+ *    `packages/core-ui/styles/groups.css`, in the reference-layout override block keyed on
  *    `.sidebar-reference-layout[data-reference-sidebar="true"]`. The V2 root
  *    already mounts inside that element, so emitting V1's classnames inherits the
  *    real app look verbatim — the row padding and full-bleed hover surface, the

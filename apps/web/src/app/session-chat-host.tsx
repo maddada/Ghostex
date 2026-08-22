@@ -1,7 +1,7 @@
 // Mounts the shared SessionChatView for a workspace session. The transport is
 // memoized per (machineId, projectId, sessionId) so the chat hook's
 // subscription survives unrelated re-renders. Chat styles (.ghostex-chat-*)
-// live in sidebar/styles/chat.css, pulled in through the shared sheet below
+// live in packages/core-ui/styles/chat.css, pulled in through the shared sheet below
 // (already loaded app-wide by WebSidebar; the duplicate import dedupes).
 //
 // The top-right Agent Actions row mirrors the gpui terminal overlay, limited

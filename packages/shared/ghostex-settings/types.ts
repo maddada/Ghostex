@@ -108,7 +108,7 @@ export type SidebarNewSessionEnvMode = "local" | "worktree";
  * CDXC:SidebarV2LogicalProjects 2026-07-29:
  * How aggressively one checkout merges with other checkouts of the same
  * repository in Sidebar V2. Mirrors
- * `SidebarV2ProjectGroupingMode` in `shared/sidebar-v2-logical-project.ts`
+ * `SidebarV2ProjectGroupingMode` in `packages/shared/sidebar-v2-logical-project.ts`
  * one-for-one; the two spellings must stay identical because this settings
  * value is fed straight into that module.
  */
@@ -482,10 +482,10 @@ export type ghostexSettings = {
    * sidebar's Settled shelf. `null` disables inactivity auto-settle entirely.
    *
    * This key is read by BOTH ends: the client predicate in
-   * `shared/sidebar-v2-lifecycle.ts` and gxserver-rs, which reads
+   * `packages/shared/sidebar-v2-lifecycle.ts` and server, which reads
    * `sidebarAutoSettleAfterDays` straight out of
    * `GHOSTEX_HOME/state/native-sidebar-settings.json` for its auto-settle sweep
-   * (`gxserver-rs/src/session_lifecycle.rs`). The spelling is therefore part of
+   * (`server/src/session_lifecycle.rs`). The spelling is therefore part of
    * the server contract — renaming it silently reverts every user to the
    * 3-day default.
    */
@@ -499,7 +499,7 @@ export type ghostexSettings = {
    *
    * The KEY is the module's physical project key
    * (`deriveSidebarV2ProjectGroupingOverrideKey` in
-   * `shared/sidebar-v2-logical-project.ts`), i.e. `<machineId>:<path>`. Keying
+   * `packages/shared/sidebar-v2-logical-project.ts`), i.e. `<machineId>:<path>`. Keying
    * by the physical checkout rather than by repository is deliberate: setting
    * "keep separate" on this Mac's copy must not silently re-group a colleague's
    * machine, and the key stays stable when a project is renamed.
@@ -566,7 +566,7 @@ export type ghostexSettings = {
   /**
    * Reveal thinking-owned tool calls by default in Session Chat. Chats that
    * use the composer's Verbose pill store their own value and stop following
-   * this (sidebar/chat/session-chat-verbose-override.ts).
+   * this (packages/core-ui/chat/session-chat-verbose-override.ts).
    */
   sessionChatVerboseMode: boolean;
   /**

@@ -5,7 +5,7 @@
  * has been tuning.
  *
  * `FIRST_LAUNCH_SETUP_SEEN_REVISION` / `HIGHLIGHTED_FEATURES_SEEN_REVISION` are
- * the exact strings gpui writes (gpui/src/main.rs), so a "returning user" state
+ * the exact strings gpui writes (apps/desktop/src/app/helpers/board_gxserver.rs), so a "returning user" state
  * file is byte-identical to a real one.
  */
 import {

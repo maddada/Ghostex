@@ -9,7 +9,7 @@ OS-agnostic in cef/shell.rs. Handles cross this seam as opaque `*mut c_void`;
 only this file treats them as HWNDs.
 
 Written without Windows hardware (P2 best-effort bring-up): the pump-state
-machine mirrors gpui/native/macos/GpuiCefAppKitHooks.m semantics 1:1 except
+machine mirrors apps/desktop/native/macos/GpuiCefAppKitHooks.m semantics 1:1 except
 that SetTimer/KillTimer replace the uncancellable dispatch_after generation
 counter. Runtime behavior needs device verification.
 */

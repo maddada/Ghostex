@@ -242,7 +242,7 @@ validate_local_gxserver_runtime_resources() {
 	local required_path executable_path
 
 	# CDXC:GPUIStartCommand 2026-07-08-04:55:
-	# `bun run gpui` refreshes gpui/runtime/macos/Web through the GPUI-owned
+	# `bun run gpui` refreshes apps/desktop/runtime/macos/Web through the GPUI-owned
 	# shared-resource build as `bun run start`, then this packager seals the
 	# app-owned gxserver package into the GPUI bundle. Runtime should resolve
 	# Contents/Resources/Web/gxserver first instead of depending on the main
@@ -316,8 +316,8 @@ validate_build_toolchain_dependencies() {
 }
 
 # CDXC:GPUIGhosttyKitLocalPrereq 2026-08-10:
-# gpui/build.rs links the repo-local GhosttyKit static archive by exact path
-# (gpui/build.rs links .dependencies/ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
+# apps/desktop/build.rs links the repo-local GhosttyKit static archive by exact path
+# (apps/desktop/build.rs links .dependencies/ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
 # The dev path never builds it; the release pipeline does. Detecting the absence
 # up front avoids a long Rust compile that only fails at link time.
 validate_ghosttykit_archive() {

@@ -3868,7 +3868,7 @@ export function SidebarApp({
        * Instead the row's new index among the LOGICAL rows is projected onto each
        * participating machine's own list, and one `syncGroupOrder` goes out per
        * machine that actually changed. The projection itself is pure and unit
-       * tested (`shared/sidebar-v2-group-order.ts`); everything DOM-dependent —
+       * tested (`packages/shared/sidebar-v2-group-order.ts`); everything DOM-dependent —
        * which boundary the pointer is over — stays in the shared resolver above,
        * so the committed reorder is the same boundary the drop line drew.
        *

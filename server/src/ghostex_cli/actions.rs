@@ -769,7 +769,7 @@ fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
     /*
     CDXC:GxserverSessionTitle 2026-06-23-08:40:
     Mobile and CLI create-session callers may provide first-message input, but
-    gxserver-rs must remain the owner of first-prompt auto-name generation.
+    server must remain the owner of first-prompt auto-name generation.
     Pass the prompt through as runtime metadata and startup text instead of
     generating or staging title commands in the CLI.
     */

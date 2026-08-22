@@ -26,7 +26,7 @@ ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/server}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
-# CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
+# CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `.dependencies/tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
 TUI_ROOT="${TUI_ROOT:-$REPO_ROOT/.dependencies/tui2}"
 CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-}}" ]] && CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=1
@@ -858,7 +858,7 @@ build_zmx_if_needed() {
 		--path "$ZMX_ROOT/build.zig" \
 		--path "$ZMX_ROOT/build.zig.zon")"
 	if cache_matches "zmx-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		# CDXC:LocalStartArchitecture 2026-06-08-08:42: zmx writes every macOS target to zmx/zig-out/bin/zmx, so an old per-arch cache stamp is not enough to prove the shared output still contains the requested CPU slice. Verify the Mach-O architecture before skipping or Ghostex can launch Intel zmx from an arm64 app.
+		# CDXC:LocalStartArchitecture 2026-06-08-08:42: zmx writes every macOS target to .dependencies/zmx/zig-out/bin/zmx, so an old per-arch cache stamp is not enough to prove the shared output still contains the requested CPU slice. Verify the Mach-O architecture before skipping or Ghostex can launch Intel zmx from an arm64 app.
 		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 			echo "zmx is current; skipping Zig build."
 			return 0
@@ -1022,7 +1022,7 @@ EOF
 		return 0
 	fi
 
-	# CDXC:GxserverRustBuild 2026-06-24-20:22: Local start must fail before packaging when gxserver-rs no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
+	# CDXC:GxserverRustBuild 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
 	"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
 	if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 		echo "Rust gxserver binary does not contain $GHOSTEX_MACOS_ARCH: $output_path" >&2
@@ -1162,7 +1162,7 @@ stage_gxserver_protocol_exports() {
 	rm -rf "$protocol_stage_dir"
 	mkdir -p "$protocol_stage_dir/src" "$protocol_stage_dir/types" "$target_dir/dist/protocol"
 	cp "$REPO_ROOT/shared/gxserver-protocol.ts" "$protocol_stage_dir/src/index.ts"
-	# CDXC:GxserverProtocolStaging 2026-08-21-12:10: shared/gxserver-protocol.ts pulls in
+	# CDXC:GxserverProtocolStaging 2026-08-21-12:10: packages/shared/gxserver-protocol.ts pulls in
 	# sibling shared modules (session-chat.ts, which now pulls session-chat-queue.ts).
 	# Stage the whole relative-import closure instead of a hand-kept file list so adding a
 	# shared module never breaks packaging with a TS2307 "cannot find module" failure.
@@ -1330,7 +1330,7 @@ package_gxserver_rust_package() {
 	local package_dir="$1"
 	local rust_bin="$2"
 	local package_version="$3"
-	# CDXC:GxserverRustPackaging 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from gxserver-rs, shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
+	# CDXC:GxserverRustPackaging 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server, packages/shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
 	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required. Beads is always staged from the checksum-pinned schema-compatible release artifact before this package is assembled.
 	rm -rf "$package_dir"
 	mkdir -p "$package_dir/bin"

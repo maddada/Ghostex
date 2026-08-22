@@ -6,7 +6,7 @@
  * The gpui desktop app deliberately does NOT use this. Its sidebar surface is
  * mouse- and focus-passive, so key events belong to the focused terminal and
  * never reach the sidebar document; gpui matches the same shared chord natively
- * (`GPUI_DEFAULT_GHOSTEX_HOTKEYS` in gpui/src/main.rs) and routes it to the same
+ * (`GPUI_DEFAULT_GHOSTEX_HOTKEYS` in apps/desktop/src/app/hotkeys.rs) and routes it to the same
  * controller through its titlebar bridge. Both apps therefore honour the user's
  * configured chord from one table, without the page ever competing with a
  * terminal for the keystroke.

@@ -11,7 +11,7 @@ const MAX_STABLE_KEY_LEN: usize = 160;
 
 /*
 CDXC:PortlessPersistence 2026-06-22-22:41:
-gxserver-rs owns Portless durable metadata in SQLite during the first local macOS integration. Metadata APIs stay database-only; Phase 6 adds an explicit route-sync API for the separate Ghostex-managed Portless state directory.
+server owns Portless durable metadata in SQLite during the first local macOS integration. Metadata APIs stay database-only; Phase 6 adds an explicit route-sync API for the separate Ghostex-managed Portless state directory.
 
 CDXC:PortlessPersistence 2026-06-22-22:41:
 Persist project and worktree slugs separately from project display names, worktree display names, paths, branches, and terminal content. Phase 4 accepts explicit slugs only; slug generation, backfill, collision suffixing, and rename-derived changes are Phase 5 work.
@@ -47,7 +47,7 @@ CDXC:PortlessRouteNaming 2026-06-22-23:28:
 Each project/worktree group has one primary domain selected by 3000, 5173, 5174, 8080, 8000, then the lowest remaining port. Other live listeners use p<port>.<base-domain> so multiple live servers in one group stay addressable without permanent service names.
 
 CDXC:PortlessBackgroundSync 2026-06-22-23:40:
-Phase 9 route sync is policy-driven and independent of Resources/sidebar polling. When Portless is enabled, gxserver-rs computes desired routes from the current live Ghostex-owned listener set, mirrors them only for Ghostex-owned active setup metadata, writes [] for disabled state, and skips setup-missing/failed/non-Ghostex states instead of inventing service detection.
+Phase 9 route sync is policy-driven and independent of Resources/sidebar polling. When Portless is enabled, server computes desired routes from the current live Ghostex-owned listener set, mirrors them only for Ghostex-owned active setup metadata, writes [] for disabled state, and skips setup-missing/failed/non-Ghostex states instead of inventing service detection.
 
 CDXC:PortlessBackgroundSync 2026-06-22-23:40:
 The current gxserver health, presentation, and sidebar contracts have no Portless status field. Keep setup-needed/setup-failed/status as an internal sync outcome until Phase 12 adds a metadata-only wire contract, rather than broadcasting an ad hoc UI payload.
@@ -65,7 +65,7 @@ CDXC:PortlessProtocol 2026-06-23-00:25:
 Phase 12 exposes Portless to health and presentation clients as metadata-only protocol payloads. Status, action availability, and route previews may carry enums, counts, stable project/session ids, protocol, hostnames, and ports, but never paths, command text, env values, process output, tokens, cookies, full URLs, query strings, terminal text, or file contents.
 
 CDXC:PortlessProtocol 2026-06-23-00:25:
-gxserver-rs only describes native admin actions; it does not advertise them as directly runnable because privileged setup is local-mac native-sidebar work in the first version. Non-local and remote gxserver consumers must see unavailable action booleans and can still render state and route previews without reading Portless files.
+server only describes native admin actions; it does not advertise them as directly runnable because privileged setup is local-mac native-sidebar work in the first version. Non-local and remote gxserver consumers must see unavailable action booleans and can still render state and route previews without reading Portless files.
 
 CDXC:PortlessLogging 2026-06-23-04:45:
 Phase 17 Portless operational logs are support diagnostics, not route or service dumps. Persist only structured counts, booleans, enum states, protocol, setup/runtime state, fixed error codes, and durations through the gxserver logger; never put project/worktree names, paths, full URLs, hostnames, command text, env values, tokens, secrets, stdout, or stderr into Portless log payloads.

@@ -26,7 +26,7 @@ const fence = (info: string, lines: readonly string[]): string =>
   ["```" + info, ...lines, "```"].join("\n");
 
 /** ```ts title="x.ts" — the attribute form, quoted. */
-const TITLE_ATTRIBUTE_FENCE = fence('ts title="sidebar/chat/session-chat-code-wrap.ts"', [
+const TITLE_ATTRIBUTE_FENCE = fence('ts title="packages/core-ui/chat/session-chat-code-wrap.ts"', [
   "export function readWrapDefault(): boolean {",
   '  return storage()?.getItem(KEY) === "1";',
   "}",
@@ -50,7 +50,7 @@ const FILENAME_ATTRIBUTE_FENCE = fence("md filename=README.md", [
 /** ```sh path/to/file.ext — the bare token form, no attribute at all. */
 const BARE_TOKEN_FENCE = fence("bash scripts/build-mobile-find.mjs", [
   "set -euo pipefail",
-  "bun build mobile-find/index.tsx",
+  "bun build apps/mobile/views/find/index.tsx",
 ]);
 
 /** No meta: the header keeps showing the language, exactly as it always has. */
@@ -123,7 +123,7 @@ const NARROW_MARKDOWN = [
   "The header at the width a transcript actually has:",
   "",
   fence(
-    'tsx title="ghostex-web/src/chat/session-chat-queued-prompts-button.tsx:118"',
+    'tsx title="apps/web/src/chat/session-chat-queued-prompts-button.tsx:118"',
     [
       "export function QueuedPromptsButton({ count }: Props) {",
       "  return <Button size=\"icon-xs\">{count}</Button>;",

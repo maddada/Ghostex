@@ -110,7 +110,7 @@ const TERMINAL_SCROLL_BUTTON_SIZE: f32 = 28.125;
 /// Shared edge inset for terminal overlay chrome: Agent Actions (top-right) and
 /// scroll-to-top/bottom (bottom-right) both sit 13px in from the pane edge,
 /// matching the chat surface's floating cluster
-/// (sidebar/chat/session-chat-host-actions-cluster.tsx).
+/// (packages/core-ui/chat/session-chat-host-actions-cluster.tsx).
 const TERMINAL_ACTION_BUTTON_EDGE_INSET: f32 = 13.0;
 /// Vertical gap between the cluster row and the expanded Agent Actions menu.
 const TERMINAL_AGENT_ACTIONS_MENU_GAP: f32 = 13.0;

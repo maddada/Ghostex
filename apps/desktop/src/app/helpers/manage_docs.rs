@@ -662,7 +662,7 @@ pub(crate) fn manage_session_context_language(relative_path: &str) -> &'static s
     }
 }
 
-/// Mirrors `gxserver-rs/src/project_docs.rs` `DocsContext`: both mounted roots
+/// Mirrors `server/src/project_docs.rs` `DocsContext`: both mounted roots
 /// plus the project's configured Docs folders, carried as one value so no
 /// operation can resolve against one root while validating against the other.
 #[derive(Clone, Copy)]
@@ -696,7 +696,7 @@ impl ManageDocsPath<'_> {
 
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `docs_path` in `gxserver-rs/src/project_docs.rs`. The reserved mount
+Mirrors `docs_path` in `server/src/project_docs.rs`. The reserved mount
 segment is the whole routing vocabulary: a path that starts with it belongs to
 the mounted Docs directory, anything else is project-relative. One relative path
 can therefore only ever mean one root.
@@ -773,7 +773,7 @@ pub(crate) fn manage_additional_docs_folder_relative_paths(
 
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `scan_roots` in `gxserver-rs/src/project_docs.rs`. Docs folders is
+Mirrors `scan_roots` in `server/src/project_docs.rs`. Docs folders is
 project-root-relative again, the meaning it had before a custom root existed:
 `docs` plus each configured folder. Round 2 made it narrow the custom root
 instead; with additive mounting that is no longer coherent, because the mounted
@@ -1018,7 +1018,7 @@ pub(crate) fn manage_docs_extra_root_name(configured: &str) -> String {
 
 /*
 CDXC:DocsRootAdditive 2026-08-09:
-Mirrors `DocsRoots` in `gxserver-rs/src/project_docs.rs`: the two roots one Docs
+Mirrors `DocsRoots` in `server/src/project_docs.rs`: the two roots one Docs
 request sees, canonicalized. The mount carries either where its folder is or why
 it could not be opened, because that failure belongs on one tree node instead of
 on the whole listing.
@@ -1180,7 +1180,7 @@ pub(crate) fn manage_project_directory(root: &Path, relative_path: &str) -> Opti
 
 /*
 CDXC:DocsRootRecursive 2026-08-09:
-Mirrors `append_extra_root_entries` in `gxserver-rs/src/project_docs.rs`, so the
+Mirrors `append_extra_root_entries` in `server/src/project_docs.rs`, so the
 local Docs pane and a remote project's Docs pane list the same tree. The mounted
 Docs directory is walked to the bottom and files are narrowed to the extensions
 Docs renders.
@@ -1237,7 +1237,7 @@ pub(crate) fn manage_append_docs_extra_root_entries(
 
 /*
 CDXC:DocsRootAdditive 2026-08-10:
-Mirrors `name_extra_root_tree_entries` in gxserver-rs/src/project_docs.rs: every
+Mirrors `name_extra_root_tree_entries` in server/src/project_docs.rs: every
 mounted entry carries the name the tree shows it under beside the routing
 address it answers to, so the reserved segment never reaches Copy Path or text
 pasted into a terminal.

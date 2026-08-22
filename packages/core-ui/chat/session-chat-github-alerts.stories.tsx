@@ -53,7 +53,7 @@ const ALERT_BODY = [
   "did — muted, grey rule, no icon:",
   "",
   "> The Swift macOS app was removed on 2026-08-20. What is left under",
-  "> `native/sidebar/` is compiled into gpui.",
+  "> `apps/desktop/views/` is compiled into gpui.",
   "",
   "And GitHub's own rule holds: a marker sharing its line with other text is",
   "not an alert either.",

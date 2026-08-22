@@ -1,5 +1,5 @@
 //! Rust port of the terminal-title trust rules from
-//! `shared/session-grid-contract-session.ts` (`getVisibleTerminalTitle`).
+//! `packages/shared/session-grid-contract-session.ts` (`getVisibleTerminalTitle`).
 //! Live Ghostty OSC titles may only replace GPUI tab labels when the shared
 //! sidebar contract would also accept them as visible terminal titles, so
 //! spinner glyphs, cwd paths, agent boot placeholders, and ghost reconnect

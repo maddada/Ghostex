@@ -1578,7 +1578,7 @@ export const GroupMenuMatchesTheClassicContextMenuChrome: Story = {
  * committed order is not "move one id" — it is the merged block moving inside the
  * local machine's own list while Build Box, which owns no member of the row being
  * dragged, is left alone. Cross-machine fan-out of the projection itself is unit
- * tested in `shared/sidebar-v2-group-order.test.ts`, where several machines can be
+ * tested in `packages/shared/sidebar-v2-group-order.test.ts`, where several machines can be
  * given several projects each.
  */
 export const ReordersGroupedProjectsByDrag: Story = {

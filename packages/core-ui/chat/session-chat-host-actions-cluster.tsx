@@ -5,12 +5,12 @@
 // strip the chat view shows.
 //
 // The cluster clones the gpui terminal overlay's action strip
-// (gpui/src/terminal_element.rs terminal_overlay_button): flush 28.125px
+// (apps/desktop/src/terminal_element.rs terminal_overlay_button): flush 28.125px
 // square buttons sharing 1px #2a2a2a divider borders, #101010 background,
 // #343434 hover, 14px #a6a6a6 icons, 0 10px 22px rgba(0,0,0,0.32) shadow,
 // inset 13px from the pane's top-right corner. Icons are the same Tabler
 // glyphs the gpui assets use; Sleep's moon is a custom filled asset copied
-// verbatim from gpui/assets/titlebar/moon.svg.
+// verbatim from apps/desktop/assets/titlebar/moon.svg.
 
 import {
   IconClockCheck,

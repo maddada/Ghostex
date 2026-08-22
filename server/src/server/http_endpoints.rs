@@ -74,7 +74,7 @@ pub(crate) fn handle_portless_state_http(
     /*
     CDXC:PortlessFailureUX 2026-06-23-04:28:
     Native-sidebar reports only enum-like Portless settings/admin outcomes to
-    gxserver-rs. The daemon persists setup recovery state, clears route files
+    server. The daemon persists setup recovery state, clears route files
     for Disable/remove, and returns refreshed metadata without paths, command
     text, process output, environment values, URLs, tokens, or file contents.
     */

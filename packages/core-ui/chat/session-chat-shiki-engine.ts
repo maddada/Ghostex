@@ -5,7 +5,7 @@
 // `shiki/core`, the oniguruma engine, its wasm, and both themes — roughly
 // 750 KB that no chat pane should pay for until it actually renders a fenced
 // code block. gpui's packaged CEF surfaces REPLACE this module at build time
-// (`createCefSingleFileEsbuildPlugin` in gpui/vite.config.ts) with a loader
+// (`createCefSingleFileEsbuildPlugin` in apps/desktop/vite.config.ts) with a loader
 // over a staged classic script, because a file:// page cannot fetch module
 // chunks. Keep the public surface to exactly these two exports so that swap
 // stays a one-liner.

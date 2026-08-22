@@ -4,7 +4,7 @@
 // depend on this table:
 //
 //   * session-chat-code-grammars.ts   (dynamic import, one chunk per grammar)
-//   * gpui's CEF build shim           (classic <script>, see gpui/vite.config.ts)
+//   * gpui's CEF build shim           (classic <script>, see apps/desktop/vite.config.ts)
 //
 // Every key is the real `@shikijs/langs/<name>` subpath so the gpui build can
 // stage exactly this list without a second name mapping.

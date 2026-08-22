@@ -33,7 +33,7 @@ Rules this module holds itself to:
 
 - The URL is published RAW (trimmed only). Normalization — scp-style vs https,
   `.git` suffix, host case — is the CLIENT's job (`normalizeGitRemoteUrl` in
-  `shared/sidebar-v2-logical-project.ts`), so one machine's git version can never
+  `packages/shared/sidebar-v2-logical-project.ts`), so one machine's git version can never
   change how another machine's projects group.
 - One probe per unique FAMILY ROOT path. A registered worktree project probes its
   parent project's checkout (see `project_git_remote_key`): a linked worktree

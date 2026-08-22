@@ -17,7 +17,7 @@ export type ModalHostOutboundMessage = { type: string } & Record<string, unknown
 // Simulated environment (the "user's OS")
 // ---------------------------------------------------------------------------
 
-/** The 17 agent CLIs gxserver knows about (gxserver-rs/src/agent_hooks.rs). */
+/** The 17 agent CLIs gxserver knows about (server/src/agent_hooks/). */
 export const SIM_AGENT_IDS = [
   "codex",
   "claude",
@@ -121,7 +121,7 @@ export interface FirstRunOnboardingStateFile {
   windowsTerminalSetupComplete: boolean;
 }
 
-/** Revision constants mirrored from gpui/src/main.rs:118200-118201. */
+/** Revision constants mirrored from apps/desktop/src/app/helpers/board_gxserver.rs. */
 export const FIRST_LAUNCH_SETUP_SEEN_REVISION = "2026-06-18-short-first-launch";
 export const HIGHLIGHTED_FEATURES_SEEN_REVISION = "2026-06-16-highlighted-features-launch";
 
@@ -155,7 +155,7 @@ export interface SimModalWindow {
   openPayload: Record<string, unknown>;
   /**
    * Set for the ONE modal kind that does not use the React modal host
-   * (`GpuiAppModalKind::uses_react_modal_host`, gpui/src/main.rs:3267): the
+   * (`GpuiAppModalKind::uses_react_modal_host`, apps/desktop/src/app/model/types1.rs:529): the
    * tutorial video window loads GHOSTEX_TUTORIAL_VIDEO_URL as its top-level
    * document instead of modal-host.html. Such windows have no bridge and no
    * ready/presented handshake — the frame points its iframe straight here.
@@ -173,7 +173,7 @@ export interface SimEvent {
   kind: SimEventKind;
   label: string;
   detail?: string;
-  /** Real-code anchor, e.g. "gpui/src/main.rs start_gpui_first_run_onboarding". */
+  /** Real-code anchor, e.g. "apps/desktop/src/app/os_integration.rs start_gpui_first_run_onboarding". */
   codeRef?: string;
 }
 

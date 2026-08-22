@@ -12,7 +12,7 @@ CONTENTS_DIR="$APP_ROOT/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
-# Packagers (gpui/scripts/build-macos-app.sh) pin the slice and the toolchain so
+# Packagers (apps/desktop/scripts/build-macos-app.sh) pin the slice and the toolchain so
 # the bundled helper matches the app they stage it into instead of whatever the
 # builder host happens to be.
 EDITOR_ARCH="${GHOSTEX_EDITOR_ARCH:-}"

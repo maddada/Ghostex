@@ -1766,7 +1766,7 @@ export type SidebarToExtensionMessage =
   | {
       /**
        * CDXC:Automations 2026-06-29-15:55:
-       * The top-sidebar Automations entry now opens the project Automation page backed by gxserver-rs, but keep the old toast message in the contract for older native bundles during the cutover.
+       * The top-sidebar Automations entry now opens the project Automation page backed by server, but keep the old toast message in the contract for older native bundles during the cutover.
        */
       type: "showAutomationsComingSoonToast";
     }

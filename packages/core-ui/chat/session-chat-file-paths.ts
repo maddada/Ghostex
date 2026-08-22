@@ -1,7 +1,7 @@
 /*
  * Inline code that is a file reference, promoted to a clickable chip.
  *
- * Agents write `sidebar/styles/chat.css:913` and `gpui/src/cef/shell.rs:42:8`
+ * Agents write `packages/core-ui/styles/chat.css:913` and `apps/desktop/src/cef/shell.rs:42:8`
  * constantly, and today every one of them is an inert grey span. This module
  * decides which inline-code spans are actually file references, and hands the
  * renderer the pieces it needs to draw one: the path to open, the line/column
@@ -243,7 +243,7 @@ function resolveFilePathReference(
 /**
  * The chip's visible text, split where it is allowed to be cut.
  *
- * `gpui/src/cef/shell.rs:42:8` becomes parent `gpui/src/cef`, name
+ * `apps/desktop/src/cef/shell.rs:42:8` becomes parent `apps/desktop/src/cef`, name
  * `/shell.rs`, and detail `L42:C8`. The chip shows the whole path, so in a
  * narrow transcript column something has to give when it does not fit — and
  * the part that may go is the tail of the parent. The leading folder says
@@ -252,8 +252,8 @@ function resolveFilePathReference(
  * can lose and still know what they are looking at.
  *
  * The separator goes with the name, not with the parent, so that a truncated
- * parent still ends in one: `gpui/src/c…/shell.rs` reads as a path with a hole
- * in it, while `gpui/src/c…shell.rs` reads as a typo.
+ * parent still ends in one: `apps/desktop/src/c…/shell.rs` reads as a path with a hole
+ * in it, while `apps/desktop/src/c…shell.rs` reads as a typo.
  */
 export function sessionChatFilePathChipLabel(ref: SessionChatFilePathRef): {
   detail: string;

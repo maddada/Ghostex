@@ -87,7 +87,7 @@ pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 1;
 pub const SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS: u64 = 10;
 
 // ---------------------------------------------------------------------------
-// Result types (mirror of shared/session-chat.ts SessionChatDetectedOptions)
+// Result types (mirror of packages/shared/session-chat.ts SessionChatDetectedOptions)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,7 +252,7 @@ pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptio
 }
 
 /// Slash commands whose dispatch can change what the statusline reports. Mirrors
-/// `sessionChatOptionCommandNames` in sidebar/chat/session-chat-session-options.ts.
+/// `sessionChatOptionCommandNames` in packages/core-ui/chat/session-chat-session-options.ts.
 pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> bool {
     if session_chat_option_agent(agent).is_none() {
         return false;
@@ -385,7 +385,7 @@ fn skips_first_segment(segments: &[String]) -> bool {
 // ---------------------------------------------------------------------------
 
 /// `(family segment prefix, pill value)` — mirrors CLAUDE_MODELS in
-/// sidebar/chat/session-chat-session-options.ts.
+/// packages/core-ui/chat/session-chat-session-options.ts.
 const CLAUDE_MODEL_FAMILIES: &[(&str, &str)] = &[
     ("Fable", "fable"),
     ("Opus", "opus"),

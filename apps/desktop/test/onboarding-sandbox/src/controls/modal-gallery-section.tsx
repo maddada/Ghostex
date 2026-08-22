@@ -4,7 +4,7 @@
  * note whenever one is used.
  *
  * Payloads mirror the required fields of OpenAppModalMessage
- * (sidebar/app-modal-host-bridge.ts) — modals whose payload is mandatory would
+ * (packages/core-ui/app-modal-host-bridge.ts) — modals whose payload is mandatory would
  * otherwise never render.
  */
 import { useSandboxStore } from "../state/store";

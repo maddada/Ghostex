@@ -1372,7 +1372,7 @@ function normalizeSidebarNewSessionEnvMode(
 
 /*
 CDXC:SidebarV2Lifecycle 2026-07-29:
-Exact twin of gxserver-rs `normalize_auto_settle_after_days`. The two ends must
+Exact twin of server `normalize_auto_settle_after_days`. The two ends must
 agree or the shelf a user sees and the shelf the daemon writes drift apart:
   missing key            -> the default window
   explicit null          -> auto-settle disabled

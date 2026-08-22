@@ -14,7 +14,7 @@ use crate::{
 /*
 CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
 Server side of Sidebar V2's settle/snooze inbox. The Ghostex
-client twin lives in `shared/sidebar-v2-lifecycle.ts` and this module must agree
+client twin lives in `packages/shared/sidebar-v2-lifecycle.ts` and this module must agree
 with it field for field.
 
 Concept mapping:
@@ -54,7 +54,7 @@ pub const SESSION_LIFECYCLE_SWEEP_INTERVAL_SECONDS: u64 = 60;
 
 /*
 A snooze is not cleared the moment it expires. The wake itself is derived —
-clients (and `shared/sidebar-v2-lifecycle.ts`) stop classifying a session as
+clients (and `packages/shared/sidebar-v2-lifecycle.ts`) stop classifying a session as
 snoozed as soon as `snoozedUntil` is in the past, to the millisecond, and the
 retained fields are what drive the "Woke" indicator until the user visits the
 row. Clearing at the boundary would erase that signal within one sweep. The
@@ -210,7 +210,7 @@ pub fn session_activity(session: &Value, now_iso: &str) -> String {
 }
 
 /// The meaningful-activity clock a session's settle window counts from — the
-/// server twin of `sessionLastActivityAtMs` in `shared/sidebar-v2-lifecycle.ts`.
+/// server twin of `sessionLastActivityAtMs` in `packages/shared/sidebar-v2-lifecycle.ts`.
 pub fn session_last_activity_ms(session: &Value, now_iso: &str) -> Option<i64> {
     let meaningful = parse_iso_ms(&session_meaningful_activity_at(session, now_iso));
     let working_started = session_effective_working_started_at(session, now_iso)

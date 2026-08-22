@@ -63,7 +63,7 @@ const AGENT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
 const AGENT_SKILL_INSTALL_EXITED_READER_DRAIN_MS: u64 = 1_000;
 /*
 CDXC:AgentSkills 2026-06-22-07:21:
-The TypeScript daemon used execFile maxBuffer=10 MiB for agent-skill installs. Keep gxserver-rs at the same stdout/stderr byte ceiling while retaining the Rust runner's explicit process termination and captured-output reporting.
+The TypeScript daemon used execFile maxBuffer=10 MiB for agent-skill installs. Keep server at the same stdout/stderr byte ceiling while retaining the Rust runner's explicit process termination and captured-output reporting.
 */
 const AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES: usize = 10 * 1024 * 1024;
 const AGENT_SKILL_INSTALL_POLL_MS: u64 = 25;

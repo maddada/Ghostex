@@ -6,7 +6,7 @@
  *   parent → iframe  {__onboardingSandbox:"deliver",  windowId, detail}
  *   iframe → parent  {__onboardingSandbox:"outbound", windowId, message}
  *   iframe → parent  {__onboardingSandbox:"iframeReady", windowId}   (shim installed)
- * The marker is mandatory: `native/sidebar/modal-host.tsx` re-emits some
+ * The marker is mandatory: `apps/desktop/views/modal-host.tsx` re-emits some
  * transient results through plain `window.postMessage`, and those must be
  * ignored here.
  *

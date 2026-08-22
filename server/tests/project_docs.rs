@@ -7,7 +7,7 @@ use gxserver::project_docs::{run_project_docs_action, ProjectDocsExtraRoot, Proj
 use serde_json::{json, Map, Value};
 
 /// The reserved first path segment that addresses the mounted Docs directory.
-/// Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `gxserver-rs/src/project_docs.rs`.
+/// Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `server/src/project_docs.rs`.
 const MOUNT: &str = ".ghostex-docs-root";
 
 fn params(value: Value) -> Map<String, Value> {

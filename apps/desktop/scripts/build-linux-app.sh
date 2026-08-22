@@ -66,7 +66,7 @@ export CEF_PATH="${CEF_PATH:-$GPUI_DIR/build/cef-cache}"
 
 # 2) Rust binaries (main app + CEF helper). Requires cmake and ninja
 # (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
-# libghostty-vt (GHOSTEX_ZIG override honored by gpui/build.rs).
+# libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
 (
   cd "$GPUI_DIR"
   cargo build --release --bins

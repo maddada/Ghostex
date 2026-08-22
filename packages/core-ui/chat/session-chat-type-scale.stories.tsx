@@ -142,13 +142,13 @@ const MESSAGES: SessionChatMessage[] = [
   toolRun(
     "tool-1",
     "Bash",
-    { command: "rg -n 'font-size' sidebar/styles/chat.css" },
+    { command: "rg -n 'font-size' packages/core-ui/styles/chat.css" },
     [
-      "sidebar/styles/chat.css:322:  font-size: 0.8125rem;",
-      "sidebar/styles/chat.css:461:  font-size: 0.8125rem;",
-      "sidebar/styles/chat.css:550:  font-size: 0.75rem;",
-      "sidebar/styles/chat.css:642:  font-size: 0.6875rem;",
-      "sidebar/styles/chat.css:1273: font-size: 0.75rem;",
+      "packages/core-ui/styles/chat.css:322:  font-size: 0.8125rem;",
+      "packages/core-ui/styles/chat.css:461:  font-size: 0.8125rem;",
+      "packages/core-ui/styles/chat.css:550:  font-size: 0.75rem;",
+      "packages/core-ui/styles/chat.css:642:  font-size: 0.6875rem;",
+      "packages/core-ui/styles/chat.css:1273: font-size: 0.75rem;",
     ].join("\n"),
     4_000,
   ),
@@ -162,7 +162,7 @@ const MESSAGES: SessionChatMessage[] = [
   toolRun(
     "tool-2",
     "Read",
-    { file_path: "sidebar/styles/chat.css", limit: 40, offset: 1069 },
+    { file_path: "packages/core-ui/styles/chat.css", limit: 40, offset: 1069 },
     [
       "agent md p:      14px   / lh 20px    / w 400",
       "user bubble p:   14px   / lh 22.75px / w 400",

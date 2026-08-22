@@ -1,6 +1,6 @@
 // Session Chat — normalized chat projection of an agent terminal session.
-// Canonical wire types shared by gxserver (Rust mirror in gxserver-rs/src/session_chat.rs),
-// the shared React chat components (sidebar/chat/), and every client host.
+// Canonical wire types shared by gxserver (Rust mirror in server/src/session_chat.rs),
+// the shared React chat components (packages/core-ui/chat/), and every client host.
 // All values must stay plain JSON: they cross the /api/events websocket, the CEF bridge,
 // and the gpui remote-machine proxy.
 

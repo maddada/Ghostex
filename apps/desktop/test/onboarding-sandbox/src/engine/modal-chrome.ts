@@ -1,15 +1,15 @@
 /*
  * Window chrome per modal kind.
  *
- * Titles and sizes mirror `GpuiAppModalKind::window_title` (gpui/src/main.rs:3114)
- * and `GpuiAppModalKind::window_size` (gpui/src/main.rs:3149) including the raw
- * pixel constants at gpui/src/main.rs:1138-1220.
+ * Titles and sizes mirror `GpuiAppModalKind::window_title` (apps/desktop/src/app/model/types1.rs:378)
+ * and `GpuiAppModalKind::window_size` (apps/desktop/src/app/model/types1.rs:413) including the raw
+ * pixel constants alongside it.
  *
  * `height: "fit"` marks the one-shot fit-height modals: the React host measures
  * its rendered dialog once and posts `contentHeightMeasured`, which the real app
  * clamps to 200..850 before resizing the child window
- * (gpui/src/main.rs:79453 GpuiAppModalHost::receive_bridge_message). The table of
- * fit-height kinds is native/sidebar/modal-host.tsx:152
+ * (apps/desktop/src/app/window/modal_host.rs:159 GpuiAppModalHost::receive_bridge_message). The table of
+ * fit-height kinds is apps/desktop/views/modal-host.tsx:152
  * ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS.
  */
 import type { SandboxModalKind } from "../state/types";
@@ -20,14 +20,14 @@ export interface SandboxModalChrome {
   height: number | "fit";
   /** Fallback height used by the frame until `contentHeightMeasured` arrives. */
   initialHeight: number;
-  /** Mirrors `GpuiAppModalKind::requires_sidebar_state` (gpui/src/main.rs:3282). */
+  /** Mirrors `GpuiAppModalKind::requires_sidebar_state` (apps/desktop/src/app/model/types1.rs:544). */
   requiresSidebarState: boolean;
   /**
    * Set when `GpuiAppModalKind::uses_react_modal_host` is false
-   * (gpui/src/main.rs:3267-3268 — only `WatchGhostexVideo`): the native child
+   * (apps/desktop/src/app/model/types1.rs:529 — only `WatchGhostexVideo`): the native child
    * window loads this URL as its top-level document instead of the modal-host
    * bundle, so there is no bridge, no hydrate, and no ready/presented
-   * handshake (`is_ready: !uses_react_modal_host`, gpui/src/main.rs:79384).
+   * handshake (`is_ready: !uses_react_modal_host`, apps/desktop/src/app/window/modal_host.rs:159).
    */
   nonReactHostUrl?: string;
 }
@@ -69,7 +69,7 @@ const REQUIRES_SIDEBAR_STATE: ReadonlySet<SandboxModalKind> = new Set<SandboxMod
 ]);
 
 /**
- * `GHOSTEX_TUTORIAL_VIDEO_URL` (gpui/src/main.rs:1130) is
+ * `GHOSTEX_TUTORIAL_VIDEO_URL` (apps/desktop/src/app/consts.rs:665) is
  * `https://www.youtube.com/watch?v=APdP-j5n4Mw` — the real watch page, NOT the
  * embed player: YouTube refuses the embed when it is framed from the file://
  * modal-host document (CDXC:GPUITutorialVideo). The sandbox serves that exact
@@ -167,7 +167,7 @@ export function modalChrome(modal: SandboxModalKind): SandboxModalChrome {
 }
 
 /**
- * `GpuiAppModalKind::open_message` (gpui/src/main.rs:3306). Most kinds carry only
+ * `GpuiAppModalKind::open_message` (apps/desktop/src/app/model/types1.rs:572). Most kinds carry only
  * `{modal, type}`; the few that need extra scaffolding get it here so the
  * gallery can force-open them into a renderable state.
  */

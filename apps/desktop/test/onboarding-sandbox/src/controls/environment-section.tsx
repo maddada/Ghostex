@@ -62,7 +62,7 @@ const SKILL_LABELS: Record<BundledSkillId, string> = {
   moveCodexSession: "move codex session",
 };
 
-/** Mirrors gxserver-rs/src/agent_hooks.rs read_hook_status (display only). */
+/** Mirrors server/src/agent_hooks/api.rs read_hook_status (display only). */
 function deriveAgentStatus(state: SimAgentState): string {
   if (!state.cliInstalled) return "cliMissing";
   if (state.hookState === "installed") return "installed";

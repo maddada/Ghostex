@@ -436,7 +436,7 @@ pub async fn run_gxserver_foreground(
     });
     /*
     CDXC:GxserverRustBuild 2026-06-24-20:22:
-    The JSON RPC catch-all needs the raw Request so gxserver-rs can preserve the
+    The JSON RPC catch-all needs the raw Request so server can preserve the
     TypeScript protocol/auth/body gate order for every endpoint, including app
     user data. Use Axum's service fallback instead of the Handler extractor path
     so all non-/api/events requests still flow through the single RPC router.

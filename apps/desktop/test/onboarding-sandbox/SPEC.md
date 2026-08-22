@@ -11,7 +11,7 @@ the flow without restarting the real app:
 
 - A fake macOS desktop: wallpaper, menu bar, dock. Clicking the Ghostex dock icon
   "launches" the app and runs the real startup sequencing.
-- The real React onboarding modals (`native/sidebar/modal-host.tsx` and everything it
+- The real React onboarding modals (`apps/desktop/views/modal-host.tsx` and everything it
   mounts) rendered **unchanged** inside fake NSPanel windows (iframes).
 - A simulation engine that is a faithful TS port of the gpui Rust startup/onboarding
   logic — including its bugs/races, because the whole point is to observe today's
@@ -30,7 +30,7 @@ Run: `bun run sandbox:onboarding` → vite dev server (default port 5199).
 - No real gxserver, no network. Everything mocked in-page.
 - Do not modify any production file. The ONLY exceptions: the root `package.json`
   script addition (foundation agent, targeted Edit) — nothing else outside
-  `gpui/test/onboarding-sandbox/`.
+  `apps/desktop/test/onboarding-sandbox/`.
 
 ## Directory layout + ownership
 
@@ -38,7 +38,7 @@ Files marked (done) already exist — do not rewrite them, only the owner may ex
 Stubs marked (stub) are placeholders the named owner REPLACES wholesale.
 
 ```
-gpui/test/onboarding-sandbox/
+apps/desktop/test/onboarding-sandbox/
   SPEC.md                      (done)
   vite.config.ts               (done — foundation may adjust if genuinely needed)
   tsconfig.json                (done)
@@ -72,13 +72,13 @@ Integration agent (bead ghostex-s5gr.11) may touch everything to fix drift.
 
 Verified facts about the real modal host (from code research — trust these):
 
-- `native/sidebar/modal-host.tsx` self-mounts `<AppModalHost/>` into `#root` at module
-  scope (line ~3505). It imports only `sidebar/*`, `shared/*`, react, react-dom, sonner —
-  zero native/gxserver transport imports. It imports `sidebar/styles.css` itself.
+- `apps/desktop/views/modal-host.tsx` self-mounts `<AppModalHost/>` into `#root` at module
+  scope (line ~3505). It imports only `packages/core-ui/*`, `packages/shared/*`, react, react-dom, sonner —
+  zero native/gxserver transport imports. It imports `packages/core-ui/styles.css` itself.
 - Outbound (React→host): `window.webkit.messageHandlers.ghostexAppModalHost.postMessage(msg)`
-  — `sidebar/app-modal-host-bridge.ts:291` THROWS if the handler is missing, and the host
+  — `packages/core-ui/app-modal-host-bridge.ts:304` THROWS if the handler is missing, and the host
   posts `{type:"ready"}` on mount ⇒ the shim MUST be installed before the module is
-  imported (mirror `ghostex-web/src/main.tsx:8` + `ghostex-web/src/app/app-modal-host-shim.ts`).
+  imported (mirror `apps/web/src/main.tsx:8` + `apps/web/src/app/app-modal-host-shim.ts`).
 - Inbound (host→React): the host listens for
   `window.dispatchEvent(new CustomEvent("ghostex-app-modal-host-message", { detail }))`.
 - Globals to set in the iframe before import:
@@ -95,7 +95,7 @@ Verified facts about the real modal host (from code research — trust these):
   `{type:"sidebarState", message: <hydrate>}` before `open`, AND pass the same hydrate
   as `latestSidebarStateMessage` on the open payload for those kinds (the host applies
   it synchronously before opening). Use `createSidebarStoryMessage()` from
-  `sidebar/sidebar-story-fixtures.ts` (it has `revision: 1`) as the base hydrate.
+  `packages/core-ui/sidebar-story-fixtures.ts` (it has `revision: 1`) as the base hydrate.
 - Other outbound messages to route to the engine: `{type:"close"}`,
   `{type:"sidebarCommand", message}` (THE channel for all modal→app commands),
   `{type:"addProjectDialogRequest"|...}` (add-project ops carry `requestId` and are
@@ -124,9 +124,11 @@ modal-chrome table via the store record.
 
 ## The simulation engine (faithful port — bugs included)
 
-Port the real sequencing from `gpui/src/main.rs`. Every step must emit a `SimEvent`
-with `codeRef` pointing at the real symbol (e.g. `gpui/src/main.rs
-start_gpui_first_run_onboarding`) so the log doubles as documentation of today's flow.
+Port the real sequencing from `apps/desktop/src/app/**` (the former monolithic
+`gpui/src/main.rs` has since been split into that module tree). Every step must emit
+a `SimEvent` with `codeRef` pointing at the real symbol (e.g.
+`apps/desktop/src/app/os_integration.rs start_gpui_first_run_onboarding`) so the log
+doubles as documentation of today's flow.
 
 Launch sequence (macOS):
 1. `launchApp()` → phase `launching`; two detached tracks start in parallel, mirroring
@@ -142,7 +144,7 @@ Launch sequence (macOS):
      ("Updating gxserver…" / "Restarting gxserver" per real copy), simulated daemon
      respawn poll; on success re-run ONLY the portless check — **not** onboarding.
      Emit a warning event: "onboarding skipped this run — real bug, requires app
-     restart" (`gpui/src/main.rs:38155` area). If `respawnFixesHealth`, the scenario
+     restart" (`apps/desktop/src/app/os_integration.rs` area). If `respawnFixesHealth`, the scenario
      heals to healthy for subsequent launches.
    - `spawnFailure` → "gxserver failed" toast, nothing else.
 3. Track B after `cefInitMs`: sidebar surface ready → call `firstRunOnboarding()`
@@ -229,8 +231,8 @@ where the two differ, this section wins:
 - `updateSettings` → merge into the fake settings + re-send hydrate.
 - Unknown commands → log event (kind `message`) so gaps are visible, never throw.
 
-Status derivation rules (mirror `gxserver-rs/src/agent_hooks.rs read_hook_status` +
-`gpui_ghostex_cli_status_message`):
+Status derivation rules (mirror `server/src/agent_hooks/api.rs read_hook_status` +
+`gpui_ghostex_cli_status_message` in `apps/desktop/src/app/helpers/os_cli.rs`):
 - per-agent status: `cliMissing` if `!cliInstalled`; else `installed` if
   `hookState === "installed"`; `updateRequired` if `"outdated"`; else `missing`.
 - firstLaunchSetup "hooks ready" gate (real fn `areFirstLaunchAgentHooksReady`): ANY of
@@ -244,19 +246,19 @@ Status derivation rules (mirror `gxserver-rs/src/agent_hooks.rs read_hook_status
 
 Real message types: import from the shared contract (e.g.
 `SidebarAgentHookStatusMessage`, `SidebarGhostexCliStatusMessage` — see
-`shared/session-grid-contract-sidebar.ts` and how
-`sidebar/first-launch-setup-modal.stories.tsx:13-35` builds fixtures from
+`packages/shared/session-grid-contract-sidebar.ts` and how
+`packages/core-ui/first-launch-setup-modal.stories.tsx:13-35` builds fixtures from
 `DEFAULT_SIDEBAR_AGENTS`). Never hand-roll shapes the real components validate.
 
 Add-project ops: answer `addProjectDialogRequest` (and the repository
 clone/browse/worktree request messages if they arrive) using
-`sidebar/add-project-modal/add-project-modal-mocks.ts`
+`packages/core-ui/add-project-modal/add-project-modal-mocks.ts`
 (`createAddProjectStoryMocks`) semantics; reply envelope
 `{type:"addProjectDialogResult", requestId, ok, result|error}` etc. On success,
 increment `env.projectCount`.
 
 Modal chrome table: title + size per `SandboxModalKind` mirroring
-`GpuiAppModalKind::window_title/sizes` (`gpui/src/main.rs:3117`, `:3169`):
+`GpuiAppModalKind::window_title/sizes` (`apps/desktop/src/app/model/types1.rs:378`, `:413`):
 `firstLaunchSetup`/`discoverGhostex` = 1120×850, title "Ghostex Tips" for
 firstLaunchSetup; fit-height modals (see one-shot table in modal-host.tsx:152) get
 `height:"fit"`. Reasonable defaults for the rest; don't over-research.
@@ -271,20 +273,20 @@ file" = brand-new user.
 
 - Fake macOS desktop filling the stage area: wallpaper (CSS gradient fine), menu bar
   (Apple logo, "Ghostex" when running, clock), dock with a few decoy app icons + the
-  real Ghostex icon (look under `gpui/assets/` / `media/` for an icon asset; a styled
+  real Ghostex icon (look under `apps/desktop/assets/` / `media/` for an icon asset; a styled
   fallback glyph is acceptable). Click Ghostex → `launchApp()`. Running indicator dot.
   While `launching`, show subtle bounce.
 - Fake Ghostex main window (only when running): titlebar with traffic lights (red =
   `quitApp()`), title, and the ⓘ Tips button with unread badge (`tipsBadgeCount`).
   Body: left sidebar pane showing the real empty-state copy ("No Projects Added…" when
   `projectCount === 0`, "Unable to load sessions / Load Sessions" when gxserver
-  unhealthy — real copy in `sidebar/sidebar-app.tsx:3559-3588`), main area placeholder
+  unhealthy — real copy in `packages/core-ui/sidebar-app.tsx:3559-3588`), main area placeholder
   terminal. Visual re-mock only — do NOT mount the real SidebarApp.
 - Toast stack (top-right of the fake window) rendering `store.toasts` mirroring GPUI
   app toasts (title, message, auto-dismiss).
 - Tips panel: anchored dropdown under the ⓘ button when `tipsPanelOpen`. Preferred:
-  mount the REAL React `TitlebarTipsMenu` from `native/sidebar/titlebar-host.tsx`
-  following the mocking pattern of `sidebar/titlebar-reading-panels.stories.tsx`
+  mount the REAL React `TitlebarTipsMenu` from `apps/desktop/views/titlebar-host.tsx`
+  following the mocking pattern of `packages/core-ui/titlebar-reading-panels.stories.tsx`
   (it installs `__ghostex_TITLEBAR_PANEL_KIND__` + `__ghostex_NATIVE_HOST__`). If that
   drags in unmountable module-scope side effects, fall back to a visual re-mock fed by
   `store.tipsNotices` (12 tips + notices list). State whichever you chose in your
@@ -325,8 +327,8 @@ Plain CSS (`src/controls/*.css`), compact developer-tool aesthetic.
 ## Shared repo rules for ALL agents
 
 - Never run `bun run start`/`bun run s`/anything launching the real app. Running
-  `bunx vite --config gpui/test/onboarding-sandbox/vite.config.ts` IS allowed.
-- `bunx tsc -p gpui/test/onboarding-sandbox/tsconfig.json --noEmit` must pass for your
+  `bunx vite --config apps/desktop/test/onboarding-sandbox/vite.config.ts` IS allowed.
+- `bunx tsc -p apps/desktop/test/onboarding-sandbox/tsconfig.json --noEmit` must pass for your
   files (pre-existing errors from imported production code are not yours to fix —
   report them instead).
 - No tests. No git branch switching, no commits, no destructive git commands.

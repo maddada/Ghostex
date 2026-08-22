@@ -388,7 +388,7 @@ pub(crate) fn gpui_portless_admin_result(
 pub(crate) fn gpui_resolve_portless_admin_runtime() -> Option<GpuiPortlessAdminRuntime> {
     /*
     CDXC:GPUIPortlessAdminBridge 2026-06-24-14:28:
-    The GPUI privileged Portless helper is production-capable only from a packaged macOS app with Contents/Resources/Web/code-server/lib/node and Contents/Resources/Web/portless/dist/cli.js. Development binaries and incomplete bundles must report `missing-bundled-portless-runtime` rather than using PATH, global npm, gxserver-rs, or repository-local commands.
+    The GPUI privileged Portless helper is production-capable only from a packaged macOS app with Contents/Resources/Web/code-server/lib/node and Contents/Resources/Web/portless/dist/cli.js. Development binaries and incomplete bundles must report `missing-bundled-portless-runtime` rather than using PATH, global npm, server, or repository-local commands.
 
     Portless integration is currently disabled. If it returns, its Node runtime must resolve from the installed code-server component instead of restoring a Node binary to the base app bundle.
     */

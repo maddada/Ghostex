@@ -828,7 +828,7 @@ impl GhostexGpuiApp {
         let mut settings_object = settings_object.clone();
         // Only explicit remote-machine UI and sidebar ordering saves may replace the
         // saved machine list; broad Settings saves keep the stored value. Mirrors
-        // canSettingsUpdateSourceChangeRemoteMachines in shared/ghostex-settings.ts.
+        // canSettingsUpdateSourceChangeRemoteMachines in packages/shared/ghostex-settings.ts.
         let source_can_change_remote_machines = matches!(
             message.get("source").and_then(serde_json::Value::as_str),
             Some("settings:remoteMachines") | Some("sidebar:remoteMachineOrder")

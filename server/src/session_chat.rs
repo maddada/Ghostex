@@ -19,7 +19,7 @@ use serde_json::{Map, Value};
 CDXC:SessionChatCore 2026-07-31:
 Session Chat renders an agent terminal session as a normalized chat by tailing
 the agent CLI's own JSONL transcript. This module is the Rust mirror of
-`shared/session-chat.ts` plus the upstream chat spec's decoders/readers/watch
+`packages/shared/session-chat.ts` plus the upstream chat spec's decoders/readers/watch
 engine: serde shapes must serialize to IDENTICAL JSON (kebab-case block tags,
 camelCase fields, skip-none optionals), decoders never throw on unknown
 records, and the reverse tail reader keeps the spec's exact limit/hasMore/
@@ -73,7 +73,7 @@ regex shape.
 pub(crate) const GROK_PASTED_IMAGE_TOKEN: &str = "ghostex-paste-";
 
 // ---------------------------------------------------------------------------
-// Schema (Rust mirror of shared/session-chat.ts)
+// Schema (Rust mirror of packages/shared/session-chat.ts)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

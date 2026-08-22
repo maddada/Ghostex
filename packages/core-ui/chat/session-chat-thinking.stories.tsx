@@ -27,14 +27,14 @@ const STORY_MESSAGES: SessionChatMessage[] = [
         type: "tool-call",
         name: "exec",
         input: {
-          cmd: "rg -n \"ghostex-chat-thinking\" sidebar/chat\nsed -n '230,330p' sidebar/styles/chat.css\nbun run typecheck\necho this-fourth-line-must-not-appear",
+          cmd: "rg -n \"ghostex-chat-thinking\" packages/core-ui/chat\nsed -n '230,330p' packages/core-ui/styles/chat.css\nbun run typecheck\necho this-fourth-line-must-not-appear",
         },
       },
       {
         type: "tool-call",
         name: "bash",
         input:
-          "git diff -- sidebar/chat/session-chat-message-list.tsx\ngit diff -- sidebar/styles/chat.css\nbun run build:sidebar-css\necho hidden-fourth-line",
+          "git diff -- packages/core-ui/chat/session-chat-message-list.tsx\ngit diff -- packages/core-ui/styles/chat.css\nbun run build:sidebar-css\necho hidden-fourth-line",
       },
     ],
     source: "transcript",
@@ -256,11 +256,11 @@ export const ExpandedRailsAndCommandPreviews: Story = {
     const canvas = within(canvasElement);
     const execRow = canvas.getByRole("button", { name: /^exec / });
     expect(execRow).toHaveTextContent(
-      "rg -n \"ghostex-chat-thinking\" sidebar/chat sed -n '230,330p' sidebar/styles/chat.css bun run typecheck",
+      "rg -n \"ghostex-chat-thinking\" packages/core-ui/chat sed -n '230,330p' packages/core-ui/styles/chat.css bun run typecheck",
     );
     expect(execRow).not.toHaveTextContent("this-fourth-line-must-not-appear");
     expect(canvas.getByRole("button", { name: /^bash / })).toHaveTextContent(
-      "git diff -- sidebar/chat/session-chat-message-list.tsx git diff -- sidebar/styles/chat.css bun run build:sidebar-css",
+      "git diff -- packages/core-ui/chat/session-chat-message-list.tsx git diff -- packages/core-ui/styles/chat.css bun run build:sidebar-css",
     );
 
     await userEvent.click(execRow);

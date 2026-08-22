@@ -113,7 +113,7 @@ CDXC:GxserverLogs 2026-06-19-18:44:
 Retention rewrites the retained JSONL file, so append, rotation, and prune must share a per-log-file writer lock. Do not replace this with stale temp-and-rename pruning unless concurrent appends are blocked or merged before the rewrite commits.
 
 CDXC:GxserverLogs 2026-06-22-09:57:
-Area 36 privacy review requires persistent gxserver-rs logs to stay metadata-only even when future call sites accidentally pass prompts, environment maps, or uppercase-scheme URLs through structured details. Keep those redactions at the JSONL writer boundary so hook, clone, typed-operation, and lifecycle diagnostics cannot persist user content.
+Area 36 privacy review requires persistent server logs to stay metadata-only even when future call sites accidentally pass prompts, environment maps, or uppercase-scheme URLs through structured details. Keep those redactions at the JSONL writer boundary so hook, clone, typed-operation, and lifecycle diagnostics cannot persist user content.
 */
 impl GxserverLogger {
     pub fn new(paths: GxserverPaths) -> Self {

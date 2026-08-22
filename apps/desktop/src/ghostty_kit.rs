@@ -518,7 +518,7 @@ pub mod ffi {
 
     CDXC:GPUILinuxX11Backend 2026-07-05:
     The exported GhosttyKit/libghostty symbols exist only in the macOS static
-    archive (gpui/build.rs links GhosttyKit on macOS alone; Windows/Linux get
+    archive (apps/desktop/build.rs links GhosttyKit on macOS alone; Windows/Linux get
     libghostty-vt only, by design). The ABI types above stay cross-platform so
     shared code can name them, but the symbol bindings are macOS-only —
     non-macOS code paths that would call them must be cfg-gated at the caller,

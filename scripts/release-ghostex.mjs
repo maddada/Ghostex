@@ -90,7 +90,7 @@ function gpuiReleaseEntry(version) {
 
 /*
  CDXC:RemoteUbuntuPackaging 2026-06-29-19:45:
- Public Ghostex releases must bundle first-run gxserver-rs packages for Ubuntu
+ Public Ghostex releases must bundle first-run server packages for Ubuntu
  x64 and arm64. Validate the deterministic Linux CI outputs before mutating
  release metadata and force native app packaging to stage both resources so the
  remote installer cannot silently ship without Ubuntu x64 support.
