@@ -31,9 +31,31 @@ import { describe, expect, test } from "vitest";
  * run by `bun run desktop:typecheck` — but it is not a substitute for this file:
  * it cannot see the Rust bridge or the modal host, and a missing dispatch arm is
  * still valid TypeScript.
+ *
+ * CDXC:DesktopRustSplit 2026-08-22:
+ * `apps/desktop/src/main.rs` was cut down to a 756-line crate root; the three
+ * Rust hops below moved into `apps/desktop/src/app/**` (docs/2026-08-22/repo-
+ * restructure/SPLITS.md C1 and the app-modal-kind split). The allowlist +
+ * dispatch-gate pair stayed contiguous with each other because both landed in
+ * `sidebar_dispatch.rs` and `delayed_send.rs` respectively (each read is a
+ * single `sourceBetweenIn` inside one file, same as before); only the
+ * `Self::RenameWorktree` app-modal-kind literals, which never had a contiguity
+ * assumption between them (three independent `toContain`s), moved to
+ * `app/model/types1.rs`. What each test verifies is unchanged.
  */
 
-const gpuiMainSource = readFileSync(new URL("../../apps/desktop/src/main.rs", import.meta.url), "utf8");
+const gpuiSidebarDispatchSource = readFileSync(
+  new URL("../../apps/desktop/src/app/sidebar_dispatch.rs", import.meta.url),
+  "utf8",
+);
+const gpuiDelayedSendSource = readFileSync(
+  new URL("../../apps/desktop/src/app/delayed_send.rs", import.meta.url),
+  "utf8",
+);
+const gpuiModalKindSource = readFileSync(
+  new URL("../../apps/desktop/src/app/model/types1.rs", import.meta.url),
+  "utf8",
+);
 const gpuiRuntimeDispatchSource = readFileSync(
   new URL("../../apps/desktop/sidebar/gxserver-runtime/core.ts", import.meta.url),
   "utf8",
@@ -68,7 +90,7 @@ describe("gpui/src/main.rs rename bridge", () => {
      * "also rename the branch" tick into a folder-only rename with no error.
      */
     const allowlist = sourceBetweenIn(
-      gpuiMainSource,
+      gpuiSidebarDispatchSource,
       "fn forward_gpui_worktree_modal_command_to_sidebar",
       "let Some(sidebar) = self.sidebar.clone()",
     );
@@ -84,7 +106,7 @@ describe("gpui/src/main.rs rename bridge", () => {
      * above is never reached and the modal's Rename button does nothing at all.
      */
     const dispatch = sourceBetweenIn(
-      gpuiMainSource,
+      gpuiDelayedSendSource,
       '"requestProjectWorktrees"\n            | "createProjectWorktree"',
       "forward_gpui_worktree_modal_command_to_sidebar(command_type, command, cx);",
     );
@@ -93,9 +115,9 @@ describe("gpui/src/main.rs rename bridge", () => {
   });
 
   test("registers the renameWorktree app-modal kind", () => {
-    expect(gpuiMainSource).toContain('"renameWorktree" => Some(Self::RenameWorktree)');
-    expect(gpuiMainSource).toContain('Self::RenameWorktree => "renameWorktree"');
-    expect(gpuiMainSource).toContain('Self::RenameWorktree => "Ghostex Rename Worktree"');
+    expect(gpuiModalKindSource).toContain('"renameWorktree" => Some(Self::RenameWorktree)');
+    expect(gpuiModalKindSource).toContain('Self::RenameWorktree => "renameWorktree"');
+    expect(gpuiModalKindSource).toContain('Self::RenameWorktree => "Ghostex Rename Worktree"');
   });
 });
 
