@@ -1,8 +1,14 @@
 /*
 CDXC:SessionChatTerminalActivity 2026-08-22:
-Long-running work the agent CLI reports ONLY as a progress line on its terminal
-screen, with nothing in the transcript until it finishes. Claude Code's
-compaction is the first (and today the only) one:
+Live work the agent CLI reports ONLY on its terminal screen, before the same
+text reaches the transcript. Claude Code replaces a current-status line as it
+works:
+
+    ⏺ Removing temporary examples
+
+The client keeps each changed value as a transient reasoning row, then lets the
+authoritative transcript replace it when JSONL catches up. Claude's compaction
+is the structured-progress variant:
 
     ❯ /compact
 
@@ -17,13 +23,12 @@ user is reading is about to be REPLACED — so a bare typing indicator is not
 just uninformative, it hides the single most consequential thing happening.
 
 This is deliberately NOT a terminal notice: nothing is wrong, nothing is
-blocked, and there is nothing to answer. It is progress, so it renders in the
-transcript where the work is, next to the messages it is about to compact.
+blocked, and there is nothing to answer. Both variants render in the transcript
+where the work is.
 
-Parsing is narrow and evidence-only. The percentage and the elapsed clock are
-read off the screen or omitted; neither is ever estimated, because a progress
-bar that invents its own numbers is worse than no progress bar. An activity
-with no percentage still carries its label, which is the part that matters.
+Parsing is narrow and evidence-only. A transient line must own a line beginning
+with Claude's `⏺` marker. The percentage and elapsed clock are read off the
+screen or omitted; neither is ever estimated.
 */
 
 use crate::session_chat_options::{
@@ -43,6 +48,9 @@ const ACTIVITY_PERCENT_LOOKAHEAD: usize = 2;
 
 /// Activity kind for Claude Code's `/compact` (manual and automatic).
 pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
+
+/// Claude Code's current assistant status, not yet flushed to transcript JSONL.
+pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
 
 /// The phrase Claude paints while compacting. Matched case-sensitively on the
 /// space-collapsed line, so prose that merely mentions compaction cannot hit
@@ -161,6 +169,19 @@ fn trailing_parenthetical(line: &str) -> Option<&str> {
     Some(line[open + 1..close].trim())
 }
 
+/// Claude appends ` · 22s` to a running tool row and repaints only the clock.
+/// Keep that clock as progress metadata so one tool run does not become a new
+/// transient chat message every second.
+fn trailing_elapsed_status(label: &str) -> (&str, Option<u64>) {
+    let Some((stable_label, elapsed)) = label.rsplit_once(" · ") else {
+        return (label, None);
+    };
+    let Some(elapsed_seconds) = parse_elapsed_seconds(elapsed.trim()) else {
+        return (label, None);
+    };
+    (stable_label.trim_end(), Some(elapsed_seconds))
+}
+
 /// `49%` anywhere on the line (the bar glyphs around it are ignored).
 fn parse_percent(line: &str) -> Option<u8> {
     for token in line.split_whitespace() {
@@ -186,20 +207,34 @@ spinner decoration (no letters and no digits), which an assistant sentence or a
 tip line can never satisfy.
 */
 fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
-    let at = line.find(COMPACTING_LABEL)?;
-    if line[..at]
-        .chars()
-        .any(|ch| ch.is_alphabetic() || ch.is_ascii_digit())
-    {
+    if let Some(at) = line.find(COMPACTING_LABEL) {
+        if !line[..at]
+            .chars()
+            .any(|ch| ch.is_alphabetic() || ch.is_ascii_digit())
+        {
+            let mut activity = SessionChatTerminalActivity::new(
+                SESSION_CHAT_ACTIVITY_COMPACTING,
+                "Compacting conversation",
+            );
+            activity.elapsed_seconds = trailing_parenthetical(line).and_then(parse_elapsed_seconds);
+            return Some(activity);
+        }
+    }
+
+    let rest = line.trim_start().strip_prefix('⏺')?;
+    if !rest.chars().next().is_some_and(char::is_whitespace) {
         return None;
     }
-    let mut activity =
-        SessionChatTerminalActivity::new(SESSION_CHAT_ACTIVITY_COMPACTING, "Compacting conversation");
-    activity.elapsed_seconds = trailing_parenthetical(line).and_then(parse_elapsed_seconds);
+    let (label, elapsed_seconds) = trailing_elapsed_status(rest.trim());
+    if label.is_empty() {
+        return None;
+    }
+    let mut activity = SessionChatTerminalActivity::new(SESSION_CHAT_ACTIVITY_CLAUDE_STATUS, label);
+    activity.elapsed_seconds = elapsed_seconds;
     Some(activity)
 }
 
-/// `Some` while the agent is painting a progress line this build understands.
+/// `Some` while the agent is painting a live line this build understands.
 pub fn detect_session_chat_terminal_activity(
     agent: Option<&str>,
     screen_text: &str,
@@ -226,11 +261,13 @@ pub fn detect_session_chat_terminal_activity(
         let Some(mut activity) = activity_from_line(line) else {
             continue;
         };
-        activity.percent = window
-            .iter()
-            .skip(index + 1)
-            .take(ACTIVITY_PERCENT_LOOKAHEAD)
-            .find_map(|candidate| parse_percent(candidate));
+        if activity.kind == SESSION_CHAT_ACTIVITY_COMPACTING {
+            activity.percent = window
+                .iter()
+                .skip(index + 1)
+                .take(ACTIVITY_PERCENT_LOOKAHEAD)
+                .find_map(|candidate| parse_percent(candidate));
+        }
         return Some(activity);
     }
     None
