@@ -164,7 +164,9 @@ const html = `<!doctype html>
     <style>
       html,
       body {
-        background: #111111;
+        /* The dark transcript's page colour, so the WebView's first paint is
+           already the surface (session-chat-main.tsx re-applies it per theme). */
+        background: #0a0a0a;
         height: 100%;
         margin: 0;
         overscroll-behavior: none;

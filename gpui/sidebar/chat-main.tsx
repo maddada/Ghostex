@@ -759,16 +759,28 @@ let renderReadyChat: ((theme: SessionChatTheme) => void) | null = null;
 
 function applyDocumentChatTheme(theme: SessionChatTheme): void {
   document.documentElement.style.colorScheme = theme;
-  document.documentElement.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
-  document.body.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#111111";
+  document.documentElement.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#0a0a0a";
+  document.body.style.backgroundColor = theme === "light" ? "#fdfdfd" : "#0a0a0a";
 }
 
+/*
+CDXC:SessionChatTypeScale 2026-08-22:
+An empty setting REMOVES the property rather than writing a fallback chain into
+it. The stylesheet already declares what the transcript falls back to, and the
+custom property's own fallback only applies while the property is unset — so
+writing "no choice" as a value here silently overrode the sheet's default and
+made the chat's typeface impossible to change from CSS.
+*/
 function applyDocumentChatFontFamily(fontFamily: string): void {
   const normalized = fontFamily.trim();
-  document.documentElement.style.setProperty(
-    "--ghostex-session-chat-font-family",
-    normalized || "var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif)",
-  );
+  if (normalized) {
+    document.documentElement.style.setProperty(
+      "--ghostex-session-chat-font-family",
+      normalized,
+    );
+  } else {
+    document.documentElement.style.removeProperty("--ghostex-session-chat-font-family");
+  }
   window.dispatchEvent(new Event("ghostex-session-chat-font-family-changed"));
 }
 

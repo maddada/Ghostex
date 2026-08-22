@@ -282,14 +282,19 @@ function readPresentation(): MobileChatPresentation {
 }
 
 function applyDocumentPresentation(presentation: MobileChatPresentation): void {
-  const background = presentation.theme === "light" ? "#fdfdfd" : "#111111";
+  const background = presentation.theme === "light" ? "#fdfdfd" : "#0a0a0a";
   document.documentElement.style.colorScheme = presentation.theme;
   document.documentElement.style.backgroundColor = background;
-  document.documentElement.style.setProperty(
-    "--ghostex-session-chat-font-family",
-    presentation.fontFamily ||
-      "var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif)",
-  );
+  // CDXC:SessionChatTypeScale 2026-08-22: unset, not a written-out fallback —
+  // the shared sheet owns the default face (see chat-main.tsx).
+  if (presentation.fontFamily) {
+    document.documentElement.style.setProperty(
+      "--ghostex-session-chat-font-family",
+      presentation.fontFamily,
+    );
+  } else {
+    document.documentElement.style.removeProperty("--ghostex-session-chat-font-family");
+  }
   document.documentElement.style.setProperty(
     "--ghostex-session-chat-transcript-width-percent",
     String(presentation.transcriptWidthPercent),

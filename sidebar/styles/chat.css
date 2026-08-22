@@ -1,4 +1,20 @@
 /*
+ * CDXC:SessionChatTypeScale 2026-08-22:
+ * The transcript's typeface. Imported here rather than from a host entry point
+ * because this sheet is the one file all three chat surfaces load (gpui's
+ * chat.html through sidebar/styles.css, the web host through the same, and the
+ * mobile WebView through mobile-chat/session-chat.css), so one import covers
+ * them all. The mobile build inlines `.woff2` as a data URL, so its single-file
+ * page keeps the face with no external request.
+ *
+ * A variable face specifically: the transcript needs 400 for running prose and
+ * 500/600 for labels and headings off ONE file, and real weights rather than
+ * the browser's synthetic emboldening are most of why the bold text stops
+ * looking heavier than it should next to the body copy.
+ */
+@import "@fontsource-variable/dm-sans/index.css";
+
+/*
  * CDXC:SessionChat 2026-07-31:
  * Shared Session Chat surface (sidebar/chat/). The conversation now renders
  * with the shadcn chat components (message-scroller, message, bubble,
@@ -17,11 +33,19 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* The user's own chat font setting still wins; this is only what the surface
+   falls back to when the setting is empty, which is the default. */
 .ghostex-session-chat-scope,
 .ghostex-session-chat-popup {
   font-family: var(
     --ghostex-session-chat-font-family,
-    var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif)
+    "DM Sans Variable",
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif
   );
 }
 
@@ -190,7 +214,7 @@ body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
 .ghostex-session-chat-scope[data-chat-theme="dark"],
 body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   color-scheme: dark;
-  --background: #111111;
+  --background: #0a0a0a;
   --foreground: #fcfcfc;
   --card: var(--background);
   --card-foreground: var(--foreground);
@@ -209,12 +233,13 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   --input: color-mix(in srgb, #fff 8%, transparent);
   --ring: oklch(55.6% 0 0);
   --info-foreground: oklch(70.7% 0.165 254.624);
-  /* Same 82% step as light. #fcfcfc on #111 is the loudest pairing in the app,
-     so this is the theme the softening was really for: 18.4:1 -> 12.5:1, well
-     clear of the 7.1:1 muted lane. */
+  /* Same 82% step as light. #fcfcfc on #0a0a0a is the loudest pairing in the
+     app, so this is the theme the softening was really for: 19.6:1 -> 13.4:1,
+     well clear of the muted lane. */
   --chat-prose-foreground: color-mix(in srgb, var(--foreground) 82%, var(--background));
   /* Same five families lifted for a dark background: the light theme's shades
-     go muddy on #111, so each one moves up to its brighter sibling. */
+     go muddy on this near-black, so each one moves up to its brighter
+     sibling. */
   --alert-note: var(--info-foreground);
   --alert-tip: oklch(76.5% 0.177 163.223);
   --alert-important: oklch(71.4% 0.203 305.504);
@@ -233,10 +258,14 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   padding: 0.75rem;
 }
 
+/* CDXC:SessionChatTypeScale 2026-08-22: the transcript has exactly two raised
+   surfaces — the user's bubble and the composer — and they wear the same fill,
+   so a message and the box you typed it in read as the same material sitting
+   on the page. */
 .ghostex-session-chat-scope[data-chat-theme="dark"]
   .ghostex-chat-user-bubble
   > [data-slot="bubble-content"] {
-  background: #1d1d1d;
+  background: #141414;
   border-radius: 1rem;
   color: #fcfcfc;
   padding: 0.75rem;
@@ -287,12 +316,15 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-thinking-row {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
+  /* CDXC:SessionChatTypeScale 2026-08-22: the work lane, not a tier of its
+     own. Reasoning is the same kind of thing as a tool row — something the
+     agent did on the way to the answer — so it is sized like one. */
+  font-size: 0.75rem;
   font-style: normal;
   display: flex;
   flex-direction: column;
   gap: calc(0.375rem + 7px);
-  line-height: 1.5;
+  line-height: 1.25rem;
   min-width: 0;
   padding: 0 0 calc(0.375rem + 7px);
   white-space: pre-wrap;
@@ -378,6 +410,17 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   white-space: nowrap;
 }
 
+/* Open, that same line is the heading of an expanded turn — and for a one-line
+   thought it is the whole thought, so it has to be readable in full. Only the
+   collapsed state trades completeness for a single row. */
+.ghostex-chat-thinking-trigger[aria-expanded="true"]
+  .ghostex-chat-thinking-text
+  > [data-ghostex-thinking-text] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 /* The reasoning body is markdown, so it owns its own block spacing and must
    not inherit the row's pre-wrap (that would double every blank line). */
 .ghostex-chat-thinking-body {
@@ -413,7 +456,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   border-radius: 4px !important;
   color: var(--muted-foreground);
   display: inline-flex;
-  font-size: 0.8125rem;
+  /* CDXC:SessionChatTypeScale 2026-08-22: the work lane, like every other
+     toggle it sits among. */
+  font-size: 0.75rem;
   gap: 0.375rem;
   height: auto;
   line-height: 1.25rem;
@@ -678,19 +723,19 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-scroll-bottom-button,
 .ghostex-chat-scroll-bottom-button:not(:disabled):hover {
-  background-color: #111111;
+  background-color: #0a0a0a;
   border-radius: 9999px;
 }
 
 .ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-composer {
-  background: #242424;
+  background: #141414;
 }
 
 /* The interactive prompt card stands in for the composer while a question is
    live, so it wears the same raised surface instead of disappearing into the
    conversation background (--card is the page background in this theme). */
 .ghostex-session-chat-scope[data-chat-theme="dark"] .ghostex-chat-question-card {
-  background: #242424;
+  background: #141414;
 }
 
 /* The chat pane can be much narrower than the app window, so lay out the
@@ -858,6 +903,54 @@ body[data-session-chat-theme="dark"]
   background: var(--muted);
 }
 
+/*
+CDXC:SessionChatScreenProbed 2026-08-22:
+Loading state for the Model / Options pills, shown only while gxserver has not
+yet read the session's screen. It renders INSIDE the real pill button, so the
+element, its height, and its padding are the ones the resolved label will use —
+the bar is swapped for text with no reflow, which is the point of showing a
+skeleton instead of the category word ("Model") that used to sit here and then
+change into a value.
+
+Widths approximate a typical resolved label ("Opus 5", "High", "Opus 5 · High")
+so the swap barely moves the composer row.
+*/
+.ghostex-chat-pill-skeleton {
+  display: inline-block;
+  height: 0.625rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, currentColor 24%, transparent);
+  animation: ghostex-chat-pill-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.ghostex-chat-pill-skeleton[data-pill="model"] {
+  width: 3.25rem;
+}
+
+.ghostex-chat-pill-skeleton[data-pill="options"] {
+  width: 2.25rem;
+}
+
+.ghostex-chat-pill-skeleton[data-pill="combined"] {
+  width: 5.5rem;
+}
+
+@keyframes ghostex-chat-pill-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-pill-skeleton {
+    animation: none;
+  }
+}
+
 /* The textarea backend uses field-sizing:content so it grows with the draft.
    That intrinsic sizing also applies horizontally, so a pasted line with no
    break opportunity (a long URL, a base64 blob) would make the input's
@@ -1007,7 +1100,27 @@ body[data-session-chat-theme="dark"]
 
 /* --- Markdown ------------------------------------------------------------- */
 
+/*
+CDXC:SessionChatTypeScale 2026-08-22:
+The transcript runs on THREE sizes and nothing else:
+
+  14px / 1.625   prose — an answer, a user message, a reasoning paragraph
+  12px / 20px    the work lane — tool rows, group toggles, run headings
+  11px / 1.625   detail under a work row — command output, diffs, tool bodies
+
+It used to run on four, with the line height left to whatever each host
+happened to inherit: the answer's paragraphs took `text-sm`'s own 20px leading
+while the user's bubble had 1.625, so the two sides of the same conversation
+set 14px text at different rhythms. A 13px tier sat between prose and the work
+lane holding the reasoning rows and the completed-work toggle, close enough to
+both to read as a mistake rather than a level. That is what made the transcript
+look like it changed its mind about size and weight from block to block.
+
+The leading is declared HERE, on the markdown root, so every host and every
+lane inherits the same one — a size is chosen per lane, a rhythm is not.
+*/
 .ghostex-chat-markdown {
+  line-height: 1.625;
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1038,7 +1151,7 @@ body[data-session-chat-theme="dark"]
    that steps down.
 
    The user's bubble is deliberately left at full strength too: it sits on its
-   own fill (--accent in light, #1d1d1d in dark), which in dark is barely a
+   own fill (--accent in light, #141414 in dark), which in dark is barely a
    shade off the page, so the text is most of what makes the bubble read as an
    object. It is also short, it is the thing you scan for when you scroll back,
    and it almost never contains headings — so there is no hierarchy to win

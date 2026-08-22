@@ -7,7 +7,10 @@
     <style>
       html,
       body {
-        background: #0e0e0e;
+        /* The dark transcript's own page colour, so the frame the browser
+           paints before the bundle boots is already the surface it will become
+           (chat-main.tsx re-applies this per theme once it knows one). */
+        background: #0a0a0a;
         height: 100%;
         margin: 0;
       }
