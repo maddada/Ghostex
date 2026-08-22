@@ -23,6 +23,10 @@ import {
   centerSessionChatExpansion,
   SessionChatExpansion,
 } from "./session-chat-expansion";
+import {
+  answeredSessionChatQuestionExchange,
+  SessionChatQuestionExchangeCard,
+} from "./session-chat-question-exchange";
 import { pairSessionChatToolBlocks } from "./session-chat-tool-fold";
 import {
   formatSessionChatToolInput,
@@ -40,6 +44,12 @@ export interface SessionChatToolRunProps {
   expandSignal?: boolean;
   /** The parent disclosure already owns collapsing, so render every row. */
   showAllRows?: boolean;
+  /**
+   * Keep answered question pairs as plain tool rows. Set by contexts where a
+   * hoisted SessionChatQuestionExchangeCard already shows the exchange (the
+   * expanded completed-work log), so it is not rendered twice.
+   */
+  questionPairsAsRows?: boolean;
 }
 
 function clipBody(text: string): string {
@@ -199,12 +209,45 @@ export function SessionChatToolRun({
   blocks,
   expandSignal = false,
   showAllRows = false,
+  questionPairsAsRows = false,
 }: SessionChatToolRunProps) {
   const pairs = pairSessionChatToolBlocks(blocks);
   const [expanded, setExpanded] = useState(showAllRows || expandSignal);
   useEffect(() => setExpanded(showAllRows || expandSignal), [expandSignal, showAllRows]);
 
-  const hiddenCount = Math.max(0, pairs.length - 1);
+  const exchanges = pairs.map((pair) =>
+    questionPairsAsRows ? null : answeredSessionChatQuestionExchange(pair),
+  );
+  const renderItem = (index: number) => {
+    const pair = pairs[index];
+    if (!pair) {
+      return null;
+    }
+    const exchange = exchanges[index];
+    if (exchange) {
+      return (
+        <div className="ghostex-chat-question-exchange-item py-1" key={index}>
+          <SessionChatQuestionExchangeCard exchange={exchange} />
+        </div>
+      );
+    }
+    return (
+      <ToolLine
+        call={pair.call}
+        expandSignal={expandSignal}
+        key={index}
+        result={pair.result}
+      />
+    );
+  };
+
+  // An answered question is conversation, not work: its card never folds
+  // behind the "+N previous tool calls" toggle. The fold hides only the
+  // ordinary tool rows before the last pair, exactly as before.
+  const collapsedVisible = pairs.map(
+    (_, index) => index === pairs.length - 1 || exchanges[index] !== null,
+  );
+  const hiddenCount = collapsedVisible.filter((visible) => !visible).length;
   const toggle = (
     <button
       aria-expanded={expanded}
@@ -227,32 +270,27 @@ export function SessionChatToolRun({
     </button>
   );
 
-  const rows = (firstIndex: number) =>
-    pairs.slice(firstIndex).map((pair, index) => (
-      <ToolLine
-        call={pair.call}
-        expandSignal={expandSignal}
-        key={firstIndex + index}
-        result={pair.result}
-      />
-    ));
+  const allRows = pairs.map((_, index) => renderItem(index));
+  const collapsedRows = pairs.map((_, index) =>
+    collapsedVisible[index] ? renderItem(index) : null,
+  );
 
   return (
     <div className="ghostex-chat-tool-run">
       {hiddenCount === 0 || showAllRows ? (
-        rows(0)
+        allRows
       ) : expanded ? (
         <SessionChatExpansion
           bodyClassName="ghostex-chat-tool-run-expanded"
           label="Show fewer tool calls"
           onCollapse={() => setExpanded(false)}
         >
-          {rows(0)}
+          {allRows}
           {toggle}
         </SessionChatExpansion>
       ) : (
         <>
-          {rows(hiddenCount)}
+          {collapsedRows}
           {toggle}
         </>
       )}
