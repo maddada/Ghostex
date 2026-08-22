@@ -50,6 +50,7 @@
     "web:dev": "vite --config apps/web/vite.config.ts",
     "web:build": "vite build --config apps/web/vite.config.ts",
     "web:typecheck": "tsc -p apps/web/tsconfig.json --noEmit",
+    "desktop:typecheck": "tsc -p apps/desktop/tsconfig.json --noEmit",
     "sandbox:onboarding": "vite --config apps/desktop/test/onboarding-sandbox/vite.config.ts",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run"

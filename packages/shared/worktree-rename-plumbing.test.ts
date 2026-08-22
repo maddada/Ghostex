@@ -16,11 +16,34 @@ import { describe, expect, test } from "vitest";
  * never reaches the allowlist at all. This test reads those files as text and
  * asserts the hops exist, following the precedent set by
  * `shared/gpui-hotkey-defaults-parity.test.ts`.
+ *
+ * CDXC:GxserverRuntimeSplit 2026-08-22:
+ * `gxserver-runtime.ts` is now a folder. The three hops this file used to find
+ * in one text blob live in three different modules, so each read is aimed at the
+ * module that owns its hop: the sidebar-message dispatch in `core.ts`, the two
+ * rename handlers in `worktrees.ts`, and the error reader in
+ * `helpers/worktrees.ts`. The handlers lost their `private` keyword in the move
+ * (a method copied onto the prototype from another module cannot be `private`)
+ * and gained an explicit `this` parameter, so the literal markers below match
+ * the new form. Nothing else about what is asserted changed.
+ *
+ * There is also a real typecheck over this tree now — `apps/desktop/tsconfig.json`,
+ * run by `bun run desktop:typecheck` — but it is not a substitute for this file:
+ * it cannot see the Rust bridge or the modal host, and a missing dispatch arm is
+ * still valid TypeScript.
  */
 
 const gpuiMainSource = readFileSync(new URL("../../apps/desktop/src/main.rs", import.meta.url), "utf8");
-const gpuiRuntimeSource = readFileSync(
-  new URL("../../apps/desktop/sidebar/gxserver-runtime.ts", import.meta.url),
+const gpuiRuntimeDispatchSource = readFileSync(
+  new URL("../../apps/desktop/sidebar/gxserver-runtime/core.ts", import.meta.url),
+  "utf8",
+);
+const gpuiRuntimeWorktreeSource = readFileSync(
+  new URL("../../apps/desktop/sidebar/gxserver-runtime/worktrees.ts", import.meta.url),
+  "utf8",
+);
+const gpuiRuntimeWorktreeHelperSource = readFileSync(
+  new URL("../../apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts", import.meta.url),
   "utf8",
 );
 const modalHostSource = readFileSync(
@@ -76,12 +99,16 @@ describe("gpui/src/main.rs rename bridge", () => {
   });
 });
 
-describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
+describe("gpui/sidebar/gxserver-runtime rename handlers", () => {
   test("handles both rename messages", () => {
-    expect(gpuiRuntimeSource).toContain('case "promptRenameWorktreeForGroup":');
-    expect(gpuiRuntimeSource).toContain('case "confirmRenameWorktree":');
-    expect(gpuiRuntimeSource).toContain("private async promptRenameWorktreeForGroup(");
-    expect(gpuiRuntimeSource).toContain("private async confirmRenameWorktree(");
+    expect(gpuiRuntimeDispatchSource).toContain('case "promptRenameWorktreeForGroup":');
+    expect(gpuiRuntimeDispatchSource).toContain('case "confirmRenameWorktree":');
+    expect(gpuiRuntimeWorktreeSource).toContain(
+      "async promptRenameWorktreeForGroup(this: GpuiSidebarRuntime,",
+    );
+    expect(gpuiRuntimeWorktreeSource).toContain(
+      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
+    );
   });
 
   test("calls the single rename endpoint rather than orchestrating git itself", () => {
@@ -91,9 +118,9 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
      * branch rename.
      */
     const confirm = sourceBetweenIn(
-      gpuiRuntimeSource,
-      "private async confirmRenameWorktree(",
-      "private async promptDeleteRemoteWorktreeForGroup(",
+      gpuiRuntimeWorktreeSource,
+      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
+      "async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,",
     );
 
     expect(confirm).toContain('"/api/renameWorktreeProject"');
@@ -108,11 +135,13 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
      * its own reader or the user gets a generic failure instead of
      * `Branch "feat/x" already exists.`
      */
-    expect(gpuiRuntimeSource).toContain("function gpuiWorktreeRenameUserVisibleErrorMessage(");
+    expect(gpuiRuntimeWorktreeHelperSource).toContain(
+      "function gpuiWorktreeRenameUserVisibleErrorMessage(",
+    );
     const confirm = sourceBetweenIn(
-      gpuiRuntimeSource,
-      "private async confirmRenameWorktree(",
-      "private async promptDeleteRemoteWorktreeForGroup(",
+      gpuiRuntimeWorktreeSource,
+      "async confirmRenameWorktree(this: GpuiSidebarRuntime,",
+      "async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,",
     );
     expect(confirm).toContain("gpuiWorktreeRenameUserVisibleErrorMessage(error)");
     expect(confirm).not.toContain("gpuiWorktreeUserVisibleErrorMessage(error)");
@@ -129,7 +158,7 @@ describe("gpui/sidebar/gxserver-runtime.ts rename handlers", () => {
      * the app, never anything the user did.
      */
     const reader = sourceBetweenIn(
-      gpuiRuntimeSource,
+      gpuiRuntimeWorktreeHelperSource,
       "function gpuiWorktreeRenameUserVisibleErrorMessage(",
       "\n}",
     );

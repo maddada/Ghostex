@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    // CDXC:DesktopTypecheck 2026-08-22:
+    // Paths resolve relative to the config that declares them, so the root's
+    // "@/*": ["./*"] has to be re-anchored at the repo root from this depth.
+    "paths": {
+      "@/*": ["../../*"]
+    },
+    "strict": true
+  },
+  // The two ambient declaration files below are picked up by the root config
+  // through its `packages/shared/**/*` include. They are what teaches tsc about
+  // `*.svg`/`*.png` imports and the handful of untyped runtime shims, so this
+  // config has to name them explicitly or the desktop tree reports ~50 phantom
+  // TS2307s that the root gate does not.
+  "include": [
+    "sidebar/**/*",
+    "views/**/*",
+    "../../packages/shared/asset-modules.d.ts",
+    "../../packages/shared/typecheck-shims.d.ts"
+  ]
+}

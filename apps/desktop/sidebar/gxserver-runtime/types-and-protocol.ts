@@ -1,0 +1,653 @@
+/*
+CDXC:GxserverRuntimeSplit 2026-08-22:
+Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
+changed. See `core.ts` for how the runtime's methods are re-attached.
+*/
+import {
+  GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE,
+  GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION,
+  GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE,
+  GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_VERSION,
+} from "./constants";
+import type {
+  GxserverPresentationSidebarProjectOverlay,
+} from "@/packages/shared/gxserver-presentation-sidebar-projection";
+import type {
+  GxserverFirstPromptTitleGenerationAgent,
+  GxserverPresentationDelta,
+  GxserverPresentationProject,
+  GxserverPresentationSession,
+  GxserverPresentationSnapshot,
+  GxserverProjectDomainState,
+  GxserverRendererCommand,
+} from "@/packages/shared/gxserver-protocol";
+import type {
+  ExtensionToSidebarMessage,
+  SidebarCommandSessionIndicator,
+  SidebarRemoteMachineStatusMessage,
+  SidebarSessionGroup,
+  SidebarToExtensionMessage,
+} from "@/packages/shared/session-grid-contract";
+import type {
+  SidebarGitAction,
+  SidebarGitChangedFile,
+  SidebarGitState,
+} from "@/packages/shared/sidebar-git";
+
+export type GpuiGxserverBootstrap = {
+  authToken?: string;
+  baseUrl?: string;
+  clientId?: string;
+  focusedSessionId?: string;
+  initialActiveProjectId?: string;
+  protocolVersion?: number;
+  visibleSessionIds?: readonly string[];
+};
+
+export type GpuiCommandPaneSessionSummary = {
+  commandId?: string;
+  closeAfterDone?: boolean;
+  closeAfterDoneDeadlineAt?: string;
+  closeAfterDoneRemainingLabel?: string;
+  closeAfterDoneRemainingMs?: number;
+  delayedSendDeadlineAt?: string;
+  delayedSendRemainingLabel?: string;
+  delayedSendRemainingMs?: number;
+  isActive?: boolean;
+  /*
+  CDXC:GPUISidebarAutoSleep 2026-06-27-06:54:
+  Rust forwards this true-only bit for native-shaped external `G...` command-panel split pane owners so GPUI Auto Sleep can protect every active command leaf while keeping `isActive` scoped to HUD/responder focus. Rust shell internals may still use numeric ids, but those ids must not cross this TypeScript bridge as command-pane owners.
+  */
+  isPaneOwner?: true;
+  sessionId: string;
+  status: SidebarCommandSessionIndicator["status"];
+  title?: string;
+};
+
+export type GpuiWorkspaceSessionDelayedSendSummary = {
+  delayedSendDeadlineAt?: string;
+  delayedSendRemainingLabel?: string;
+  delayedSendRemainingMs?: number;
+  sendWhenAllProjectSessionsStopActive?: boolean;
+  sendWhenAgentStopsActive?: boolean;
+  sessionId: string;
+};
+
+export type GpuiFirstPromptTitleRuntimeSettings = {
+  firstPromptTitleGenerationAgent: GxserverFirstPromptTitleGenerationAgent;
+  firstPromptTitleGenerationCommand?: string;
+  firstUserInputDraft?: string;
+  firstUserMessage?: string;
+};
+
+export type GpuiSidebarRuntimeSettings = {
+  debuggingMode?: unknown;
+  settings?: unknown;
+  showBetaFeatures?: unknown;
+};
+
+export type GpuiSidebarRuntimeSettingsSnapshot = {
+  debuggingMode: boolean;
+  settings?: unknown;
+  showBetaFeatures: boolean;
+};
+
+export type GhostexGpuiSidebarBridge = {
+  browserTabs?: readonly GpuiBrowserTabSummary[];
+  commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
+  /**
+   * CDXC:AutoSleepDisplayedSessions 2026-08-20:
+   * The local gxserver sessions the shell is rendering right now, terminal body
+   * or chat surface alike. Auto Sleep protects these instead of guessing
+   * visibility from the rows this runtime last saw selected.
+   */
+  displayedWorkspaceSessionIds?: readonly string[];
+  onDisplayedWorkspaceSessionIdsChanged?: (sessionIds: readonly string[]) => void;
+  workspaceSessionDelayedSends?: readonly GpuiWorkspaceSessionDelayedSendSummary[];
+  onBrowserTabsChanged?: (tabs: readonly GpuiBrowserTabSummary[]) => void;
+  /**
+   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * Rust asks the sidebar to reveal one Browser tab row after the user opened
+   * it. Rust owns tab identity (project id + tab id); the session id the
+   * sidebar rows are keyed by is derived here, in the same place that builds
+   * those rows, so Rust never has to know the sidebar's id format.
+   */
+  onRevealBrowserTab?: (payload: unknown) => void;
+  gxserverBootstrap?: GpuiGxserverBootstrap;
+  onCommandPaletteRunSidebarCommand?: (payload: unknown) => void;
+  onCommandPaletteSessionFocus?: (payload: unknown) => void;
+  onCommandPaneSessionsChanged?: (sessions: readonly GpuiCommandPaneSessionSummary[]) => void;
+  onWorkspaceSessionDelayedSendsChanged?: (
+    sessions: readonly GpuiWorkspaceSessionDelayedSendSummary[],
+  ) => void;
+  onGxserverBootstrapChanged?: (bootstrap: GpuiGxserverBootstrap) => void;
+  onExportTranscriptModalCommand?: (payload: unknown) => void;
+  onGitCommitModalCommand?: (payload: unknown) => void;
+  onMenuBarProjectActivation?: (payload: unknown) => void;
+  onMenuBarSessionActivation?: (payload: unknown) => void;
+  onNativeAppShotCaptured?: (payload: unknown) => void;
+  onNativeAppShotPromptResult?: (payload: unknown) => void;
+  onOsIntegrationCommand?: (payload: unknown) => void;
+  onProjectBoardConversationRequest?: (payload: unknown) => void;
+  onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
+  onSidebarHostMessage?: (message: ExtensionToSidebarMessage | SidebarToExtensionMessage) => void;
+  onStatusPetActivation?: (payload: unknown) => void;
+  onTitlebarGitAction?: (payload: unknown) => void;
+  onWorktreeModalCommand?: (payload: unknown) => void;
+  /**
+   * CDXC:GPUISidebarPointerTracking 2026-08-02:
+   * Close every open sidebar context menu because a native mouse-down landed
+   * outside the sidebar's frame. Installed by the sidebar entry point, called
+   * by Rust's AppKit pointer observer.
+   */
+  dismissSidebarContextMenus?: () => void;
+  dismissSidebarTooltips?: () => void;
+  onWorkspaceFirstPromptTitleGenerationCancel?: (payload: unknown) => void;
+  onWorkspaceFolderPicked?: (payload: unknown) => void;
+  onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;
+  onWorkspaceTabSessionSelected?: (payload: unknown) => void;
+  onWorkspaceTerminalBell?: (payload: unknown) => void;
+  onWorkspaceTerminalTitleChanged?: (payload: unknown) => void;
+  onWorkspaceTerminalEscapePressed?: (payload: unknown) => void;
+  onWorkspaceTerminalLifecycleRequest?: (payload: unknown) => void;
+  onWorkspaceTerminalRuntimeAction?: (payload: unknown) => void;
+  pendingCommandPaletteRunSidebarCommands?: unknown[];
+  pendingCommandPaletteSessionFocusRequests?: unknown[];
+  pendingExportTranscriptModalCommands?: unknown[];
+  pendingGitCommitModalCommands?: unknown[];
+  pendingMenuBarProjectActivations?: unknown[];
+  pendingMenuBarSessionActivations?: unknown[];
+  pendingNativeAppShotPromptResults?: unknown[];
+  pendingNativeAppShots?: unknown[];
+  pendingOsIntegrationCommands?: unknown[];
+  pendingProjectBoardConversationRequests?: unknown[];
+  pendingStatusPetActivations?: unknown[];
+  pendingTitlebarGitActions?: unknown[];
+  pendingWorktreeModalCommands?: unknown[];
+  pendingWorkspaceFirstPromptTitleGenerationCancels?: unknown[];
+  pendingWorkspaceFolderPicks?: unknown[];
+  pendingWorkspaceSessionAttentionAcknowledgements?: unknown[];
+  pendingWorkspaceTabSessionSelections?: unknown[];
+  pendingWorkspaceTerminalBells?: unknown[];
+  pendingWorkspaceTerminalTitleChanges?: unknown[];
+  pendingWorkspaceTerminalEscapePresses?: unknown[];
+  pendingWorkspaceTerminalLifecycleRequests?: unknown[];
+  pendingWorkspaceTerminalRuntimeActions?: unknown[];
+  postActiveProjectContext?: (payload: string) => boolean;
+  postBrowserTabFocus?: (payload: string) => boolean;
+  postCreateProjectAgent?: (payload: string) => boolean;
+  postCreateProjectTerminal?: (payload: string) => boolean;
+  postGxserverPresentationFocusState?: (payload: string) => boolean;
+  postGhostexHotkeyAction?: (payload: string) => boolean;
+  postNativeAppShotPromptToSession?: (payload: string) => boolean;
+  postNativeProjectPathAction?: (payload: string) => boolean;
+  postOpenBrowserUrl?: (payload: string) => boolean;
+  postPetOverlayState?: (payload: string) => boolean;
+  postProjectBoardConversationResponse?: (payload: string) => boolean;
+  postSidebarCommandAction?: (payload: string) => boolean;
+  postSidebarCommandRunEnd?: (payload: string) => boolean;
+  postSidebarEditableFocus?: (payload: string) => boolean;
+  postSessionCompletionSound?: (payload: string) => boolean;
+  postGlobalActions?: (payload: string) => boolean;
+  postSessionStatusIndicators?: (payload: string) => boolean;
+  postTitlebarGitMenuState?: (payload: string) => boolean;
+  postWorkspaceTerminalEnter?: (payload: string) => boolean;
+  postWorkspaceTerminalFocus?: (payload: string) => boolean;
+  postWorkspaceTerminalLifecycleResult?: (payload: string) => boolean;
+  postWorkspaceTerminalRenameCommand?: (payload: string) => boolean;
+  runtimeSettings?: GpuiSidebarRuntimeSettings;
+};
+
+declare global {
+  interface Window {
+    ghostexGpui?: GhostexGpuiSidebarBridge;
+  }
+}
+
+export type GpuiSidebarRuntimeSnapshotKind = "hydrate" | "patch";
+
+export type GpuiWorkspaceTerminalLifecycleRequest = {
+  action: "close" | "sleep" | "wake";
+  projectId: string;
+  replacementProjectId?: string;
+  replacementSessionId?: string;
+  requestId: number;
+  sessionId: string;
+  skipReplacementFallback: boolean;
+};
+
+export type GpuiValidatedGxserverBootstrap = {
+  authToken: string;
+  baseUrl: string;
+  clientId: string;
+  focusedSessionId?: string;
+  initialActiveProjectId?: string;
+  visibleSessionIds?: readonly string[];
+};
+
+export type GpuiSidebarGroupsPatch = {
+  groupOrder: string[];
+  groups: SidebarSessionGroup[];
+  removedGroupIds: string[];
+  removedSessionIds: string[];
+};
+
+export type GpuiGxserverRpcSuccess<TResult> = {
+  ok: true;
+  product: "gxserver";
+  protocolVersion: number;
+  result: TResult;
+};
+
+export type GpuiProjectWorktreesResultMessage = {
+  branches?: unknown;
+  error?: string;
+  ok: boolean;
+  requestId: string;
+  type: "projectWorktreesResult";
+  worktrees?: unknown;
+};
+
+export type GpuiSidebarRemotePresentationEvent = {
+  payload:
+    | {
+        snapshot: GxserverPresentationSnapshot;
+        type: "presentationSnapshot";
+      }
+    | {
+        delta: GxserverPresentationDelta;
+        revision: number;
+        type: "presentationDelta";
+      };
+  remoteMachineId: string;
+  type: "remoteGxserverPresentation";
+};
+
+export type GpuiSidebarRemoteGxserverResponseEvent = {
+  error?: string;
+  ok: boolean;
+  remoteMachineId: string;
+  requestId: string;
+  result?: unknown;
+  type: "remoteGxserverResponse";
+};
+
+export type GpuiSidebarRemoteEvent =
+  | SidebarRemoteMachineStatusMessage
+  | GpuiSidebarRemoteGxserverResponseEvent
+  | GpuiSidebarRemotePresentationEvent;
+
+export type GpuiSessionStatusIndicatorStatus = "attention" | "working" | "available";
+
+export type GpuiSessionStatusIndicatorCandidate = {
+  hasRunningZmxBacking: boolean;
+  iconDataUrl?: string;
+  lastInteractionAt?: string;
+  order: number;
+  projectId: string;
+  projectTitle: string;
+  sessionId: string;
+  status: GpuiSessionStatusIndicatorStatus;
+  title: string;
+};
+
+export type GpuiSessionStatusIndicatorProject = {
+  iconDataUrl?: string;
+  projectId: string;
+  sessions: Array<{
+    lastActiveAt?: string;
+    sessionId: string;
+    sidebarOrder: number;
+    status: GpuiSessionStatusIndicatorStatus;
+    title: string;
+  }>;
+  title: string;
+};
+
+export type GpuiSessionStatusIndicatorsPayload = {
+  attentionCount: number;
+  availableCount: number;
+  hideMenuBarIndicators: boolean;
+  projects: GpuiSessionStatusIndicatorProject[];
+  type: typeof GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_TYPE;
+  version: typeof GPUI_SIDEBAR_SESSION_STATUS_INDICATORS_MESSAGE_VERSION;
+  workingCount: number;
+};
+
+export type GpuiPetOverlayStatePayload = {
+  activities: Array<{
+    id: string;
+    projectId: string;
+    state: GpuiSessionStatusIndicatorStatus;
+    title: string;
+  }>;
+  enabled: boolean;
+  selectedPetId: string;
+  statusItems: Array<{
+    count: number;
+    status: GpuiSessionStatusIndicatorStatus;
+  }>;
+  type: typeof GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_TYPE;
+  version: typeof GPUI_SIDEBAR_PET_OVERLAY_STATE_MESSAGE_VERSION;
+};
+
+export type GpuiStatusPetActivationPayload = {
+  sessionId: string;
+};
+
+export type GpuiMenuBarProjectActivationPayload = {
+  projectId: string;
+};
+
+export type GpuiMenuBarSessionActivationPayload = {
+  projectId: string;
+  sessionId: string;
+};
+
+export type GpuiWorkspaceTabSessionSelectionPayload = {
+  localRuntimeMissing?: true;
+  localWasSleeping?: true;
+  projectId: string;
+  sessionId: string;
+  visibleSessionIds?: readonly string[];
+};
+
+export type GpuiActiveWorkspaceTabSessionPayload = {
+  activity: "idle" | "working" | "attention";
+  agentIcon?: string;
+  agentSessionId?: string;
+  isGeneratingFirstPromptTitle: boolean;
+  isSleeping: boolean;
+  kind: GxserverPresentationSession["kind"];
+  lifecycleState?: string;
+  projectId: string;
+  sessionId: string;
+  title: string;
+};
+
+export type GpuiBrowserTabSummary = {
+  faviconUrl?: string;
+  isActive: boolean;
+  isSleeping: boolean;
+  isVisible: boolean;
+  projectId: string;
+  tabId: string;
+  title: string;
+  url: string;
+};
+
+export type GpuiRendererCommandResolvedSession = {
+  projectId: string;
+  sessionId: string;
+  sidebarSessionId: string;
+};
+
+/*
+CDXC:SidebarGitMemo 2026-07-29:
+The two GitHub-CLI derived fields of `SidebarGitState`, memoized as one unit so
+they are always published together (a `pr` from one probe can never pair with a
+`hasGitHubCli` from another).
+*/
+export type GpuiSidebarGitHubState = {
+  hasGitHubCli: boolean;
+  pr: SidebarGitState["pr"];
+};
+
+export type GpuiSidebarNativeProjectPathAction =
+  | "copyRecentProjectPath"
+  | "openRecentProjectInFinder"
+  | "copyWorkspaceProjectPath"
+  | "openWorkspaceProjectInFinder"
+  | "openWorkspaceProjectInIde"
+  | "openActiveWorkspaceProjectInFinder"
+  | "openActiveWorkspaceProjectInVscode"
+  | "openActiveWorkspaceProjectInZed"
+  | "openExistingPullRequestInBrowser"
+  | "openSidebarGitChangedFileInIde"
+  | "copyRemoteProjectPath"
+  | "openRemoteProjectTerminal"
+  | "openRemoteWorkspaceProjectInIde"
+  | "openRemoteWorkspaceProjectInVscode"
+  | "openRemoteWorkspaceProjectInZed"
+  | "openRemoteExistingPullRequestInBrowser"
+  | "openRemoteSidebarGitChangedFileInIde"
+  | "openRemoteProjectPortsBrowser"
+  | "openRemoteSessionTerminal"
+  | "copyRemoteAttachCommand"
+  | "copyRemoteResumeCommand";
+
+export type GpuiTrustedExistingWorktreeList = {
+  parentProjectId: string;
+  paths: Set<string>;
+  remoteMachineId?: string;
+  sourceProjectId: string;
+  worktreeKeys?: Set<string>;
+};
+
+export type GpuiPendingGitCommitRequest = {
+  action: Extract<SidebarGitAction, "commit" | "pr" | "push">;
+  files: SidebarGitChangedFile[];
+  hasCommit: boolean;
+  projectId: string;
+  remoteReference?: GpuiRemoteProjectReference;
+  remoteTitle?: string;
+  subject: string;
+};
+
+export type GpuiPendingNativeAppShotPromptInsertion = {
+  resolve: (ok: boolean) => void;
+  sessionId: string;
+  timeoutId: number;
+};
+
+export type GpuiTrustedGitReviewFileSelection = {
+  explicit: boolean;
+  filePaths: string[];
+};
+
+export type GpuiPendingRemoteGxserverRequest = {
+  reject: (error: Error) => void;
+  resolve: (result: unknown) => void;
+  timeoutId: number;
+};
+
+export type GpuiGxserverCreatedSessionResult = {
+  session?: {
+    projectId?: string;
+    sessionId?: string;
+  };
+};
+
+export type GpuiNativeAppShotCapture = {
+  appName: string;
+  bundleIdentifier?: string;
+  imagePath: string;
+  trigger?: string;
+  windowHeight?: number;
+  windowTitle?: string;
+  windowWidth?: number;
+};
+
+export type GpuiWorktreeMetadata = {
+  branch?: string;
+  name?: string;
+  parentProjectId: string;
+  parentProjectName?: string;
+};
+
+export type GpuiProjectWorktreeParentCandidate = {
+  name?: string;
+  path?: string;
+  projectId: string;
+  worktree?: Record<string, unknown>;
+};
+
+export type GpuiGitPreferences = {
+  confirmCommit: boolean;
+  generateCommitBody: boolean;
+  primaryAction: SidebarGitAction;
+};
+
+export type GpuiRemoteProjectReference = {
+  machineId: string;
+  projectId: string;
+};
+
+export type GpuiExportedTranscriptResult = {
+  /** The exported session's agent, so the dialog can preselect the same one. */
+  agentId?: string;
+  /** Absolute path of the markdown file, on `machineId`'s disk. */
+  path: string;
+  projectId: string;
+  /** Absent for the local daemon; set for a remote machine's own daemon. */
+  machineId?: string;
+};
+
+export type GpuiProjectDiffStatsRefreshTarget =
+  | { key: string; kind: "local"; project: GxserverProjectDomainState }
+  | { key: string; kind: "remote"; reference: GpuiRemoteProjectReference };
+
+export type GpuiRemoteProjectScope = GpuiRemoteProjectReference & {
+  machineName?: string;
+  project: GxserverPresentationProject;
+};
+
+export type GpuiRemoteCreatePullRequestResult = {
+  created?: boolean;
+  ok?: boolean;
+  pr?: {
+    number?: number;
+    state?: string;
+  };
+  reason?: string;
+};
+
+export type GpuiRendererCommandHandler = (
+  command: GxserverRendererCommand,
+) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void;
+
+export type GpuiPresentationSubscription = {
+  close: () => void;
+};
+
+export type GpuiSidebarCommandSessionIndicatorScope = {
+  activeProjectId?: string;
+  presentation?: GxserverPresentationSnapshot;
+};
+
+export type GpuiWorktreeDeleteBranchMetadata = {
+  branch: string | null;
+  canDeleteLocalBranch: boolean;
+  localBranchName?: string;
+  remoteBranchDisabledReason?: string;
+  remoteBranchExists: boolean;
+  remoteBranchName?: string;
+  remoteName: string;
+};
+
+export type GpuiWorktreeModalCommand =
+  | Extract<SidebarToExtensionMessage, { type: "requestProjectWorktrees" }>
+  | Extract<SidebarToExtensionMessage, { type: "createProjectWorktree" }>
+  | Extract<SidebarToExtensionMessage, { type: "confirmDeleteWorktree" }>
+  | Extract<SidebarToExtensionMessage, { type: "confirmRenameWorktree" }>
+  | Extract<SidebarToExtensionMessage, { type: "commitWorktreeBeforeDelete" }>;
+
+export type GpuiGitCommitModalCommand =
+  | Extract<SidebarToExtensionMessage, { type: "confirmSidebarGitCommit" }>
+  | Extract<SidebarToExtensionMessage, { type: "confirmSidebarGitDirectMerge" }>
+  | Extract<SidebarToExtensionMessage, { type: "runSidebarGitMultipleCommits" }>
+  | Extract<SidebarToExtensionMessage, { type: "openSidebarGitChangedFileDiff" }>
+  | Extract<SidebarToExtensionMessage, { type: "cancelSidebarGitCommit" }>;
+
+export type GpuiCreatedProjectAgentSessionRecord = {
+  agentSessionId?: string;
+  agentSessionPath?: string;
+  projectId: string;
+  sessionId: string;
+  zmxName?: string;
+};
+
+export type GpuiProjectBoardConversationRequest = {
+  action:
+    | "appendDebugLog"
+    | "associateFocusedSession"
+    | "getState"
+    | "jumpToConversation"
+    | "showToast"
+    | "startWork"
+    | "unlinkConversation";
+  agentId?: string;
+  beadDisplayId?: string;
+  beadId?: string;
+  projectId?: string;
+  projectPath?: string;
+  prompt?: string;
+  requestId: string;
+  sessionId?: string;
+  startLocation?: string;
+  toastDescription?: string;
+  toastLevel?: string;
+  toastTitle?: string;
+};
+
+export type GpuiWorkspaceTerminalBellPayload = {
+  projectId: string;
+  sessionId: string;
+};
+
+export type GpuiWorkspaceTerminalTitleChangedPayload = {
+  projectId: string;
+  rawTitle: string;
+  sessionId: string;
+};
+
+export type GpuiWorkspaceTerminalEscapePressedPayload = {
+  projectId: string;
+  sessionId: string;
+};
+
+export type GpuiWorkspaceFirstPromptTitleGenerationCancelPayload = {
+  projectId: string;
+  sessionId: string;
+};
+
+export type GpuiWorkspaceSessionAttentionAcknowledgePayload = {
+  projectId: string;
+  sessionId: string;
+};
+
+export type GpuiSessionAttentionAcknowledgeReason = "native-focus" | "sidebar-focus" | "terminal-escape";
+
+export type GpuiSessionAttentionTarget =
+  | {
+      kind: "local";
+      projectId: string;
+      sessionId: string;
+    }
+  | {
+      kind: "remote";
+      machineId: string;
+      projectId: string;
+      sessionId: string;
+    };
+
+export type GpuiWorkspaceTerminalRuntimeActionPayload =
+  | {
+      action: "exportTranscript" | "forkSession" | "fullReloadSession";
+      projectId: string;
+      sessionId: string;
+    }
+  | { action: "sleepAllDaemonSessions" }
+  | { action: "sleepInactiveSessions" };
+
+export type GpuiPresentationProjectProjectionMetadata = {
+  chatProjectIds: ReadonlySet<string>;
+  hiddenProjectIds: ReadonlySet<string>;
+  projectOverlays: readonly GxserverPresentationSidebarProjectOverlay[];
+};
+
+export type GpuiCloseAfterDoneTimer = {
+  deadlineAtMs?: number;
+  doneSinceAtMs?: number;
+  timeoutId?: number;
+};
