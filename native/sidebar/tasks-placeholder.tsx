@@ -1186,11 +1186,11 @@ function ProjectBoardApp() {
     try {
       if (mode === "initial" || mode === "manual") {
         await ensureIssuePrefix(runBeads, issuePrefix);
-        const nextColumns = buildBoardColumns(await ensureWorkflowStatuses(runBeads));
-        if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
-          boardColumnsRef.current = nextColumns;
-          setBoardColumns(nextColumns);
-        }
+      }
+      const nextColumns = buildBoardColumns(await ensureWorkflowStatuses(runBeads));
+      if (boardColumnsSignature(nextColumns) !== boardColumnsSignature(boardColumnsRef.current)) {
+        boardColumnsRef.current = nextColumns;
+        setBoardColumns(nextColumns);
       }
       const payload = await runBeads({ action: "listIssues" });
       const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
