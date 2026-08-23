@@ -26,10 +26,10 @@ ZMX_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${ZMX_ROOT:-}" ]] && ZMX_ROOT_EXPLICITLY_CONFIGURED=1
 ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/server}"
-TUI_ROOT_EXPLICITLY_CONFIGURED=0
-[[ -n "${TUI_ROOT:-}" ]] && TUI_ROOT_EXPLICITLY_CONFIGURED=1
-# CDXC:GhostexTui 2026-07-01-02:10: The old `tui/` submodule is no longer the app launched by `gx tui`; build the promoted GX 2 source from `.dependencies/tui2/` into the canonical `ghostex-tui` binary so installed and remote launch contracts do not carry the transitional `ghostex-tui2` name.
-TUI_ROOT="${TUI_ROOT:-$REPO_ROOT/.dependencies/tui2}"
+# CDXC:GhostexTui 2026-08-23: the vendored ghostex-tui terminal app was deleted
+# from the repository, so nothing is built, fingerprinted, or staged as
+# Web/bin/ghostex-tui any more. A herdr plugin replaces it (spec in
+# docs/2026-08-23/tui2-herdr-plugin/).
 CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-}}" ]] && CODE_SERVER_ROOT_EXPLICITLY_CONFIGURED=1
 CODE_SERVER_ROOT="${CODE_SERVER_ROOT:-${GHOSTEX_CODE_SERVER_ROOT:-$REPO_ROOT/.dependencies/code-server}}"
@@ -112,7 +112,7 @@ case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" i
 		GHOSTEX_ON_DEMAND_ASSETS=0
 		;;
 esac
-# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source, TUI, or Zehn resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
+# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES="${GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES:-${GHOSTEX_LOCAL_START:-0}}"
 case "$(printf '%s' "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
 	1 | true | yes | on)
@@ -125,7 +125,6 @@ esac
 
 APP_CAPABILITY_SHARED_NODE_RUNTIME=false
 APP_CAPABILITY_SOURCE_EDITOR=false
-APP_CAPABILITY_TUI=false
 APP_CAPABILITY_BEADS=false
 APP_CAPABILITY_ZMX=true
 APP_OPTIONAL_RESOURCE_NOTES=()
@@ -804,6 +803,11 @@ package_portless_if_needed() {
 	write_cache_stamp "portless-package-$GHOSTEX_MACOS_ARCH" "$package_digest"
 }
 
+# The macOS 26/27 SDK gates INFINITY/NAN behind clang's __need_infinity_nan protocol, which
+# Zig's bundled clang does not implement, so linking any exe with C++ objects (ghostty-vt pulls
+# in simdutf/highway) fails inside libc++'s clamp_to_integral.h. This is NOT a Zig 0.15 quirk:
+# 0.16 ships the same clang behaviour and fails identically, so the SDK overlay below stays for
+# as long as the SDK keeps that gate.
 macos_sdk_needs_infinity_fix() {
 	local sdk="$1"
 	[[ -f "$sdk/usr/include/math.h" ]] || return 1
@@ -838,7 +842,7 @@ synthesize_macos_sdk_overlay() {
 
 /* Ghostex INFINITY fallback: the guards above skip these macros when clang
  * reports modules support but its float.h lacks __need_infinity_nan (true for
- * Zig 0.15's bundled clang). Harmless when already defined. */
+ * Zig's bundled clang, 0.15 and 0.16 alike). Harmless when already defined. */
 #ifndef INFINITY
 #define INFINITY    HUGE_VALF
 #endif
@@ -870,7 +874,7 @@ build_zmx_if_needed() {
 
 	(
 		cd "$ZMX_ROOT"
-		# CDXC:ZmxPersistence 2026-05-20-10:23: Zig 0.15.2 currently resolves the native build runner through the selected macOS 26 Xcode SDK on this machine, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above.
+		# CDXC:ZmxPersistence 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.16 toolchain zmx builds with today.
 		ZMX_BUILD_ENV=(env -u LDFLAGS ZIG="$ZIG_BIN")
 		if [[ -z "${ZMX_BUILD_DEVELOPER_DIR:-}" ]] \
 			&& DEVELOPER_DIR=/Library/Developer/CommandLineTools /usr/bin/xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
@@ -912,56 +916,6 @@ XCRUN_EOF
 		"${ZMX_BUILD_ENV[@]}" "$ZIG_BIN" build -Doptimize=ReleaseSafe -Dtarget="$ZMX_TARGET"
 	)
 	write_cache_stamp "zmx-$GHOSTEX_MACOS_ARCH" "$build_digest"
-}
-
-build_tui_if_needed() {
-	local output_path="$TUI_ROOT/target/$TUI_CARGO_TARGET/release/ghostex-tui"
-	local cargo_version build_digest
-	cargo_version="$("$TUI_CARGO_BIN" --version 2>/dev/null || true)"
-	build_digest="$(fingerprint_inputs \
-		--value "ghostex-tui-promoted-tui2-build-v1" \
-		--value "target=$TUI_CARGO_TARGET" \
-		--value "cargo=$cargo_version" \
-		--value "zig=$ZIG_VERSION" \
-		--path "$TUI_ROOT/src" \
-		--path "$TUI_ROOT/Cargo.toml" \
-		--path "$TUI_ROOT/Cargo.lock")"
-	if cache_matches "ghostex-tui-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		echo "ghostex-tui is current; skipping Cargo build."
-		return 0
-	fi
-
-	(
-		TUI_BUILD_ENV=(env ZIG="$ZIG_BIN")
-		tui_sdk="$(/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
-		if [[ -n "$tui_sdk" ]] && macos_sdk_needs_infinity_fix "$tui_sdk"; then
-			overlay_sdk="$TUI_ROOT/.zig-cache/ghostex-sdk-overlay/$(basename "$tui_sdk")"
-			if [[ ! -f "$overlay_sdk/usr/include/math.h" ]] \
-				|| [[ "$tui_sdk/usr/include/math.h" -nt "$overlay_sdk/usr/include/math.h" ]]; then
-				synthesize_macos_sdk_overlay "$tui_sdk" "$overlay_sdk"
-			fi
-			shim_dir="$(mktemp -d "${TMPDIR:-/tmp}/ghostex-tui-xcrun.XXXXXX")"
-			trap 'rm -rf "$shim_dir"' EXIT
-			cat > "$shim_dir/xcrun" <<XCRUN_EOF
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1:-}" == "--sdk" && "\${2:-}" == "macosx" && "\${3:-}" == "--show-sdk-path" ]]; then
-	echo "$overlay_sdk"
-	exit 0
-fi
-if [[ "\${1:-}" == "--show-sdk-path" ]]; then
-	echo "$overlay_sdk"
-	exit 0
-fi
-exec /usr/bin/xcrun "\$@"
-XCRUN_EOF
-			chmod +x "$shim_dir/xcrun"
-			TUI_BUILD_ENV+=(PATH="$shim_dir:$PATH")
-			echo "ghostex-tui build: using INFINITY-patched SDK overlay at $overlay_sdk"
-		fi
-		"${TUI_BUILD_ENV[@]}" "$TUI_CARGO_BIN" build --release --bin ghostex-tui --manifest-path "$TUI_ROOT/Cargo.toml" --target "$TUI_CARGO_TARGET"
-	)
-	write_cache_stamp "ghostex-tui-$GHOSTEX_MACOS_ARCH" "$build_digest"
 }
 
 gxserver_rust_cargo_target() {
@@ -1360,8 +1314,7 @@ validate_remote_gxserver_linux_package() {
 		"bin/gxserver" \
 		"bin/ghostex" \
 		"bin/zmx" \
-		"bin/bd" \
-		"bin/ghostex-tui"; do
+		"bin/bd"; do
 		if [[ ! -e "$package_dir/$required_path" ]]; then
 			echo "Remote gxserver $package_label package is missing required resource: $required_path" >&2
 			return 1
@@ -1370,8 +1323,7 @@ validate_remote_gxserver_linux_package() {
 	for required_path in \
 		"bin/gxserver" \
 		"bin/zmx" \
-		"bin/bd" \
-		"bin/ghostex-tui"; do
+		"bin/bd"; do
 		file_output="$(file "$package_dir/$required_path")"
 		if [[ "$file_output" == *"Mach-O"* ]]; then
 			echo "Remote gxserver $package_label package contains a macOS binary at $required_path; Linux packages must not ship Mach-O payloads." >&2
@@ -1727,7 +1679,6 @@ write_build_capabilities_manifest() {
 	fi
 	GHOSTEX_CAP_SHARED_NODE_RUNTIME="$APP_CAPABILITY_SHARED_NODE_RUNTIME" \
 		GHOSTEX_CAP_SOURCE_EDITOR="$APP_CAPABILITY_SOURCE_EDITOR" \
-		GHOSTEX_CAP_TUI="$APP_CAPABILITY_TUI" \
 		GHOSTEX_CAP_BEADS="$APP_CAPABILITY_BEADS" \
 		GHOSTEX_CAP_ZMX="$APP_CAPABILITY_ZMX" \
 		GHOSTEX_CAP_ALLOW_MISSING_OPTIONAL="$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" \
@@ -1756,7 +1707,6 @@ writeFileSync(
       beads: bool("GHOSTEX_CAP_BEADS"),
       sharedNodeRuntime: bool("GHOSTEX_CAP_SHARED_NODE_RUNTIME"),
       sourceEditor: bool("GHOSTEX_CAP_SOURCE_EDITOR"),
-      tui: bool("GHOSTEX_CAP_TUI"),
       zmx: bool("GHOSTEX_CAP_ZMX"),
     },
     skippedOptionalResources: notes,
@@ -1806,34 +1756,50 @@ if [[ "$GXSERVER_NODE_MAJOR" != "$CODE_SERVER_APP_NODE_MAJOR" ]]; then
 fi
 GXSERVER_NODE_MODULE_VERSION="$("$GXSERVER_NODE_BIN" -p 'process.versions.modules')"
 
-# CDXC:NativeBuild 2026-05-29-11:24: `bun run start` builds zmx and its Ghostty Zig dependency, which require Zig 0.15.2. A global Homebrew `zig` upgrade to 0.16 breaks the build API, so the local native build must choose the compatible Zig binary deliberately instead of inheriting the first PATH entry.
+# CDXC:NativeBuild 2026-05-29-11:24: `bun run start` builds zmx and its Ghostty Zig dependency.
+# Both are on Zig 0.16 now (zmx was re-ported onto upstream/main for 0.16, matching the
+# vendored ghostty pin), so the repo needs exactly one Zig toolchain. An explicit `ZIG` still
+# wins; otherwise prefer a 0.16 binary from PATH/Homebrew/mise instead of blindly taking the
+# first PATH entry, which may still be an old 0.15 keg.
 ZIG_BIN="${ZIG:-}"
-if [[ -z "$ZIG_BIN" && -x /opt/homebrew/opt/zig@0.15/bin/zig ]]; then
-	ZIG_BIN=/opt/homebrew/opt/zig@0.15/bin/zig
-elif [[ -z "$ZIG_BIN" ]]; then
-	ZIG_BIN="$(command -v zig || true)"
+if [[ -z "$ZIG_BIN" ]]; then
+	for zig_candidate in \
+		"$(command -v zig || true)" \
+		/opt/homebrew/bin/zig \
+		/opt/homebrew/opt/zig@0.16/bin/zig \
+		"$HOME/.local/share/mise/installs/zig/0.16"*/bin/zig; do
+		[[ -n "$zig_candidate" && -x "$zig_candidate" ]] || continue
+		# Remember the first usable binary so the version error below can name it.
+		[[ -n "$ZIG_BIN" ]] || ZIG_BIN="$zig_candidate"
+		if [[ "$("$zig_candidate" version 2>/dev/null || true)" == 0.16.* ]]; then
+			ZIG_BIN="$zig_candidate"
+			break
+		fi
+	done
 fi
 if [[ -z "$ZIG_BIN" ]]; then
 	cat >&2 <<EOF
-Zig 0.15.2 is required to build Ghostex's native zmx/Ghostty dependency.
+Zig 0.16.x is required to build Ghostex's native zmx/Ghostty dependency.
 
 Install it, then rerun this script:
-  brew install zig@0.15
+  brew install zig
+  # or: mise install zig@0.16.0
 EOF
 	exit 1
 fi
 ZIG_VERSION="$("$ZIG_BIN" version 2>/dev/null || true)"
-if [[ "$ZIG_VERSION" != "0.15.2" ]]; then
+if [[ "$ZIG_VERSION" != 0.16.* ]]; then
 	cat >&2 <<EOF
-Zig 0.15.2 is required to build Ghostex's native zmx/Ghostty dependency.
+Zig 0.16.x is required to build Ghostex's native zmx/Ghostty dependency.
 
 Selected Zig:
   $ZIG_BIN
   version: ${ZIG_VERSION:-unknown}
 
-Install Homebrew's compatible keg or set ZIG explicitly:
-  brew install zig@0.15
-  ZIG=/opt/homebrew/opt/zig@0.15/bin/zig bun run start
+Install a 0.16 toolchain or set ZIG explicitly:
+  brew install zig
+  mise install zig@0.16.0
+  ZIG=/opt/homebrew/bin/zig bun run start
 EOF
 	exit 1
 fi
@@ -1869,44 +1835,7 @@ rm -rf "$WEB_DIR/bin"
 mkdir -p "$WEB_DIR/bin"
 cp "$ZMX_ROOT/zig-out/bin/zmx" "$WEB_DIR/bin/zmx"
 chmod 755 "$WEB_DIR/bin/zmx"
-# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate TUI, Zehn, and Source independently so one missing feature cannot remove the rest of the app shell. Beads is staged independently from its verified official release archive.
-case "$GHOSTEX_MACOS_ARCH" in
-	arm64)
-		TUI_CARGO_TARGET="aarch64-apple-darwin"
-		;;
-	x86_64)
-		TUI_CARGO_TARGET="x86_64-apple-darwin"
-		;;
-esac
-TUI_CARGO_BIN="${CARGO:-}"
-if [[ -z "$TUI_CARGO_BIN" ]]; then
-	TUI_CARGO_BIN="$(command -v cargo || true)"
-fi
-if [[ -f "$TUI_ROOT/Cargo.toml" ]]; then
-	if [[ -z "$TUI_CARGO_BIN" ]]; then
-		cat >&2 <<EOF
-Cargo is required to build bundled ghostex-tui.
-
-Install Rust, then rerun this script:
-  rustup toolchain install stable
-EOF
-		exit 1
-	fi
-	build_tui_if_needed
-	cp "$TUI_ROOT/target/$TUI_CARGO_TARGET/release/ghostex-tui" "$WEB_DIR/bin/ghostex-tui"
-	chmod 755 "$WEB_DIR/bin/ghostex-tui"
-	APP_CAPABILITY_TUI=true
-elif [[ "$TUI_ROOT_EXPLICITLY_CONFIGURED" == "1" || "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" == "0" ]]; then
-	cat >&2 <<EOF
-Ghostex TUI source is missing:
-  $TUI_ROOT
-
-Initialize or provide the TUI source before building the app bundle.
-EOF
-	exit 1
-else
-	record_optional_resource_note "Ghostex TUI" "tui2 checkout was not found"
-fi
+# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate Source independently so one missing feature cannot remove the rest of the app shell. Beads is staged independently from its verified official release archive.
 stage_beads_release_if_needed
 cp "$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd" "$WEB_DIR/bin/bd"
 chmod 755 "$WEB_DIR/bin/bd"

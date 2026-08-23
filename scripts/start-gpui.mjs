@@ -206,14 +206,6 @@ if (!isDarwin && !targetsWindows) {
   current source before staging every local GPUI build.
   */
   logStartStep("Building local gxserver and zmx runtime...");
-  const packagedRuntimeBinDir = path.join(
-    repoRoot,
-    "build",
-    "remote-gxserver-linux",
-    process.arch,
-    "package",
-    "bin",
-  );
   const packageArgs = [
     path.join(repoRoot, "server", "package-remote-linux.mjs"),
     "--arch",
@@ -223,10 +215,6 @@ if (!isDarwin && !targetsWindows) {
     "--zig-target",
     process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu",
   ];
-  const packagedTui = path.join(packagedRuntimeBinDir, "ghostex-tui");
-  if (existsSync(packagedTui)) {
-    packageArgs.push("--tui-bin", packagedTui);
-  }
   run(process.execPath, packageArgs, {
     env: buildEnvironment,
     quietLabel: "Linux gxserver runtime build",

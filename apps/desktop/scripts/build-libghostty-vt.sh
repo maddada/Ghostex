@@ -66,8 +66,8 @@ find_zig() {
     return 0
   fi
 
-  # Homebrew's zig@0.15 is preferred over the mise tarball install: on
-  # macOS 27 (2026-07-11) the mise-installed 0.15.2 intermittently fails
+  # Homebrew's zig@0.16 is preferred over the mise tarball install: on
+  # macOS 27 (2026-07-11) the mise tarball install intermittently fails
   # executable links against the Xcode 27 SDK with every libSystem symbol
   # undefined, while the Homebrew build of the same version links cleanly.
   local candidate
@@ -185,8 +185,11 @@ EOF
 fi
 
 # Ghostex patch (2026-07-11): cargo links only the STATIC libghostty-vt
-# archive; skip the shared dylib emit. Zig 0.15 cannot link macOS dylibs
-# against the Xcode 26+/27 SDKs (bundled-libcxx / arm64e stub issues), so the
+# archive; skip the shared dylib emit. Linking a Zig-built dylib/exe that
+# pulls in C++ against the Xcode 26+/27 SDKs still fails (the bundled libc++
+# sub-compilation trips the SDK's math.h INFINITY / __need_infinity_nan
+# handling, plus arm64e stub issues). Re-verified on Zig 0.16 (2026-08-23):
+# this is not a 0.15-only limitation, so the emit stays off. Without it the
 # unconditional dylib emit failed the whole cargo build on machines without
 # an older Command Line Tools SDK even though the static archive builds fine.
 exec "$ZIG" build \

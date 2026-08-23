@@ -120,7 +120,6 @@ const remoteGxserverLinuxRequiredPackageResources = [
   "bin/gxserver",
   "bin/zmx",
   "bin/bd",
-  "bin/ghostex-tui",
   "bin/ghostex",
   "build-identity.json",
 ];
@@ -169,7 +168,7 @@ Usage:
   node scripts/release-ghostex.mjs <version> [options]
 
 Options:
-  --with-tests        Run release-safe Vitest and TUI checks before building.
+  --with-tests        Run release-safe Vitest checks before building.
   --skip-typecheck   Skip bun run typecheck.
   --skip-brew-fetch  Skip final brew fetch checks.
   --skip-sparkle     Do not update or validate Sparkle appcasts.
@@ -1431,7 +1430,6 @@ async function preflight(version, buildVersion, options) {
   }
   if (options.withTests) {
     await run("bun run release:test", { timeoutMs: releaseTimeouts.testMs });
-    await run("scripts/ghostex-tui-test.sh", { timeoutMs: releaseTimeouts.testMs });
   }
 
   return {};

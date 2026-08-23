@@ -22,7 +22,7 @@ import {
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname);
 const githubRepo = "maddada/Ghostex";
 const subrepoCandidates = [
-  "apps/mobile/app", "tui", ".dependencies/tui2", "crossplatform", ".dependencies/zmx",
+  "apps/mobile/app", "crossplatform", ".dependencies/zmx",
 ];
 
 const highConfidenceSecretPatterns = [

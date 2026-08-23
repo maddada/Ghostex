@@ -26,7 +26,7 @@ Current root:
 ```
 Ghostex/
 ├── .dependencies/     # ALL external-origin code (edited or not)
-│   ├── ghostty/  ghostty-patches/  code-server/  tui2/  zmx/  zehn/
+│   ├── ghostty/  ghostty-patches/  code-server/  zmx/  zehn/
 │   └── zed/  cef-rs/  gpui-component/
 ├── apps/
 │   ├── desktop/       # Rust/GPUI desktop app (crate ghostex-gpui)
@@ -73,9 +73,15 @@ Deprecated. Never route new features, refactors, parity work, or bug fixes to th
 - **Native iOS app** and **Termux-fork Android app** — already removed from this checkout; they live under `/Users/madda/dev/_active/ghostex-deprecated/` and must never be restored as active release inputs.
 
 Everything under `apps/`, `packages/`, and `server/` is active. `.dependencies/`
-is external-origin code: some of it we edit (ghostty, tui2, zmx, code-server),
+is external-origin code: some of it we edit (ghostty, zmx, code-server),
 some of it is a pure build input (zed, cef-rs, gpui-component), and one entry
 (`.dependencies/zehn`) is reference-only.
+
+- **`ghostex-tui` terminal app (`.dependencies/tui2`)** — deleted on 2026-08-23,
+  together with `gx tui`, its build/staging plumbing, and `bin/ghostex-tui` in
+  the macOS and remote Linux packages. Do not restore the vendored tree or
+  re-add a `tui` CLI verb; the replacement is a herdr plugin, specified in
+  `docs/2026-08-23/tui2-herdr-plugin/TUI2-AS-HERDR-PLUGIN.md`.
 
 ### `apps/desktop/views/` — the desktop app's embedded pages
 
@@ -119,7 +125,7 @@ Search these app-owned areas first by task:
 - Web app: `apps/web/src/`, then the shared `packages/core-ui/` and `packages/shared/` code it builds on.
 - Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `packages/shared/`, then the consuming surface in `packages/core-ui/`, `apps/desktop/sidebar/`, `apps/desktop/views/`, `apps/mobile/views/`, or `server/src/`.
 - Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `scripts/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
-- TUI or zmx behavior: `.dependencies/tui2/` and `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. These are the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits them — but keep `.dependencies/tui2/vendor/**` excluded unless the task is specifically about the vendored VT library.
+- zmx behavior: `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. This is the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits it.
 - Prompt-history search (`gx f`, the Find surface): `packages/find/` for the engine, `server/src/agent_prompt_search.rs` for the API, `packages/core-ui/find/` for the shared UI.
 - Mobile app work: `apps/mobile/` is the only active mobile app and releases Android through the React Native/Expo project in `apps/mobile/app` (a git submodule). Its embedded chat and find pages are `apps/mobile/views/chat/` and `apps/mobile/views/find/`, bundled by `bun run build:mobile-chat` / `bun run build:mobile-find`. The retired native iOS and Termux-fork Android repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
 - Assets, sounds, icons, and release tooling: `media/`, `apps/desktop/assets/`, `packages/core-ui/assets/`, `scripts/`, and `scripts/release-gpui/`.
@@ -156,7 +162,9 @@ does not any more. Prompt-history search is the `packages/find/` Rust crate
 (crate name `ghostex-find`), compiled into gxserver and the `ghostex` CLI, so:
 
 - `gx f` runs the picker **in-process**. There is no `bin/zehn` to stage, no
-  `GHOSTEX_ZEHN_BIN`, no `ZEHN_ZIG`, and no Zig 0.16 requirement for a release.
+  `GHOSTEX_ZEHN_BIN`, and no `ZEHN_ZIG`. (Releases do still require Zig 0.16 —
+  for ghostty and zmx, not for zehn — and 0.16 is now the repo's *only* Zig
+  toolchain.)
 - `.dependencies/zehn/` is kept only as reference for the original
   implementation. Never build it, bundle it, add it back to a packaging list, or
   treat it as the spec for new work — change `packages/find/` instead.

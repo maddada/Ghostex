@@ -21,7 +21,7 @@ tar plus a shell to bootstrap. The listener stop shells out to ss/lsof exactly
 like the old script so setup does not gain new privileges or dependencies.
 */
 
-const REMOTE_TOOL_NAMES: [&str; 5] = ["gxserver", "ghostex", "zmx", "bd", "ghostex-tui"];
+const REMOTE_TOOL_NAMES: [&str; 4] = ["gxserver", "ghostex", "zmx", "bd"];
 
 pub fn run_setup(args: Vec<String>) -> Result<()> {
     #[cfg(not(unix))]

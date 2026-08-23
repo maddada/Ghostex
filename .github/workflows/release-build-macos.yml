@@ -147,10 +147,9 @@ jobs:
             go@1.26.5 \
             ninja@1.13.2 \
             xcodegen@2.46.0
-          "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
+          "$HOME/.local/bin/mise" install zig@0.16.0
           echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
-          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\nZEHN_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig" \
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
             "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
             "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
       - name: Seed pinned VS Code ripgrep cache

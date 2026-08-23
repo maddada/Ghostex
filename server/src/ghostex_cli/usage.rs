@@ -52,10 +52,6 @@ fn automation_help_commands() -> Vec<String> {
 pub fn usage() -> String {
     let session_commands = [
         format_help_command(
-            "tui [--tui-bin path]",
-            "Open the Ghostex terminal TUI",
-        ),
-        format_help_command(
             "sessions | s | ls [--ungrouped|-u] [--json] [--mobile-summary]",
             "List running terminal sessions",
         ),
@@ -433,11 +429,8 @@ Selectors:
 
 Sessions:
   Running ghostex or gx with no subcommand launches or activates the Ghostex desktop app.
-  ghostex tui and gx tui open the Ghostex terminal TUI.
   gx find and gx f open the built-in Zehn prompt-history picker; gx history and gx h open the transcript viewer.
-  The TUI shows the attached session, with a top switch button for project/session switching.
-  The switcher lists Ghostex projects and sessions in macOS sidebar order and attaches through the existing zmx path.
-  Direct attach stays available through attach/a/resume/r without opening the TUI.
+  Direct attach stays available through attach/a/resume/r.
   Projects and sessions follow the macOS sidebar order, including the active Last Active sort mode.
   Each project prints its path once as the section header, then compact session rows without field labels.
   --ungrouped/-u prints one flat list and prefixes each row with the project name.
@@ -1004,7 +997,7 @@ mod tests {
         }
         assert!(text.contains("automations --help"));
         assert!(text.contains("cli --help"));
-        assert!(text.contains("tui [--tui-bin path]"));
+        assert!(!text.contains("tui"));
         assert!(text.contains("no subcommand launches or activates the Ghostex desktop app"));
         assert!(!text.contains("gx 2"));
         assert!(text.contains("automation-mark-run-read --run-id id --path path"));

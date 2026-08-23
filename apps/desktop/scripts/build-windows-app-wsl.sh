@@ -160,15 +160,15 @@ if [[ "$($WINDOWS_ZIG version | tr -d '\r')" != "0.16.0" ]]; then
   exit 1
 fi
 
-WSL_ZIG_VERSION="0.15.2"
+WSL_ZIG_VERSION="0.16.0"
 case "$(uname -m)" in
   x86_64)
     WSL_ZIG_HOST_ARCH="x86_64"
-    WSL_ZIG_SHA256="02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+    WSL_ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
     ;;
   aarch64 | arm64)
     WSL_ZIG_HOST_ARCH="aarch64"
-    WSL_ZIG_SHA256="958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"
+    WSL_ZIG_SHA256="ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
     ;;
   *)
     echo "Unsupported WSL build host architecture: $(uname -m)" >&2

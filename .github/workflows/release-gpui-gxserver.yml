@@ -66,7 +66,7 @@ jobs:
         id: cache_keys
         run: |
           {
-            printf 'zig=%s-%s\n' "$(git rev-parse HEAD:.dependencies/zmx)" "$(git rev-parse HEAD:.dependencies/zehn)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/zmx)"
             printf 'cargo=%s\n' "$(git rev-parse HEAD:server)"
           } >> "$GITHUB_OUTPUT"
       - name: Restore Cargo registry cache
@@ -98,13 +98,12 @@ jobs:
         run: |
           scripts/release-gpui/retry.sh 3 5 -- sudo apt-get update
           scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
-      - name: Install pinned Zig toolchains
+      - name: Install pinned Zig toolchain
         run: |
           scripts/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
-          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\nZEHN_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig" \
+          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
+            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
             "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
       - name: Install Rust musl targets
         run: scripts/release-gpui/retry.sh 3 5 -- rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
@@ -113,7 +112,7 @@ jobs:
       - name: Prepare source dependencies
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 scripts/release-gpui/prepare-references.sh
       - name: Pre-fetch Zig package dependencies
-        run: scripts/release-gpui/fetch-zig-deps.sh zmx zehn
+        run: scripts/release-gpui/fetch-zig-deps.sh zmx
       - name: Build pinned embedded-Dolt Beads
         run: |
           node scripts/build-pinned-beads-release.mjs \

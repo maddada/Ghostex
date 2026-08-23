@@ -137,7 +137,6 @@ fn exit_code() -> i32 {
 fn is_known_command(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "sessions",
-        "tui",
         "s",
         "list-sessions",
         "ls",
@@ -295,7 +294,6 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
     };
     match name {
         "sessions" | "s" | "list-sessions" | "ls" => sessions::sessions_command(args),
-        "tui" => launchers::ghostex_tui_command(args),
         "find" | "f" => launchers::zehn_search_command(args),
         "history" | "h" => launchers::history_command(args),
         "android-check" => diagnostics::android_check_command(args),
@@ -715,8 +713,9 @@ mod tests {
     use super::is_known_command;
 
     #[test]
-    fn tui_is_explicit_and_the_numeric_alias_is_removed() {
-        assert!(is_known_command("tui"));
+    fn the_numeric_alias_is_removed() {
+        assert!(is_known_command("sessions"));
+        assert!(!is_known_command("tui"));
         assert!(!is_known_command("2"));
     }
 }

@@ -17,7 +17,7 @@ const repoRoot = path.resolve(gxserverRoot, '..');
 /*
  * CDXC:RemoteMinimalDeps 2026-07-13:
  * Remote hosts must not need a specific glibc/libstdc++ floor, so the Rust
- * binaries (gxserver, ghostex, ghostex-tui) build against musl and link
+ * binaries (gxserver, ghostex) build against musl and link
  * statically, matching the already-static zmx (Zig musl). bd is the
  * checksum-verified schema-compatible Beads binary with embedded Dolt support.
  */
@@ -48,9 +48,6 @@ Inputs can be overridden with:
   --zmx-root <dir>       default: zmx
   --out-root <dir>       default for --arch all: build/remote-gxserver-linux
   --rust-target <triple> default: arch-specific Linux musl target (static)
-  --tui-root <dir>       default: tui2
-  --tui-bin <path>       use a prebuilt Linux ghostex-tui binary instead of building TUI
-  --tui-zig-bin <path>   default: TUI_ZIG, ZMX_ZIG, ZIG, or zig
   --zig-target <triple>  default: arch-specific Linux musl target
   --zmx-zig-bin <path>   default: ZMX_ZIG, ZIG, or zig
   --allow-cross          allow running outside Linux when cross toolchains are configured
@@ -112,11 +109,11 @@ async function buildLinuxPackageForArch({ arch, options }) {
         options.zmxZigBin,
         process.env.ZMX_ZIG,
         process.env.ZIG,
-        path.join(os.homedir(), 'apps', `zig-${zigHostArch()}-linux-0.15.2`, 'zig'),
+        path.join(os.homedir(), 'apps', `zig-${zigHostArch()}-linux-0.16.0`, 'zig'),
         'zig',
       ],
-      label: 'Zig 0.15.x for zmx',
-      versionMatches: (version) => /^0\.15\./u.test(version),
+      label: 'Zig 0.16.x for zmx',
+      versionMatches: (version) => /^0\.16\./u.test(version),
     });
     const config = {
       ...archConfig,
@@ -126,9 +123,6 @@ async function buildLinuxPackageForArch({ arch, options }) {
       rustTarget: options.rustTarget || archConfig.rustTarget,
       sourceDirty: await gitSourceDirty(repoRoot),
       sourceRevision: await gitOutput(repoRoot, ['rev-parse', 'HEAD'], 'unknown'),
-      tuiBin: options.tuiBin ? path.resolve(repoRoot, options.tuiBin) : '',
-      tuiRoot: path.resolve(repoRoot, options.tuiRoot || '.dependencies/tui2'),
-      tuiZigBin: options.tuiZigBin || process.env.TUI_ZIG || zmxZigBin,
       zmxRoot: path.resolve(repoRoot, options.zmxRoot || '.dependencies/zmx'),
       zmxZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
@@ -137,16 +131,11 @@ async function buildLinuxPackageForArch({ arch, options }) {
     /*
      * CDXC:RemoteMachines 2026-06-23-10:07:
      * Ubuntu install must be a first-run package, not an on-host source build.
-     * Build server, zmx, and ghostex-tui and stage the pinned
+     * Build server and zmx and stage the pinned
      * schema-compatible bd release artifact into one package
      * directory so the macOS app
      * can upload it over SSH and start the same Rust control plane without PATH
      * fallbacks.
-     *
-     * CDXC:RemoteUbuntuTui 2026-06-25-19:33:
-     * `ghostex tui` on Ubuntu is the documented terminal UI entry point, so the
-     * remote package must include `bin/ghostex-tui` instead of telling users to
-     * build from a source checkout or a Homebrew-only Zig path after install.
      *
      * CDXC:RemoteUbuntuPackaging 2026-06-29-19:45:
      * Release automation must reject stale prebuilt Linux packages. Record the
@@ -154,10 +143,10 @@ async function buildLinuxPackageForArch({ arch, options }) {
      * releases can prove x64 and arm64 Ubuntu payloads were built from the
      * commit being released before staging them into the app bundle.
      *
-     * CDXC:RemoteUbuntuTui 2026-07-01-02:10:
-     * GX 2 is now the canonical remote terminal UI. Build it from `.dependencies/tui2/` while
-     * still staging the package contract as `bin/ghostex-tui`, because
-     * `ghostex tui` on Ubuntu and the macOS uploader already resolve that name.
+     * CDXC:RemoteUbuntuTui 2026-08-23:
+     * The vendored ghostex-tui terminal app was removed from the repository, so
+     * the remote package no longer builds or stages `bin/ghostex-tui`. A herdr
+     * plugin replaces it (spec in docs/2026-08-23/tui2-herdr-plugin/).
      */
     await buildPackage({ config, outputDir, workRoot });
     console.log(`Remote gxserver Linux ${arch} package written to ${outputDir}`);
@@ -219,7 +208,8 @@ async function buildPackage({ config, outputDir, workRoot }) {
    * CDXC:AgentHistorySearch 2026-08-20:
    * zehn used to be built here with its own pinned Zig 0.16 toolchain. It is now
    * a Rust crate inside gxserver, so the Linux remote package needs exactly one
-   * Zig toolchain (zmx's 0.15.x) again.
+   * Zig toolchain. Since the zmx fork was re-ported onto upstream/main, that one
+   * toolchain is 0.16.x — the same pin the vendored ghostty uses.
    */
   const zmxBin = await buildZigTool({
     binName: 'zmx',
@@ -241,13 +231,11 @@ async function buildPackage({ config, outputDir, workRoot }) {
       platform: 'linux',
     });
   }
-  const tuiBin = config.tuiBin || (await buildGhostexTui(config));
 
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await copyExecutable(ghostexBin, path.join(binsDir, 'ghostex'), 'ghostex');
   await copyExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
   await copyExecutable(bdBin, path.join(binsDir, 'bd'), 'bd');
-  await copyExecutable(tuiBin, path.join(binsDir, 'ghostex-tui'), 'ghostex-tui');
 
   /*
    * CDXC:RemoteMinimalDeps 2026-07-13:
@@ -281,33 +269,6 @@ async function buildGxserver(config) {
   };
 }
 
-async function buildGhostexTui(config) {
-  await assertDirectory(config.tuiRoot, 'Ghostex TUI root');
-  await run(
-    'cargo',
-    [
-      'build',
-      '--release',
-      '--bin',
-      'ghostex-tui',
-      '--manifest-path',
-      path.join(config.tuiRoot, 'Cargo.toml'),
-      '--target',
-      config.rustTarget,
-    ],
-    {
-      cwd: repoRoot,
-      env: {
-        /* CDXC:RemoteUbuntuTui 2026-06-25-19:33: Host shell compiler/linker flags can leak into Zig's build-runner link step during cross builds and fail before the Linux TUI archive is produced. Clear generic CPPFLAGS/LDFLAGS for this package-owned Cargo/Zig build while still passing the pinned Zig executable explicitly. */
-        CPPFLAGS: '',
-        LDFLAGS: '',
-        ZIG: config.tuiZigBin || 'zig',
-      },
-    }
-  );
-  return path.join(cargoTargetRoot(config.tuiRoot), config.rustTarget, 'release', 'ghostex-tui');
-}
-
 function cargoTargetRoot(defaultRoot) {
   const configured = process.env.CARGO_TARGET_DIR?.trim();
   return configured ? path.resolve(repoRoot, configured) : path.join(defaultRoot, 'target');
@@ -323,11 +284,11 @@ async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd', 'bin/ghostex-tui'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }
-  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd', 'bin/ghostex-tui']) {
+  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd']) {
     const fullPath = path.join(packageDir, relativePath);
     if (!(await isElf(fullPath))) {
       throw new Error(`Linux remote package expected an ELF binary at ${relativePath}.`);

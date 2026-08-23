@@ -267,7 +267,6 @@ describe("Ghostex release automation helpers", () => {
       "/package/bin/gxserver",
       "/package/bin/zmx",
       "/package/bin/bd",
-      "/package/bin/ghostex-tui",
       "/package/bin/ghostex",
       "/package/build-identity.json",
     ]);

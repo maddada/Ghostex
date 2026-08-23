@@ -129,16 +129,14 @@ jobs:
           restore-keys: zig-macos-arm64-
       - name: Install build tools
         run: scripts/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
-      - name: Install pinned Zig toolchains
+      - name: Install pinned Zig toolchain
         run: |
           scripts/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
-          ZIG_015="$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig"
-          ZIG_016="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_015 version)" == "0.15.2" ]]
-          [[ "$($ZIG_016 version)" == "0.16.0" ]]
-          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\nZEHN_ZIG=%s\n' \
-            "$ZIG_015" "$ZIG_016" "$ZIG_016" >> "$GITHUB_ENV"
+          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
+            "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Seed pinned VS Code ripgrep cache
         env:
           RIPGREP_PACKAGE_VERSION: 1.17.1

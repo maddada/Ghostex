@@ -5,13 +5,13 @@ use std::process::Stdio;
 
 use serde_json::{json, Value};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 /*
 CDXC:GhostexRustCli 2026-07-13:
 Faithful port of the Node CLI's tool launchers: interactive shell resolution,
-desktop activation, explicit `gx tui` launch, ghostex-history/bd/gxserver
+desktop activation, ghostex-history/bd/gxserver
 binary discovery, and the shared interactive process runner. Resolution order and error strings must
 match scripts/ghostex-cli.mjs so installed bundles, remote Ubuntu packages,
 and source checkouts keep resolving the exact same binaries.
@@ -256,7 +256,7 @@ fn env_path(name: &str) -> Option<PathBuf> {
 
 pub fn ghostex_bundled_web_resource_roots(cli_dir: &Path) -> Vec<PathBuf> {
     /*
-    Installed app CLIs moved from Web/cli to CLI, but zmx/gxserver/TUI
+    Installed app CLIs moved from Web/cli to CLI, but zmx/gxserver
     runtime assets still live under Web. Check both the new sibling Web folder
     and the legacy parent layout so old dev bundles and new release bundles
     resolve app-owned tools without PATH fallbacks.
@@ -276,9 +276,7 @@ pub fn find_ghostex_source_root(start_path: Option<&Path>) -> Option<PathBuf> {
             .as_path(),
     );
     loop {
-        if file_exists_sync(&current.join("scripts").join("ghostex-cli.mjs"))
-            && file_exists_sync(&current.join(".dependencies").join("tui2").join("Cargo.toml"))
-        {
+        if file_exists_sync(&current.join("scripts").join("ghostex-cli.mjs")) {
             return Some(current);
         }
         let Some(parent) = current.parent().map(Path::to_path_buf) else {
@@ -370,7 +368,7 @@ pub fn run_interactive_shell_command(
 }
 
 // ---------------------------------------------------------------------------
-// Desktop and TUI launch (`gx` / `gx tui`)
+// Desktop launch (`gx`)
 // ---------------------------------------------------------------------------
 
 #[cfg(any(target_os = "macos", test))]
@@ -469,7 +467,7 @@ fn resolve_linux_desktop_launch_from_cli(executable: &Path) -> CliResult<Launch>
         .find(|candidate| is_executable_file_sync(candidate))
         .ok_or_else(|| {
             CliError::Other(
-                "Ghostex desktop app was not found. Install the Ghostex Linux desktop package, or run `gx tui` for the terminal interface."
+                "Ghostex desktop app was not found. Install the Ghostex Linux desktop package."
                     .to_string(),
             )
         })?;
@@ -529,8 +527,7 @@ fn spawn_detached_desktop(launch: &Launch) -> CliResult<()> {
 fn activate_or_launch_linux_desktop() -> CliResult<()> {
     if !std::env::var("DISPLAY").is_ok_and(|display| !display.trim().is_empty()) {
         return Err(CliError::Other(
-            "Ghostex desktop activation requires an X11 DISPLAY; run `gx tui` for the terminal interface."
-                .to_string(),
+            "Ghostex desktop activation requires an X11 DISPLAY.".to_string(),
         ));
     }
     let listing = Command::new("wmctrl").args(["-l", "-x"]).output().map_err(|error| {
@@ -582,7 +579,7 @@ pub fn resolve_ghostex_desktop_launch() -> CliResult<Launch> {
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         Err(CliError::Other(
-            "Launching the Ghostex desktop app from ghostex/gx is not supported on this platform; run `gx tui` for the terminal interface."
+            "Launching the Ghostex desktop app from ghostex/gx is not supported on this platform."
                 .to_string(),
         ))
     }
@@ -601,140 +598,6 @@ pub fn ghostex_desktop_command() -> CliResult<()> {
         &launch.env,
     )?;
     Ok(())
-}
-
-fn is_interactive_terminal() -> bool {
-    use crossterm::tty::IsTty;
-    std::io::stdin().is_tty() && std::io::stdout().is_tty()
-}
-
-pub fn ghostex_tui_command(args: &[String]) -> CliResult<()> {
-    let parsed = parse_args(args);
-    /*
-    `ghostex tui` / `gx tui` launches the full Ghostex terminal TUI; without an
-    interactive terminal it falls back to the plain session picker rows.
-    */
-    if !is_interactive_terminal() {
-        return interactive_session_picker_command(args);
-    }
-    let tui = resolve_ghostex_tui_launch(&parsed.flags)?;
-    /*
-    The explicit TUI launcher must pass TUI environment through the spawn env so
-    the app build keeps the callback command the TUI uses to list and attach
-    Ghostex sessions.
-    */
-    let mut env = tui.env.clone();
-    env.push((
-        "GHOSTEX_TUI_CLI_COMMAND".to_string(),
-        shell_quote(&current_cli_executable().to_string_lossy()),
-    ));
-    run_interactive_process(&tui.command, &tui.args, tui.cwd.as_deref(), &env)?;
-    Ok(())
-}
-
-pub fn resolve_ghostex_tui_launch(flags: &Flags) -> CliResult<Launch> {
-    let explicit_bin = flags
-        .text("tuiBin")
-        .or_else(|| std::env::var("GHOSTEX_TUI_BIN").ok())
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let tui_args = || vec!["--ghostex".to_string(), "--no-session".to_string()];
-    if !explicit_bin.is_empty() {
-        return Ok(Launch {
-            command: explicit_bin,
-            args: tui_args(),
-            cwd: None,
-            env: Vec::new(),
-        });
-    }
-    let cli_dir = cli_dir();
-    for root in default_launch_roots(&cli_dir) {
-        if let Some(launch) = resolve_ghostex_tui_launch_from_root(&root) {
-            return Ok(launch);
-        }
-    }
-    Err(CliError::Other(
-        "Ghostex TUI binary was not found. Build the TUI with `cargo build --bin ghostex-tui --manifest-path .dependencies/tui2/Cargo.toml`, pass `--tui-bin <path>`, or set GHOSTEX_TUI_BIN.".to_string(),
-    ))
-}
-
-pub fn resolve_ghostex_tui_launch_from_root(root: &Path) -> Option<Launch> {
-    let tui_args = vec!["--ghostex".to_string(), "--no-session".to_string()];
-    let simple = |command: &Path| Launch {
-        command: command.to_string_lossy().to_string(),
-        args: tui_args.clone(),
-        cwd: None,
-        env: Vec::new(),
-    };
-    let bundled_bin = root.join("bin").join("ghostex-tui");
-    if file_exists_sync(&bundled_bin) {
-        return Some(simple(&bundled_bin));
-    }
-    let debug_bin = root
-        .join(".dependencies")
-        .join("tui2")
-        .join("target")
-        .join("debug")
-        .join("ghostex-tui");
-    let release_bin = root
-        .join(".dependencies")
-        .join("tui2")
-        .join("target")
-        .join("release")
-        .join("ghostex-tui");
-    if file_exists_sync(&release_bin) {
-        return Some(simple(&release_bin));
-    }
-    if file_exists_sync(&debug_bin) {
-        return Some(simple(&debug_bin));
-    }
-    let manifest_path = root.join(".dependencies").join("tui2").join("Cargo.toml");
-    if !file_exists_sync(&manifest_path) {
-        return None;
-    }
-    Some(Launch {
-        command: "cargo".to_string(),
-        args: vec![
-            "run".to_string(),
-            "--quiet".to_string(),
-            "--bin".to_string(),
-            "ghostex-tui".to_string(),
-            "--manifest-path".to_string(),
-            manifest_path.to_string_lossy().to_string(),
-            "--".to_string(),
-            "--ghostex".to_string(),
-            "--no-session".to_string(),
-        ],
-        cwd: None,
-        env: ghostex_tui_cargo_env(),
-    })
-}
-
-pub fn ghostex_tui_cargo_env() -> Vec<(String, String)> {
-    /*
-    On macOS 26.4+, unpatched Zig 0.15.2 cannot link libc from Xcode 26 SDKs;
-    prefer Homebrew's patched `zig@0.15` keg when it exists so first-run
-    fallback builds can produce the real Ghostty terminal backend.
-    */
-    let patched_homebrew_zig = "/opt/homebrew/opt/zig@0.15/bin/zig";
-    if file_exists_sync(Path::new(patched_homebrew_zig)) {
-        vec![("ZIG".to_string(), patched_homebrew_zig.to_string())]
-    } else {
-        Vec::new()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Non-interactive picker fallback (private copy of the row printer used by
-// `gx tui` when stdin/stdout are not TTYs; the interactive picker
-// itself is owned by the picker module).
-// ---------------------------------------------------------------------------
-
-fn interactive_session_picker_command(args: &[String]) -> CliResult<()> {
-    // Delegate to the attach module's full picker command (TTY detection,
-    // alias-cache refresh, picker, attach) so there is one implementation.
-    crate::ghostex_cli::attach::interactive_session_picker_command(args)
 }
 
 // ---------------------------------------------------------------------------
@@ -1323,44 +1186,6 @@ mod tests {
 
 
     #[test]
-    fn tui_launch_prefers_bundled_then_release_then_debug_then_cargo() {
-        let root = temp_root("tui");
-        assert!(resolve_ghostex_tui_launch_from_root(&root).is_none());
-
-        touch(&root.join(".dependencies").join("tui2").join("Cargo.toml"));
-        let launch = resolve_ghostex_tui_launch_from_root(&root).expect("cargo launch");
-        assert_eq!(launch.command, "cargo");
-        assert_eq!(launch.args[0], "run");
-        assert_eq!(launch.args.last().map(String::as_str), Some("--no-session"));
-
-        let debug = root
-            .join(".dependencies")
-            .join("tui2")
-            .join("target")
-            .join("debug")
-            .join("ghostex-tui");
-        touch(&debug);
-        let launch = resolve_ghostex_tui_launch_from_root(&root).expect("debug launch");
-        assert_eq!(launch.command, debug.to_string_lossy());
-        assert_eq!(launch.args, vec!["--ghostex", "--no-session"]);
-
-        let release = root
-            .join(".dependencies")
-            .join("tui2")
-            .join("target")
-            .join("release")
-            .join("ghostex-tui");
-        touch(&release);
-        let launch = resolve_ghostex_tui_launch_from_root(&root).expect("release launch");
-        assert_eq!(launch.command, release.to_string_lossy());
-
-        let bundled = root.join("bin").join("ghostex-tui");
-        touch(&bundled);
-        let launch = resolve_ghostex_tui_launch_from_root(&root).expect("bundled launch");
-        assert_eq!(launch.command, bundled.to_string_lossy());
-    }
-
-    #[test]
     fn desktop_launch_opens_the_bundle_that_owns_the_cli() {
         let executable = Path::new("/Applications/Ghostex Dev.app/Contents/Resources/CLI/ghostex");
         let launch = resolve_macos_desktop_launch(executable);
@@ -1475,10 +1300,9 @@ mod tests {
     }
 
     #[test]
-    fn find_ghostex_source_root_walks_up_to_marker_pair() {
+    fn find_ghostex_source_root_walks_up_to_marker() {
         let root = temp_root("source-root");
         touch(&root.join("scripts").join("ghostex-cli.mjs"));
-        touch(&root.join(".dependencies").join("tui2").join("Cargo.toml"));
         let nested = root.join("a").join("b");
         std::fs::create_dir_all(&nested).expect("mkdir");
         let canonical_root = std::fs::canonicalize(&root).expect("canonical root");

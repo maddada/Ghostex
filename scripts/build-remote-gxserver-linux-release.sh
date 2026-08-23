@@ -5,7 +5,7 @@ set -euo pipefail
 # The 5.4.0 release lost most of its controllable time rediscovering the macOS
 # cross-build recipe for the Ubuntu remote gxserver packages (Zig CC/AR
 # wrappers, Rust-style --target argument stripping, split Zig toolchains for
-# zmx/tui versus the musl cc/ar wrappers). This script owns that recipe so
+# zmx versus the musl cc/ar wrappers). This script owns that recipe so
 # releases run one
 # deterministic command instead of hand-typing environment variables.
 #
@@ -194,34 +194,20 @@ zig_version_of() {
 	"$1" version 2>/dev/null || true
 }
 
-# zmx and the TUI vendor tree require Zig 0.15.x, while the musl `zig cc`/`zig ar`
-# wrappers that link the static Rust binaries need Zig 0.16+. Resolve both
-# toolchains explicitly instead of trusting PATH order.
+# One Zig toolchain covers both roles now: the zmx cross build and the musl
+# `zig cc`/`zig ar` wrappers that link the static Rust binaries. zmx used to pin
+# 0.15.x while the wrappers needed 0.16+, but the zmx fork was re-ported onto
+# upstream/main (Zig 0.16), so a single 0.16 binary serves everything. Resolve it
+# explicitly instead of trusting PATH order.
 #
 # CDXC:AgentHistorySearch 2026-08-20: the 0.16 toolchain used to exist for zehn
-# as well. Zehn is Rust now, so 0.16 is here purely for the cc/ar wrappers.
-resolve_zig_015() {
-	local candidate
-	for candidate in \
-		"${ZMX_ZIG:-}" \
-		"$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig" \
-		"$HOME/.local/share/mise/installs/zig/0.15"*/bin/zig \
-		"$(command -v zig || true)"; do
-		[[ -n "$candidate" && -x "$candidate" ]] || continue
-		case "$(zig_version_of "$candidate")" in
-			0.15.*)
-				printf '%s\n' "$candidate"
-				return 0
-				;;
-		esac
-	done
-	return 1
-}
-
+# as well. Zehn is Rust now, so 0.16 is here for zmx plus the cc/ar wrappers.
 resolve_zig_016() {
 	local candidate
 	for candidate in \
 		"${GHOSTEX_ZIG_016:-}" \
+		"${ZMX_ZIG:-}" \
+		"${ZIG:-}" \
 		/opt/homebrew/bin/zig \
 		"$HOME/.local/share/mise/installs/zig/0.16"*/bin/zig \
 		"$(command -v zig || true)"; do
@@ -236,21 +222,13 @@ resolve_zig_016() {
 	return 1
 }
 
-if ! ZIG_015="$(resolve_zig_015)"; then
-	cat >&2 <<'EOF'
-Could not find Zig 0.15.x for zmx/TUI cross builds.
-
-Install it with mise, or point ZMX_ZIG at a Zig 0.15 binary:
-  mise install zig@0.15.2
-EOF
-	exit 1
-fi
 if ! ZIG_016="$(resolve_zig_016)"; then
 	cat >&2 <<'EOF'
-Could not find Zig 0.16+ for the musl cc/ar cross-link wrappers.
+Could not find Zig 0.16+ for the zmx build and the musl cc/ar cross-link wrappers.
 
-Install it with Homebrew, or point GHOSTEX_ZIG_016 at a Zig 0.16 binary:
+Install it with Homebrew or mise, or point GHOSTEX_ZIG_016 at a Zig 0.16 binary:
   brew install zig
+  mise install zig@0.16.0
 EOF
 	exit 1
 fi
@@ -311,8 +289,7 @@ exec "$ZIG_016" ar "\$@"
 EOF
 chmod 755 "$WRAPPER_DIR/zig-ar"
 
-echo "Zig 0.15 (zmx/TUI): $ZIG_015 ($(zig_version_of "$ZIG_015"))"
-echo "Zig 0.16 (musl cc/ar): $ZIG_016 ($(zig_version_of "$ZIG_016"))"
+echo "Zig 0.16 (zmx + musl cc/ar): $ZIG_016 ($(zig_version_of "$ZIG_016"))"
 
 build_arch() {
 	local arch="$1"
@@ -338,8 +315,7 @@ build_arch() {
 		"AR_$rust_triple=$WRAPPER_DIR/zig-ar" \
 		"CARGO_TARGET_${env_suffix}_LINKER=$RUST_LLD" \
 		"CARGO_TARGET_${env_suffix}_RUSTFLAGS=-C linker-flavor=ld.lld" \
-		ZMX_ZIG="$ZIG_015" \
-		TUI_ZIG="$ZIG_015" \
+		ZMX_ZIG="$ZIG_016" \
 		node "$REPO_ROOT/server/package-remote-linux.mjs" --arch "$arch" --allow-cross
 
 	if ! status="$(package_status "$arch")"; then

@@ -47,7 +47,7 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
           curl -fsSL https://mise.run | MISE_VERSION=2026.7.7 sh
-          "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
+          "$HOME/.local/bin/mise" install zig@0.16.0
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
       - run: bun install --frozen-lockfile
       - name: Prepare source dependencies
