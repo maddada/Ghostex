@@ -149,6 +149,7 @@ impl GhostexGpuiApp {
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .px(px(3.0))
+                    .ml(px(5.0))
                     .mt(px(2.0))
                     .text_size(px(13.5))
                     .font_weight(FontWeight::SEMIBOLD)
