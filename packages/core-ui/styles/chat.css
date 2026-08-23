@@ -274,6 +274,166 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   color: var(--foreground);
 }
 
+/* --- The marker column ---------------------------------------------------- */
+
+/*
+CDXC:SessionChatMarkerColumn 2026-08-23:
+Every top-level transcript row leads with ONE gutter, so the answer's bullet,
+a disclosure chevron and a tool's category icon all land on the same vertical
+axis. Before this, prose sat in a 6px slot at a 6.5px inset (optical centre
+9.5px), the tool-group toggle in a 20px slot at 2px (centre 12px), a tool row
+in that same slot inside a 2px-padded row (centre 14px), and the suppressed
+turn had no inset at all (centre 6px) — four indents down one column, which is
+what made the margin read as stepped even where the glyph matched.
+
+The geometry is expressed as tokens rather than repeated literals so the rows
+cannot drift apart again, and so a story can move the whole column at once:
+
+  centre  = --chat-marker-inset + (--chat-marker-slot / 2)   = 2 + 8  = 10px
+  content = --chat-marker-inset + --chat-marker-slot + --chat-marker-gap
+                                                             = 2 + 16 + 6 = 24px
+
+--chat-marker-slot is 1rem because that is the smallest box that holds the
+14px disclosure chevron with a hair of optical breathing room; the 4px prose
+dot is centred in the same box.
+*/
+.ghostex-session-chat-scope,
+body[data-session-chat-theme] .ghostex-session-chat-popup {
+  --chat-marker-slot: 1rem;
+  --chat-marker-gap: 0.375rem;
+  --chat-marker-inset: 2px;
+  /*
+  CDXC:SessionChatGlyphRamp 2026-08-23:
+  The transcript's glyph vocabulary is TWO tiers, and every icon in a
+  transcript row belongs to exactly one of them:
+
+    control  — this row expands, this button acts. Chevrons, disclosure
+               carets. Heavier stroke: a chevron is three line segments and
+               goes weedy at prose weight.
+    semantic — this row MEANS something. The per-tool category icons
+               (terminal / pencil / file / globe) and the status-tone badges
+               (check / alert / info). Lighter stroke: these glyphs are dense,
+               and at control weight they blot.
+
+  The two tiers deliberately share ONE size. They sit in the same 1rem marker
+  slot on the same vertical axis (see the marker column above), so a size step
+  between them would re-introduce exactly the stepped column this change
+  removes. They are told apart by shape and by stroke weight, which is the
+  distinction that carries meaning — a chevron never has to be mistaken for a
+  terminal icon on size alone.
+
+  14px / stroke 2 for control is not a new number: it is what the markdown
+  <details> chevron already renders at (session-chat-markdown.tsx), so the
+  renderer and the transcript agree on what "this expands" looks like.
+
+  Call sites take a tier CLASS (.ghostex-chat-glyph-control /
+  .ghostex-chat-glyph-semantic, or .ghostex-chat-disclosure-chevron which is
+  control plus the open rotation) instead of repeating `size=` and `stroke=`
+  numbers, so the ramp cannot drift one icon at a time.
+  */
+  --chat-glyph-control-size: 0.875rem;
+  --chat-glyph-control-stroke: 2;
+  --chat-glyph-semantic-size: 0.875rem;
+  --chat-glyph-semantic-stroke: 1.75;
+  /* Tier 3: badge. The status-row tone glyphs (check / alert / info) sit
+     inside their own tinted round, NOT in the shared marker slot, so nothing
+     about them is on the marker axis and the semantic size buys them no
+     alignment — it only makes the pill taller. They keep the semantic stroke
+     so they still read as the same icon family; only the size steps down.
+     Do not "fix" this back up to the semantic size. */
+  --chat-glyph-badge-size: 0.75rem;
+  /* The prose bullet. Set to 0 to retire it while keeping the column. It is
+     deliberately a CSS circle and NOT a tabler point icon: a 4px round is a
+     shape CSS draws exactly, a scaled-down SVG point renders optically
+     heavier, is harder to sit on a text baseline, and would cost one more
+     SVG per paragraph. */
+  --chat-marker-bullet: 0.25rem;
+}
+
+/*
+CDXC:SessionChatMarkerColumn 2026-08-23:
+The no-bullet variant. A review switch, deliberately NOT a user setting: the
+transcript ships with bullets on and nothing reads it but the host that opts
+in. Retiring the dot leaves the gutter in place, so the structural rows
+(disclosures, tool rows) keep their shared axis and only the prose loses its
+leading glyph.
+*/
+.ghostex-session-chat-scope[data-chat-bullets="off"],
+body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
+  --chat-marker-bullet: 0rem;
+}
+
+/* The gutter for rows that lay out as flex (a trigger with a glyph, a label
+   and a trailing preview). Grid rows spell the same numbers as their first
+   column, because their content column has to be a real minmax(0, 1fr) track. */
+.ghostex-chat-marker-row {
+  align-items: center;
+  display: flex;
+  gap: var(--chat-marker-gap);
+  min-width: 0;
+  padding-inline: var(--chat-marker-inset) 5px;
+}
+
+/* The gutter box itself. One height (the row's own line box) so a glyph is
+   centred on the first line of text beside it, whatever the glyph is. */
+.ghostex-chat-marker-slot {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 var(--chat-marker-slot);
+  height: 1.625em;
+  justify-content: center;
+  overflow: visible;
+  width: var(--chat-marker-slot);
+}
+
+/* --- The glyph ramp ------------------------------------------------------- */
+
+/* Tier 1: control. Anything whose job is "expand this" or "do this". */
+.ghostex-chat-glyph-control {
+  flex: 0 0 auto;
+  height: var(--chat-glyph-control-size);
+  stroke-width: var(--chat-glyph-control-stroke);
+  width: var(--chat-glyph-control-size);
+}
+
+/* Tier 2: semantic. Anything whose job is to say WHAT a row is. */
+.ghostex-chat-glyph-semantic {
+  flex: 0 0 auto;
+  height: var(--chat-glyph-semantic-size);
+  stroke-width: var(--chat-glyph-semantic-stroke);
+  width: var(--chat-glyph-semantic-size);
+}
+
+/* Tier 3: badge. Semantic stroke, one size down, for a glyph that lives in its
+   own chrome instead of the marker slot. */
+.ghostex-chat-glyph-badge {
+  flex: 0 0 auto;
+  height: var(--chat-glyph-badge-size);
+  stroke-width: var(--chat-glyph-semantic-stroke);
+  width: var(--chat-glyph-badge-size);
+}
+
+/* The one disclosure glyph: IconChevronRight on the control tier, rotated a
+   quarter turn when the row is open. Every expander in the transcript uses
+   this — there is no second disclosure metaphor and no second chevron size. */
+.ghostex-chat-disclosure-chevron {
+  flex: 0 0 auto;
+  height: var(--chat-glyph-control-size);
+  stroke-width: var(--chat-glyph-control-stroke);
+  transition: transform 150ms ease;
+  width: var(--chat-glyph-control-size);
+}
+
+.ghostex-chat-disclosure-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-disclosure-chevron {
+    transition: none;
+  }
+}
+
 /* --- Conversation blocks ------------------------------------------------- */
 
 .ghostex-chat-user-bubble > [data-slot="bubble-content"] {
@@ -316,11 +476,11 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-agent-message {
   align-items: start;
-  column-gap: 0.625rem;
+  column-gap: var(--chat-marker-gap);
   display: grid;
-  grid-template-columns: 0.375rem minmax(0, 1fr);
+  grid-template-columns: var(--chat-marker-slot) minmax(0, 1fr);
   min-width: 0;
-  padding-inline-start: 6.5px;
+  padding-inline-start: var(--chat-marker-inset);
   width: 100%;
 }
 
@@ -330,9 +490,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   background: currentColor;
   border-radius: 50%;
   content: "";
-  height: 0.25rem;
+  height: var(--chat-marker-bullet);
   justify-self: center;
-  width: 0.25rem;
+  width: var(--chat-marker-bullet);
 }
 
 .ghostex-chat-agent-message::before {
@@ -360,11 +520,11 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 
 .ghostex-chat-thinking-line {
   align-items: start;
-  column-gap: 0.625rem;
+  column-gap: var(--chat-marker-gap);
   display: grid;
-  grid-template-columns: 0.375rem minmax(0, 1fr);
+  grid-template-columns: var(--chat-marker-slot) minmax(0, 1fr);
   min-width: 0;
-  padding-inline-start: 6.5px;
+  padding-inline-start: var(--chat-marker-inset);
 }
 
 .ghostex-chat-thinking-line::before {
@@ -384,12 +544,12 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: grid;
   font: inherit;
   font-style: inherit;
-  column-gap: 0.625rem;
-  grid-template-columns: 0.375rem minmax(0, 1fr);
+  column-gap: var(--chat-marker-gap);
+  grid-template-columns: var(--chat-marker-slot) minmax(0, 1fr);
   line-height: inherit;
   min-width: 0;
   padding: 0;
-  padding-inline: 6.5px 5px;
+  padding-inline: var(--chat-marker-inset) 5px;
   text-align: left;
   width: 100%;
 }
@@ -398,27 +558,19 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   color: var(--foreground);
 }
 
+/* The reasoning disclosure's gutter is the transcript's gutter. It used to be
+   a 6px-wide box holding a clip-path triangle, which was the surface's SECOND
+   disclosure metaphor (the tool rows already used a stroke chevron) and read
+   as a different state rather than a different row. Both the box and the glyph
+   now come from the shared tokens; the triangle is gone. */
 .ghostex-chat-thinking-icon {
   align-items: center;
   display: inline-flex;
-  height: 1.21875rem;
+  flex: 0 0 var(--chat-marker-slot);
+  height: 1.625em;
   justify-content: center;
   overflow: visible;
-  width: 0.375rem;
-}
-
-.ghostex-chat-thinking-caret {
-  background: currentColor;
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
-  display: block;
-  height: 0.5625rem;
-  flex: 0 0 auto;
-  transition: transform 150ms ease;
-  width: 0.4375rem;
-}
-
-.ghostex-chat-thinking-caret.is-open {
-  transform: rotate(90deg);
+  width: var(--chat-marker-slot);
 }
 
 .ghostex-chat-thinking-text {
@@ -457,8 +609,13 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   margin-block-start: 0.5rem;
 }
 
+/* The expansion rail hangs under the glyph that opened the row, so it is
+   positioned from the marker column rather than from a constant: half the
+   5px rail to the left of the column's optical centre. */
 .ghostex-chat-thinking-detail {
-  margin-inline-start: calc(0.03125rem + 6.5px);
+  margin-inline-start: calc(
+    var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px
+  );
 }
 
 .ghostex-chat-completed-turn,
@@ -484,10 +641,13 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   display: inline-flex;
   /* CDXC:SessionChatOneSize 2026-08-22 */
   font-size: 0.875rem;
-  gap: 0.375rem;
+  gap: var(--chat-marker-gap);
   height: auto;
   line-height: 1.625;
   padding: 0;
+  /* Leads with the marker column like every other row, so "Worked for 12s"
+     starts on the same text axis as the answer beneath it. */
+  padding-inline: var(--chat-marker-inset) 5px;
 }
 
 .ghostex-chat-completed-work-trigger:not(:disabled) {
@@ -495,9 +655,9 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-completed-work-trigger svg {
-  height: 0.875rem;
+  height: var(--chat-glyph-control-size);
   transition: transform 150ms ease;
-  width: 0.875rem;
+  width: var(--chat-glyph-control-size);
 }
 
 .ghostex-chat-completed-work-content {
@@ -573,10 +733,13 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   cursor: pointer;
   display: flex;
   font-size: 0.875rem;
-  gap: 0.375rem;
+  gap: var(--chat-marker-gap);
   line-height: 1.625;
   min-width: 0;
-  padding: 0.125rem;
+  /* Block padding only: the leading inset belongs to the marker column, and
+     baking another 2px in here is what pushed the tool group off the axis. */
+  padding-block: 0.125rem;
+  padding-inline: var(--chat-marker-inset) 5px;
   text-align: left;
 }
 
@@ -594,7 +757,11 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 .ghostex-chat-work-row {
   border-radius: 4px !important;
   min-width: 0;
-  padding: 0.125rem;
+  /* Block padding only, for the same reason as the tool-run toggle: this row's
+     own inline padding used to stack on the trigger's, putting the tool icon
+     4px right of every other glyph in the column. */
+  padding-block: 0.125rem;
+  padding-inline: 0;
   width: 100%;
 }
 
@@ -606,11 +773,11 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   color: var(--muted-foreground);
   display: flex;
   font-size: 0.875rem;
-  gap: 0.375rem;
+  gap: var(--chat-marker-gap);
   line-height: 1.625;
   min-width: 0;
   padding: 0;
-  padding-inline: 2px 5px;
+  padding-inline: var(--chat-marker-inset) 5px;
   text-align: left;
   width: 100%;
 }
@@ -622,15 +789,19 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
 .ghostex-chat-work-icon {
   align-items: center;
   display: inline-flex;
-  flex: 0 0 1.25rem;
-  height: 1.25rem;
+  flex: 0 0 var(--chat-marker-slot);
+  height: 1.625em;
   justify-content: center;
-  width: 1.25rem;
+  width: var(--chat-marker-slot);
 }
 
-.ghostex-chat-work-icon svg {
-  height: 0.875rem;
-  width: 0.875rem;
+/* Holds either a disclosure chevron or a per-tool category icon; both are the
+   one glyph size, so the column reads level whichever one a row carries. */
+.ghostex-chat-work-icon svg,
+.ghostex-chat-marker-slot svg,
+.ghostex-chat-thinking-icon svg {
+  height: var(--chat-glyph-control-size);
+  width: var(--chat-glyph-control-size);
 }
 
 .ghostex-chat-work-heading {
@@ -649,15 +820,15 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   white-space: nowrap;
 }
 
-.ghostex-chat-work-chevron {
-  flex: 0 0 auto;
-  height: 0.75rem;
-  transition: transform 150ms ease;
-  width: 0.75rem;
-}
+/* The tool row's trailing "this expands" chevron is a plain
+   .ghostex-chat-disclosure-chevron like every other one. It used to own a
+   0.75rem rule here, which was the surface's third chevron size. */
 
+/* Same rail placement as the reasoning detail, from the same tokens. */
 .ghostex-chat-work-detail {
-  margin-inline-start: 0.46875rem;
+  margin-inline-start: calc(
+    var(--chat-marker-inset) + var(--chat-marker-slot) / 2 - 2.5px
+  );
   margin-top: 0.25rem;
   padding-top: 0.125rem;
 }
@@ -1054,15 +1225,15 @@ so the swap barely moves the composer row.
 .ghostex-chat-suppressed-inline {
   align-items: start;
   color: var(--muted-foreground);
-  column-gap: 0.625rem;
+  column-gap: var(--chat-marker-gap);
   display: grid;
   font-size: 0.875rem;
-  grid-template-columns: 0.375rem minmax(0, 1fr);
+  grid-template-columns: var(--chat-marker-slot) minmax(0, 1fr);
   line-height: 1.625;
   min-width: 0;
   overflow-wrap: anywhere;
   padding-block-end: calc(0.375rem + 7px);
-  padding-inline-start: 6.5px;
+  padding-inline-start: var(--chat-marker-inset);
   white-space: pre-wrap;
   width: 100%;
 }
@@ -1072,10 +1243,35 @@ so the swap barely moves the composer row.
   background: currentColor;
   border-radius: 50%;
   content: "";
-  height: 0.25rem;
+  height: var(--chat-marker-bullet);
   justify-self: center;
   margin-block-start: 0.484375rem;
-  width: 0.25rem;
+  width: var(--chat-marker-bullet);
+}
+
+/* The expandable harness turn. Same gutter, same chevron: it used to be a
+   flex row with no inset at all and a 0.75rem chevron, which put it 4px LEFT
+   of the prose bullet and gave the surface a third chevron size. */
+.ghostex-chat-suppressed-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px !important;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  gap: var(--chat-marker-gap);
+  line-height: 1.625;
+  min-width: 0;
+  padding-block: 0;
+  padding-inline: var(--chat-marker-inset) 5px;
+  text-align: left;
+  transition: color 150ms ease;
+}
+
+.ghostex-chat-suppressed-trigger:hover {
+  color: var(--foreground);
 }
 
 /* The marker label stays as the sentence's lead-in so the line still says
@@ -2211,8 +2407,10 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   color: var(--foreground);
 }
 
-/* Keeps the text column aligned when a row has no handle (single row, no
-   reorder endpoint, or a row that is being delivered). */
+/* Keeps the text column aligned when a row has no LIVE handle (single row, no
+   reorder endpoint, or a row that is being delivered). It is never empty: an
+   empty gutter reads as an unexplained indent, so it carries the grip inert or
+   the delivery spinner. */
 .ghostex-chat-queue-row-handle-slot {
   align-items: center;
   color: var(--muted-foreground);
@@ -2221,6 +2419,12 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   height: 1.25rem;
   justify-content: center;
   width: 1.125rem;
+}
+
+/* Nothing to reorder here, but the column still has to read as the same column
+   the draggable rows use. */
+.ghostex-chat-queue-row-handle-inert {
+  opacity: 0.35;
 }
 
 /* One line, always: the first non-empty line of the prompt, ellipsized. */
@@ -2320,4 +2524,151 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 
 .ghostex-chat-draft-conflict-action:hover {
   text-decoration: underline;
+}
+
+/* CDXC:SessionChatAgentFleet 2026-08-23:
+   Sub-agents Claude is running, read off its terminal screen. This sits
+   ABOVE the composer container while the queue strip sits INSIDE it, and that
+   split is the whole point: queued prompts are input the user still owns and
+   can edit, these are work the agent already owns and the user can only watch.
+   Same quiet weight as the draft-conflict bar above it, so neither reads as a
+   second composer. */
+.ghostex-chat-agent-fleet {
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-bottom: 0.375rem;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+}
+
+.ghostex-chat-agent-fleet-header {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  padding: 0 0.125rem 0.125rem;
+}
+
+.ghostex-chat-agent-fleet-title {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* The count carries the roster size on its own, so the title never has to be
+   rewritten with a number in it. */
+.ghostex-chat-agent-fleet-count {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.1875rem 0.3125rem;
+}
+
+/* ONE grid for every row, not a flex box per row: that is what makes each task
+   start at the same x whatever the names above it are. The name track sizes to
+   the widest name and stops there, so short rosters waste nothing and a long
+   agent type cannot push every task off the right.
+
+   Around four rows, then scroll: a wide fan-out must never push the input off
+   the pane. Same rule the queue strip follows, for the same reason. */
+.ghostex-chat-agent-fleet-rows {
+  align-items: center;
+  column-gap: 0.375rem;
+  display: grid;
+  grid-template-columns: auto fit-content(10rem) minmax(0, 1fr) auto;
+  max-height: 6.5rem;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  row-gap: 0.0625rem;
+}
+
+/* The row is a grouping for semantics only; its cells belong to the grid above
+   so they can share its column tracks. */
+.ghostex-chat-agent-fleet-row {
+  display: contents;
+}
+
+.ghostex-chat-agent-fleet-pulse {
+  animation: ghostex-chat-agent-fleet-pulse 1.6s ease-in-out infinite;
+  background: var(--primary);
+  border-radius: 999px;
+  flex: none;
+  height: 0.375rem;
+  width: 0.375rem;
+}
+
+@keyframes ghostex-chat-agent-fleet-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The agent type. Its width is the grid's to decide, so every name in the strip
+   occupies the same column and every task lines up under the one above it. */
+.ghostex-chat-agent-fleet-name {
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.125rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Task plus its `+N` marker. The task takes the room and ellipsizes; the marker
+   never does, so it survives a task far too long to show. */
+.ghostex-chat-agent-fleet-work {
+  align-items: baseline;
+  display: flex;
+  gap: 0.3125rem;
+  min-width: 0;
+}
+
+.ghostex-chat-agent-fleet-nested {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  flex: none;
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.1875rem 0.3125rem;
+}
+
+/* The row's payload, and the first thing to be given room: it takes everything
+   the name and the clock do not need, and only ellipsizes after that. Whatever
+   the CLI already truncated to fit its own column arrives truncated — that cut
+   is the terminal's and cannot be undone here — so this must not add a second,
+   tighter one on top of it. */
+.ghostex-chat-agent-fleet-task {
+  color: var(--muted-foreground);
+  flex: 0 1 auto;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-agent-fleet-clock {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.125rem;
+  text-align: right;
 }

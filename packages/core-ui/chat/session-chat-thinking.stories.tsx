@@ -170,8 +170,10 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
   const thinkingIcon = canvasElement.querySelector<HTMLElement>(
     ".ghostex-chat-thinking-icon",
   );
+  // CDXC:SessionChatMarkerColumn 2026-08-23: the reasoning disclosure's glyph
+  // is the transcript's ONE disclosure chevron now, not a clip-path triangle.
   const caret = canvasElement.querySelector<HTMLElement>(
-    ".ghostex-chat-thinking-caret",
+    ".ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron",
   );
 
   expect(agentMessage).not.toBeNull();
@@ -219,9 +221,10 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
     Math.abs(iconRectangle.top + iconRectangle.height / 2 - thinkingTriggerCenter),
   ).toBeLessThanOrEqual(0.5);
 
+  // One glyph size across the whole surface: --chat-glyph-control-size, 14px.
   const caretRectangle = (caret as HTMLElement).getBoundingClientRect();
-  expect(caretRectangle.width).toBeCloseTo(7, 1);
-  expect(caretRectangle.height).toBeCloseTo(9, 1);
+  expect(caretRectangle.width).toBeCloseTo(14, 1);
+  expect(caretRectangle.height).toBeCloseTo(14, 1);
 }
 
 const meta = {
@@ -328,7 +331,9 @@ export const HoverHeadingTreatmentPreview: Story = {
       thinkingTrigger as HTMLElement
     ).getBoundingClientRect();
     const caretRectangle = canvasElement
-      .querySelector<HTMLElement>(".ghostex-chat-thinking-caret")
+      .querySelector<HTMLElement>(
+        ".ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron",
+      )
       ?.getBoundingClientRect();
     const toolIconRectangle = workTrigger
       ?.querySelector<SVGElement>(".ghostex-chat-work-icon svg")
@@ -341,8 +346,11 @@ export const HoverHeadingTreatmentPreview: Story = {
       (caretRectangle?.left ?? 0) - triggerRectangle.left;
     const toolInset =
       (toolIconRectangle?.left ?? 0) - (workTriggerRectangle?.left ?? 0);
-    expect(caretInset).toBeCloseTo(5, 1);
-    expect(toolInset).toBeCloseTo(5, 1);
+    // CDXC:SessionChatMarkerColumn 2026-08-23: one gutter for both lanes —
+    // --chat-marker-inset (2px) plus the 1px each side that centres a 14px
+    // glyph in the 16px slot.
+    expect(caretInset).toBeCloseTo(3, 1);
+    expect(toolInset).toBeCloseTo(3, 1);
     expect(
       Math.abs(caretInset - toolInset),
     ).toBeLessThanOrEqual(0.5);
@@ -353,11 +361,13 @@ export const HoverHeadingTreatmentPreview: Story = {
     expect(
       Math.abs(
         horizontalCenter(thinkingIcon as Element) -
+          // Half of --chat-marker-slot: the disclosure's glyph sits on the
+          // same axis as the bullet of the prose line below it.
           ((plainThinkingLine?.getBoundingClientRect().left ?? 0) +
             Number.parseFloat(
               getComputedStyle(plainThinkingLine as HTMLElement).paddingLeft,
             ) +
-            3),
+            8),
       ),
     ).toBeLessThanOrEqual(0.5);
     expect(

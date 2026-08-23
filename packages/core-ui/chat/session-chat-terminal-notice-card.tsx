@@ -32,7 +32,7 @@ answered. "Open terminal" stays as the escape hatch.
 
 import {
   IconAlertTriangle,
-  IconChevronDown,
+  IconChevronRight,
   IconInfoCircle,
   IconTerminal2,
   IconX,
@@ -295,13 +295,13 @@ export function SessionChatTerminalNoticeCard({
                 type="button"
               >
                 {tailOpen ? "Hide terminal output" : "Show terminal output"}
-                <IconChevronDown
+                {/* Control tier, like every other expander in the chat. */}
+                <IconChevronRight
                   aria-hidden="true"
                   className={cn(
-                    "size-3.5 shrink-0 transition-transform duration-150",
-                    tailOpen && "rotate-180",
+                    "ghostex-chat-disclosure-chevron",
+                    tailOpen && "is-open",
                   )}
-                  stroke={2}
                 />
               </button>
               {tailOpen ? (

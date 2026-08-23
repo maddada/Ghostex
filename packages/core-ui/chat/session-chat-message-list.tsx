@@ -228,7 +228,7 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
     <div className="flex w-full min-w-0 flex-col gap-1.5 pb-2">
       <button
         aria-expanded={expanded}
-        className="flex min-w-0 items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="ghostex-chat-suppressed-trigger self-start"
         // Opts out of the sidebar's legacy `button:where(:not([data-slot]))`
         // base, which otherwise paints a 1px app border around the marker.
         data-slot="session-chat-suppressed-trigger"
@@ -241,11 +241,13 @@ function SuppressedTurn({ label, text }: { label: string; text: string }) {
         ref={triggerRef}
         type="button"
       >
-        <IconChevronRight
-          aria-hidden="true"
-          className={cn("size-3 shrink-0 transition-transform", expanded && "rotate-90")}
-          stroke={2}
-        />
+        <span className="ghostex-chat-marker-slot">
+          <IconChevronRight
+            aria-hidden="true"
+            className={cn("ghostex-chat-disclosure-chevron", expanded && "is-open")}
+            stroke={2}
+          />
+        </span>
         <span className="truncate">{label}</span>
       </button>
       {expanded ? (
@@ -305,13 +307,16 @@ function StatusRow({
   const { Icon, className } = STATUS_TONE_ICON[tone];
   return (
     <div className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+      {/* Tone badge: a badge-tier glyph in a tinted round. This round is off
+          the marker axis, so it takes the ramp's smallest tier — the semantic
+          size only made the pill taller without aligning it to anything. */}
       <span
         className={cn(
           "flex size-4 shrink-0 items-center justify-center rounded-full",
           className,
         )}
       >
-        <Icon aria-hidden="true" className="size-3" stroke={2.4} />
+        <Icon aria-hidden="true" className="ghostex-chat-glyph-badge" />
       </span>
       <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
     </div>
@@ -490,8 +495,7 @@ function AgentToolsDisclosure({
           <span className="ghostex-chat-work-icon">
             <IconChevronRight
               aria-hidden="true"
-              className={cn(open && "rotate-90")}
-              stroke={2}
+              className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
             />
           </span>
           <span className="shrink-0">{label}</span>
@@ -562,13 +566,14 @@ function ReasoningRow({
           ref={triggerRef}
           type="button"
         >
+          {/* The reasoning disclosure used to draw a filled clip-path triangle
+              here while the tool rows below it drew a stroke chevron: two
+              disclosure metaphors on one column, which read as two STATES
+              rather than two rows. One glyph now, on the control tier. */}
           <span className="ghostex-chat-thinking-icon">
-            <span
+            <IconChevronRight
               aria-hidden="true"
-              className={cn(
-                "ghostex-chat-thinking-caret",
-                open && "is-open",
-              )}
+              className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
             />
           </span>
           <span className="ghostex-chat-thinking-text">
@@ -1049,15 +1054,20 @@ function CompletedWork({
           type="button"
           variant="ghost"
         >
+          {/* The chevron LEADS, in the transcript's marker slot, like every
+              other disclosure. It used to trail the label, which left this row
+              as the only expander on the surface whose glyph was not on the
+              column. The slot stays even with no work to disclose, so a turn
+              with nothing behind it does not shift its label left. */}
+          <span className="ghostex-chat-marker-slot">
+            {hasWork ? (
+              <IconChevronRight
+                aria-hidden="true"
+                className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
+              />
+            ) : null}
+          </span>
           <span>{workedDurationLabel(turn.user.timestamp, turn.final.timestamp)}</span>
-          {hasWork ? (
-            <IconChevronRight
-              aria-hidden="true"
-              className={cn(open && "rotate-90")}
-              data-icon="inline-end"
-              stroke={2}
-            />
-          ) : null}
         </Button>
         <Separator />
         {hasWork && open ? (

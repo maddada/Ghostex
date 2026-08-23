@@ -58,21 +58,29 @@ function clipBody(text: string): string {
     : text;
 }
 
+/*
+ * The one glyph on this surface that says WHAT ran rather than "this expands":
+ * semantic tier (see CDXC:SessionChatGlyphRamp in chat.css). It shares the
+ * control tier's size because it stands in the same marker slot on the same
+ * vertical axis as the chevrons; only its stroke weight and its shape set it
+ * apart, and it must never be flattened into a chevron.
+ */
 function toolIcon(name: string): ReactNode {
   const normalized = name.toLowerCase();
+  const className = "ghostex-chat-glyph-semantic";
   if (/edit|write|patch|replace/.test(normalized)) {
-    return <IconPencil aria-hidden="true" stroke={1.8} />;
+    return <IconPencil aria-hidden="true" className={className} />;
   }
   if (/read|file|glob|list/.test(normalized)) {
-    return <IconFileText aria-hidden="true" stroke={1.8} />;
+    return <IconFileText aria-hidden="true" className={className} />;
   }
   if (/exec|command|shell|terminal|bash/.test(normalized)) {
-    return <IconTerminal2 aria-hidden="true" stroke={1.8} />;
+    return <IconTerminal2 aria-hidden="true" className={className} />;
   }
   if (/web|search|browser|fetch|url/.test(normalized)) {
-    return <IconWorldSearch aria-hidden="true" stroke={1.8} />;
+    return <IconWorldSearch aria-hidden="true" className={className} />;
   }
-  return <IconTool aria-hidden="true" stroke={1.8} />;
+  return <IconTool aria-hidden="true" className={className} />;
 }
 
 function isCommandTool(name: string): boolean {
@@ -174,8 +182,7 @@ function ToolLine({
         {hasDetail ? (
           <IconChevronRight
             aria-hidden="true"
-            className={cn("ghostex-chat-work-chevron", open && "rotate-90")}
-            stroke={2}
+            className={cn("ghostex-chat-disclosure-chevron", open && "is-open")}
           />
         ) : null}
       </button>
@@ -258,8 +265,7 @@ export function SessionChatToolRun({
       <span className="ghostex-chat-work-icon">
         <IconChevronRight
           aria-hidden="true"
-          className={cn(expanded && "rotate-90")}
-          stroke={2}
+          className={cn("ghostex-chat-disclosure-chevron", expanded && "is-open")}
         />
       </span>
       <span>

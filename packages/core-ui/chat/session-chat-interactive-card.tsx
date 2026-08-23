@@ -21,7 +21,7 @@
 
 import {
   IconArrowLeft,
-  IconChevronDown,
+  IconChevronRight,
   IconTerminal2,
   IconX,
 } from "@tabler/icons-react";
@@ -161,13 +161,13 @@ function CardHeader({
           type="button"
         >
           {labelRow}
-          <IconChevronDown
+          {/* Control tier, like every other expander in the chat. */}
+          <IconChevronRight
             aria-hidden="true"
             className={cn(
-              "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 group-hover/header:text-foreground",
-              collapsed && "rotate-180",
+              "ghostex-chat-disclosure-chevron ml-auto text-muted-foreground group-hover/header:text-foreground",
+              !collapsed && "is-open",
             )}
-            stroke={2}
           />
         </button>
       ) : (

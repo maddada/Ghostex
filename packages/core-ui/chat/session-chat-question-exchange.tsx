@@ -15,7 +15,7 @@ all keeps the generic tool row (the caller decides that via
 `answeredSessionChatQuestionExchange` returning null).
 */
 
-import { IconCheck, IconChevronDown } from "@tabler/icons-react";
+import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import { useState } from "react";
 import type { SessionChatQuestion } from "../../shared/session-chat";
 import { cn } from "@/packages/components/utils";
@@ -289,8 +289,7 @@ function SelectedAnswerRow({
     <div className="flex w-full items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
       <IconCheck
         aria-hidden="true"
-        className="mt-0.5 size-3.5 shrink-0 text-primary"
-        stroke={2.6}
+        className="ghostex-chat-glyph-semantic mt-0.5 text-primary"
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-sm leading-snug font-medium text-foreground">
@@ -312,8 +311,7 @@ function CustomAnswerRow({ label, text }: { label: string; text: string }) {
     <div className="flex w-full items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
       <IconCheck
         aria-hidden="true"
-        className="mt-0.5 size-3.5 shrink-0 text-primary"
-        stroke={2.6}
+        className="ghostex-chat-glyph-semantic mt-0.5 text-primary"
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
@@ -406,13 +404,14 @@ function QuestionSection({
             onClick={() => setShowOptions((value) => !value)}
             type="button"
           >
-            <IconChevronDown
+            {/* One disclosure metaphor across the surface: a right chevron
+                that turns a quarter, never a down chevron that flips. */}
+            <IconChevronRight
               aria-hidden="true"
               className={cn(
-                "size-3.5 shrink-0 transition-transform duration-150",
-                showOptions && "rotate-180",
+                "ghostex-chat-disclosure-chevron",
+                showOptions && "is-open",
               )}
-              stroke={2}
             />
             {showOptions
               ? "Hide options"

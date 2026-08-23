@@ -86,8 +86,7 @@ export function SessionChatChoiceRows({
             {isSelected ? (
               <IconCheck
                 aria-hidden="true"
-                className="size-3.5 shrink-0 text-primary"
-                stroke={2.6}
+                className="ghostex-chat-glyph-semantic text-primary"
               />
             ) : shortcutKey !== null ? (
               <kbd className="flex size-5 shrink-0 items-center justify-center rounded border border-border/60 bg-background/40 text-[11px] font-medium text-muted-foreground tabular-nums transition-colors duration-150 group-hover/option:text-foreground">

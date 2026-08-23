@@ -179,10 +179,22 @@ function SessionChatQueueRow({
           <IconGripVertical aria-hidden="true" size={14} stroke={1.8} />
         </button>
       ) : (
+        /*
+        The gutter always holds SOMETHING. An empty one reads as an unexplained
+        indent, so a row that cannot be dragged — one row, no reorder endpoint,
+        a row already being delivered — shows the grip inert (or the delivery
+        spinner) instead of a blank column the text is pushed away from.
+        */
         <span aria-hidden="true" className="ghostex-chat-queue-row-handle-slot">
           {busy ? (
             <IconLoader2 className="animate-spin" size={13} stroke={2} />
-          ) : null}
+          ) : (
+            <IconGripVertical
+              className="ghostex-chat-queue-row-handle-inert"
+              size={14}
+              stroke={1.8}
+            />
+          )}
         </span>
       )}
       <span className="ghostex-chat-queue-row-text" title={prompt.text}>
