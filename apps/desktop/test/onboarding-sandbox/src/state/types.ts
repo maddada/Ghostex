@@ -121,7 +121,7 @@ export interface FirstRunOnboardingStateFile {
   windowsTerminalSetupComplete: boolean;
 }
 
-/** Revision constants mirrored from apps/desktop/src/app/helpers/board_gxserver.rs. */
+/** Revision constants mirrored from apps/desktop/src/app/helpers/board_gxserver/focus_state.rs. */
 export const FIRST_LAUNCH_SETUP_SEEN_REVISION = "2026-06-18-short-first-launch";
 export const HIGHLIGHTED_FEATURES_SEEN_REVISION = "2026-06-16-highlighted-features-launch";
 

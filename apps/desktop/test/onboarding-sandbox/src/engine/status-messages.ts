@@ -110,7 +110,7 @@ export function createAgentHookStatusMessage(
 }
 
 /**
- * apps/desktop/src/app/helpers/agents_hub.rs gpui_ordered_agent_hook_status_agent_ids:2804 — priority
+ * apps/desktop/src/app/helpers/agents_hub/agent_hook_status.rs gpui_ordered_agent_hook_status_agent_ids:20 — priority
  * agents first (codex, claude, opencode, pi), then everything else requested.
  */
 export function orderedHookStatusAgentIds(
