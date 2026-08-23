@@ -524,6 +524,21 @@ impl GhostexGpuiApp {
                 let _ = gpui_open_terminal_action_url(open_value);
                 return;
             }
+            /*
+            CDXC:DisabledPluginRouting 2026-08-23:
+            Answer the Customize refusal here rather than letting the open take
+            the renderer round trip only to be refused on the way back: the
+            reader cmd+clicked, so the copied link and its toast should land on
+            the same interaction.
+            */
+            if !self.titlebar_mode_available(TitlebarMode::Browser) {
+                self.copy_target_for_disabled_project_workarea(
+                    open_value,
+                    TitlebarMode::Browser,
+                    cx,
+                );
+                return;
+            }
             let Some(sidebar) = self.sidebar.clone() else {
                 return;
             };

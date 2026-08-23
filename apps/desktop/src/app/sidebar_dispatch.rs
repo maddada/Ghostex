@@ -649,6 +649,13 @@ impl GhostexGpuiApp {
     ) {
         let _ = window;
         let background = cx.background_executor().clone();
+        // The requested paths themselves, kept for the disabled-Code toast
+        // below: `projects` only carries the git roots they resolved to, which
+        // is not what the user asked to open.
+        let requested_path_text = paths
+            .first()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default();
         cx.spawn(async move |this, cx| {
             let (projects, missing_count) = background
                 .spawn(async move {
@@ -693,6 +700,21 @@ impl GhostexGpuiApp {
                     }),
                     cx,
                 );
+                /*
+                CDXC:DisabledPluginRouting 2026-08-23:
+                Registering the project is still the right half of an OS open
+                request, but with Code turned off in Settings → Customize there
+                is no editor to reveal the path in. Keep the project and hand
+                back the path instead of switching to a disabled workarea.
+                */
+                if !this.titlebar_mode_available(TitlebarMode::Source) {
+                    this.copy_target_for_disabled_project_workarea(
+                        &requested_path_text,
+                        TitlebarMode::Source,
+                        cx,
+                    );
+                    return;
+                }
                 this.switch_workarea_from_hotkey(TitlebarMode::Source, window, cx);
                 this.focus_project_editor_surface(TitlebarMode::Source, window, cx);
             });

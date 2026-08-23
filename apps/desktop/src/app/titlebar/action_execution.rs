@@ -71,7 +71,14 @@ impl GhostexGpuiApp {
         CDXC:GPUITitlebarActions 2026-06-24-14:24:
         Browser Actions must enter the existing GPUI Browser tab/CEF path: switch to Browser, wake the Browser shell, load the saved URL into the active Browser tab, and let Browser surface machinery own navigation. Do not call OS open, shell commands, external browsers, persistent logs, or duplicate CEF surfaces from the titlebar action.
         */
+        /*
+        CDXC:DisabledPluginRouting 2026-08-23:
+        Running a saved Browser Action is a deliberate click, so a Browser
+        turned off in Settings → Customize owes the user the URL and a reason
+        instead of an Action that appears to do nothing.
+        */
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
+            self.copy_target_for_disabled_project_workarea(&url, TitlebarMode::Browser, cx);
             return;
         }
         self.active_mode = TitlebarMode::Browser;

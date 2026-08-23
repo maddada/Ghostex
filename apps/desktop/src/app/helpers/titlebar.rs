@@ -2433,6 +2433,32 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(mode: TitlebarMode) -> 
     }
 }
 
+/*
+CDXC:DisabledPluginRouting 2026-08-23:
+Toasts and menus name a workarea the way Settings → Customize does, which is
+not always the way the enum does: `Source` is "Code" and `Manage` is "Docs"
+everywhere the user can read it.
+*/
+pub(crate) fn gpui_titlebar_mode_plugin_display_name(mode: TitlebarMode) -> &'static str {
+    match mode {
+        TitlebarMode::Agents => "Agents",
+        TitlebarMode::Source => "Code",
+        TitlebarMode::Browser => "Browser",
+        TitlebarMode::Kanban => "Kanban",
+        TitlebarMode::Automate => "Automate",
+        TitlebarMode::Manage => "Docs",
+    }
+}
+
+/// What the copied target *is*, for a disabled-workarea toast: Browser is the
+/// only workarea reached by a web link, every other one is reached by a path.
+pub(crate) fn gpui_disabled_project_workarea_copy_noun(mode: TitlebarMode) -> &'static str {
+    match mode {
+        TitlebarMode::Browser => "Link",
+        _ => "Path",
+    }
+}
+
 pub(crate) fn gpui_titlebar_mode_hidden_from_settings(mode: TitlebarMode) -> bool {
     let Some(settings_key) = titlebar_mode_view_tab_hidden_settings_key(mode) else {
         return false;

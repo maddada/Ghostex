@@ -361,6 +361,26 @@ impl GhostexGpuiApp {
                 .await;
             let _ = this.update_in(cx, |this, window, cx| match result {
                 Ok(pending) => {
+                    /*
+                    CDXC:DisabledPluginRouting 2026-08-23:
+                    "Open in built-in editor" names the Code view, so with Code
+                    turned off in Settings → Customize there is nothing to open
+                    it in. Hand back the resolved path instead of registering
+                    the project and parking on a workarea the user disabled.
+                    */
+                    if !this.titlebar_mode_available(TitlebarMode::Source) {
+                        let file_path = pending.file_path.to_string_lossy().to_string();
+                        // Close the Agents Hub modal first: the copy toast is a
+                        // main-window toast, so it would sit behind the modal
+                        // that is still covering the window.
+                        this.close_gpui_app_modal_window_and_restore_command_focus(cx);
+                        this.copy_target_for_disabled_project_workarea(
+                            &file_path,
+                            TitlebarMode::Source,
+                            cx,
+                        );
+                        return;
+                    }
                     let project_path = pending.project_path.clone();
                     this.pending_source_file_open = Some(pending);
                     this.close_gpui_app_modal_window_and_restore_command_focus(cx);

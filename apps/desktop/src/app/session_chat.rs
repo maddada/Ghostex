@@ -674,6 +674,17 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        /*
+        CDXC:DisabledPluginRouting 2026-08-23:
+        With Browser turned off in Settings → Customize there is no embedded
+        workarea to send this link to, and silently redirecting it to the OS
+        browser would contradict the reader's own "open links in embedded
+        browser" choice. Copy it and say so instead.
+        */
+        if !self.titlebar_mode_available(TitlebarMode::Browser) {
+            self.copy_target_for_disabled_project_workarea(url, TitlebarMode::Browser, cx);
+            return;
+        }
         self.open_browser_url_from_renderer_command(
             GpuiSidebarOpenBrowserUrlMessage {
                 url: url.to_string(),
@@ -743,8 +754,8 @@ impl GhostexGpuiApp {
                 session_chat_file_opens_in_docs(relative, &docs_folders)
             });
         if let Some(relative_path) = docs_relative_path {
-            if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage) {
-                self.copy_path_for_disabled_project_workarea(trimmed, "Docs", cx);
+            if !self.titlebar_mode_available(TitlebarMode::Manage) {
+                self.copy_target_for_disabled_project_workarea(trimmed, TitlebarMode::Manage, cx);
                 return;
             }
             self.report_session_chat_file_opening("Docs view", &file_path, cx);
@@ -757,9 +768,7 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
-            || !self.titlebar_mode_available(TitlebarMode::Source)
-        {
+        if !self.titlebar_mode_available(TitlebarMode::Source) {
             /*
             CDXC:GPUTitlebarAvailability 2026-08-20:
             Source is also unavailable for remote projects, where switching
@@ -767,7 +776,7 @@ impl GhostexGpuiApp {
             dead. Fall back to the same copy-the-path affordance the hidden-tab
             case uses instead of parking on an unreachable workarea.
             */
-            self.copy_path_for_disabled_project_workarea(trimmed, "Code", cx);
+            self.copy_target_for_disabled_project_workarea(trimmed, TitlebarMode::Source, cx);
             return;
         }
         /*
@@ -790,22 +799,51 @@ impl GhostexGpuiApp {
         self.focus_project_editor_surface(TitlebarMode::Source, window, cx);
     }
 
-    pub(crate) fn copy_path_for_disabled_project_workarea(
+    /**
+    CDXC:DisabledPluginRouting 2026-08-23:
+    The single answer every clicked link, file path, or doc gets when the view
+    that would show it is turned off in Settings → Customize. Refusing the
+    click silently reads as a broken link, and opening the view anyway defeats
+    the setting, so the reader keeps what they clicked on the clipboard and the
+    toast names the view and where the switch lives. Every route that would
+    have switched workareas for a clicked target ends here instead.
+    */
+    pub(crate) fn copy_target_for_disabled_project_workarea(
         &mut self,
-        path: &str,
-        plugin_name: &str,
+        target: &str,
+        mode: TitlebarMode,
         cx: &mut gpui::Context<Self>,
     ) {
-        cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
+        let view_name = gpui_titlebar_mode_plugin_display_name(mode);
+        let noun = gpui_disabled_project_workarea_copy_noun(mode);
+        let lowercase_noun = noun.to_ascii_lowercase();
+        /*
+        The same copy affordance covers a workarea the user switched off and a
+        workarea this project cannot host (Source on a machine-scoped remote,
+        every project-scoped view in Quick context). Only the first one is a
+        setting, so only the first one points at Settings; claiming the reader
+        disabled something they did not would send them hunting for a toggle
+        that is already on.
+        */
+        let description = if gpui_titlebar_mode_hidden_from_settings(mode) {
+            format!(
+                "The {view_name} view is disabled under Settings → Customize, so we copied the {lowercase_noun} instead."
+            )
+        } else {
+            format!(
+                "The {view_name} view is not available here, so we copied the {lowercase_noun} instead."
+            )
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(target.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id: format!(
-                    "gpui-disabled-{}-file-path-copied",
-                    plugin_name.to_ascii_lowercase()
+                    "gpui-disabled-{}-target-copied",
+                    view_name.to_ascii_lowercase()
                 ),
                 level: GpuiAppToastLevel::from_raw(Some("success")),
-                title: "Copied to Clipboard!".to_string(),
-                description: Some(format!("({plugin_name} plugin is disabled)")),
+                title: format!("Copied {noun} to Clipboard"),
+                description: Some(description),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
@@ -832,10 +870,8 @@ impl GhostexGpuiApp {
         path: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
-            || !self.titlebar_mode_available(TitlebarMode::Source)
-        {
-            self.copy_path_for_disabled_project_workarea(path, "Code", cx);
+        if !self.titlebar_mode_available(TitlebarMode::Source) {
+            self.copy_target_for_disabled_project_workarea(path, TitlebarMode::Source, cx);
             return;
         }
         // Naming Code view is only useful advice when Code view can actually

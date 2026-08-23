@@ -619,6 +619,16 @@ impl GhostexGpuiApp {
             cx.notify();
             return;
         }
+        /*
+        CDXC:DisabledPluginRouting 2026-08-23:
+        Close and sleep above are housekeeping the sidebar may still need for
+        tabs that already exist, but everything past this point focuses the
+        Browser workarea. With Browser turned off in Settings → Customize a
+        stale sidebar tab row must not be able to drag the shell back into it.
+        */
+        if !self.titlebar_mode_available(TitlebarMode::Browser) {
+            return;
+        }
         if !is_active_browser_project {
             let parked_model_has_tab = self
                 .parked_browser_tabs_by_project
@@ -670,6 +680,24 @@ impl GhostexGpuiApp {
         have the Browser workarea, so the availability gate only applies to
         untargeted opens.
         */
+        /*
+        CDXC:DisabledPluginRouting 2026-08-23:
+        This is the one door every embedded-browser open goes through — chat
+        and terminal links, saved Action links, sidebar project and Quick
+        headers, `ghostex browser open`. With Browser turned off in Settings →
+        Customize none of them may open a tab, and that includes the two routes
+        that bypass the availability gate below (an explicit project target and
+        the projectless Quick header), so the Customize refusal is checked
+        first and answers with the copied link rather than a dead click.
+        */
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Browser) {
+            self.copy_target_for_disabled_project_workarea(
+                &message.url,
+                TitlebarMode::Browser,
+                cx,
+            );
+            return;
+        }
         if let Some(project_id) = message.project_id.as_deref() {
             if self.browser_tabs_project_id.as_deref() != Some(project_id) {
                 self.swap_browser_tabs_to_project_id(Some(project_id.to_string()), cx);

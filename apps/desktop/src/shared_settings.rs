@@ -566,10 +566,18 @@ impl SharedSidebarSettingsSnapshot {
     The pane overflow button has no toggle: it is the only route to the
     remaining pane actions, and hiding it would strand them.
     */
+    /*
+    CDXC:DisabledPluginRouting 2026-08-23:
+    Turning Browser off in Settings → Customize also retires New Browser Tab
+    from the tab strip. The per-button hide toggle stays independent — it is
+    the user's own layout choice — but a button whose only outcome is a
+    workarea that no longer exists has nothing left to do.
+    */
     pub fn tab_strip_built_in_buttons(&self) -> SharedTabStripBuiltInButtons {
         SharedTabStripBuiltInButtons {
             show_new_browser: strict_bool_field(&self.object, "hideTabStripNewBrowserButton")
-                != Some(true),
+                != Some(true)
+                && strict_bool_field(&self.object, "browserViewTabHidden") != Some(true),
             show_new_chat: strict_bool_field(&self.object, "hideTabStripNewChatButton")
                 != Some(true),
             show_new_terminal: strict_bool_field(&self.object, "hideTabStripNewTerminalButton")

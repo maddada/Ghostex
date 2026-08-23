@@ -51,7 +51,7 @@ import {
 } from '@/packages/components/ui/command';
 import type { SidebarCommandButton } from '../shared/sidebar-commands';
 import { DEFAULT_SIDEBAR_COMMAND_ICON } from '../shared/sidebar-command-icons';
-import type { ghostexSettings } from '../shared/ghostex-settings';
+import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
 import {
   GHOSTEX_HOTKEY_DEFINITIONS,
   normalizeHotkeyText,
@@ -477,6 +477,50 @@ export function CommandPalette({
   const [selectedCommandValue, setSelectedCommandValue] = useState('');
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandRunStates = useSidebarStore((state) => state.commandRunStates);
+  /*
+   * CDXC:DisabledPluginRouting 2026-08-23:
+   * A view turned off in Settings → Customize is gone from the titlebar, and
+   * the host refuses to switch to it, so its palette rows would be commands
+   * that cannot run. Filter them here — the switchers for the hidden views,
+   * plus the two Browser creators — instead of leaving dead rows that report
+   * nothing when chosen.
+   */
+  const browserViewTabHidden = useSidebarStore(
+    (state) =>
+      (state.hud.settings?.browserViewTabHidden ??
+        DEFAULT_ghostex_SETTINGS.browserViewTabHidden) === true
+  );
+  const codeViewTabHidden = useSidebarStore(
+    (state) =>
+      (state.hud.settings?.codeViewTabHidden ?? DEFAULT_ghostex_SETTINGS.codeViewTabHidden) === true
+  );
+  const docsViewTabHidden = useSidebarStore(
+    (state) =>
+      (state.hud.settings?.docsViewTabHidden ?? DEFAULT_ghostex_SETTINGS.docsViewTabHidden) === true
+  );
+  const kanbanViewTabHidden = useSidebarStore(
+    (state) =>
+      (state.hud.settings?.kanbanViewTabHidden ?? DEFAULT_ghostex_SETTINGS.kanbanViewTabHidden) ===
+      true
+  );
+  const hiddenWorkareaCommandIds = useMemo(() => {
+    const hidden = new Set<string>();
+    if (browserViewTabHidden) {
+      hidden.add('switchGitHubView');
+      hidden.add('openBrowserPane');
+      hidden.add('quickBrowserTab');
+    }
+    if (codeViewTabHidden) {
+      hidden.add('switchSourceView');
+    }
+    if (docsViewTabHidden) {
+      hidden.add('switchManageView');
+    }
+    if (kanbanViewTabHidden) {
+      hidden.add('switchKanbanView');
+    }
+    return hidden;
+  }, [browserViewTabHidden, codeViewTabHidden, docsViewTabHidden, kanbanViewTabHidden]);
   const normalizedHotkeys = useMemo(() => normalizeghostexHotkeySettings(hotkeys), [hotkeys]);
   const commandQuery = inputValue.trim();
   const createBuiltInCommand = (definition: ghostexHotkeyDefinition): HotkeyPaletteCommand => {
@@ -496,7 +540,8 @@ export function CommandPalette({
         definition.id !== 'openCommandPalette' &&
         definition.id !== 'openSessionSearchPalette' &&
         definition.action.kind !== 'runActionSlot' &&
-        !paneActionIds.has(definition.id)
+        !paneActionIds.has(definition.id) &&
+        !hiddenWorkareaCommandIds.has(definition.id)
     ).map(createBuiltInCommand);
     const petTitle = petOverlayEnabled ? 'Sleep Pet' : 'Wake Pet';
     const petCommand: BuiltInPaletteCommand = {
@@ -522,17 +567,20 @@ export function CommandPalette({
     return [
       ...hotkeyCommands,
       ...APP_MODAL_PALETTE_COMMANDS,
-      ...SIDEBAR_MESSAGE_PALETTE_COMMANDS,
+      ...SIDEBAR_MESSAGE_PALETTE_COMMANDS.filter(
+        (command) => !hiddenWorkareaCommandIds.has(command.commandId)
+      ),
       ...openTargetCommands,
       petCommand,
     ];
-  }, [normalizedHotkeys, openTargetSettings, petOverlayEnabled]);
+  }, [hiddenWorkareaCommandIds, normalizedHotkeys, openTargetSettings, petOverlayEnabled]);
   const paneActionCommands = useMemo(() => {
     const definitionsById = new Map(GHOSTEX_HOTKEY_DEFINITIONS.map((definition) => [definition.id, definition]));
-    return PANE_ACTION_COMMAND_IDS.map((id) => definitionsById.get(id))
+    return PANE_ACTION_COMMAND_IDS.filter((id) => !hiddenWorkareaCommandIds.has(id))
+      .map((id) => definitionsById.get(id))
       .filter((definition): definition is ghostexHotkeyDefinition => definition !== undefined)
       .map(createBuiltInCommand);
-  }, [normalizedHotkeys]);
+  }, [hiddenWorkareaCommandIds, normalizedHotkeys]);
   const projectCommands = useMemo(
     () =>
       commands

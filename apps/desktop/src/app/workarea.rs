@@ -872,8 +872,22 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn titlebar_mode_available(&self, mode: TitlebarMode) -> bool {
+        /*
+        CDXC:DisabledPluginRouting 2026-08-23:
+        A workarea turned off in Settings → Customize is not just missing its
+        titlebar tab: it is a place the shell must never route to. Folding the
+        Customize gate into the single availability predicate closes that off
+        for every caller at once — hotkeys, command palette, chat/terminal link
+        and file opens, saved Browser Actions, `ghostex browser open`, OS
+        `ghostex://` opens, restored and persisted active modes — instead of
+        leaving each entry point to remember its own check. Entry points that
+        answer a click still handle the refusal visibly (they copy the target
+        and say why); this predicate is the backstop that keeps the rest from
+        silently parking the user on a view they turned off.
+        */
         self.project_scoped_workarea_availability()
             .titlebar_mode_available(mode)
+            && !gpui_titlebar_mode_hidden_from_settings(mode)
     }
 
     pub(crate) fn available_titlebar_mode_or_agents(&self, mode: TitlebarMode) -> TitlebarMode {

@@ -921,6 +921,17 @@ export function SessionGroupSection({
     (state) =>
       state.hud.settings?.showProjectIcons ?? DEFAULT_ghostex_SETTINGS.showProjectIcons,
   );
+  /*
+   * CDXC:DisabledPluginRouting 2026-08-23:
+   * Turning Browser off in Settings → Customize removes the Browser workarea,
+   * so the project header's New Browser Tab button has nowhere left to put a
+   * tab. Hide it rather than leaving a control whose only outcome is a refusal.
+   */
+  const browserViewEnabled = useSidebarStore(
+    (state) =>
+      (state.hud.settings?.browserViewTabHidden ??
+        DEFAULT_ghostex_SETTINGS.browserViewTabHidden) !== true,
+  );
   const projectSessionListCollapsedCount = useSidebarStore(
     (state) =>
       clampProjectSessionListCollapsedCount(
@@ -2445,7 +2456,7 @@ export function SessionGroupSection({
                             />
                           </ProjectHeaderActionButton>
                         ) : null}
-                        {projectHeaderActions === "all" ? (
+                        {projectHeaderActions === "all" && browserViewEnabled ? (
                           <ProjectHeaderActionButton
                             aria-label={`Create a browser tab in ${group.title}`}
                             className="group-add-button group-browser-button"
