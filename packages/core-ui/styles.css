@@ -999,6 +999,25 @@ body {
   width: 7px;
 }
 
+/*
+ CDXC:StashedPromptTags 2026-08-23:
+ "No tag" is the absence of a tag, so it wears a hollow dot and stays neutral
+ when selected rather than borrowing a tag color it does not have.
+*/
+.ghostex-stashed-prompt-tag-pill-untagged .ghostex-stashed-prompt-tag-dot {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.ghostex-stashed-prompt-tag-pill-untagged[data-active="true"] {
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-color: color-mix(in srgb, var(--foreground) 34%, transparent);
+}
+
+.ghostex-stashed-prompt-tag-pill-untagged[data-active="true"] .ghostex-stashed-prompt-tag-dot {
+  border-color: color-mix(in srgb, var(--foreground) 70%, transparent);
+}
+
 .ghostex-stashed-prompt-tag-star {
   color: var(--ghostex-tag-color);
   flex: 0 0 auto;

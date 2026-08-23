@@ -71,6 +71,20 @@ const STASHED_PROMPT_TAG_COLORS = [
 
 const MAX_TAG_NAME_LENGTH = 40;
 
+/*
+ * CDXC:StashedPromptTags 2026-08-23:
+ * The rail filters on three distinct things, so it is a union rather than a
+ * nullable tagId: "untagged" is a real selection, not the absence of one, and a
+ * sentinel string mixed into the tagId space could one day collide with a tag
+ * the daemon mints.
+ */
+type StashedPromptTagFilter =
+  | { kind: 'all' }
+  | { kind: 'tag'; tagId: string }
+  | { kind: 'untagged' };
+
+const ALL_PROMPTS_FILTER: StashedPromptTagFilter = { kind: 'all' };
+
 type StashedPromptDayGroup = {
   dayLabel: string;
   prompts: GxserverStashedPrompt[];
@@ -143,7 +157,7 @@ export function StashedPromptsModal({
 }: StashedPromptsModalProps) {
   const [prompts, setPrompts] = useState<GxserverStashedPrompt[]>();
   const [tags, setTags] = useState<GxserverStashedPromptTag[]>([]);
-  const [activeTagId, setActiveTagId] = useState<string>();
+  const [tagFilter, setTagFilter] = useState<StashedPromptTagFilter>(ALL_PROMPTS_FILTER);
   const [tagMenuPromptId, setTagMenuPromptId] = useState<string>();
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [createTagName, setCreateTagName] = useState('');
@@ -179,7 +193,7 @@ export function StashedPromptsModal({
     if (!isOpen) {
       setPrompts(undefined);
       setTags([]);
-      setActiveTagId(undefined);
+      setTagFilter(ALL_PROMPTS_FILTER);
       setTagMenuPromptId(undefined);
       setIsCreatingTag(false);
       setCreateTagName('');
@@ -244,7 +258,9 @@ export function StashedPromptsModal({
                 : prompt
             )
           );
-          setActiveTagId((current) => (current === deletedTagId ? undefined : current));
+          setTagFilter((current) =>
+            current.kind === 'tag' && current.tagId === deletedTagId ? ALL_PROMPTS_FILTER : current
+          );
         }
         return;
       }
@@ -348,12 +364,30 @@ export function StashedPromptsModal({
     return prompts.filter((prompt) => stashedPromptSearchText(prompt).includes(query));
   }, [prompts, searchQuery]);
 
-  const visiblePrompts = useMemo(
-    () =>
-      activeTagId
-        ? searchedPrompts.filter((prompt) => promptTagIds(prompt).includes(activeTagId))
-        : searchedPrompts,
-    [activeTagId, searchedPrompts]
+  const visiblePrompts = useMemo(() => {
+    if (tagFilter.kind === 'all') {
+      return searchedPrompts;
+    }
+    if (tagFilter.kind === 'untagged') {
+      return searchedPrompts.filter((prompt) => promptTagIds(prompt).length === 0);
+    }
+    return searchedPrompts.filter((prompt) => promptTagIds(prompt).includes(tagFilter.tagId));
+  }, [searchedPrompts, tagFilter]);
+
+  const untaggedPromptCount = useMemo(
+    () => searchedPrompts.filter((prompt) => promptTagIds(prompt).length === 0).length,
+    [searchedPrompts]
+  );
+
+  /*
+   * CDXC:StashedPromptTags 2026-08-23:
+   * Whether "No tag" exists is decided by the whole library, not the current
+   * search: its count narrows with the query like every other pill, but the
+   * pill itself must not blink in and out of the rail as the user types.
+   */
+  const hasTaggedPrompt = useMemo(
+    () => (prompts ?? []).some((prompt) => promptTagIds(prompt).length > 0),
+    [prompts]
   );
 
   const promptCountByTagId = useMemo(() => {
@@ -371,7 +405,7 @@ export function StashedPromptsModal({
   const groupedVisiblePrompts = useMemo(() => groupStashedPromptsByDay(visiblePrompts), [visiblePrompts]);
   const normalizedSearchQuery = searchQuery.toLowerCase().replace(/\s+/g, ' ').trim();
   const showAddPrompt =
-    !activeTagId &&
+    tagFilter.kind === 'all' &&
     (normalizedSearchQuery.length === 0 || 'add saved prompt new prompt'.includes(normalizedSearchQuery));
   const topPromptValue = showAddPrompt ? 'add saved prompt new prompt' : visiblePrompts[0]?.promptId ?? '';
 
@@ -479,7 +513,7 @@ export function StashedPromptsModal({
     }
     pendingTagApplicationRef.current = undefined;
     if (!pending.promptId) {
-      setActiveTagId(createdTag.tagId);
+      setTagFilter({ kind: 'tag', tagId: createdTag.tagId });
       return;
     }
     const prompt = prompts?.find((candidate) => candidate.promptId === pending.promptId);
@@ -620,7 +654,8 @@ export function StashedPromptsModal({
                 onValueChange={setSearchQuery}
               />
               <StashedPromptTagRail
-                activeTagId={activeTagId}
+                onSelectFilter={setTagFilter}
+                tagFilter={tagFilter}
                 createTagColor={createTagColor}
                 createTagName={createTagName}
                 isCreatingTag={isCreatingTag && createTagOriginRef.current === 'rail'}
@@ -635,8 +670,9 @@ export function StashedPromptsModal({
                   }
                 }}
                 onDeleteTag={deleteTag}
-                onSelectTag={setActiveTagId}
                 promptCount={searchedPrompts.length}
+                showUntaggedFilter={hasTaggedPrompt}
+                untaggedPromptCount={untaggedPromptCount}
                 promptCountByTagId={promptCountByTagId}
                 tags={tags}
               />
@@ -651,9 +687,11 @@ export function StashedPromptsModal({
               >
                 {prompts !== undefined && !showAddPrompt && visiblePrompts.length === 0 ? (
                   <CommandEmpty>
-                    {activeTagId
+                    {tagFilter.kind === 'tag'
                       ? 'No saved prompts carry this tag yet.'
-                      : 'No saved prompts match this search.'}
+                      : tagFilter.kind === 'untagged'
+                        ? 'Every saved prompt here already carries a tag.'
+                        : 'No saved prompts match this search.'}
                   </CommandEmpty>
                 ) : null}
                 {showAddPrompt || visiblePrompts.length > 0 ? (
@@ -749,7 +787,6 @@ export function StashedPromptsModal({
 }
 
 type StashedPromptTagRailProps = {
-  activeTagId: string | undefined;
   createTagColor: string;
   createTagName: string;
   isCreatingTag: boolean;
@@ -758,10 +795,13 @@ type StashedPromptTagRailProps = {
   onCreateTagNameChange: (name: string) => void;
   onCreateTagOpenChange: (nextOpen: boolean) => void;
   onDeleteTag: (tag: GxserverStashedPromptTag) => void;
-  onSelectTag: (tagId: string | undefined) => void;
+  onSelectFilter: (filter: StashedPromptTagFilter) => void;
   promptCount: number;
   promptCountByTagId: Map<string, number>;
+  showUntaggedFilter: boolean;
+  tagFilter: StashedPromptTagFilter;
   tags: readonly GxserverStashedPromptTag[];
+  untaggedPromptCount: number;
 };
 
 /*
@@ -773,7 +813,6 @@ type StashedPromptTagRailProps = {
  * space prompt text has to be readable in.
  */
 function StashedPromptTagRail({
-  activeTagId,
   createTagColor,
   createTagName,
   isCreatingTag,
@@ -782,19 +821,22 @@ function StashedPromptTagRail({
   onCreateTagNameChange,
   onCreateTagOpenChange,
   onDeleteTag,
-  onSelectTag,
+  onSelectFilter,
   promptCount,
   promptCountByTagId,
+  showUntaggedFilter,
+  tagFilter,
   tags,
+  untaggedPromptCount,
 }: StashedPromptTagRailProps) {
   return (
     <div className='ghostex-stashed-prompt-tag-rail-wrap'>
       <div className='ghostex-stashed-prompt-tag-rail' role='group' aria-label='Filter saved prompts by tag'>
         <button
-          aria-pressed={activeTagId === undefined}
+          aria-pressed={tagFilter.kind === 'all'}
           className='ghostex-stashed-prompt-tag-pill'
-          data-active={String(activeTagId === undefined)}
-          onClick={() => onSelectTag(undefined)}
+          data-active={String(tagFilter.kind === 'all')}
+          onClick={() => onSelectFilter(ALL_PROMPTS_FILTER)}
           style={{ '--ghostex-tag-color': '#9a9aa4' } as React.CSSProperties}
           type='button'
         >
@@ -804,11 +846,17 @@ function StashedPromptTagRail({
         <span aria-hidden='true' className='ghostex-stashed-prompt-tag-rail-separator' />
         {tags.map((tag) => (
           <button
-            aria-pressed={activeTagId === tag.tagId}
+            aria-pressed={tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId}
             className='ghostex-stashed-prompt-tag-pill'
-            data-active={String(activeTagId === tag.tagId)}
+            data-active={String(tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId)}
             key={tag.tagId}
-            onClick={() => onSelectTag(activeTagId === tag.tagId ? undefined : tag.tagId)}
+            onClick={() =>
+              onSelectFilter(
+                tagFilter.kind === 'tag' && tagFilter.tagId === tag.tagId
+                  ? ALL_PROMPTS_FILTER
+                  : { kind: 'tag', tagId: tag.tagId }
+              )
+            }
             /*
              * Removing a tag lives on its own pill rather than in a settings
              * screen, so the place you file prompts is the place you unfile a
@@ -834,6 +882,31 @@ function StashedPromptTagRail({
             <span className='ghostex-stashed-prompt-tag-count'>{promptCountByTagId.get(tag.tagId) ?? 0}</span>
           </button>
         ))}
+        {/*
+          CDXC:StashedPromptTags 2026-08-23:
+          "No tag" closes the rail so the pills partition the list completely —
+          without it, prompts nobody has filed are reachable only through All.
+          It stays out of the rail until something is tagged, because until then
+          it selects the same set as All. It also stays put while it is the
+          active filter, so tagging the last loose prompt cannot leave the list
+          filtered by a pill that is no longer on screen.
+        */}
+        {showUntaggedFilter || tagFilter.kind === 'untagged' ? (
+          <button
+            aria-pressed={tagFilter.kind === 'untagged'}
+            className='ghostex-stashed-prompt-tag-pill ghostex-stashed-prompt-tag-pill-untagged'
+            data-active={String(tagFilter.kind === 'untagged')}
+            onClick={() =>
+              onSelectFilter(tagFilter.kind === 'untagged' ? ALL_PROMPTS_FILTER : { kind: 'untagged' })
+            }
+            title='Saved prompts with no tag'
+            type='button'
+          >
+            <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
+            No tag
+            <span className='ghostex-stashed-prompt-tag-count'>{untaggedPromptCount}</span>
+          </button>
+        ) : null}
       </div>
       {/*
         The "+" lives outside the scrolling strip: once there are more tags than
