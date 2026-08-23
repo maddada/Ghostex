@@ -22,6 +22,8 @@ fi
 # CDXC:AgentHistorySearch 2026-08-20: zehn is no longer a Zig submodule that this
 # script builds and stages as Web/bin/zehn. Prompt-history search is a Rust crate
 # compiled into gxserver, so there is nothing to build, cache, or copy here.
+ZMX_ROOT_EXPLICITLY_CONFIGURED=0
+[[ -n "${ZMX_ROOT:-}" ]] && ZMX_ROOT_EXPLICITLY_CONFIGURED=1
 ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/server}"
 TUI_ROOT_EXPLICITLY_CONFIGURED=0
@@ -471,7 +473,7 @@ ensure_code_server_payload() {
 		exit 1
 	fi
 	if [[ ! -d "$CODE_SERVER_ROOT/node_modules" ]]; then
-		echo "code-server node_modules are missing. Run: npm --prefix .dependencies/code-server install" >&2
+		echo "code-server node_modules are missing. Run: npm --prefix \"$CODE_SERVER_ROOT\" install" >&2
 		exit 1
 	fi
 	node_payload_digest="$(code_server_node_payload_digest)"
@@ -483,11 +485,11 @@ ensure_code_server_payload() {
 		write_cache_stamp "code-server-node-payload" "$node_payload_digest"
 	fi
 	if [[ ! -f "$CODE_SERVER_ROOT/lib/vscode/package.json" ]]; then
-		echo "code-server VS Code submodule is missing. Run: git -C .dependencies/code-server submodule update --init lib/vscode" >&2
+		echo "code-server VS Code submodule is missing. Run: git -C \"$CODE_SERVER_ROOT\" submodule update --init lib/vscode" >&2
 		exit 1
 	fi
 	if [[ ! -d "$CODE_SERVER_ROOT/lib/vscode/node_modules" ]]; then
-		echo "code-server VS Code node_modules are missing. Run: npm --prefix .dependencies/code-server/lib/vscode install" >&2
+		echo "code-server VS Code node_modules are missing. Run: npm --prefix \"$CODE_SERVER_ROOT/lib/vscode\" install" >&2
 		exit 1
 	fi
 	vscode_ripgrep_bin="$(code_server_vscode_ripgrep_bin "$vscode_release_root")"
@@ -1843,13 +1845,14 @@ mkdir -p "$CLI_DIR"
 
 # CDXC:ZmxPersistence 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
 if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
-	cat >&2 <<EOF
-zmx source is missing:
-  $ZMX_ROOT
-
-Initialize submodules before building:
-  git submodule update --init --recursive .dependencies/zmx
-EOF
+	{
+		printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
+		if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
+			printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
+		else
+			printf 'Initialize submodules before building:\n  git submodule update --init --recursive %s\n' "$ZMX_ROOT"
+		fi
+	} >&2
 	exit 1
 fi
 case "$GHOSTEX_MACOS_ARCH" in
