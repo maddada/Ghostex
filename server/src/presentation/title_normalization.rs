@@ -116,6 +116,9 @@ pub(crate) fn normalize_terminal_title(title: Option<&str>) -> Option<String> {
     if let Some(pi_title) = normalize_pi_terminal_title(&sanitized) {
         return Some(pi_title);
     }
+    if let Some(grok_title) = normalize_grok_terminal_title(&sanitized) {
+        return Some(grok_title);
+    }
     if sanitized.is_empty() {
         None
     } else {
@@ -283,6 +286,70 @@ pub(crate) fn normalize_pi_terminal_title(title: &str) -> Option<String> {
     } else {
         Some(parts[..parts.len() - 1].join(" - "))
     }
+}
+
+pub(crate) const GROK_TERMINAL_TITLE_SUFFIX: &str = " - grok";
+
+/*
+Grok Build publishes `{spinner} - {status} - {session title} - grok` while it
+works and `{session title} - grok` when it is idle. Tabs and sidebar rows only
+want the session title, so drop the trailing agent segment and the leading
+status segment instead of showing `- Thinking - Fix bun run start command - grok`.
+*/
+pub(crate) fn normalize_grok_terminal_title(title: &str) -> Option<String> {
+    let normalized = normalize_spaces(title.trim());
+    let split_at = normalized
+        .len()
+        .checked_sub(GROK_TERMINAL_TITLE_SUFFIX.len())?;
+    if !normalized.is_char_boundary(split_at) {
+        return None;
+    }
+    let (body, suffix) = normalized.split_at(split_at);
+    if !suffix.eq_ignore_ascii_case(GROK_TERMINAL_TITLE_SUFFIX) {
+        return None;
+    }
+    let body = strip_grok_status_prefix(body.trim());
+    Some(if body.is_empty() {
+        "grok".to_string()
+    } else {
+        body
+    })
+}
+
+pub(crate) fn strip_grok_status_prefix(body: &str) -> String {
+    if let Some(rest) = body.strip_prefix('-') {
+        let rest = rest.trim();
+        return match rest.split_once(" - ") {
+            Some((status, title)) if !status.is_empty() => title.trim().to_string(),
+            _ => String::new(),
+        };
+    }
+    match body.split_once(" - ") {
+        Some((status, title)) if is_grok_status_segment(status) => title.trim().to_string(),
+        _ => body.to_string(),
+    }
+}
+
+pub(crate) fn is_grok_status_segment(segment: &str) -> bool {
+    let lower = segment.trim().to_lowercase();
+    matches!(
+        lower.as_str(),
+        "cancelling"
+            | "compacting"
+            | "completed"
+            | "done"
+            | "error"
+            | "executing"
+            | "idle"
+            | "responding"
+            | "running"
+            | "starting"
+            | "stopped"
+            | "thinking"
+            | "verifying"
+            | "waiting"
+            | "working"
+    ) || lower.starts_with("retrying")
 }
 
 pub(crate) fn is_ignored_placeholder_session_title(title: &str) -> bool {
