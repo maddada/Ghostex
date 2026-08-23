@@ -790,49 +790,27 @@ stage_gpui_sparkle_framework_if_available() {
 }
 
 stage_gpui_app_icon() {
-	local asset
-	local app_icon_build_root
-	local app_icon_build_set
-	local app_icon_build_dest
-	local required_assets=(
-		icon_16x16.png
-		icon_16x16@2x.png
-		icon_32x32.png
-		icon_32x32@2x.png
-		icon_128x128.png
-		icon_128x128@2x.png
-		icon_256x256.png
-		icon_256x256@2x.png
-		icon_512x512.png
-		icon_512x512@2x.png
-	)
+	local writer="$SCRIPT_DIR/write-macos-icns.py"
 
 	if [[ ! -d "$APP_ICON_SOURCE_SET" ]]; then
 		echo "Missing canonical Ghostex app icon asset set: $APP_ICON_SOURCE_SET" >&2
 		exit 1
 	fi
-	if ! command -v iconutil >/dev/null 2>&1; then
-		echo "Missing iconutil; cannot build the GPUI app icon from the canonical macOS AppIcon asset set." >&2
+	if ! command -v python3 >/dev/null 2>&1; then
+		echo "Missing python3; cannot encode the GPUI app icon from $APP_ICON_SOURCE_SET." >&2
+		exit 1
+	fi
+	if [[ ! -f "$writer" ]]; then
+		echo "Missing app icon encoder: $writer" >&2
 		exit 1
 	fi
 
-	mkdir -p "$GPUI_DIR/build/macos" "$(dirname "$APP_ICON_DEST")"
-	app_icon_build_root="$(mktemp -d "$GPUI_DIR/build/macos/.app-icon.XXXXXX")"
-	app_icon_build_set="$app_icon_build_root/AppIcon.iconset"
-	app_icon_build_dest="$app_icon_build_root/AppIcon.icns"
-	(
-		trap 'rm -rf "$app_icon_build_root"' EXIT
-		mkdir -p "$app_icon_build_set"
-		for asset in "${required_assets[@]}"; do
-			if [[ ! -f "$APP_ICON_SOURCE_SET/$asset" ]]; then
-				echo "Missing canonical Ghostex app icon asset: $APP_ICON_SOURCE_SET/$asset" >&2
-				exit 1
-			fi
-			install -m 0644 "$APP_ICON_SOURCE_SET/$asset" "$app_icon_build_set/$asset"
-		done
-		iconutil -c icns "$app_icon_build_set" -o "$app_icon_build_dest"
-		mv -f "$app_icon_build_dest" "$APP_ICON_DEST"
-	)
+	mkdir -p "$(dirname "$APP_ICON_DEST")"
+	python3 "$writer" "$APP_ICON_SOURCE_SET" "$APP_ICON_DEST"
+	if [[ ! -s "$APP_ICON_DEST" ]]; then
+		echo "App icon encoder did not write $APP_ICON_DEST" >&2
+		exit 1
+	fi
 }
 
 sign_gpui_app_bundle() {
