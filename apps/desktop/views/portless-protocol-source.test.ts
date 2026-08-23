@@ -22,10 +22,19 @@ const portlessRustSource = [
   readFileSync(new URL("../../../server/src/portless/types.rs", import.meta.url), "utf8"),
   readFileSync(new URL("../../../server/src/portless/status.rs", import.meta.url), "utf8"),
 ].join("\n");
-const presentationRustSource = readFileSync(
-  new URL("../../../server/src/presentation.rs", import.meta.url),
-  "utf8",
-);
+// server/src/presentation.rs was split into server/src/presentation/{mod,
+// snapshot,payload_inserts,session_projection,search,session_attributes,
+// title_normalization,util,tests}.rs. The call site below lives in
+// snapshot.rs, while the payload's "portless" key lives in
+// payload_inserts.rs, so concatenate just those two to keep checking the
+// same content.
+const presentationRustSource = [
+  readFileSync(new URL("../../../server/src/presentation/snapshot.rs", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../server/src/presentation/payload_inserts.rs", import.meta.url),
+    "utf8",
+  ),
+].join("\n");
 const protocolRustSource = readFileSync(
   new URL("../../../server/src/protocol.rs", import.meta.url),
   "utf8",
