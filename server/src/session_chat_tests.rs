@@ -210,12 +210,11 @@ mod tests {
         .expect("user item");
         assert_eq!(user.role, SessionChatRole::User);
         assert_eq!(user.id, "019fdc6f-1436-7b10-a55f-23ba56beb5ac");
+        // The skill chip decodes to nothing: extra chip-derived text made the
+        // turn differ from its optimistic echo, duplicating the sent message.
         assert_eq!(
             user.blocks,
-            vec![
-                text_block("Skill: ghostex-browser-use".to_string()),
-                text_block("explain questions 2 and 3".to_string()),
-            ]
+            vec![text_block("explain questions 2 and 3".to_string())]
         );
 
         // AgentMessage spells its text block `Text`, unlike UserMessage's `text`.

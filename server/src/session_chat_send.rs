@@ -45,6 +45,17 @@ until its Enter fires. HTTP handlers enqueue and return immediately.
 pub const SESSION_CHAT_SUBMIT_DELAY_MS: u64 = 500;
 pub const SESSION_CHAT_QUESTION_STEP_MS: u64 = 1_000;
 pub const SESSION_CHAT_IMAGE_ATTACHMENT_SETTLE_MS: u64 = 300;
+/*
+The clear burst must reach the TUI in its OWN stdin read chunk. Written
+back-to-back with a paste frame, the two coalesce into one chunk, and Claude
+Code's chunk-level paste handling inserts the burst bytes as literal text at
+the head of the message instead of interpreting them as kill keys (observed
+2026-08-23: a chat-sent prompt was recorded with 39×Ctrl-U + 39×Ctrl-K glued
+to its front, which also left the optimistic echo unconsumed — the duplicated
+user bubble). Same pacing discipline as the image settle and the separate
+delayed Enter.
+*/
+pub const SESSION_CHAT_CLEAR_INPUT_SETTLE_MS: u64 = 150;
 pub const SESSION_CHAT_SUBMIT: &str = "\r";
 /*
 Esc in the kitty CSI-u encoding (CSI 27 u). Ghostex agent sessions always run
@@ -377,8 +388,8 @@ pub enum SessionChatSendStep {
     SleepMs(u64),
 }
 
-/// clear burst → image pastes back-to-back → (300ms settle when text follows
-/// images) → paste body → 500ms → SEPARATE Enter.
+/// clear burst → 150ms settle → image pastes back-to-back → (300ms settle
+/// when text follows images) → paste body → 500ms → SEPARATE Enter.
 pub fn build_session_chat_message_steps(
     text: &str,
     image_paths: &[String],
@@ -386,6 +397,9 @@ pub fn build_session_chat_message_steps(
     let mut steps = Vec::new();
     steps.push(SessionChatSendStep::Write(
         build_agent_tui_clear_input_for_text(text),
+    ));
+    steps.push(SessionChatSendStep::SleepMs(
+        SESSION_CHAT_CLEAR_INPUT_SETTLE_MS,
     ));
     for path in image_paths {
         steps.push(SessionChatSendStep::Write(
@@ -1027,6 +1041,7 @@ mod tests {
             steps,
             vec![
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("hi")),
+                SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write("hi".to_string()),
                 SessionChatSendStep::SleepMs(500),
                 SessionChatSendStep::Write("\r".to_string()),
@@ -1040,6 +1055,7 @@ mod tests {
             with_images,
             vec![
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("what is this")),
+                SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write(
                     "\u{1b}[200~/tmp/ghostex-paste-1.png\u{1b}[201~".to_string()
                 ),
@@ -1055,6 +1071,7 @@ mod tests {
             images_only,
             vec![
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("")),
+                SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write("\u{1b}[200~/tmp/a.png\u{1b}[201~".to_string()),
                 SessionChatSendStep::SleepMs(500),
                 SessionChatSendStep::Write("\r".to_string()),

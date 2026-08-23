@@ -12,6 +12,47 @@ export const SESSION_CHAT_COMMAND_MARKER_LIMIT = 8;
 // transcript twin.
 const IMAGE_PROMPT_MARKER = /^\[Image #\d+\]\s*/;
 
+// Kill-key bytes a TUI occasionally swallows into the submitted prompt as
+// literal text: the send path's Ctrl-U/Ctrl-K clear burst can coalesce into
+// the paste frame's stdin chunk and get recorded at the head of the message.
+// Never typeable content, so both sides drop all C0 controls except \t/\n/\r
+// (real text) and ESC (a bare strip would leave dangling ANSI fragments).
+const LEAKED_CONTROL_CHARS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001a\u001c-\u001f\u007f]/g;
+
+// A skill mention is typed as `[$name](path)`, but the harness owns the
+// destination: Codex resolves symlinked skill roots, so the echo and its
+// transcript twin can disagree on the path while meaning the same mention.
+// Only the `$name` label is identity. Destinations follow
+// linkedSessionChatSkillMention: bare with \-escaped delimiters, or
+// angle-bracketed when the path carries whitespace.
+const SKILL_MENTION_LINK =
+  /\[(\$(?:[^\]\\\n]|\\.)+)\]\((?:<(?:[^>\\]|\\.)*>|(?:[^)\s\\]|\\.)*)\)/g;
+
+const SKILL_CHIP_LINE = /^Skill: (.+)$/;
+
+/**
+ * Daemons that predate the chip-drop decode Codex's skill content chip into a
+ * "Skill: name" text block the composer never typed. Drop such a line when the
+ * text already carries its `$name` mention, so the echo still matches across
+ * that version skew.
+ */
+function stripSkillChipLines(text: string): string {
+  if (!text.includes("Skill: ")) {
+    return text;
+  }
+  const lines = text.split("\n");
+  const kept = lines.filter((line, index) => {
+    const name = SKILL_CHIP_LINE.exec(line.trim())?.[1];
+    if (!name) {
+      return true;
+    }
+    const rest = lines.filter((_, other) => other !== index).join("\n");
+    return !rest.includes(`$${name}`);
+  });
+  return kept.length === lines.length ? text : kept.join("\n");
+}
+
 export interface SessionChatPendingSend {
   id: string;
   text: string;
@@ -58,7 +99,13 @@ export function stripSessionChatImagePromptMarker(text: string): string {
 }
 
 export function normalizeSessionChatPendingText(text: string): string {
-  return stripSessionChatImagePromptMarker(text).trim().replace(/\s+/g, " ");
+  return stripSkillChipLines(
+    stripSessionChatImagePromptMarker(
+      text.replace(LEAKED_CONTROL_CHARS, ""),
+    ).replace(SKILL_MENTION_LINK, "$1"),
+  )
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function sessionChatPendingContentKey(entry: {

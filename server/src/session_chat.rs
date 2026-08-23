@@ -393,8 +393,42 @@ pub fn transcript_fallback_id(file_path: &Path, byte_offset: u64) -> String {
     )
 }
 
+/*
+Kill-key bytes leaked into a recorded turn. The chat send path clears the TUI
+composer with a Ctrl+U/Ctrl+K burst before pasting; when that burst coalesces
+into the same stdin chunk as the paste frame, the TUI's chunk-level paste
+handling inserts the burst as literal text at the head of the prompt (observed
+2026-08-23: Claude Code recorded 39×0x15 + 39×0x0b inside a user message).
+Those bytes are never typeable content, so decoded text drops all C0 controls
+except \t/\n/\r (kept: real text) and ESC (kept: ANSI styling is the noise
+filter's concern, and a bare strip would leave dangling `[1m` fragments).
+*/
+fn is_leaked_control_char(character: char) -> bool {
+    matches!(
+        character,
+        '\u{00}'..='\u{08}'
+            | '\u{0b}'
+            | '\u{0c}'
+            | '\u{0e}'..='\u{1a}'
+            | '\u{1c}'..='\u{1f}'
+            | '\u{7f}'
+    )
+}
+
+fn strip_leaked_control_chars(text: String) -> String {
+    if text.chars().any(is_leaked_control_char) {
+        text.chars()
+            .filter(|character| !is_leaked_control_char(*character))
+            .collect()
+    } else {
+        text
+    }
+}
+
 pub(crate) fn text_block(text: impl Into<String>) -> SessionChatBlock {
-    SessionChatBlock::Text { text: text.into() }
+    SessionChatBlock::Text {
+        text: strip_leaked_control_chars(text.into()),
+    }
 }
 
 pub(crate) fn tool_result_output(value: Option<&Value>) -> String {

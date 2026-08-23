@@ -211,8 +211,14 @@ fn codex_event_message(
 /*
 `item_completed` content blocks use their own spellings: `Text` (capitalized)
 in AgentMessages, `text` in UserMessages, and `skill` for a slash-skill
-invocation chip (`{type:"skill",name,path}`). Anything else falls through to
-the shared mapper so future image/attachment blocks render like Claude's.
+invocation chip (`{type:"skill",name,path}`). The skill chip decodes to
+NOTHING: the typed text already carries the `$name` mention (codex-cli 0.149
+keeps the composer's `[$name](path)` link verbatim), and folding the chip into
+the turn as extra text made the decoded user turn differ from the chat
+composer's optimistic echo — the echo was then never consumed and the sent
+message stayed duplicated at the bottom of the chat. Anything else falls
+through to the shared mapper so future image/attachment blocks render like
+Claude's.
 */
 fn codex_item_content_blocks(content: Option<&Value>) -> Vec<SessionChatBlock> {
     let Some(Value::Array(items)) = content else {
@@ -224,8 +230,7 @@ fn codex_item_content_blocks(content: Option<&Value>) -> Vec<SessionChatBlock> {
             let record = entry.as_object()?;
             match record.get("type").and_then(Value::as_str) {
                 Some("Text") => extract_string(record.get("text")).map(text_block),
-                Some("skill") => extract_string(record.get("name"))
-                    .map(|name| text_block(format!("Skill: {name}"))),
+                Some("skill") => None,
                 _ => claude_content_block(record),
             }
         })
