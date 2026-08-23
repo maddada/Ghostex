@@ -54,6 +54,29 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+/*
+CDXC:GPUITitlebarDoubleClick 2026-08-23:
+GPUI paints the whole titlebar strip itself, so AppKit's own titlebar view
+never sees a double click there and the standard macOS zoom gesture silently
+did nothing. Forward it to the platform window, which honours the user's
+NSGlobalDomain AppleActionOnDoubleClick preference (Maximize/Fill/Minimize/
+Do Nothing). Linux compositors leave the same gesture to the client, so zoom
+directly there; Windows already resolves it from the WindowControlArea::Drag
+hit test in the platform layer.
+*/
+#[cfg(target_os = "macos")]
+fn gpui_titlebar_double_click_window_action(window: &Window) {
+    window.titlebar_double_click();
+}
+
+#[cfg(target_os = "linux")]
+fn gpui_titlebar_double_click_window_action(window: &Window) {
+    window.zoom_window();
+}
+
+#[cfg(target_os = "windows")]
+fn gpui_titlebar_double_click_window_action(_window: &Window) {}
+
 impl GhostexGpuiApp {
     pub(crate) fn render_titlebar(
         &self,
@@ -84,6 +107,12 @@ impl GhostexGpuiApp {
             .font_family("Inter Variable")
             .line_height(px(TITLEBAR_CONTROL_HEIGHT))
             .window_control_area(WindowControlArea::Drag)
+            .on_click(|event, window, _cx| {
+                if event.click_count() != 2 {
+                    return;
+                }
+                gpui_titlebar_double_click_window_action(window);
+            })
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
