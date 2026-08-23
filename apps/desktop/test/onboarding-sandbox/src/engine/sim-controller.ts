@@ -543,7 +543,7 @@ export function createEngineActions(
       "state",
       "updateSettings applied to the simulated settings service",
       `debuggingMode: ${debuggingMode}, session persistence off: ${sessionPersistenceOff}.`,
-      "apps/desktop/src/app/remote_conn.rs:797 handle_gpui_app_modal_update_settings_message",
+      "apps/desktop/src/app/remote_conn/settings_and_install_probe.rs:6 handle_gpui_app_modal_update_settings_message",
     );
     const hydrate = createSandboxHydrateMessage(get().env);
     dispatchSidebarStateToOpenModals(hydrate);
@@ -578,7 +578,7 @@ export function createEngineActions(
     emit(
       "flow",
       `Portless setup prompt check (${source}) — compile-time disabled`,
-      "GPUI_PORTLESS_APP_INTEGRATION_ENABLED is false (apps/desktop/src/app/helpers/os_cli.rs:260), so the check immediately suppresses the prompt for this run and disables Portless state. No modal can ever appear here today.",
+      "GPUI_PORTLESS_APP_INTEGRATION_ENABLED is false (apps/desktop/src/app/helpers/os_cli/process_and_constants.rs:230), so the check immediately suppresses the prompt for this run and disables Portless state. No modal can ever appear here today.",
       CODE_REFS.portlessCheck,
     );
     maybeOpenPortlessSetupPrompt(source);

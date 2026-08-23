@@ -2,7 +2,7 @@
  * Add Project dialog round trips.
  *
  * The real chain is apps/desktop/views/modal-host.tsx:786
- * requestAddProjectDialogOperation → apps/desktop/src/app/remote_conn.rs
+ * requestAddProjectDialogOperation → apps/desktop/src/app/remote_conn/project_browse_and_add.rs
  * handle_gpui_add_project_dialog_request_message → gxserver. The sandbox answers
  * the same `{type:"addProjectDialogResult", requestId, ok, result|error}`
  * envelope from the shared story mocks

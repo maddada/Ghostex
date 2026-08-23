@@ -18,7 +18,7 @@ export const CODE_REFS = {
   modalReady: "apps/desktop/src/app/window/modal_host.rs:159 GpuiAppModalHost::receive_bridge_message",
   nonReactHost: "apps/desktop/src/app/model/app_modal_kind.rs GpuiAppModalKind::uses_react_modal_host",
   tutorialVideoUrl: "apps/desktop/src/app/consts.rs:665 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:GPUITutorialVideo)",
-  persistState: "apps/desktop/src/app/helpers/os_cli.rs:4729 persist_gpui_first_run_onboarding_state",
+  persistState: "apps/desktop/src/app/helpers/os_cli/app_state_persistence.rs:253 persist_gpui_first_run_onboarding_state",
   portlessCheck: "apps/desktop/src/app/os_integration.rs:2477 start_gpui_portless_setup_prompt_check",
   progressiveHooks: "apps/desktop/src/app/os_integration.rs:1565 run_gpui_progressive_agent_hook_status_task",
   cliSettingsAction: "apps/desktop/src/app/os_integration.rs:1628 run_gpui_ghostex_cli_settings_action",
@@ -26,7 +26,7 @@ export const CODE_REFS = {
   tipsRuntimeStatus: "apps/desktop/src/app/modals.rs:939 request_gpui_titlebar_tips_runtime_status",
   toast: "apps/desktop/src/app/modals.rs:1987 show_gpui_gxserver_bootstrap_toast",
   firstLaunchSetup: "apps/desktop/src/app/modals.rs:1361 open_gpui_first_launch_setup_with_sidebar_state",
-  addProject: "apps/desktop/src/app/remote_conn.rs:1812 handle_gpui_add_project_dialog_request_message",
+  addProject: "apps/desktop/src/app/remote_conn/project_browse_and_add.rs:249 handle_gpui_add_project_dialog_request_message",
 } as const;
 
 export const GPUI_APP_TOAST_DEFAULT_DURATION_MS = 8_000;

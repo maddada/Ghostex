@@ -8,7 +8,7 @@
  *
  * Derivation rules mirror:
  * - server/src/agent_hooks/api.rs read_hook_status (per-agent status + detail)
- * - apps/desktop/src/app/helpers/os_cli.rs gpui_ghostex_cli_status_message (CLI/skill/cua payload)
+ * - apps/desktop/src/app/helpers/os_cli/cli_status.rs gpui_ghostex_cli_status_message (CLI/skill/cua payload)
  */
 import type {
   SidebarAgentHookStatus,
