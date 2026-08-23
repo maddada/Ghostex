@@ -32,8 +32,14 @@ const MARKUP_TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?>/gi;
 const ANSI_STYLE_SEQUENCE = /(?:\u001b|\u009b)?\[[0-9;]{1,8}m/g;
 const COMPACTION_OUTPUT =
   /^compact(?:ed|ing|ion)\b(?:\s+(?:is\s+)?(?:complete[d]?|done|finished|successful(?:ly)?))?(?:\s*\([^)]*\))?\s*[.!…]*$/i;
+/*
+ * Claude Code appends a second line when a `.claude/settings.json` model pin
+ * disagrees with the picked model, so this cannot be end-anchored: the trailing
+ * sentence is captured as a note and reported as its own status row instead of
+ * demoting the whole turn to a raw "Local command output" marker.
+ */
 const MODEL_DEFAULT_OUTPUT =
-  /^set model to\s+(.+?)\s+and saved as your default for new sessions\s*[.!…]*$/i;
+  /^set model to\s+(.+?)\s+and saved as your default for new sessions\s*(?:[.!…]+(?=\s|$))?\s*(.*)$/i;
 const EFFORT_DEFAULT_OUTPUT = /^set effort level to\s+\S+/i;
 
 /*
@@ -114,9 +120,17 @@ function fitsInlineSuppressedTurn(body: string): boolean {
   );
 }
 
+/**
+ * Terminal styling is not content: a transcript row carries the agent's SGR
+ * codes verbatim, and a chat view has no terminal to interpret them, so they
+ * must never reach the DOM.
+ */
+export function stripSessionChatAnsi(text: string): string {
+  return text.replace(ANSI_STYLE_SEQUENCE, "");
+}
+
 function normalizedSuppressedTurnBody(text: string): string {
-  return sessionChatSuppressedTurnBody(text)
-    .replace(ANSI_STYLE_SEQUENCE, "")
+  return stripSessionChatAnsi(sessionChatSuppressedTurnBody(text))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -125,11 +139,20 @@ function isCompactionCommandOutput(text: string): boolean {
   return COMPACTION_OUTPUT.test(normalizedSuppressedTurnBody(text));
 }
 
-function modelSetByCommandOutput(text: string): string | null {
-  return (
-    MODEL_DEFAULT_OUTPUT.exec(normalizedSuppressedTurnBody(text))?.[1]?.trim() ??
-    null
-  );
+interface ModelDefaultOutput {
+  model: string;
+  /** Trailing sentence the harness added, e.g. a settings.json pin warning. */
+  note: string | null;
+}
+
+function modelSetByCommandOutput(text: string): ModelDefaultOutput | null {
+  const match = MODEL_DEFAULT_OUTPUT.exec(normalizedSuppressedTurnBody(text));
+  const model = match?.[1]?.trim();
+  if (!model) {
+    return null;
+  }
+  const note = (match?.[2] ?? "").trim();
+  return { model, note: note.length > 0 ? note : null };
 }
 
 /** Harness tags that render as a collapsed, expandable marker. */
@@ -277,7 +300,7 @@ export function classifySessionChatSuppressedTurn(
   if (label === "Local command output") {
     const model = modelSetByCommandOutput(text);
     if (model) {
-      return { kind: "status", label: `Set model to ${model}` };
+      return { kind: "status", label: `Set model to ${model.model}` };
     }
     if (EFFORT_DEFAULT_OUTPUT.test(normalizedSuppressedTurnBody(text))) {
       // Effort is part of the model configuration action. The model result
@@ -348,17 +371,34 @@ export function sessionChatSuppressedTurnPresentation(
   }
 
   const command = parseSessionChatCommandEnvelope(rawText);
-  let text = rawText;
+  const model = modelSetByCommandOutput(rawText);
+  let text = stripSessionChatAnsi(rawText);
   if (command?.name.toLowerCase() === "/model") {
     text = command.name;
-  } else if (modelSetByCommandOutput(rawText)) {
+  } else if (model) {
     text = normalizedSuppressedTurnBody(rawText);
+    if (model.note) {
+      // The pin warning is a second fact about the same action, not chrome to
+      // drop: it gets its own neutral row under the model result.
+      return {
+        kind: "status",
+        label: suppressed.label,
+        text,
+        statuses: [
+          {
+            label: suppressed.label,
+            tone: suppressed.kind === "status" ? (suppressed.tone ?? "ok") : "ok",
+          },
+          { label: model.note, tone: "neutral" },
+        ],
+      };
+    }
   }
 
   // Short harness turns read as prose; the body without its markup IS the
   // sentence, so the inline row shows that rather than the raw envelope.
   if (suppressed.kind === "collapsed") {
-    const body = sessionChatSuppressedTurnBody(rawText);
+    const body = stripSessionChatAnsi(sessionChatSuppressedTurnBody(rawText));
     if (fitsInlineSuppressedTurn(body)) {
       return { kind: "inline", label: suppressed.label, text: body };
     }
