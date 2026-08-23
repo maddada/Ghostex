@@ -471,7 +471,7 @@ ensure_code_server_payload() {
 		exit 1
 	fi
 	if [[ ! -d "$CODE_SERVER_ROOT/node_modules" ]]; then
-		echo "code-server node_modules are missing. Run: npm --prefix code-server install" >&2
+		echo "code-server node_modules are missing. Run: npm --prefix .dependencies/code-server install" >&2
 		exit 1
 	fi
 	node_payload_digest="$(code_server_node_payload_digest)"
@@ -483,11 +483,11 @@ ensure_code_server_payload() {
 		write_cache_stamp "code-server-node-payload" "$node_payload_digest"
 	fi
 	if [[ ! -f "$CODE_SERVER_ROOT/lib/vscode/package.json" ]]; then
-		echo "code-server VS Code submodule is missing. Run: git -C code-server submodule update --init lib/vscode" >&2
+		echo "code-server VS Code submodule is missing. Run: git -C .dependencies/code-server submodule update --init lib/vscode" >&2
 		exit 1
 	fi
 	if [[ ! -d "$CODE_SERVER_ROOT/lib/vscode/node_modules" ]]; then
-		echo "code-server VS Code node_modules are missing. Run: npm --prefix code-server/lib/vscode install" >&2
+		echo "code-server VS Code node_modules are missing. Run: npm --prefix .dependencies/code-server/lib/vscode install" >&2
 		exit 1
 	fi
 	vscode_ripgrep_bin="$(code_server_vscode_ripgrep_bin "$vscode_release_root")"
@@ -1848,7 +1848,7 @@ zmx source is missing:
   $ZMX_ROOT
 
 Initialize submodules before building:
-  git submodule update --init --recursive zmx
+  git submodule update --init --recursive .dependencies/zmx
 EOF
 	exit 1
 fi
