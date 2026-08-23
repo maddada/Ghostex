@@ -13,6 +13,7 @@ import type {
   GxserverAnswerSessionChatPromptParams,
   GxserverReadSessionChatResult,
   GxserverSessionChatEvent,
+  SessionChatAgentFleet,
   SessionChatDetectedOptions,
   SessionChatDraft,
   SessionChatInteractivePrompt,
@@ -222,6 +223,12 @@ export interface UseSessionChatResult {
    */
   terminalActivity: SessionChatTerminalActivity | null;
   /**
+   * Sub-agents Claude is running, from the same screen and with the same
+   * cleared-on-omission rule. Never gated on `working`: these outlive the turn
+   * that spawned them, so an idle agent is exactly when this still has rows.
+   */
+  agentFleet: SessionChatAgentFleet | null;
+  /**
    * True once gxserver has actually read this session's screen. Latched: a
    * later frame that omits it does NOT unset it, because "we have looked" does
    * not stop being true. The option pills use it to decide between a loading
@@ -293,9 +300,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   */
   const [terminalActivity, setTerminalActivity] =
     useState<SessionChatTerminalActivity | null>(null);
+  // CDXC:SessionChatAgentFleet 2026-08-23: carried and cleared exactly like the
+  // activity row above; the strip's clocks tick locally off `detectedAt`.
+  const [agentFleet, setAgentFleet] = useState<SessionChatAgentFleet | null>(null);
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
-  // changed value only for this mounted chat; matching transcript text removes
-  // it from composition as soon as JSONL catches up.
+  // DISTINCT value only for this mounted chat; matching transcript text removes
+  // it from composition as soon as JSONL catches up. Distinct rather than
+  // merely non-repeating: the line cycles back to an earlier phrase between
+  // lines that the transcript later swallows, so a "differs from the previous
+  // one" rule leaves the same phrase standing several times in a row.
   const [terminalStatusMessages, setTerminalStatusMessages] = useState<
     readonly SessionChatMessage[]
   >([]);
@@ -355,11 +368,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       setTerminalActivity(null);
       setTerminalStatusMessages((current) => {
-        const last = current.at(-1);
-        if (
-          last &&
-          normalizedSessionChatText(last) === normalizedSessionChatText(transient)
-        ) {
+        const text = normalizedSessionChatText(transient);
+        if (current.some((message) => normalizedSessionChatText(message) === text)) {
           return current;
         }
         return [...current, transient];
@@ -405,6 +415,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       terminalNotice?: SessionChatTerminalNotice;
       /** Live on-screen progress; omitted ⇒ cleared. */
       terminalActivity?: SessionChatTerminalActivity;
+      /** Sub-agents on screen; omitted ⇒ cleared. */
+      agentFleet?: SessionChatAgentFleet;
       /** gxserver has read the screen; latched, never cleared by omission. */
       screenProbed?: boolean;
       /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
@@ -429,6 +441,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       setTerminalNotice(result.terminalNotice ?? null);
       applyTerminalActivity(result.terminalActivity);
+      setAgentFleet(result.agentFleet ?? null);
       if (result.screenProbed) {
         setScreenProbed(true);
       }
@@ -633,6 +646,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       setTerminalNotice(event.terminalNotice ?? null);
       applyTerminalActivity(event.terminalActivity);
+      setAgentFleet(event.agentFleet ?? null);
       if (event.screenProbed) {
         setScreenProbed(true);
       }
@@ -1135,6 +1149,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     status,
     terminalNotice,
     terminalActivity,
+    agentFleet,
     screenProbed,
     view,
     working,

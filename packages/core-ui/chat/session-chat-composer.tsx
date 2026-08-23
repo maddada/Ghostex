@@ -88,6 +88,7 @@ import {
   sessionChatImageTargetForHref,
   useSessionChatImageViewer,
 } from "./session-chat-image-viewer";
+import { SessionChatAgentFleetStrip } from "./session-chat-agent-fleet-strip";
 import { SessionChatQueueRows } from "./session-chat-queue-rows";
 import {
   isNewerSessionChatDraftStamp,
@@ -99,6 +100,7 @@ import type {
   SessionChatQueueController,
 } from "./use-session-chat";
 import type {
+  SessionChatAgentFleet,
   SessionChatDraft,
   SessionChatQueuedPrompt,
   SessionChatSkill,
@@ -247,6 +249,14 @@ export interface SessionChatComposerProps {
    * per-client localStorage cache is unaffected either way.
    */
   draftSync?: SessionChatDraftController;
+  /*
+  CDXC:SessionChatAgentFleet 2026-08-23:
+  Sub-agents read off the agent's terminal screen. Rendered ABOVE this
+  composer's container, unlike the queue rows above, because it is work the
+  agent already owns rather than input the user still owns. Null/absent renders
+  nothing at all.
+  */
+  agentFleet?: SessionChatAgentFleet | null;
 }
 
 interface PastedImagePreview {
@@ -427,6 +437,7 @@ export const SessionChatComposer = forwardRef<
   SessionChatComposerProps
 >(function SessionChatComposer(
   {
+    agentFleet,
     disabled = false,
     draftSync,
     fileHeading,
@@ -1641,6 +1652,7 @@ export const SessionChatComposer = forwardRef<
           </div>
         ) : null}
         {sendError ? <FieldError className="px-2">{sendError}</FieldError> : null}
+        <SessionChatAgentFleetStrip fleet={agentFleet ?? null} />
         {incomingDraft ? (
           <div className="ghostex-chat-draft-conflict" role="status">
             <IconDeviceMobileMessage aria-hidden="true" size={14} stroke={1.8} />

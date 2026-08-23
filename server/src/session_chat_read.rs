@@ -152,11 +152,29 @@ pub(crate) fn resolve_session_chat_read_state(
     event socket would otherwise watch a frozen bar for the whole compaction.
     Still cache-only: no detection, no spawn, on this 500ms loop.
     */
-    match cached_session_chat_screen_state(state, project_id, session_id).activity {
+    let screen = cached_session_chat_screen_state(state, project_id, session_id);
+    match screen.activity {
         Some(activity) => {
             activity.kind.hash(&mut hasher);
             activity.percent.hash(&mut hasher);
             activity.elapsed_seconds.hash(&mut hasher);
+        }
+        None => 0u8.hash(&mut hasher),
+    }
+    /*
+    CDXC:SessionChatAgentFleet 2026-08-23:
+    The ROSTER only — names and tasks, never the clocks. Opposite choice from
+    the progress row above and for the opposite reason: a fleet row's clock
+    moves every second for as long as the agent runs, so hashing it would make
+    this 500ms loop re-read the whole transcript forever. The client ticks those
+    clocks itself from `detectedAt`.
+    */
+    match screen.fleet {
+        Some(fleet) => {
+            for agent in &fleet.agents {
+                agent.name.hash(&mut hasher);
+                agent.task.hash(&mut hasher);
+            }
         }
         None => 0u8.hash(&mut hasher),
     }
@@ -345,6 +363,14 @@ pub(crate) async fn handle_read_session_chat_http(
             if let Some(activity) = detection.activity.as_ref() {
                 result.insert("terminalActivity".to_string(), activity.to_value());
             }
+        }
+        /*
+        CDXC:SessionChatAgentFleet 2026-08-23: same capture, same cache — but no
+        running gate. Sub-agents outlive the turn that spawned them, so
+        an idle main agent is exactly when this is worth reading.
+        */
+        if let Some(fleet) = detection.fleet.as_ref() {
+            result.insert("agentFleet".to_string(), fleet.to_value());
         }
         /*
         CDXC:SessionChatScreenProbed 2026-08-22: same capture again. Followerless

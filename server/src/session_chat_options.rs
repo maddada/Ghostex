@@ -194,6 +194,12 @@ pub struct SessionChatTerminalDetection {
     */
     pub activity:
         Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    /*
+    CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
+    painting. Fourth reading of the same capture, same reason as the second and
+    third: it must never cost a spawn.
+    */
+    pub fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     /// True when a usable (non-truncated) screen backed this detection. It is
     /// the ONLY case where `notice: None` means "the screen is clean" — a failed
     /// or capped capture must never retire a notice.
@@ -850,6 +856,12 @@ pub fn detect_session_chat_terminal_state(
                 &capture.text,
             )
         }),
+        fleet: screen.and_then(|capture| {
+            crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(
+                agent_id,
+                &capture.text,
+            )
+        }),
         captured: screen.is_some(),
         // We got past the agent check, so a capture was tried. Whether it came
         // back is `captured`'s business, not this field's.
@@ -1429,6 +1441,13 @@ impl SessionChatOptionDetector {
                         .and_then(|entry| entry.value.activity.as_ref()),
                 );
             }
+            // CDXC:SessionChatAgentFleet 2026-08-23: same rule, and load-bearing
+            // for the same reason — every row's clock counts from `detectedAt`.
+            if let Some(fleet) = detected.fleet.as_mut() {
+                fleet.carry_forward_detected_at(
+                    cache.get(&key).and_then(|entry| entry.value.fleet.as_ref()),
+                );
+            }
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
@@ -1478,6 +1497,7 @@ and can never be published one frame apart.
 pub(crate) struct CachedSessionChatScreenState {
     pub(crate) notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     pub(crate) activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
+    pub(crate) fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     /// CDXC:SessionChatScreenProbed 2026-08-22: whether the cache entry these
     /// came from was backed by a whole capture at all.
     pub(crate) probed: bool,
@@ -1488,6 +1508,7 @@ impl CachedSessionChatScreenState {
         crate::session_chat::SessionChatScreenState {
             notice: self.notice.as_ref(),
             activity: self.activity.as_ref(),
+            fleet: self.fleet.as_ref(),
             probed: self.probed,
         }
     }
@@ -1498,7 +1519,7 @@ pub(crate) fn cached_session_chat_screen_state(
     project_id: &str,
     session_id: &str,
 ) -> CachedSessionChatScreenState {
-    let (screen_notice, activity, probed) = state
+    let (screen_notice, activity, fleet, probed) = state
         .session_chat_option_cache
         .lock()
         .ok()
@@ -1507,6 +1528,7 @@ pub(crate) fn cached_session_chat_screen_state(
                 (
                     entry.value.notice.clone(),
                     entry.value.activity.clone(),
+                    entry.value.fleet.clone(),
                     entry.value.attempted,
                 )
             })
@@ -1519,6 +1541,7 @@ pub(crate) fn cached_session_chat_screen_state(
             screen_notice,
         ),
         activity,
+        fleet,
         probed,
     }
 }
@@ -1561,7 +1584,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
     let session_id = session_id.to_string();
     Arc::new(move || {
         let key = session_observer_key(&project_id, &session_id);
-        let (options, screen_notice, activity, captured) = option_cache
+        let (options, screen_notice, activity, fleet, captured) = option_cache
             .lock()
             .ok()
             .and_then(|cache| {
@@ -1570,6 +1593,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
                         entry.value.options.clone(),
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
+                        entry.value.fleet.clone(),
                         entry.value.attempted,
                     )
                 })
@@ -1591,6 +1615,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
             crate::session_chat::SessionChatScreenState {
                 notice: notice.as_ref(),
                 activity: activity.as_ref(),
+                fleet: fleet.as_ref(),
                 probed: captured,
             },
         );
@@ -1667,6 +1692,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
             cached.notice,
         );
         let mut published_activity = cached.activity;
+        let mut published_fleet = cached.fleet;
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             let detection = detector
@@ -1691,7 +1717,12 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     detection.activity.as_ref(),
                     published_activity.as_ref(),
                 );
-            if !options_changed && !notice_changed && !activity_changed {
+            let fleet_changed = detection.captured
+                && !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
+                    detection.fleet.as_ref(),
+                    published_fleet.as_ref(),
+                );
+            if !options_changed && !notice_changed && !activity_changed && !fleet_changed {
                 continue;
             }
             if options_changed {
@@ -1702,6 +1733,9 @@ pub(crate) fn schedule_session_chat_option_redetect(
             }
             if activity_changed {
                 published_activity = detection.activity;
+            }
+            if fleet_changed {
+                published_fleet = detection.fleet;
             }
             emit_session_chat_options_state_frame(
                 &followers,
@@ -1714,6 +1748,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 crate::session_chat::SessionChatScreenState {
                     notice: published_notice.as_ref(),
                     activity: published_activity.as_ref(),
+                    fleet: published_fleet.as_ref(),
                     probed: detection.attempted,
                 },
             );

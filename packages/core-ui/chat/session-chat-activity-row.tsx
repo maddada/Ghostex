@@ -42,9 +42,13 @@ export function formatSessionChatActivityElapsed(totalSeconds: number): string {
  * Seconds to show now: what the CLI last reported, plus the time since that
  * sample was taken. `detectedAt` anchors the whole run, so this keeps counting
  * smoothly across probes instead of snapping backwards on each one.
+ *
+ * Takes the two fields rather than the activity so the background-agent strip
+ * can share it: its clocks anchor on the FLEET's `detectedAt` while the seconds
+ * come off each row.
  */
 export function sessionChatActivityElapsedSeconds(
-  activity: SessionChatTerminalActivity,
+  activity: { elapsedSeconds?: number; detectedAt: string },
   now: number,
 ): number | null {
   if (activity.elapsedSeconds === undefined) {

@@ -784,6 +784,7 @@ export function SessionChatView({
         />
         {questionActive ? null : (
           <SessionChatComposer
+            agentFleet={chat.agentFleet}
             disabled={!composerEnabled}
             draftSync={chat.draft}
             isWorking={chat.working}

@@ -31,9 +31,7 @@ with Claude's `⏺` marker. The percentage and elapsed clock are read off the
 screen or omitted; neither is ever estimated.
 */
 
-use crate::session_chat_options::{
-    normalize_spaces, session_chat_option_agent, strip_ansi_sgr, SessionChatOptionAgent,
-};
+use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
 
 use serde_json::{json, Map, Value};
 
@@ -145,7 +143,7 @@ pub fn same_session_chat_terminal_activity(
 
 /// `1h 2m 3s` / `1m 1s` / `45s` → seconds. `None` unless EVERY token parsed,
 /// so a half-read clock is dropped rather than shown wrong.
-fn parse_elapsed_seconds(text: &str) -> Option<u64> {
+pub(crate) fn parse_elapsed_seconds(text: &str) -> Option<u64> {
     let mut total: u64 = 0;
     let mut matched = false;
     for token in text.split_whitespace() {
@@ -244,18 +242,20 @@ pub fn detect_session_chat_terminal_activity(
     if session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Claude) {
         return None;
     }
-    let mut window: Vec<String> = Vec::new();
-    for raw in screen_text.lines().rev() {
-        let line = normalize_spaces(&strip_ansi_sgr(raw)).trim().to_string();
-        if line.is_empty() {
-            continue;
-        }
-        window.push(line);
-        if window.len() >= ACTIVITY_SCAN_LINES {
-            break;
-        }
+    let mut lines = crate::session_chat_agent_fleet::normalized_screen_lines(screen_text);
+    /*
+    CDXC:SessionChatAgentFleet 2026-08-23: cut the background-agent block off
+    the bottom of the screen before reading anything. Its rows are
+    indistinguishable from a status line — `⏺` there is the TUI's selection
+    marker, so a selected subagent paints `⏺ general-purpose  Fixing tool-ro…`
+    — and the block sits BELOW the statusline, so newest-match-wins would
+    prefer it over the real status line and its rows would spend the scan
+    window's line budget getting there.
+    */
+    if let Some(start) = crate::session_chat_agent_fleet::agent_fleet_block_start(&lines) {
+        lines.truncate(start);
     }
-    window.reverse();
+    let window = &lines[lines.len().saturating_sub(ACTIVITY_SCAN_LINES)..];
     // Newest match wins: a screen can still hold the tail of a previous run.
     for (index, line) in window.iter().enumerate().rev() {
         let Some(mut activity) = activity_from_line(line) else {

@@ -462,6 +462,12 @@ function snapshotEventFromRead(
       ? { terminalActivity: result.terminalActivity }
       : {}),
     /*
+    CDXC:SessionChatAgentFleet 2026-08-23: sub-agents, same carriage
+    rule again. The read's fingerprint hashes the roster, so the phone's long
+    poll wakes when an agent starts, finishes, or changes task.
+    */
+    ...(result.agentFleet !== undefined ? { agentFleet: result.agentFleet } : {}),
+    /*
     CDXC:SessionChatPromptQueue 2026-08-21: the queue and the synced draft.
     Both keep the READ's semantics here, and both matter: an absent queue is
     the daemon capability probe that hides every queue control, and an absent

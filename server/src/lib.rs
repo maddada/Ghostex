@@ -32,6 +32,7 @@ pub mod resume_lookup;
 pub mod runtime;
 pub mod server;
 pub mod session_chat;
+pub mod session_chat_agent_fleet;
 pub mod session_chat_decode_claude;
 pub mod session_chat_decode_codex;
 pub mod session_chat_decode_grok;

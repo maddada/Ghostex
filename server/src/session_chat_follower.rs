@@ -326,6 +326,13 @@ pub struct SessionChatScreenState<'a> {
     pub activity:
         Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
+    CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
+    painting right now. Rides here for the same reason the activity row does —
+    one capture, one value, so the fleet strip can never survive a frame that
+    cleared the progress row it was read beside.
+    */
+    pub fleet: Option<&'a crate::session_chat_agent_fleet::SessionChatAgentFleet>,
+    /*
     CDXC:SessionChatScreenProbed 2026-08-22:
     True once a WHOLE screen capture has actually been read for this session.
 
@@ -346,6 +353,9 @@ pub(crate) fn insert_screen_state(frame: &mut Map<String, Value>, screen: Sessio
     insert_optional_terminal_notice(frame, screen.notice);
     if let Some(activity) = screen.activity {
         frame.insert("terminalActivity".to_string(), activity.to_value());
+    }
+    if let Some(fleet) = screen.fleet {
+        frame.insert("agentFleet".to_string(), fleet.to_value());
     }
     if screen.probed {
         frame.insert("screenProbed".to_string(), Value::Bool(true));
@@ -684,6 +694,14 @@ pub async fn run_session_chat_follower(
     let mut published_activity: Option<
         crate::session_chat_terminal_activity::SessionChatTerminalActivity,
     > = None;
+    /*
+    CDXC:SessionChatAgentFleet 2026-08-23: deliberately NOT cleared when the
+    main agent goes idle, unlike the activity row above. A `⏺` status line is
+    stale scrollback the moment Claude stops, but sub-agents outlive the
+    turn that spawned them — clearing on idle would blank the strip exactly when
+    it is the only thing telling the user work is still running.
+    */
+    let mut published_fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet> = None;
     // CDXC:SessionChatScreenProbed 2026-08-22: latched, not sampled. It answers
     // "has detection run for this session yet", so a later capture failure (the
     // session stopped, the daemon went away) must not put the composer back
@@ -757,6 +775,7 @@ pub async fn run_session_chat_follower(
                                 .working
                                 .then_some(detection.activity.as_ref())
                                 .flatten(),
+                            fleet: detection.fleet.as_ref(),
                             probed: published_screen_probed || detection.attempted,
                         },
                     );
@@ -766,6 +785,7 @@ pub async fn run_session_chat_follower(
                     } else {
                         None
                     };
+                    published_fleet = detection.fleet;
                     emitted_starting = true;
                 }
                 tokio::select! {
@@ -863,6 +883,7 @@ pub async fn run_session_chat_follower(
                             .working
                             .then_some(snapshot_detection.activity.as_ref())
                             .flatten(),
+                        fleet: snapshot_detection.fleet.as_ref(),
                         probed: published_screen_probed || snapshot_detection.attempted,
                     },
                 );
@@ -876,6 +897,7 @@ pub async fn run_session_chat_follower(
                 } else {
                     None
                 };
+                published_fleet = snapshot_detection.fleet;
                 published_prompt = prompt;
                 published_working = live.working;
                 published_state_valid = true;
@@ -976,6 +998,7 @@ pub async fn run_session_chat_follower(
                     SessionChatScreenState {
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
+                        fleet: published_fleet.as_ref(),
                         probed: published_screen_probed,
                     },
                 );
@@ -1036,7 +1059,7 @@ pub async fn run_session_chat_follower(
         subscribed, so the faster tiers are bounded by what is actually on
         screen in front of someone.
         */
-        let probe_interval_ticks = if published_activity.is_some() {
+        let probe_interval_ticks = if published_activity.is_some() || published_fleet.is_some() {
             crate::session_chat_options::SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS
         } else if published_working {
             crate::session_chat_options::SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS
@@ -1084,8 +1107,16 @@ pub async fn run_session_chat_follower(
             without this the composer would never hear that detection HAD run
             and would hold its loading skeleton for the life of the session.
             */
+            // Same capture rule again: only a whole screen proves the fleet is
+            // gone, and only the roster counts as a change — the per-row clocks
+            // tick locally off `detectedAt`.
+            let fleet_changed = detection.captured
+                && !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
+                    detection.fleet.as_ref(),
+                    published_fleet.as_ref(),
+                );
             let probed_changed = detection.attempted && !published_screen_probed;
-            if options_changed || notice_changed || activity_changed || probed_changed {
+            if options_changed || notice_changed || activity_changed || fleet_changed || probed_changed {
                 if options_changed {
                     published_options = detection.options;
                 }
@@ -1094,6 +1125,9 @@ pub async fn run_session_chat_follower(
                 }
                 if activity_changed {
                     published_activity = detection.activity;
+                }
+                if fleet_changed {
+                    published_fleet = detection.fleet;
                 }
                 published_screen_probed = published_screen_probed || detection.attempted;
                 emit_state_frame(
@@ -1112,6 +1146,7 @@ pub async fn run_session_chat_follower(
                     SessionChatScreenState {
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
+                        fleet: published_fleet.as_ref(),
                         probed: published_screen_probed,
                     },
                 );

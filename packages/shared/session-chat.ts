@@ -325,6 +325,57 @@ export interface SessionChatTerminalActivity {
   detectedAt: string;
 }
 
+/*
+CDXC:SessionChatAgentFleet 2026-08-23:
+Sub-agents Claude Code is running, which exist ONLY on its terminal
+screen — nothing about them reaches transcript JSONL:
+
+      ⏺ main
+      ◯ general-purpose  Fixing tool-ro… 12m 36s · ↓ 171.9k tokens
+
+Without this a chat surface can say nothing better than "the agent is working"
+while three agents are working. The `main` row is the block's header, not a
+member: it is the agent the user is already talking to, and the chat IS its
+output, so only the rows below it arrive here.
+
+The name arrives with its `(+1)` marker split off into `nested`, because the CLI
+space-pads the name column to align every task and leaving the marker in would
+misalign it while making one row's agent type read as a different type.
+
+`task` comes ellipsized by the terminal that painted it — the CLI truncated it
+to a column, and re-truncating in CSS is the client's business. `elapsedSeconds`
+is read off the screen or omitted; a client must never estimate it, but it
+SHOULD tick locally from `detectedAt`, which belongs to the roster and holds
+still while the clocks move. That is the whole reason the token counter beside
+each clock is not carried: it moves every sample, and a roster that changed only
+by a number would cost a frame per second.
+
+Carried by read results and by snapshot/replaced/state frames with `prompt`
+semantics — omitted ⇒ CLEARED, which is how a client learns the fleet is done.
+Never gated on the main agent working: sub-agents outlive the turn that
+spawned them.
+*/
+export interface SessionChatSubAgent {
+  /** Agent type as the CLI names it (`general-purpose`). */
+  name: string;
+  /** What it is doing, already ellipsized by the terminal. */
+  task?: string;
+  /** Seconds the CLI reported, only when it painted them. */
+  elapsedSeconds?: number;
+  /**
+   * The `(+1)` the CLI paints beside a name: further agents running under this
+   * one, folded into its row instead of listed. Absent when unmarked; never 0.
+   */
+  nested?: number;
+}
+
+export interface SessionChatAgentFleet {
+  /** Screen order, never empty: no sub-agents means no fleet at all. */
+  agents: SessionChatSubAgent[];
+  /** ISO-8601 millis; stable for the roster, so local clocks can tick. */
+  detectedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // /api/readSessionChat
 // ---------------------------------------------------------------------------
@@ -371,6 +422,8 @@ export interface GxserverReadSessionChatResult {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
+  agentFleet?: SessionChatAgentFleet;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -628,6 +681,8 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
+  agentFleet?: SessionChatAgentFleet;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -683,6 +738,8 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
+  agentFleet?: SessionChatAgentFleet;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -721,6 +778,8 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   terminalNotice?: SessionChatTerminalNotice;
   /** Live on-screen progress (compaction). Omitted ⇒ cleared. */
   terminalActivity?: SessionChatTerminalActivity;
+  /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
+  agentFleet?: SessionChatAgentFleet;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
