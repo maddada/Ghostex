@@ -1850,7 +1850,8 @@ if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
 		if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
 			printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
 		else
-			printf 'Initialize submodules before building:\n  git submodule update --init --recursive %s\n' "$ZMX_ROOT"
+			printf 'Initialize submodules before building:\n  git -C %q submodule update --init --recursive -- %q\n' \
+				"$REPO_ROOT" "$ZMX_ROOT"
 		fi
 	} >&2
 	exit 1
