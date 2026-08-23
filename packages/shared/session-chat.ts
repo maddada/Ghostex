@@ -345,10 +345,11 @@ misalign it while making one row's agent type read as a different type.
 `task` comes ellipsized by the terminal that painted it — the CLI truncated it
 to a column, and re-truncating in CSS is the client's business. `elapsedSeconds`
 is read off the screen or omitted; a client must never estimate it, but it
-SHOULD tick locally from `detectedAt`, which belongs to the roster and holds
-still while the clocks move. That is the whole reason the token counter beside
-each clock is not carried: it moves every sample, and a roster that changed only
-by a number would cost a frame per second.
+SHOULD tick locally from `detectedAt`, which is minted with the seconds it
+belongs to. Never treat those two as independent: the clock is
+`elapsedSeconds + (now - detectedAt)`, so they only agree while they describe
+the same instant. The server holds a fleet still by not republishing it — the
+roster and the token counters decide that, the clocks never do.
 
 Carried by read results and by snapshot/replaced/state frames with `prompt`
 semantics — omitted ⇒ CLEARED, which is how a client learns the fleet is done.
@@ -362,6 +363,12 @@ export interface SessionChatSubAgent {
   task?: string;
   /** Seconds the CLI reported, only when it painted them. */
   elapsedSeconds?: number;
+  /**
+   * The token counter exactly as painted (`↓ 155.4k tokens`), arrow and all.
+   * Kept whole rather than split into a number: the arrow is the direction and
+   * the CLI already rounded the figure to fit a narrow column.
+   */
+  tokens?: string;
   /**
    * The `(+1)` the CLI paints beside a name: further agents running under this
    * one, folded into its row instead of listed. Absent when unmarked; never 0.
@@ -834,4 +841,4 @@ CDXC:AgentHistorySearch 2026-08-20:
 body on exactly the same terms as chat: the terminal parks rather than closing,
 and only one surface can own the pane at a time.
 */
-export type SessionSurfaceMode = "terminal" | "chat" | "find";
+export type SessionSurfaceMode = "terminal" | "chat";

@@ -216,6 +216,14 @@ body[data-session-chat-theme="light"] .ghostex-session-chat-popup {
   --input: var(--border);
   --ring: oklch(70.5% 0.015 286.067);
   --info-foreground: oklch(48.8% 0.243 264.376);
+  /* Inline code and file chips get their own fill instead of --muted. --muted
+     sits within a percent of the page in both themes, which is enough for a
+     block that also has size and a header, but an inline card is a few
+     characters wide and has to be legible as a card at a glance, unhovered.
+     These are the same two steps in each theme: a fill that clears the page
+     and a border that clears the fill. */
+  --chat-inline-code-surface: color-mix(in srgb, var(--foreground) 6%, var(--background));
+  --chat-inline-code-border: color-mix(in srgb, var(--foreground) 16%, transparent);
   /* The answer's running prose, one notch under --foreground so headings have
      somewhere to be louder than (see "Prose altitude" further down). Mixed
      towards the page rather than expressed as an alpha, so the same colour
@@ -258,6 +266,12 @@ body[data-session-chat-theme="dark"] .ghostex-session-chat-popup {
   --input: color-mix(in srgb, #fff 8%, transparent);
   --ring: oklch(55.6% 0 0);
   --info-foreground: oklch(70.7% 0.165 254.624);
+  /* See the light theme. The 4%-white --muted lands on #0a0a0a at roughly
+     #151515, which is where the "the chips are too dark" reading comes from;
+     these are opaque rather than mixed with transparent so a chip reads the
+     same on the page, inside a bubble, and inside an alert. */
+  --chat-inline-code-surface: color-mix(in srgb, var(--foreground) 11%, var(--background));
+  --chat-inline-code-border: color-mix(in srgb, var(--foreground) 18%, transparent);
   /* Same 82% step as light. #fcfcfc on #0a0a0a is the loudest pairing in the
      app, so this is the theme the softening was really for: 19.6:1 -> 13.4:1,
      well clear of the muted lane. */
@@ -302,6 +316,26 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   --chat-marker-slot: 1rem;
   --chat-marker-gap: 0.375rem;
   --chat-marker-inset: 2px;
+  /*
+  CDXC:SessionChatMarkerOptical 2026-08-23:
+  Where a marker sits vertically against its row's first line.
+
+  A slot glyph (chevron, tool icon) takes the line-box centre and nothing
+  more. Its ink fills the 14px box roughly symmetrically, so it reads against
+  the whole line rather than against the text's ink band, and any correction
+  on top of centring shows up as sitting low.
+
+  A bullet is different: it is 4px of ink placed from the row's TOP edge, so
+  it has to be aimed at the text itself. Line-box centre (11.375px on the
+  22.75px line box these rows share) reads high, because a line box is
+  symmetric about the em box while text is not — half the leading sits above
+  the ascender. The x-height centre is the other extreme and reads low
+  against a capital. This lands between them, nearer the cap-height centre.
+
+  Tuned against real rendering, not derived — if the transcript's line-height
+  or family changes, look at it again rather than scaling the number.
+  */
+  --chat-marker-bullet-offset: 0.59375rem;
   /*
   CDXC:SessionChatGlyphRamp 2026-08-23:
   The transcript's glyph vocabulary is TWO tiers, and every icon in a
@@ -468,11 +502,15 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
   text-transform: uppercase;
 }
 
-.ghostex-chat-user-bubble .ghostex-chat-markdown p,
-.ghostex-chat-user-bubble .ghostex-chat-markdown li,
-.ghostex-chat-user-bubble .ghostex-chat-markdown blockquote {
-  white-space: pre-wrap;
-}
+/* The bubble's paragraphs, list items and quotes used to run on
+   `white-space: pre-wrap`, to keep the single newlines somebody typed in the
+   composer. It also painted the structural `"\n"` text nodes react-markdown
+   puts between block children — around the `<p>` of a loose list item, inside a
+   `<blockquote>` — so a numbered list broke between its marker and its text and
+   a quote stood blank lines taller than the words in it. Typed newlines are now
+   real `<br>` nodes (SessionChatMarkdown's `chatText` mode,
+   session-chat-user-text.ts), which the structural whitespace cannot imitate,
+   so there is nothing left for a whitespace rule to do here. */
 
 .ghostex-chat-agent-message {
   align-items: start;
@@ -496,7 +534,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-agent-message::before {
-  margin-block-start: 0.5rem;
+  margin-block-start: var(--chat-marker-bullet-offset);
 }
 
 .ghostex-chat-thinking-row {
@@ -528,7 +566,7 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-thinking-line::before {
-  margin-block-start: 0.484375rem;
+  margin-block-start: var(--chat-marker-bullet-offset);
 }
 
 .ghostex-chat-thinking-row.is-disclosure {
@@ -603,6 +641,21 @@ body[data-session-chat-bullets="off"] .ghostex-session-chat-popup {
    not inherit the row's pre-wrap (that would double every blank line). */
 .ghostex-chat-thinking-body {
   white-space: normal;
+}
+
+/*
+CDXC:SessionChatReasoningWeight 2026-08-23:
+Reasoning is the quiet lane, so nothing in it gets to shout. Agents write
+their thinking summaries as a bolded headline per step ("**Planning the
+revisions**"), and the transcript folds consecutive steps into one row — so a
+reasoning line arrives as a run of ** ** fragments and renders entirely bold,
+heavier than the answer underneath it and inverting the hierarchy the lane
+exists to express. Emphasis is dropped to the row's own weight rather than
+stripped from the text, so the words are still exactly what the agent wrote
+and a copy still carries the markdown.
+*/
+.ghostex-chat-thinking-row .ghostex-chat-markdown :is(b, strong) {
+  font-weight: inherit;
 }
 
 .ghostex-chat-thinking-body + .ghostex-chat-tool-run {
@@ -1110,6 +1163,17 @@ body[data-session-chat-theme="dark"]
 }
 
 /*
+The stack-push glyph only draws across 16x15 of its 24px box, while the
+paperclip next to it draws across roughly 19x20, so at the shared 16px icon size
+the stash button reads as noticeably smaller than the rest of the footer row.
+Rendering this one glyph a size up lines its ink up with its neighbours.
+*/
+.ghostex-chat-stash-control .ghostex-chat-footer-control svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/*
 CDXC:SessionChatScreenProbed 2026-08-22:
 Loading state for the Model / Options pills, shown only while gxserver has not
 yet read the session's screen. It renders INSIDE the real pill button, so the
@@ -1245,7 +1309,7 @@ so the swap barely moves the composer row.
   content: "";
   height: var(--chat-marker-bullet);
   justify-self: center;
-  margin-block-start: 0.484375rem;
+  margin-block-start: var(--chat-marker-bullet-offset);
   width: var(--chat-marker-bullet);
 }
 
@@ -1497,8 +1561,8 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 .ghostex-chat-markdown h6 { color: var(--muted-foreground); }
 
 .ghostex-chat-markdown :not(pre) > code {
-  background: var(--muted);
-  border: 1px solid var(--border);
+  background: var(--chat-inline-code-surface, var(--muted));
+  border: 1px solid var(--chat-inline-code-border, var(--border));
   border-radius: 0.375rem;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: var(--chat-code-size);
@@ -1522,8 +1586,8 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    string, so the spacing is placed on the glyph and the detail instead. */
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
   align-items: center;
-  background: var(--muted);
-  border: 1px solid var(--border);
+  background: var(--chat-inline-code-surface, var(--muted));
+  border: 1px solid var(--chat-inline-code-border, var(--border));
   border-radius: 0.375rem;
   color: var(--chat-prose-foreground);
   cursor: pointer;
@@ -1539,9 +1603,16 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   vertical-align: baseline;
 }
 
+/* Hover has to stay a lift now that the resting chip is a real card: it tints
+   the resting fill towards the link blue rather than swapping in --accent,
+   which sits below the new resting surface and would read as a press. */
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
-  background: var(--accent);
+  background: color-mix(
+    in srgb,
+    var(--info-foreground) 14%,
+    var(--chat-inline-code-surface, var(--muted))
+  );
   border-color: color-mix(in srgb, var(--info-foreground) 45%, var(--border));
   color: var(--info-foreground);
   outline: none;
@@ -2534,6 +2605,10 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    Same quiet weight as the draft-conflict bar above it, so neither reads as a
    second composer. */
 .ghostex-chat-agent-fleet {
+  /* Its own container, because the composer's is on a SIBLING box and cannot be
+     queried from here. Same technique the composer footer uses to drop the
+     agent name under a narrow pane. */
+  container: ghostex-chat-agent-fleet / inline-size;
   background: color-mix(in srgb, var(--foreground) 3%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 0.75rem;
@@ -2583,7 +2658,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   align-items: center;
   column-gap: 0.375rem;
   display: grid;
-  grid-template-columns: auto fit-content(10rem) minmax(0, 1fr) auto;
+  grid-template-columns: auto fit-content(10rem) minmax(0, 1fr) auto auto auto;
   max-height: 6.5rem;
   min-width: 0;
   overflow-x: hidden;
@@ -2665,10 +2740,76 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   white-space: nowrap;
 }
 
+/* Right-aligned in its own track, so every counter ends on the same edge and a
+   longer figure grows leftwards into the task instead of shoving the clock. */
+.ghostex-chat-agent-fleet-tokens {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.125rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ghostex-chat-agent-fleet-separator {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+  opacity: 0.5;
+}
+
 .ghostex-chat-agent-fleet-clock {
   color: var(--muted-foreground);
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.125rem;
   text-align: right;
+  white-space: nowrap;
+}
+
+/* A narrow pane drops columns in reverse order of usefulness rather than
+   squeezing the task down to two words: the task is the only part that says
+   what is actually happening, so it is the last thing standing.
+
+   Each step also restates the track list. The cells are grid items of the rows
+   box (each row is `display: contents`), so they auto-place in order — leave a
+   track behind after hiding its cell and every later cell lands one column off,
+   which is exactly the alignment this grid exists to guarantee.
+
+   The task's `title` carries the agent name too, so the name remains reachable
+   on hover after the last step has hidden it.
+
+   The widths are chosen from what the DROPPED column costs, not from device
+   sizes: each step fires while the task can still hold roughly a readable
+   sentence, so the strip never reaches a state where every column is present
+   and none of them says anything. */
+@container ghostex-chat-agent-fleet (max-width: 38rem) {
+  .ghostex-chat-agent-fleet-rows {
+    grid-template-columns: auto fit-content(10rem) minmax(0, 1fr) auto;
+  }
+
+  .ghostex-chat-agent-fleet-tokens,
+  .ghostex-chat-agent-fleet-separator {
+    display: none;
+  }
+}
+
+@container ghostex-chat-agent-fleet (max-width: 28rem) {
+  .ghostex-chat-agent-fleet-rows {
+    grid-template-columns: auto fit-content(10rem) minmax(0, 1fr);
+  }
+
+  .ghostex-chat-agent-fleet-clock {
+    display: none;
+  }
+}
+
+@container ghostex-chat-agent-fleet (max-width: 20rem) {
+  .ghostex-chat-agent-fleet-rows {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ghostex-chat-agent-fleet-name {
+    display: none;
+  }
 }

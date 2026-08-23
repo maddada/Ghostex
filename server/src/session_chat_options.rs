@@ -1441,13 +1441,14 @@ impl SessionChatOptionDetector {
                         .and_then(|entry| entry.value.activity.as_ref()),
                 );
             }
-            // CDXC:SessionChatAgentFleet 2026-08-23: same rule, and load-bearing
-            // for the same reason — every row's clock counts from `detectedAt`.
-            if let Some(fleet) = detected.fleet.as_mut() {
-                fleet.carry_forward_detected_at(
-                    cache.get(&key).and_then(|entry| entry.value.fleet.as_ref()),
-                );
-            }
+            /*
+            CDXC:SessionChatAgentFleet 2026-08-23: deliberately NOT carried
+            forward, unlike the notice and the activity row above. A fleet's
+            `detectedAt` is the anchor its per-row clocks count from, so it has
+            to stay paired with the seconds it was read beside; giving a fresh
+            reading an older anchor would make every client count that interval
+            twice. Holding a fleet still is `same_fleet`'s job.
+            */
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {

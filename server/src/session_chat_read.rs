@@ -163,17 +163,20 @@ pub(crate) fn resolve_session_chat_read_state(
     }
     /*
     CDXC:SessionChatAgentFleet 2026-08-23:
-    The ROSTER only — names and tasks, never the clocks. Opposite choice from
-    the progress row above and for the opposite reason: a fleet row's clock
-    moves every second for as long as the agent runs, so hashing it would make
-    this 500ms loop re-read the whole transcript forever. The client ticks those
-    clocks itself from `detectedAt`.
+    Everything a fleet row shows EXCEPT its clock. Split differently from the
+    progress row above, which hashes all of its numbers: a fleet clock moves
+    every second for as long as the agent runs, so hashing it would make this
+    500ms loop re-read the whole transcript forever, while a token counter moves
+    only when an agent did something and is worth waking a poller for. The
+    client ticks the clocks itself from `detectedAt`.
     */
     match screen.fleet {
         Some(fleet) => {
             for agent in &fleet.agents {
                 agent.name.hash(&mut hasher);
                 agent.task.hash(&mut hasher);
+                agent.tokens.hash(&mut hasher);
+                agent.nested.hash(&mut hasher);
             }
         }
         None => 0u8.hash(&mut hasher),

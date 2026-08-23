@@ -48,15 +48,23 @@ const FLEET: SessionChatAgentFleet = {
       elapsedSeconds: 756,
       name: "general-purpose",
       task: "Fixing tool-row alignment in the transcript",
+      tokens: "↓ 155.4k tokens",
     },
     {
       elapsedSeconds: 195,
       name: "general-purpose",
       nested: 1,
       task: "Launching board_gxserver.rs split",
+      tokens: "↓ 76.0k tokens",
     },
-    // A shorter name, so the shared name column is visibly doing its job.
-    { elapsedSeconds: 12, name: "explore", task: "Reviewing the diff…" },
+    // A shorter name and a shorter counter, so both shared columns are visibly
+    // doing their job.
+    {
+      elapsedSeconds: 12,
+      name: "explore",
+      task: "Reviewing the diff…",
+      tokens: "↑ 4.6k tokens",
+    },
   ],
   detectedAt: AT,
 };
@@ -77,11 +85,14 @@ const QUEUE_SEED: SessionChatQueuedPrompt[] = [
 function SessionChatAgentFleetStripStory({
   agents,
   isWorking,
+  paneWidth,
   queued: queuedCount,
   theme,
 }: {
   agents: number;
   isWorking: boolean;
+  /** Chat-pane width in px. The strip drops columns as this shrinks. */
+  paneWidth: number;
   queued: number;
   theme: "dark" | "light";
 }) {
@@ -151,7 +162,10 @@ function SessionChatAgentFleetStripStory({
       className="ghostex-session-chat-scope flex h-screen flex-col justify-end bg-background p-4 text-foreground"
       data-chat-theme={theme}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+      <div
+        className="mx-auto flex w-full flex-col gap-2"
+        style={{ maxWidth: `${paneWidth}px` }}
+      >
         {/* Standing in for the transcript, so a send has somewhere to land. */}
         {sent.length > 0 ? (
           <div className="text-xs text-muted-foreground">
@@ -175,9 +189,10 @@ function SessionChatAgentFleetStripStory({
 }
 
 const meta = {
-  args: { agents: 3, isWorking: true, queued: 2, theme: "dark" },
+  args: { agents: 3, isWorking: true, paneWidth: 768, queued: 2, theme: "dark" },
   argTypes: {
     agents: { control: { max: 3, min: 0, step: 1, type: "range" } },
+    paneWidth: { control: { max: 900, min: 220, step: 10, type: "range" } },
     queued: { control: { max: 2, min: 0, step: 1, type: "range" } },
     theme: { control: "inline-radio", options: ["dark", "light"] },
   },
@@ -208,3 +223,13 @@ export const NoFleet: Story = { args: { agents: 0 } };
  * theirs.
  */
 export const SingleQueuedPrompt: Story = { args: { agents: 1, queued: 1 } };
+
+/**
+ * Narrow enough to have dropped the token counters, keeping the task, the name
+ * and the clock. Drag `paneWidth` down from here to watch the clock go, then
+ * the name — the task never does.
+ */
+export const NarrowPane: Story = { args: { paneWidth: 560, queued: 0 } };
+
+/** Narrower still: task only, with the agent name on the task's tooltip. */
+export const VeryNarrowPane: Story = { args: { paneWidth: 280, queued: 0 } };

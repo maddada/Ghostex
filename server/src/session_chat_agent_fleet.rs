@@ -25,10 +25,13 @@ session_chat_terminal_activity.rs asks only where the block STARTS so it can cut
 it off the screen before reading the status line, because a fleet row and a
 status line are indistinguishable once the selection marker moves.
 
-Deliberately not carried: the `· ↓ 171.9k tokens` counter. It changes on nearly
-every sample, and the roster-only change test below (`same_fleet`) is what keeps
-a running fleet from emitting a frame per second. A number that could only ever
-be shown stale is worse than one that is not shown.
+What changes and what does not decides the publish rate. `same_fleet` compares
+the roster AND the token counters, but never the clocks: a clock moves every
+second and would cost a frame per second, while the counters move only when an
+agent actually did something. The clocks tick client-side from `detectedAt`
+instead, which is why that timestamp is minted with the seconds it belongs to
+and never carried forward — pairing a fresh reading with an older anchor would
+make the client count the same interval twice.
 */
 
 use crate::session_chat_options::{
@@ -60,6 +63,10 @@ pub struct SessionChatSubAgent {
     pub task: Option<String>,
     /// Seconds the CLI reports it has been running, only when it painted them.
     pub elapsed_seconds: Option<u64>,
+    /// The token counter exactly as painted (`↓ 155.4k tokens`), arrow and all.
+    /// Kept whole rather than split into a number: the arrow is the direction
+    /// and the CLI already rounded the figure for a narrow column.
+    pub tokens: Option<String>,
     /*
     The `(+1)` Claude paints beside a name: further agents running under this
     one, which the block folds into its row instead of listing separately.
@@ -81,6 +88,9 @@ impl SessionChatSubAgent {
         if let Some(elapsed_seconds) = self.elapsed_seconds {
             map.insert("elapsedSeconds".to_string(), json!(elapsed_seconds));
         }
+        if let Some(tokens) = self.tokens.as_ref() {
+            map.insert("tokens".to_string(), json!(tokens));
+        }
         if let Some(nested) = self.nested {
             map.insert("nested".to_string(), json!(nested));
         }
@@ -92,7 +102,14 @@ impl SessionChatSubAgent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChatAgentFleet {
     pub agents: Vec<SessionChatSubAgent>,
-    /// RFC3339 millis anchoring the client's elapsed clocks; see `same_fleet`.
+    /*
+    RFC3339 millis, minted when `elapsed_seconds` above was read off the screen
+    and NEVER carried forward from an earlier sample. The client shows
+    `elapsedSeconds + (now - detectedAt)`, so the two only agree while they
+    describe the same instant: hand it a fresh reading under an older anchor
+    and it counts that interval twice. Holding a value still is `same_fleet`'s
+    job — it decides whether a sample is published at all — not this field's.
+    */
     pub detected_at: String,
 }
 
@@ -105,10 +122,12 @@ impl SessionChatAgentFleet {
     }
 
     /*
-    Two samples of the SAME roster, ignoring the clocks. Clocks tick every
-    second, so counting them as a change would emit a frame per second for the
-    life of the fleet. Instead the client interpolates from `detectedAt` and
-    the last published seconds, exactly like the activity row.
+    Two samples of the same roster doing the same things, ignoring ONLY the
+    clocks. Clocks tick every second, so counting them would emit a frame per
+    second for the life of the fleet; the client interpolates them from
+    `detectedAt` instead. The token counters do count: they move when an agent
+    actually did something, and a counter frozen at its first reading is worse
+    than one that is a couple of seconds behind.
     */
     pub fn same_fleet(&self, other: Option<&SessionChatAgentFleet>) -> bool {
         other.is_some_and(|other| {
@@ -120,20 +139,10 @@ impl SessionChatAgentFleet {
                     .all(|(left, right)| {
                         left.name == right.name
                             && left.task == right.task
+                            && left.tokens == right.tokens
                             && left.nested == right.nested
                     })
         })
-    }
-
-    /*
-    An unchanged roster keeps its original `detectedAt`, because that is what
-    the client's clocks count from: re-minting it every probe while republishing
-    the same seconds would peg every row at its first sample forever.
-    */
-    pub fn carry_forward_detected_at(&mut self, previous: Option<&SessionChatAgentFleet>) {
-        if let Some(previous) = previous.filter(|previous| self.same_fleet(Some(previous))) {
-            self.detected_at = previous.detected_at.clone();
-        }
     }
 
     pub fn to_value(&self) -> Value {
@@ -234,10 +243,13 @@ fn split_nested_count(name: &str) -> (&str, Option<u32>) {
 }
 
 fn sub_agent_from_row(content: &str) -> Option<SessionChatSubAgent> {
-    // The token counter is the last column and is deliberately dropped.
-    let columns = match content.rsplit_once(FLEET_TOKENS_SEPARATOR) {
-        Some((left, _)) => left,
-        None => content,
+    // The token counter is the last column, kept exactly as it was painted.
+    let (columns, tokens) = match content.rsplit_once(FLEET_TOKENS_SEPARATOR) {
+        Some((left, counter)) => {
+            let counter = counter.trim();
+            (left, (!counter.is_empty()).then(|| counter.to_string()))
+        }
+        None => (content, None),
     };
     // Name first, because the clock must be peeled off the TASK: a row whose
     // task never arrived is all name, and peeling first would empty it.
@@ -255,6 +267,7 @@ fn sub_agent_from_row(content: &str) -> Option<SessionChatSubAgent> {
         name: name.to_string(),
         task: (!task.is_empty()).then(|| task.to_string()),
         elapsed_seconds,
+        tokens,
         nested,
     })
 }

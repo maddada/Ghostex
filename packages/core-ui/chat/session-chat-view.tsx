@@ -303,7 +303,7 @@ function SessionVerbosePill({
           size="icon-xs"
           variant={verbose ? "secondary" : "ghost"}
         >
-          <Icon aria-hidden="true" className="size-3 shrink-0" stroke={2} />
+          <Icon aria-hidden="true" className="size-4 shrink-0" stroke={2} />
         </Button>
       </span>
     </AppTooltip>

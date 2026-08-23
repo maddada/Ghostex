@@ -13,15 +13,21 @@ owned by the agent, that the user cannot edit. Two strips, two containers, no
 competition for the same row shape.
 
 Rows lay out on ONE grid rather than each flexing on its own, so every task
-starts at the same x no matter how long the names above it are. The name track
-sizes to the widest name and stops; every cell is therefore rendered even when
-empty, because a missing cell would shift that row's remaining columns out of
-the shared alignment.
+starts at the same x no matter how long the names above it are, and every token
+counter ends on the same edge. The name track sizes to the widest name and
+stops; every cell is therefore rendered even when empty, because a missing cell
+would shift that row's remaining columns out of the shared alignment.
 
-Every row's clock ticks LOCALLY from the fleet's `detectedAt`. The server holds
-that timestamp still while the roster is unchanged and deliberately omits the
-per-second token counter, so the strip must interpolate or it would read as
-frozen between the probes that actually change something.
+A narrow pane drops whole columns instead of squeezing the task into nothing —
+counter first, then clock, then name — because the task is the only part that
+says what is actually happening. Those steps are container queries in chat.css;
+the only thing this file owes them is a `title` that still names the agent after
+the name column is gone.
+
+Every row's clock ticks LOCALLY from `detectedAt`, which gxserver mints with the
+seconds it belongs to. It republishes a fleet only when the roster or a token
+counter moves, never for a clock, so without interpolating here the times would
+sit frozen between the samples that actually changed something.
 */
 
 import { useEffect, useState } from "react";
@@ -90,7 +96,12 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                   work on its left, and staying out of the clock's column keeps
                   a marked row aligned with every unmarked one. */}
               <span className="ghostex-chat-agent-fleet-work">
-                <span className="ghostex-chat-agent-fleet-task" title={agent.task ?? ""}>
+                <span
+                  className="ghostex-chat-agent-fleet-task"
+                  // Names the agent as well as the task: under a narrow pane the
+                  // name column is hidden and this is the only way back to it.
+                  title={agent.task ? `${agent.name} — ${agent.task}` : agent.name}
+                >
                   {agent.task ?? ""}
                 </span>
                 {agent.nested ? (
@@ -101,6 +112,14 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                     +{agent.nested}
                   </span>
                 ) : null}
+              </span>
+              {/* Counter, separator and clock are three tracks, not one cell:
+                  that is what right-aligns every counter on the same edge no
+                  matter how long the one above it was. The separator only
+                  appears when it has something on both sides of it. */}
+              <span className="ghostex-chat-agent-fleet-tokens">{agent.tokens ?? ""}</span>
+              <span aria-hidden="true" className="ghostex-chat-agent-fleet-separator">
+                {agent.tokens && elapsed !== null ? "•" : ""}
               </span>
               <span className="ghostex-chat-agent-fleet-clock">
                 {elapsed === null ? "" : formatSessionChatActivityElapsed(elapsed)}
