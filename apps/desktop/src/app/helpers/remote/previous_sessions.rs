@@ -287,20 +287,156 @@ pub(crate) fn gpui_stashed_prompts_result_message(
             serde_json::Value::String(project_id.to_string()),
         );
     }
-    let prompts = gpui_gxserver_rpc_result(
+    let result = gpui_gxserver_rpc_result(
         "/api/listStashedPrompts",
         &serde_json::Value::Object(params),
         Duration::from_secs(10),
     )
-    .ok()
-    .and_then(|result| result.get("prompts").cloned())
-    .filter(|prompts| prompts.is_array())
-    .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
+    .ok();
+    let prompts = result
+        .as_ref()
+        .and_then(|result| result.get("prompts").cloned())
+        .filter(serde_json::Value::is_array)
+        .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
+    /*
+    CDXC:StashedPromptTags 2026-08-23:
+    The tag catalogue rides on the same answer as the prompts so the modal's
+    pill rail and its row chips paint together.
+    */
+    let tags = result
+        .as_ref()
+        .and_then(|result| result.get("tags").cloned())
+        .filter(serde_json::Value::is_array)
+        .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
     serde_json::json!({
         "prompts": prompts,
         "requestId": request_id,
+        "tags": tags,
         "type": "stashedPromptsResult",
     })
+}
+
+/*
+CDXC:StashedPromptTags 2026-08-23:
+Tag create/rename and delete both answer with the whole refreshed catalogue,
+because a create can resolve onto a tag that already exists and a delete
+invalidates assignments the modal is still holding. Tag names are user-authored
+text on the same footing as prompt bodies: forward them verbatim, never log.
+*/
+pub(crate) fn gpui_save_stashed_prompt_tag_result_message(
+    request_id: &str,
+    name: &str,
+    color: Option<&str>,
+    tag_id: Option<&str>,
+) -> serde_json::Value {
+    let mut params = serde_json::Map::new();
+    params.insert(
+        "name".to_string(),
+        serde_json::Value::String(name.to_string()),
+    );
+    if let Some(color) = color {
+        params.insert(
+            "color".to_string(),
+            serde_json::Value::String(color.to_string()),
+        );
+    }
+    if let Some(tag_id) = tag_id {
+        params.insert(
+            "tagId".to_string(),
+            serde_json::Value::String(tag_id.to_string()),
+        );
+    }
+    gpui_stashed_prompt_tags_result_message(
+        request_id,
+        "/api/saveStashedPromptTag",
+        serde_json::Value::Object(params),
+        None,
+        "Could not save this tag.",
+    )
+}
+
+pub(crate) fn gpui_delete_stashed_prompt_tag_result_message(
+    request_id: &str,
+    tag_id: &str,
+) -> serde_json::Value {
+    gpui_stashed_prompt_tags_result_message(
+        request_id,
+        "/api/deleteStashedPromptTag",
+        serde_json::json!({ "tagId": tag_id }),
+        Some(tag_id),
+        "Could not delete this tag.",
+    )
+}
+
+fn gpui_stashed_prompt_tags_result_message(
+    request_id: &str,
+    endpoint: &str,
+    params: serde_json::Value,
+    deleted_tag_id: Option<&str>,
+    failure_message: &str,
+) -> serde_json::Value {
+    let tags = gpui_gxserver_rpc_result(endpoint, &params, Duration::from_secs(10))
+        .ok()
+        .and_then(|result| result.get("tags").cloned())
+        .filter(serde_json::Value::is_array);
+    match tags {
+        Some(tags) => {
+            let mut payload = serde_json::Map::new();
+            payload.insert("ok".to_string(), serde_json::Value::Bool(true));
+            payload.insert(
+                "requestId".to_string(),
+                serde_json::Value::String(request_id.to_string()),
+            );
+            payload.insert("tags".to_string(), tags);
+            if let Some(deleted_tag_id) = deleted_tag_id {
+                payload.insert(
+                    "deletedTagId".to_string(),
+                    serde_json::Value::String(deleted_tag_id.to_string()),
+                );
+            }
+            payload.insert(
+                "type".to_string(),
+                serde_json::Value::String("stashedPromptTagsResult".to_string()),
+            );
+            serde_json::Value::Object(payload)
+        }
+        None => serde_json::json!({
+            "error": failure_message,
+            "ok": false,
+            "requestId": request_id,
+            "tags": [],
+            "type": "stashedPromptTagsResult",
+        }),
+    }
+}
+
+pub(crate) fn gpui_set_stashed_prompt_tags_result_message(
+    request_id: &str,
+    prompt_id: &str,
+    tag_ids: &[String],
+) -> serde_json::Value {
+    let prompt = gpui_gxserver_rpc_result(
+        "/api/setStashedPromptTags",
+        &serde_json::json!({ "promptId": prompt_id, "tagIds": tag_ids }),
+        Duration::from_secs(10),
+    )
+    .ok()
+    .and_then(|result| result.get("prompt").cloned())
+    .filter(serde_json::Value::is_object);
+    match prompt {
+        Some(prompt) => serde_json::json!({
+            "ok": true,
+            "prompt": prompt,
+            "requestId": request_id,
+            "type": "setStashedPromptTagsResult",
+        }),
+        None => serde_json::json!({
+            "error": "Could not update this prompt's tags.",
+            "ok": false,
+            "requestId": request_id,
+            "type": "setStashedPromptTagsResult",
+        }),
+    }
 }
 
 pub(crate) fn gpui_save_stashed_prompt_result_message(

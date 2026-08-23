@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useMemo } from 'react';
-import type { GxserverStashedPrompt } from '../shared/gxserver-protocol';
+import type {
+  GxserverStashedPrompt,
+  GxserverStashedPromptTag,
+} from '../shared/gxserver-protocol';
 import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
 import type {
   SidebarPreviousSessionItem,
@@ -98,6 +101,41 @@ const STORY_RECENT_PROJECTS: SidebarRecentProject[] = [
   },
 ];
 
+const STORY_SAVED_PROMPT_TAGS: GxserverStashedPromptTag[] = [
+  {
+    color: '#e3b341',
+    createdAt: '2026-08-01T00:00:00.000Z',
+    isBuiltin: true,
+    name: 'Favorites',
+    tagId: 'favorite',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  },
+  {
+    color: '#7f9cf5',
+    createdAt: '2026-08-02T00:00:00.000Z',
+    isBuiltin: false,
+    name: 'Code review',
+    tagId: 'quick-access-tag-review',
+    updatedAt: '2026-08-02T00:00:00.000Z',
+  },
+  {
+    color: '#86d1a4',
+    createdAt: '2026-08-03T00:00:00.000Z',
+    isBuiltin: false,
+    name: 'Release',
+    tagId: 'quick-access-tag-release',
+    updatedAt: '2026-08-03T00:00:00.000Z',
+  },
+  {
+    color: '#e3796b',
+    createdAt: '2026-08-04T00:00:00.000Z',
+    isBuiltin: false,
+    name: 'Debugging',
+    tagId: 'quick-access-tag-debug',
+    updatedAt: '2026-08-04T00:00:00.000Z',
+  },
+];
+
 const STORY_SAVED_PROMPTS: GxserverStashedPrompt[] = [
   {
     content: 'Review the current implementation and suggest the smallest reliable fix.',
@@ -107,6 +145,7 @@ const STORY_SAVED_PROMPTS: GxserverStashedPrompt[] = [
     projectName: 'Ghostex',
     promptId: 'quick-access-prompt-1',
     sessionId: 'quick-access-open-session-1',
+    tagIds: ['favorite', 'quick-access-tag-review'],
     updatedAt: '2026-08-08T08:00:00.000Z',
   },
   {
@@ -117,7 +156,30 @@ const STORY_SAVED_PROMPTS: GxserverStashedPrompt[] = [
     projectName: 'Release Tools',
     promptId: 'quick-access-prompt-2',
     sessionId: null,
+    tagIds: ['quick-access-tag-release'],
     updatedAt: '2026-08-07T19:00:00.000Z',
+  },
+  {
+    content: 'Reproduce the freeze with an isolated daemon and tell me which thread is blocking.',
+    createdAt: '2026-08-07T11:30:00.000Z',
+    cwd: '/Users/demo/Ghostex',
+    projectId: 'quick-access-project-1',
+    projectName: 'Ghostex',
+    promptId: 'quick-access-prompt-3',
+    sessionId: null,
+    tagIds: ['quick-access-tag-debug'],
+    updatedAt: '2026-08-07T11:30:00.000Z',
+  },
+  {
+    content: 'Summarize what changed since the last tag, grouped by user-facing area.',
+    createdAt: '2026-08-06T09:15:00.000Z',
+    cwd: '/Users/demo/Release Tools',
+    projectId: 'quick-access-project-3',
+    projectName: 'Release Tools',
+    promptId: 'quick-access-prompt-4',
+    sessionId: null,
+    tagIds: [],
+    updatedAt: '2026-08-06T09:15:00.000Z',
   },
 ];
 
@@ -174,6 +236,7 @@ function useQuickAccessStoryHost(respondToRequests = true): WebviewApi {
           dispatchStoryMessage({
             prompts: STORY_SAVED_PROMPTS,
             requestId: message.requestId,
+            tags: STORY_SAVED_PROMPT_TAGS,
             type: 'stashedPromptsResult',
           });
         }

@@ -2730,6 +2730,98 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "saveStashedPromptTag" => {
+                /*
+                CDXC:StashedPromptTags 2026-08-23:
+                Tag create/rename runs through the same local gxserver daemon as
+                the prompts, and answers with the whole refreshed catalogue so
+                the modal's rail cannot drift from what is stored.
+                */
+                let request_id = command
+                    .get("requestId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let Some(name) = command
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                else {
+                    return;
+                };
+                let color = command
+                    .get("color")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let tag_id = command
+                    .get("tagId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                self.run_gpui_app_modal_sidebar_status_task(
+                    move || {
+                        gpui_save_stashed_prompt_tag_result_message(
+                            &request_id,
+                            &name,
+                            color.as_deref(),
+                            tag_id.as_deref(),
+                        )
+                    },
+                    cx,
+                );
+            }
+            "deleteStashedPromptTag" => {
+                let request_id = command
+                    .get("requestId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let Some(tag_id) = command
+                    .get("tagId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                else {
+                    return;
+                };
+                self.run_gpui_app_modal_sidebar_status_task(
+                    move || gpui_delete_stashed_prompt_tag_result_message(&request_id, &tag_id),
+                    cx,
+                );
+            }
+            "setStashedPromptTags" => {
+                let request_id = command
+                    .get("requestId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let Some(prompt_id) = command
+                    .get("promptId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                else {
+                    return;
+                };
+                let tag_ids = command
+                    .get("tagIds")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .map(str::to_string)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                self.run_gpui_app_modal_sidebar_status_task(
+                    move || {
+                        gpui_set_stashed_prompt_tags_result_message(
+                            &request_id,
+                            &prompt_id,
+                            &tag_ids,
+                        )
+                    },
+                    cx,
+                );
+            }
             "deleteStashedPrompt" => {
                 if let Some(prompt_id) = command
                     .get("promptId")

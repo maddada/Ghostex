@@ -35,6 +35,7 @@ import type {
   GxserverPresentationSessionGitStatus,
   GxserverSidebarProjectCollectionsState,
   GxserverStashedPrompt,
+  GxserverStashedPromptTag,
 } from "./gxserver-protocol";
 import type {
   NativePortlessAdminAction,
@@ -1212,7 +1213,39 @@ export type SidebarPreviousSessionsResultMessage = {
 export type SidebarStashedPromptsResultMessage = {
   prompts: GxserverStashedPrompt[];
   requestId: string;
+  /**
+   * CDXC:StashedPromptTags 2026-08-23:
+   * The tag catalogue rides along with the prompts so the pill rail, its
+   * counts, and the row chips all paint from one answer instead of three.
+   */
+  tags?: GxserverStashedPromptTag[];
   type: "stashedPromptsResult";
+};
+
+/**
+ * CDXC:StashedPromptTags 2026-08-23:
+ * Answer to `saveStashedPromptTag` and `deleteStashedPromptTag`. Both return
+ * the whole refreshed catalogue rather than the one row they touched, because
+ * a create can resolve to an existing tag and a delete reorders nothing but
+ * removes assignments the modal is still holding.
+ */
+export type SidebarStashedPromptTagsResultMessage = {
+  /** Set on delete so the modal can drop the id from every prompt it holds. */
+  deletedTagId?: string;
+  error?: string;
+  ok: boolean;
+  requestId: string;
+  tags: GxserverStashedPromptTag[];
+  type: "stashedPromptTagsResult";
+};
+
+/** Answer to `setStashedPromptTags`, carrying the canonical re-tagged row. */
+export type SidebarSetStashedPromptTagsResultMessage = {
+  error?: string;
+  ok: boolean;
+  prompt?: GxserverStashedPrompt;
+  requestId: string;
+  type: "setStashedPromptTagsResult";
 };
 
 /**
@@ -1378,6 +1411,8 @@ export type ExtensionToSidebarMessage =
   | SidebarPreviousSessionsResultMessage
   | SidebarStashedPromptsResultMessage
   | SidebarSaveStashedPromptResultMessage
+  | SidebarStashedPromptTagsResultMessage
+  | SidebarSetStashedPromptTagsResultMessage
   | SidebarWorktreeSessionResultMessage
   | SidebarSessionWorktreeRemovalResultMessage
   | SidebarRecentProjectsResultMessage
@@ -2466,6 +2501,31 @@ export type SidebarToExtensionMessage =
   | {
       promptId: string;
       type: "deleteStashedPrompt";
+    }
+  | {
+      /**
+       * CDXC:StashedPromptTags 2026-08-23:
+       * Creates a tag, or renames/recolors `tagId` when it is supplied. The
+       * daemon owns the catalogue, so the modal never mints tag ids itself.
+       */
+      color?: string;
+      name: string;
+      requestId: string;
+      tagId?: string;
+      type: "saveStashedPromptTag";
+    }
+  | {
+      /** Unfiles every prompt carrying this tag; the prompts themselves stay. */
+      requestId: string;
+      tagId: string;
+      type: "deleteStashedPromptTag";
+    }
+  | {
+      /** Replaces one prompt's whole tag set, including its Favorites star. */
+      promptId: string;
+      requestId: string;
+      tagIds: string[];
+      type: "setStashedPromptTags";
     }
   | {
       content: string;
