@@ -109,6 +109,10 @@ import {
   sessionChatTableToCsv,
   sessionChatTableToMarkdown,
 } from "./session-chat-table-clipboard";
+import {
+  remarkSessionChatHardBreaks,
+  sessionChatUserMarkdownSource,
+} from "./session-chat-user-text";
 
 /*
  * Order matters in one place: remarkSessionChatDetails runs before the three
@@ -124,6 +128,14 @@ const REMARK_PLUGINS = [
   remarkSessionChatGithubAlerts,
   remarkSessionChatInlineCode,
 ];
+
+/*
+ * The same chain for text somebody typed into the composer, with the two
+ * chat-text corrections from session-chat-user-text.ts on the end: every typed
+ * newline becomes a real hard break. It runs last so it also reaches the nodes
+ * remarkSessionChatDetails parsed into existence.
+ */
+const CHAT_TEXT_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatHardBreaks];
 
 
 /**
@@ -1010,9 +1022,18 @@ function markdownComponents(
 }
 
 export function SessionChatMarkdown({
+  chatText = false,
   isStreaming = false,
   markdown,
 }: {
+  /**
+   * True when this body is text somebody typed into a composer rather than
+   * markdown an agent authored. Typed newlines then render as line breaks and
+   * a quote ends where the author stopped typing `>`, which is what those
+   * keystrokes meant in a chat box (session-chat-user-text.ts). Everything
+   * else about the render — GFM, fences, links, chips — is identical.
+   */
+  chatText?: boolean;
   /**
    * True while this body is still being appended to by a working agent. Only
    * syntax highlighting reads it (see ShikiCodeBody); the markdown itself
@@ -1027,11 +1048,15 @@ export function SessionChatMarkdown({
     () => markdownComponents(viewer, hostLinks),
     [hostLinks, viewer],
   );
+  const source = chatText ? sessionChatUserMarkdownSource(markdown) : markdown;
   return (
     <SessionChatMarkdownStreamingContext value={isStreaming}>
       <div className="ghostex-chat-markdown">
-        <ReactMarkdown components={components} remarkPlugins={REMARK_PLUGINS}>
-          {markdown}
+        <ReactMarkdown
+          components={components}
+          remarkPlugins={chatText ? CHAT_TEXT_REMARK_PLUGINS : REMARK_PLUGINS}
+        >
+          {source}
         </ReactMarkdown>
       </div>
     </SessionChatMarkdownStreamingContext>

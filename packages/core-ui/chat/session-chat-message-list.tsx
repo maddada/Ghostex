@@ -789,7 +789,7 @@ function MessageRow({
               variant="default"
             >
               <BubbleContent>
-                <SessionChatMarkdown markdown={userMarkdown} />
+                <SessionChatMarkdown chatText markdown={userMarkdown} />
               </BubbleContent>
             </Bubble>
           ) : null}
