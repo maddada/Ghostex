@@ -4,14 +4,14 @@
  *
  * Reference flow (macOS):
  *   main → cx.open_window
- *     ├─ Track A  start_gpui_local_gxserver_bootstrap (apps/desktop/src/app/os_integration.rs:954)
+ *     ├─ Track A  start_gpui_local_gxserver_bootstrap (apps/desktop/src/app/os_integration/gxserver_bootstrap.rs:33)
  *     │    healthy+tools → replay bootstrap → portless check → first-run onboarding
  *     │    any other health → toast + daemon restart → portless check +
  *     │                       first-run onboarding on the healed path
  *     └─ Track B  initialize_cef → sidebar surface ready (apps/desktop/src/app/terminal_sync.rs:5426)
  *                  → first-run onboarding
  *
- * start_gpui_first_run_onboarding (apps/desktop/src/app/os_integration.rs:536) returns immediately
+ * start_gpui_first_run_onboarding (apps/desktop/src/app/os_integration/first_run_onboarding.rs:82) returns immediately
  * when `self.sidebar` is None, so a Track A attempt that wins the race against
  * CEF is a pure no-op — nothing is consumed and nothing is shown.
  *
@@ -698,7 +698,7 @@ export function createEngineActions(
       emit(
         "flow",
         "Sandbox extension: respawn-heals is on, so the daemon is restarted anyway",
-        "Real macOS returns immediately on a protocol mismatch (apps/desktop/src/app/os_integration.rs:954) — no respawn, no further work this launch.",
+        "Real macOS returns immediately on a protocol mismatch (apps/desktop/src/app/os_integration/gxserver_bootstrap.rs:33) — no respawn, no further work this launch.",
         CODE_REFS.bootstrap,
       );
       runGxserverRespawn();

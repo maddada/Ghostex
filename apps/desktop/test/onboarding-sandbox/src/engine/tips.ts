@@ -2,7 +2,7 @@
  * Tips & Tricks badge + notices.
  *
  * Tip ids: apps/desktop/src/app/consts.rs:540 TITLEBAR_TIP_IDS (12 tips, all unread on a
- * fresh profile — apps/desktop/src/app/titlebar.rs:3276 seeds the badge with the full count).
+ * fresh profile — apps/desktop/src/app/titlebar/dropdown_panels.rs:370 seeds the badge with the full count).
  *
  * Notices: apps/desktop/views/titlebar-host.tsx:833-975. Only the settings-derived
  * notices (persistence off, debugging mode) exist before the panel is opened;

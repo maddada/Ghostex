@@ -1,17 +1,17 @@
 /*
  * Copy + code anchors for the startup sequence.
  *
- * Toast copy is verbatim from apps/desktop/src/app/os_integration.rs
- * start_gpui_local_gxserver_bootstrap (:954) and
- * start_gpui_first_run_onboarding (:536) so the sandbox shows the same strings
- * a user sees on a real launch.
+ * Toast copy is verbatim from apps/desktop/src/app/os_integration/
+ * gxserver_bootstrap.rs start_gpui_local_gxserver_bootstrap (:33) and
+ * first_run_onboarding.rs start_gpui_first_run_onboarding (:82) so the sandbox
+ * shows the same strings a user sees on a real launch.
  */
 import type { GxserverHealthScenario } from "../state/types";
 
 export const CODE_REFS = {
-  bootstrap: "apps/desktop/src/app/os_integration.rs:954 start_gpui_local_gxserver_bootstrap",
+  bootstrap: "apps/desktop/src/app/os_integration/gxserver_bootstrap.rs:33 start_gpui_local_gxserver_bootstrap",
   cefReady: "apps/desktop/src/app/terminal_sync.rs:5426 initialize_cef → sidebar surface ready",
-  firstRun: "apps/desktop/src/app/os_integration.rs:536 start_gpui_first_run_onboarding",
+  firstRun: "apps/desktop/src/app/os_integration/first_run_onboarding.rs:82 start_gpui_first_run_onboarding",
   healthProbe: "apps/desktop/src/app/helpers/board_gxserver.rs gpui_probe_local_gxserver_health",
   modalSlot: "apps/desktop/src/app/modals.rs:1040 open_gpui_app_modal_window_inner (app_modal_window)",
   modalOpen: "apps/desktop/src/app/modals.rs:966 open_gpui_app_modal_window",
@@ -19,9 +19,9 @@ export const CODE_REFS = {
   nonReactHost: "apps/desktop/src/app/model/app_modal_kind.rs GpuiAppModalKind::uses_react_modal_host",
   tutorialVideoUrl: "apps/desktop/src/app/consts.rs:665 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:GPUITutorialVideo)",
   persistState: "apps/desktop/src/app/helpers/os_cli/app_state_persistence.rs:253 persist_gpui_first_run_onboarding_state",
-  portlessCheck: "apps/desktop/src/app/os_integration.rs:2477 start_gpui_portless_setup_prompt_check",
-  progressiveHooks: "apps/desktop/src/app/os_integration.rs:1565 run_gpui_progressive_agent_hook_status_task",
-  cliSettingsAction: "apps/desktop/src/app/os_integration.rs:1628 run_gpui_ghostex_cli_settings_action",
+  portlessCheck: "apps/desktop/src/app/os_integration/notifications_and_portless.rs:368 start_gpui_portless_setup_prompt_check",
+  progressiveHooks: "apps/desktop/src/app/os_integration/toast_and_status_dispatch.rs:260 run_gpui_progressive_agent_hook_status_task",
+  cliSettingsAction: "apps/desktop/src/app/os_integration/toast_and_status_dispatch.rs:323 run_gpui_ghostex_cli_settings_action",
   sidebarCommand: "apps/desktop/src/app/delayed_send.rs:1820 handle_gpui_app_modal_sidebar_command",
   tipsRuntimeStatus: "apps/desktop/src/app/modals.rs:939 request_gpui_titlebar_tips_runtime_status",
   toast: "apps/desktop/src/app/modals.rs:1987 show_gpui_gxserver_bootstrap_toast",
