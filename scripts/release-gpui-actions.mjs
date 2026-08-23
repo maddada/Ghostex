@@ -30,7 +30,7 @@ Usage:
 Scope options for start/publish (all are enabled by default):
   --only-macos
   --skip-macos
-  --skip-linux | --skip-linux-deb | --skip-linux-rpm
+  --skip-linux | --skip-linux-deb | --skip-linux-rpm | --skip-linux-tar
   --skip-windows | --skip-windows-x64 | --skip-windows-arm64
   --skip-android
   --skip-gxserver-linux-x64 | --skip-gxserver-linux-arm64
@@ -38,7 +38,7 @@ Scope options for start/publish (all are enabled by default):
 
 Product flags for amend (all are disabled by default; opt-in):
   --macos
-  --linux | --linux-deb | --linux-rpm
+  --linux | --linux-deb | --linux-rpm | --linux-tar
   --windows | --windows-x64 | --windows-arm64
   --android
   --gxserver | --gxserver-linux-x64 | --gxserver-linux-arm64
@@ -80,6 +80,7 @@ function parseArgs(argv) {
     gxserverWslWindowsX64: !amendDefaults,
     linuxDeb: !amendDefaults,
     linuxRpm: !amendDefaults,
+    linuxTar: !amendDefaults,
     macos: !amendDefaults,
     prerelease: false,
     sourceRunId: "",
@@ -105,6 +106,7 @@ function parseArgs(argv) {
         gxserverWslWindowsX64: false,
         linuxDeb: false,
         linuxRpm: false,
+        linuxTar: false,
         macos: true,
         windowsArm64: false,
         windowsX64: false,
@@ -113,9 +115,10 @@ function parseArgs(argv) {
       rejectSkipOnAmend(arg);
       options.macos = false;
     } else if (arg === "--macos") options.macos = true;
-    else if (arg === "--linux") options.linuxDeb = options.linuxRpm = true;
+    else if (arg === "--linux") options.linuxDeb = options.linuxRpm = options.linuxTar = true;
     else if (arg === "--linux-deb") options.linuxDeb = true;
     else if (arg === "--linux-rpm") options.linuxRpm = true;
+    else if (arg === "--linux-tar") options.linuxTar = true;
     else if (arg === "--windows") options.windowsX64 = options.windowsArm64 = true;
     else if (arg === "--windows-x64") options.windowsX64 = true;
     else if (arg === "--windows-arm64") options.windowsArm64 = true;
@@ -129,13 +132,16 @@ function parseArgs(argv) {
     else if (arg === "--gxserver-wsl-arm64") options.gxserverWslWindowsArm64 = true;
     else if (arg === "--skip-linux") {
       rejectSkipOnAmend(arg);
-      options.linuxDeb = options.linuxRpm = false;
+      options.linuxDeb = options.linuxRpm = options.linuxTar = false;
     } else if (arg === "--skip-linux-deb") {
       rejectSkipOnAmend(arg);
       options.linuxDeb = false;
     } else if (arg === "--skip-linux-rpm") {
       rejectSkipOnAmend(arg);
       options.linuxRpm = false;
+    } else if (arg === "--skip-linux-tar") {
+      rejectSkipOnAmend(arg);
+      options.linuxTar = false;
     } else if (arg === "--skip-windows") {
       rejectSkipOnAmend(arg);
       options.windowsX64 = options.windowsArm64 = false;
@@ -205,6 +211,7 @@ function validateScope(options, command) {
     options.macos,
     options.linuxDeb,
     options.linuxRpm,
+    options.linuxTar,
     options.windowsX64,
     options.windowsArm64,
     options.android,
@@ -228,6 +235,7 @@ function validateScope(options, command) {
   if (
     (options.linuxDeb ||
       options.linuxRpm ||
+      options.linuxTar ||
       options.windowsX64 ||
       options.gxserverWslWindowsX64) &&
     !options.gxserverLinuxX64
@@ -247,6 +255,7 @@ function requiresGpuiReferenceContract(options) {
     options.macos ||
     options.linuxDeb ||
     options.linuxRpm ||
+    options.linuxTar ||
     options.windowsX64 ||
     options.windowsArm64
   );
@@ -257,6 +266,7 @@ function expectedPlatforms(options) {
     options.macos && "macos-arm64",
     options.linuxDeb && "linux-deb-x64",
     options.linuxRpm && "linux-rpm-x64",
+    options.linuxTar && "linux-tar-x64",
     options.windowsX64 && "windows-x64",
     options.windowsArm64 && "windows-arm64",
     options.android && "android",
@@ -359,6 +369,7 @@ function previewPlan(version, options, windowsSigned, { required }) {
     gxserverWslWindowsX64: options.gxserverWslWindowsX64,
     linuxDeb: options.linuxDeb,
     linuxRpm: options.linuxRpm,
+    linuxTar: options.linuxTar,
     macos: options.macos,
     prerelease: options.prerelease,
     signWindows: windowsSigned,
@@ -459,6 +470,7 @@ if (command === "start") {
       gxserver_wsl_windows_x64: options.gxserverWslWindowsX64,
       linux_deb: options.linuxDeb,
       linux_rpm: options.linuxRpm,
+      linux_tar: options.linuxTar,
       macos: options.macos,
       prerelease: options.prerelease,
       sign_windows: windowsSigned,
@@ -481,6 +493,7 @@ if (command === "start") {
       gxserver_wsl_windows_x64: options.gxserverWslWindowsX64,
       linux_deb: options.linuxDeb,
       linux_rpm: options.linuxRpm,
+      linux_tar: options.linuxTar,
       macos: options.macos,
       sign_windows: windowsSigned,
       update_sparkle: options.updateSparkle,

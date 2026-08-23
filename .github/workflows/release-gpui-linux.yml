@@ -1,16 +1,20 @@
 name: GPUI release - Linux packages
 
 # CDXC:ReleaseChangeAwarePlanning 2026-08-13:
-# One compile, two packages (§7).
+# One compile, three packages (§7).
 #
 # DEB and RPM used to run as two independent jobs that each executed
 # linux-stage.sh — a full `cargo build --release`, CEF download, and JS bundle —
 # to produce two packages from what is byte-for-byte the same staged tree. That
 # was ~13 minutes and one runner of pure duplication per release.
 #
-# Ordering matters: linux-rpm.sh tars the whole package root, so the RPM is
-# built BEFORE linux-deb.sh creates DEBIAN/. Keep that order, or DEBIAN/ leaks
-# into the RPM payload.
+# The prefix-preserving `.tar.zst` (Arch, ubi, mise, and the AUR package) is the
+# third wrapper over the same staged root and costs seconds, not a runner.
+#
+# Ordering matters: linux-rpm.sh and linux-tar.sh archive the whole package
+# root, so both are built BEFORE linux-deb.sh creates DEBIAN/. Keep that order.
+# Both archivers also delete DEBIAN/ defensively, so a future reordering
+# degrades to a rebuilt archive rather than a leaked control directory.
 
 on:
   workflow_call:
@@ -19,7 +23,7 @@ on:
         required: true
         type: string
       packages:
-        description: Comma-separated package formats to produce (deb, rpm, or both)
+        description: Comma-separated package formats to produce (any of deb, rpm, tar)
         required: true
         type: string
       runtime_artifacts_ready:
@@ -40,9 +44,9 @@ on:
       packages:
         description: Linux package formats
         required: true
-        default: deb,rpm
+        default: deb,rpm,tar
         type: choice
-        options: [deb, rpm, "deb,rpm"]
+        options: [deb, rpm, tar, "deb,rpm", "deb,rpm,tar"]
 
 permissions:
   attestations: write
@@ -73,10 +77,19 @@ jobs:
         env:
           REQUESTED_PACKAGES: ${{ inputs.packages }}
         run: |
-          case "$REQUESTED_PACKAGES" in
-            deb | rpm | deb,rpm | rpm,deb) ;;
-            *) echo "packages must be deb, rpm, or deb,rpm; got $REQUESTED_PACKAGES" >&2; exit 2 ;;
-          esac
+          IFS=',' read -ra FORMATS <<<"$REQUESTED_PACKAGES"
+          [[ ${#FORMATS[@]} -gt 0 ]] || { echo "packages must name at least one format" >&2; exit 2; }
+          SEEN=""
+          for FORMAT in "${FORMATS[@]}"; do
+            case "$FORMAT" in
+              deb | rpm | tar) ;;
+              *) echo "packages entries must be deb, rpm, or tar; got '$FORMAT'" >&2; exit 2 ;;
+            esac
+            case " $SEEN " in
+              *" $FORMAT "*) echo "packages repeats $FORMAT" >&2; exit 2 ;;
+            esac
+            SEEN="$SEEN $FORMAT"
+          done
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -111,16 +124,14 @@ jobs:
       - name: Install native packaging dependencies
         run: |
           scripts/release-gpui/retry.sh 3 5 -- sudo apt-get update
-          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
-      - name: Install pinned Zig toolchains
+          scripts/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm zstd libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
+      - name: Install pinned Zig toolchain
         run: |
           scripts/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.15.2 zig@0.16.0
-          ZIG_015="$HOME/.local/share/mise/installs/zig/0.15.2/bin/zig"
-          ZIG_016="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_015 version)" == "0.15.2" ]]
-          [[ "$($ZIG_016 version)" == "0.16.0" ]]
-          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_015" "$ZIG_016" >> "$GITHUB_ENV"
+          scripts/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Install JavaScript dependencies
         run: scripts/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Pre-fetch Zig package dependencies
@@ -164,8 +175,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/release-gpui/linux-stage.sh "${{ inputs.version }}" "$GHOSTEX_LINUX_PACKAGE_ROOT"
-      # RPM first: linux-rpm.sh tars the whole staged root, and linux-deb.sh
-      # creates DEBIAN/ inside it.
+      # RPM and the portable tarball first: both archive the whole staged root,
+      # and linux-deb.sh creates DEBIAN/ inside it.
       - name: Build the RPM package
         if: ${{ contains(inputs.packages, 'rpm') }}
         env:
@@ -190,6 +201,23 @@ jobs:
           sudo test -x "$RPM_TEST_ROOT/opt/ghostex/Ghostex"
           sudo test -x "$RPM_TEST_ROOT/usr/bin/ghostex"
           sudo test -L "$RPM_TEST_ROOT/usr/bin/gx"
+      - name: Build the portable tarball
+        if: ${{ contains(inputs.packages, 'tar') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-gpui/linux-tar.sh "${{ inputs.version }}"
+          # Prove the published archive really installs onto a filesystem root
+          # with its prefix intact: /usr/bin/ghostex wraps hardcoded
+          # /opt/ghostex paths, and gx must arrive as a symlink, not a copy.
+          TAR_PATH="$(realpath "build/release-gpui/${{ inputs.version }}/linux-tar-x64/ghostex-${{ inputs.version }}-linux-x64.tar.zst")"
+          TAR_TEST_ROOT="$(mktemp -d)"
+          trap 'sudo rm -rf "$TAR_TEST_ROOT"' EXIT
+          zstd -dc "$TAR_PATH" | sudo tar -xpf - -C "$TAR_TEST_ROOT"
+          sudo test -x "$TAR_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$TAR_TEST_ROOT/usr/bin/ghostex"
+          sudo test -L "$TAR_TEST_ROOT/usr/bin/gx"
+          sudo test ! -e "$TAR_TEST_ROOT/DEBIAN"
       - name: Build the DEB package
         if: ${{ contains(inputs.packages, 'deb') }}
         env:
@@ -212,6 +240,11 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-rpm-x64/ghostex-${{ inputs.version }}-1.x86_64.rpm
+      - name: Attest the portable tarball
+        if: ${{ contains(inputs.packages, 'tar') }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: build/release-gpui/${{ inputs.version }}/linux-tar-x64/ghostex-${{ inputs.version }}-linux-x64.tar.zst
       - name: Attest the DEB package
         if: ${{ contains(inputs.packages, 'deb') }}
         uses: actions/attest-build-provenance@v4
@@ -234,6 +267,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v7
+        if: ${{ contains(inputs.packages, 'tar') }}
+        with:
+          name: release-linux-tar-x64
+          path: build/release-gpui/${{ inputs.version }}/linux-tar-x64/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
         if: ${{ contains(inputs.packages, 'deb') }}
         with:
           name: release-linux-deb-x64
@@ -245,6 +285,13 @@ jobs:
         with:
           name: release-provenance-linux-rpm-x64
           path: build/release-gpui/${{ inputs.version }}/linux-rpm-x64/provenance.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.plan != '' && contains(inputs.packages, 'tar') }}
+        with:
+          name: release-provenance-linux-tar-x64
+          path: build/release-gpui/${{ inputs.version }}/linux-tar-x64/provenance.json
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v7

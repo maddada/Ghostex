@@ -30,6 +30,7 @@ function parseArgs(argv) {
     gxserverWslWindowsX64: false,
     linuxDeb: false,
     linuxRpm: false,
+    linuxTar: false,
     macos: false,
     updateSparkle: false,
     version: null,
@@ -50,6 +51,7 @@ function parseArgs(argv) {
     } else if (argument === "--macos") flag("macos");
     else if (argument === "--linux-deb") flag("linuxDeb");
     else if (argument === "--linux-rpm") flag("linuxRpm");
+    else if (argument === "--linux-tar") flag("linuxTar");
     else if (argument === "--windows-x64") flag("windowsX64");
     else if (argument === "--windows-arm64") flag("windowsArm64");
     else if (argument === "--android") flag("android");

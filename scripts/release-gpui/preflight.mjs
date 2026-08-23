@@ -39,6 +39,7 @@ const platforms = {
   gxserverWslWindowsX64: enabled("GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64"),
   linuxDeb: enabled("GHOSTEX_RELEASE_LINUX_DEB"),
   linuxRpm: enabled("GHOSTEX_RELEASE_LINUX_RPM"),
+  linuxTar: enabled("GHOSTEX_RELEASE_LINUX_TAR"),
   macos: enabled("GHOSTEX_RELEASE_MACOS"),
   windowsArm64: enabled("GHOSTEX_RELEASE_WINDOWS_ARM64"),
   windowsX64: enabled("GHOSTEX_RELEASE_WINDOWS_X64"),
@@ -69,6 +70,7 @@ function validatePlanAgainstScope(plan) {
     gxserverWslWindowsX64: platforms.gxserverWslWindowsX64,
     linuxDeb: platforms.linuxDeb,
     linuxRpm: platforms.linuxRpm,
+    linuxTar: platforms.linuxTar,
     macos: platforms.macos,
     windowsArm64: platforms.windowsArm64,
     windowsX64: platforms.windowsX64,
@@ -129,6 +131,7 @@ if (platforms.macos && (!platforms.gxserverLinuxX64 || !platforms.gxserverLinuxA
 if (
   (platforms.linuxDeb ||
     platforms.linuxRpm ||
+    platforms.linuxTar ||
     platforms.windowsX64 ||
     platforms.gxserverWslWindowsX64) &&
   !platforms.gxserverLinuxX64
@@ -186,7 +189,12 @@ if (signWindows && (platforms.windowsX64 || platforms.windowsArm64)) {
 const componentManifestPath = process.env.GHOSTEX_RELEASE_COMPONENT_MANIFEST ||
   path.resolve("build/on-demand-components/components.json");
 const componentPlatformsEnabled =
-  platforms.macos || platforms.linuxDeb || platforms.linuxRpm || platforms.windowsX64 || platforms.windowsArm64;
+  platforms.macos ||
+  platforms.linuxDeb ||
+  platforms.linuxRpm ||
+  platforms.linuxTar ||
+  platforms.windowsX64 ||
+  platforms.windowsArm64;
 if (!componentPlatformsEnabled) {
   console.log("Component tag validation skipped: no desktop package is enabled.");
 } else if (existsSync(componentManifestPath)) {

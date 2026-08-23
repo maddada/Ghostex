@@ -51,6 +51,7 @@ const PRODUCT_RUNNER_MINUTES = Object.freeze({
   "gxserver-wsl-windows-x64": 1,
   "linux-deb-x64": 14,
   "linux-rpm-x64": 14,
+  "linux-tar-x64": 14,
   "macos-arm64": 34,
   "windows-arm64": 27,
   "windows-x64": 25,
@@ -76,6 +77,7 @@ export function scopeFromEnv(env = process.env) {
     gxserverWslWindowsX64: flag("GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64"),
     linuxDeb: flag("GHOSTEX_RELEASE_LINUX_DEB"),
     linuxRpm: flag("GHOSTEX_RELEASE_LINUX_RPM"),
+    linuxTar: flag("GHOSTEX_RELEASE_LINUX_TAR"),
     macos: flag("GHOSTEX_RELEASE_MACOS"),
     prerelease: flag("GHOSTEX_RELEASE_PRERELEASE"),
     signWindows: flag("GHOSTEX_RELEASE_SIGN_WINDOWS"),
@@ -277,7 +279,7 @@ function componentJobAction({ arch, components, products }) {
 
 function planJobs({ components, products }) {
   const action = (productId) => products[productId]?.action ?? "skip";
-  const linuxPackages = ["deb", "rpm"].filter((format) => action(`linux-${format}-x64`) === "build");
+  const linuxPackages = ["deb", "rpm", "tar"].filter((format) => action(`linux-${format}-x64`) === "build");
   return {
     android: action("android"),
     code_server_arm64: componentJobAction({ arch: "arm64", components, products }),

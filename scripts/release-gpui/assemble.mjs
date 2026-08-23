@@ -93,6 +93,7 @@ const artifactContracts = new Map([
   ["macos-arm64", [`ghostex-${version}-arm64.dmg`, "bd-darwin-arm64.tar.gz"]],
   ["linux-deb-x64", [`ghostex_${version}_amd64.deb`]],
   ["linux-rpm-x64", [`ghostex-${version}-1.x86_64.rpm`]],
+  ["linux-tar-x64", [`ghostex-${version}-linux-x64.tar.zst`]],
   ["windows-x64", null],
   ["windows-arm64", null],
   ["android", ["ghostex-android.apk"]],

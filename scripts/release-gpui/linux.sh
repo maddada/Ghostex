@@ -11,6 +11,7 @@ release_gpui_require_command bun
 release_gpui_require_command cargo
 release_gpui_require_command dpkg-deb
 release_gpui_require_command rpmbuild
+release_gpui_require_command zstd
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
 if [[ "$(uname -m)" != "x86_64" ]]; then
@@ -133,5 +134,27 @@ RPM="$OUTPUT/ghostex-$VERSION-1.x86_64.rpm"
 cp "$RPM_BUILT" "$RPM"
 rpm -qpi "$RPM" >/dev/null
 
-release_gpui_write_manifest "$OUTPUT" linux-x64 "$VERSION" "$DEB" "$RPM"
+# Prefix-preserving portable tarball for Arch and anything installing straight
+# from the GitHub release (ubi, mise, the AUR package). Same rules as
+# linux-tar.sh: DEBIAN/ is already gone, symlinks stay symlinks (no `-h`), and
+# mtimes are normalized through tar rather than by rewriting the staged tree.
+TARBALL="$OUTPUT/ghostex-${VERSION}-linux-x64.tar.zst"
+TAR_FILE_LIST="$(mktemp)"
+trap 'rm -f "$TAR_FILE_LIST"' EXIT
+(
+  cd "$PACKAGE_ROOT"
+  find . -mindepth 1 -print0 | LC_ALL=C sort -z >"$TAR_FILE_LIST"
+  tar --format=gnu \
+    --owner=0 --group=0 --numeric-owner \
+    --mtime=@946684800 \
+    --no-recursion --null --files-from "$TAR_FILE_LIST" -cf - \
+    | zstd -19 -T0 -q -f -o "$TARBALL" -
+)
+TAR_MEMBERS="$(zstd -dc "$TARBALL" | tar -tf -)"
+if grep -q '^\./DEBIAN' <<<"$TAR_MEMBERS"; then
+  echo "Linux tarball leaked DEBIAN/ control metadata" >&2
+  exit 1
+fi
+
+release_gpui_write_manifest "$OUTPUT" linux-x64 "$VERSION" "$DEB" "$RPM" "$TARBALL"
 printf 'Built Linux x64 release payload in %s\n' "$OUTPUT"

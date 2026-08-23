@@ -21,7 +21,8 @@ import {
   nodeDefinition,
 } from "./product-inputs.mjs";
 
-export const FINGERPRINT_ALGORITHM_REVISION = "fp3";
+/* fp4 (2026-08-23): added the linux-tar-x64 product to the input map. */
+export const FINGERPRINT_ALGORITHM_REVISION = "fp4";
 
 const EXCLUDE_PREFIX = ":(exclude)";
 const PROJECTIONS = new Set(["package-json"]);

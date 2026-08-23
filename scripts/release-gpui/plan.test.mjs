@@ -45,10 +45,10 @@ describe("bootstrap release", () => {
     for (const entry of Object.values(bootstrapPlan.products)) {
       expect(entry.reason).toBe("no provenance baseline for this product; building");
     }
-    expect(bootstrapPlan.expectedPlatforms).toHaveLength(10);
+    expect(bootstrapPlan.expectedPlatforms).toHaveLength(11);
     expect(bootstrapPlan.jobs.reuse_matrix).toEqual([]);
     expect(bootstrapPlan.jobs.validate_windows).toBe(true);
-    expect(bootstrapPlan.jobs.linux_packages).toEqual(["deb", "rpm"]);
+    expect(bootstrapPlan.jobs.linux_packages).toEqual(["deb", "rpm", "tar"]);
   });
 });
 
@@ -69,6 +69,7 @@ describe("Scenario A — desktop-only change", () => {
       "gxserver-wsl-windows-x64": "build",
       "linux-deb-x64": "build",
       "linux-rpm-x64": "build",
+      "linux-tar-x64": "build",
       "macos-arm64": "build",
       "windows-arm64": "build",
       "windows-x64": "build",
@@ -84,7 +85,7 @@ describe("Scenario A — desktop-only change", () => {
   });
 
   test("still publishes every in-scope product and reports the reuse jobs", () => {
-    expect(plan.expectedPlatforms).toHaveLength(10);
+    expect(plan.expectedPlatforms).toHaveLength(11);
     expect(plan.jobs.reuse_matrix).toEqual(["gxserver-linux-x64", "gxserver-linux-arm64", "android"]);
     expect(plan.jobs.gxserver_x64).toBe("reuse");
     expect(plan.jobs.android).toBe("reuse");
@@ -177,6 +178,7 @@ describe("Scenario D — Windows-only fix after a partial failure", () => {
       "gxserver-wsl-windows-x64": "reuse",
       "linux-deb-x64": "reuse",
       "linux-rpm-x64": "reuse",
+      "linux-tar-x64": "reuse",
       "macos-arm64": "reuse",
       "windows-arm64": "build",
       "windows-x64": "build",
@@ -373,6 +375,7 @@ describe("Scenario F — unchanged immutable components", () => {
       scope: defaultScope({
         linuxDeb: false,
         linuxRpm: false,
+        linuxTar: false,
         macos: false,
         updateSparkle: false,
         windowsArm64: false,
@@ -444,6 +447,7 @@ describe("scope, validation, and reporting", () => {
           gxserverWslWindowsX64: false,
           linuxDeb: false,
           linuxRpm: false,
+          linuxTar: false,
           macos: false,
           updateSparkle: false,
           windowsArm64: false,
@@ -496,6 +500,7 @@ describe("scope, validation, and reporting", () => {
       GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64: "true",
       GHOSTEX_RELEASE_LINUX_DEB: "true",
       GHOSTEX_RELEASE_LINUX_RPM: "true",
+      GHOSTEX_RELEASE_LINUX_TAR: "true",
       GHOSTEX_RELEASE_MACOS: "true",
       GHOSTEX_RELEASE_SIGN_WINDOWS: "true",
       GHOSTEX_RELEASE_UPDATE_SPARKLE: "true",

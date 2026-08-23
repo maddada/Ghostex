@@ -13,6 +13,7 @@ Options:
   --disable-linux
   --disable-linux-deb
   --disable-linux-rpm
+  --disable-linux-tar
   --disable-windows-x64
   --disable-windows-arm64
   --disable-android
@@ -39,6 +40,7 @@ const enabled = {
   macos: true,
   linux_deb: true,
   linux_rpm: true,
+  linux_tar: true,
   windows_x64: true,
   windows_arm64: true,
   android: true,
@@ -54,9 +56,10 @@ while (argv.length > 0) {
   const argument = argv.shift();
   switch (argument) {
     case "--disable-macos": enabled.macos = false; break;
-    case "--disable-linux": enabled.linux_deb = enabled.linux_rpm = false; break;
+    case "--disable-linux": enabled.linux_deb = enabled.linux_rpm = enabled.linux_tar = false; break;
     case "--disable-linux-deb": enabled.linux_deb = false; break;
     case "--disable-linux-rpm": enabled.linux_rpm = false; break;
+    case "--disable-linux-tar": enabled.linux_tar = false; break;
     case "--disable-windows-x64": enabled.windows_x64 = false; break;
     case "--disable-windows-arm64": enabled.windows_arm64 = false; break;
     case "--disable-android": enabled.android = false; break;
@@ -80,7 +83,11 @@ if (enabled.macos && (!enabled.gxserver_linux_x64 || !enabled.gxserver_linux_arm
   throw new Error("macOS requires both gxserver Linux runtime assets");
 }
 if (
-  (enabled.linux_deb || enabled.linux_rpm || enabled.windows_x64 || enabled.gxserver_wsl_windows_x64) &&
+  (enabled.linux_deb ||
+    enabled.linux_rpm ||
+    enabled.linux_tar ||
+    enabled.windows_x64 ||
+    enabled.gxserver_wsl_windows_x64) &&
   !enabled.gxserver_linux_x64
 ) {
   throw new Error("Enabled x64 Linux/Windows packages require gxserver Linux x64");

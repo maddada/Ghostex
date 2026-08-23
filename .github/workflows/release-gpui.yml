@@ -45,6 +45,11 @@ on:
         required: true
         default: true
         type: boolean
+      linux_tar:
+        description: Build the portable x64 tar.zst (Arch, mise/ubi, AUR)
+        required: true
+        default: true
+        type: boolean
       windows_x64:
         description: Build Windows x64 installer and portable package
         required: true
@@ -141,6 +146,7 @@ jobs:
       GHOSTEX_RELEASE_MACOS: ${{ inputs.macos }}
       GHOSTEX_RELEASE_LINUX_DEB: ${{ inputs.linux_deb }}
       GHOSTEX_RELEASE_LINUX_RPM: ${{ inputs.linux_rpm }}
+      GHOSTEX_RELEASE_LINUX_TAR: ${{ inputs.linux_tar }}
       GHOSTEX_RELEASE_WINDOWS_X64: ${{ inputs.windows_x64 }}
       GHOSTEX_RELEASE_WINDOWS_ARM64: ${{ inputs.windows_arm64 }}
       GHOSTEX_RELEASE_SIGN_WINDOWS: ${{ inputs.sign_windows }}
@@ -178,10 +184,10 @@ jobs:
           WINDOWS_CODE_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGN_PFX_PASSWORD }}
         run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node scripts/release-gpui/verify-reference-contract.mjs --clean
       - name: Check the Ghostty Zig toolchain pin against the vendored source
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node scripts/release-gpui/check-ghostty-zig-pin.mjs
       - uses: oven-sh/setup-bun@v2
         with:

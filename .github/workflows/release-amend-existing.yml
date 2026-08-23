@@ -37,6 +37,11 @@ on:
         required: true
         default: false
         type: boolean
+      linux_tar:
+        description: Add or replace the portable x64 tar.zst (Arch, mise/ubi, AUR)
+        required: true
+        default: false
+        type: boolean
       windows_x64:
         description: Add or replace Windows x64 installer and portable package
         required: true
@@ -124,6 +129,7 @@ jobs:
           --macos "${{ inputs.macos }}"
           --linux-deb "${{ inputs.linux_deb }}"
           --linux-rpm "${{ inputs.linux_rpm }}"
+          --linux-tar "${{ inputs.linux_tar }}"
           --windows-x64 "${{ inputs.windows_x64 }}"
           --windows-arm64 "${{ inputs.windows_arm64 }}"
           --android "${{ inputs.android }}"
@@ -139,6 +145,7 @@ jobs:
           GHOSTEX_RELEASE_MACOS: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS }}
           GHOSTEX_RELEASE_LINUX_DEB: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB }}
           GHOSTEX_RELEASE_LINUX_RPM: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM }}
+          GHOSTEX_RELEASE_LINUX_TAR: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR }}
           GHOSTEX_RELEASE_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 }}
           GHOSTEX_RELEASE_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_SIGN_WINDOWS: ${{ inputs.sign_windows }}
@@ -168,7 +175,7 @@ jobs:
           WINDOWS_CODE_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGN_PFX_PASSWORD }}
         run: node scripts/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
-        if: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 == 'true' }}
+        if: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 == 'true' }}
         run: node scripts/release-gpui/verify-reference-contract.mjs --clean
       - uses: oven-sh/setup-bun@v2
         with:
@@ -187,6 +194,7 @@ jobs:
           GHOSTEX_RELEASE_MACOS: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS }}
           GHOSTEX_RELEASE_LINUX_DEB: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB }}
           GHOSTEX_RELEASE_LINUX_RPM: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM }}
+          GHOSTEX_RELEASE_LINUX_TAR: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR }}
           GHOSTEX_RELEASE_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 }}
           GHOSTEX_RELEASE_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_SIGN_WINDOWS: ${{ inputs.sign_windows }}
@@ -216,6 +224,7 @@ jobs:
           GHOSTEX_RELEASE_MACOS: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS }}
           GHOSTEX_RELEASE_LINUX_DEB: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB }}
           GHOSTEX_RELEASE_LINUX_RPM: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM }}
+          GHOSTEX_RELEASE_LINUX_TAR: ${{ steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR }}
           GHOSTEX_RELEASE_WINDOWS_X64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 }}
           GHOSTEX_RELEASE_WINDOWS_ARM64: ${{ steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 }}
           GHOSTEX_RELEASE_ANDROID: ${{ steps.scope.outputs.GHOSTEX_RELEASE_ANDROID }}

@@ -115,7 +115,7 @@ describe("plan-cli workflow outputs", () => {
     expect(outputs.expected_platforms.split(",")).toEqual(plan.expectedPlatforms);
     expect(outputs.job_macos).toBe(plan.jobs.macos);
     expect(outputs.job_validate_windows).toBe("true");
-    expect(outputs.linux_packages).toBe("deb,rpm");
+    expect(outputs.linux_packages).toBe("deb,rpm,tar");
     expect(JSON.parse(outputs.reuse_matrix)).toEqual([]);
     expect(outputs.reuse_count).toBe("0");
   });

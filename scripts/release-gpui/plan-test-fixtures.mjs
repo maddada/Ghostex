@@ -82,6 +82,7 @@ const FIXTURE_FILES = {
   "scripts/release-gpui/linux-deb.sh": "#!/usr/bin/env bash\n",
   "scripts/release-gpui/linux-rpm.sh": "#!/usr/bin/env bash\n",
   "scripts/release-gpui/linux-stage.sh": "#!/usr/bin/env bash\n",
+  "scripts/release-gpui/linux-tar.sh": "#!/usr/bin/env bash\n",
   "scripts/release-gpui/macos-finalize.sh": "#!/usr/bin/env bash\n",
   "scripts/release-gpui/macos-notary.sh": "#!/usr/bin/env bash\n",
   "scripts/release-gpui/macos-prerequisite.sh": "#!/usr/bin/env bash\n",
@@ -104,7 +105,6 @@ const FIXTURE_FILES = {
   "packages/core-ui/sidebar-app.tsx": "export const SidebarApp = () => null;\n",
   "skills/ghostex-cli/SKILL.md": "# skill\n",
   "tsconfig.json": "{\"compilerOptions\":{}}\n",
-  ".dependencies/tui2/src/main.rs": "fn main() {}\n",
 };
 
 function git(dir, args) {

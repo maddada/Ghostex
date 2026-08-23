@@ -72,6 +72,7 @@ describe("release product input map", () => {
       "android",
       "linux-deb-x64",
       "linux-rpm-x64",
+      "linux-tar-x64",
       "windows-x64",
       "windows-arm64",
       "gxserver-wsl-windows-x64",
@@ -89,6 +90,7 @@ describe("release product input map", () => {
     ]);
     expect(productDefinition("linux-deb-x64").artifacts(version)).toEqual(["ghostex_7.8.0_amd64.deb"]);
     expect(productDefinition("linux-rpm-x64").artifacts(version)).toEqual(["ghostex-7.8.0-1.x86_64.rpm"]);
+    expect(productDefinition("linux-tar-x64").artifacts(version)).toEqual(["ghostex-7.8.0-linux-x64.tar.zst"]);
     expect(productDefinition("android").artifacts(version)).toEqual(["ghostex-android.apk"]);
     expect(productDefinition("gxserver-linux-arm64").artifacts(version)).toEqual(["gxserver-linux-arm64.tar.gz"]);
     expect(productDefinition("gxserver-wsl-windows-x64").artifacts(version)).toEqual([
@@ -153,7 +155,14 @@ describe("release product input map", () => {
 
   test("encodes the cross-cutting invalidation rules", () => {
     const specs = (nodeId) => nodePathspecs(nodeId).map((declaration) => declaration.pathspec);
-    for (const desktop of ["macos-arm64", "linux-deb-x64", "linux-rpm-x64", "windows-x64", "windows-arm64"]) {
+    for (const desktop of [
+      "macos-arm64",
+      "linux-deb-x64",
+      "linux-rpm-x64",
+      "linux-tar-x64",
+      "windows-x64",
+      "windows-arm64",
+    ]) {
       /* Rule 1: protocol coupling and the embedded gxserver payload. */
       expect(specs(desktop)).toContain("server/**");
       expect(specs(desktop)).toContain("packages/paths/**");
@@ -196,6 +205,7 @@ describe("release product input map", () => {
       "gxserver-wsl-windows-x64",
       "linux-deb-x64",
       "linux-rpm-x64",
+      "linux-tar-x64",
       "macos-arm64",
       "windows-arm64",
       "windows-x64",
@@ -222,6 +232,7 @@ describe("release product input map", () => {
       "code-server": ["linux-arm64", "windows-arm64"],
     });
     expect(componentPlatformRequirements("linux-deb-x64")).toEqual({ cef: ["linux-x64"] });
+    expect(componentPlatformRequirements("linux-tar-x64")).toEqual({ cef: ["linux-x64"] });
     expect(componentPlatformRequirements("android")).toEqual({});
   });
 
@@ -245,12 +256,12 @@ describe("pinned toolchain values track the workflows", () => {
     const windows = workflow("release-gpui-windows.yml");
     const android = workflow("release-gpui-android.yml");
     expect(macos).toContain(`bun-version: ${TOOLCHAIN.bun}`);
-    expect(macos).toContain(`zig@${TOOLCHAIN.zig015} zig@${TOOLCHAIN.zig016}`);
-    expect(macos).toContain('"$ZIG_015" "$ZIG_016" "$ZIG_016" >> "$GITHUB_ENV"');
-    expect(workflow("release-gpui-linux.yml")).toContain(`zig@${TOOLCHAIN.zig015} zig@${TOOLCHAIN.zig016}`);
-    expect(workflow("release-gpui-linux.yml")).toContain('"$ZIG_015" "$ZIG_016" >> "$GITHUB_ENV"');
-    expect(readFileSync("scripts/release-gpui/macos.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig016}"`);
-    expect(readFileSync("scripts/release-gpui/macos-prerequisite.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig016}"`);
+    expect(macos).toContain(`mise" install zig@${TOOLCHAIN.zig}\n`);
+    expect(macos).toContain('"$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"');
+    expect(workflow("release-gpui-linux.yml")).toContain(`mise" install zig@${TOOLCHAIN.zig}\n`);
+    expect(workflow("release-gpui-linux.yml")).toContain('"$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"');
+    expect(readFileSync("scripts/release-gpui/macos.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig}"`);
+    expect(readFileSync("scripts/release-gpui/macos-prerequisite.sh", "utf8")).toContain(`== "${TOOLCHAIN.zig}"`);
     expect(macos).toContain(`RIPGREP_VERSION: ${TOOLCHAIN.ripgrepVersion}`);
     expect(macos).toContain(`RIPGREP_PACKAGE_VERSION: ${TOOLCHAIN.ripgrepPackageVersion}`);
     expect(macos).toContain(`RIPGREP_SHA256: ${TOOLCHAIN.ripgrepSha256}`);
@@ -262,18 +273,25 @@ describe("pinned toolchain values track the workflows", () => {
     expect(android).toContain(`"platforms;${TOOLCHAIN.androidPlatform}"`);
     expect(android).toContain(`"build-tools;${TOOLCHAIN.androidBuildTools}"`);
     expect(android).toContain(`"ndk;${TOOLCHAIN.androidNdk}"`);
-    expect(readFileSync("scripts/release-gpui/prepare-zig.ps1", "utf8")).toContain(`$Version = "${TOOLCHAIN.zig016}"`);
+    expect(readFileSync("scripts/release-gpui/prepare-zig.ps1", "utf8")).toContain(`$Version = "${TOOLCHAIN.zig}"`);
   });
 
   /*
-   * The 7.8.0 Ghostty-sync guard: the vendored source's own minimum_zig_version
-   * is the authority for TOOLCHAIN.zig016. The standalone check script runs the
-   * same assertion pre-dispatch; this test keeps it from rotting.
+   * The 7.8.0 Ghostty-sync guard: each vendored Zig source's own
+   * minimum_zig_version is the authority for TOOLCHAIN.zig. The standalone check
+   * script runs the same assertion pre-dispatch; this test keeps it from rotting.
+   * zmx joined the check once its fork was re-ported onto upstream/main (0.16),
+   * which made TOOLCHAIN.zig the repo's only Zig pin.
    */
-  test("the Ghostty Zig pin satisfies the vendored source's declared minimum", async () => {
-    const { checkGhosttyZigPin, readGhosttyMinimumZig } = await import("./check-ghostty-zig-pin.mjs");
-    expect(() => checkGhosttyZigPin({ minimum: readGhosttyMinimumZig(), pin: TOOLCHAIN.zig016 })).not.toThrow();
-    expect(() => checkGhosttyZigPin({ minimum: "0.17.0", pin: TOOLCHAIN.zig016 })).toThrow(/requires Zig 0\.17\.0/u);
+  test("the vendored Zig sources' declared minimums are satisfied by the single pin", async () => {
+    const { checkGhosttyZigPin, readGhosttyMinimumZig, readZmxMinimumZig } = await import(
+      "./check-ghostty-zig-pin.mjs"
+    );
+    expect(() => checkGhosttyZigPin({ minimum: readGhosttyMinimumZig(), pin: TOOLCHAIN.zig })).not.toThrow();
+    expect(() => checkGhosttyZigPin({ minimum: "0.17.0", pin: TOOLCHAIN.zig })).toThrow(/requires Zig 0\.17\.0/u);
+    expect(() =>
+      checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: "zmx" }),
+    ).not.toThrow();
   });
 
   test("Beads and code-server identity pins match their source of truth", () => {

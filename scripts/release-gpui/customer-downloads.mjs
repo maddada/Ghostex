@@ -47,6 +47,7 @@ export function customerDownloadEntries(version, assetNames) {
       downloads: [
         ["x64 Debian package", `ghostex_${version}_amd64.deb`],
         ["x64 RPM package", `ghostex-${version}-1.x86_64.rpm`],
+        ["x64 tarball (Arch & other distros, mise/ubi)", `ghostex-${version}-linux-x64.tar.zst`],
       ],
     },
   ];

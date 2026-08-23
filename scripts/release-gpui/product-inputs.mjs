@@ -33,8 +33,11 @@ export const TOOLCHAIN = Object.freeze({
   ripgrepSha256: "2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6",
   ripgrepVersion: "v15.0.1",
   vpk: "1.2.0",
-  zig015: "0.15.2",
-  zig016: "0.16.0",
+  /*
+   * One Zig toolchain for the whole repo. zmx pinned 0.15.2 until its fork was
+   * re-ported onto upstream/main (Zig 0.16), which was the last 0.15 consumer.
+   */
+  zig: "0.16.0",
 });
 
 /* Mirrors scripts/beads-release.mjs; asserted equal in product-inputs.test.mjs. */
@@ -153,8 +156,6 @@ const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: "packages/paths/**" },
   { pathspec: "packages/find/**" },
   { pathspec: ":(exclude)packages/find/target" },
-  { pathspec: ".dependencies/tui2/**" },
-  { pathspec: ":(exclude).dependencies/tui2/target" },
   { pathspec: ".dependencies/zmx" },
   { pathspec: "scripts/build-remote-gxserver-linux-release.sh" },
   { pathspec: "scripts/beads-release.mjs" },
@@ -208,17 +209,28 @@ function gxserverProduct(arch) {
       beadsPackageId: BEADS_PINS.packageId,
       beadsPinnedRef: BEADS_PINS.sourceRevision,
       goVersionFile: TOOLCHAIN.goVersionFile,
-      zig015: TOOLCHAIN.zig015,
-      zig016: TOOLCHAIN.zig016,
+      zig: TOOLCHAIN.zig,
     },
     versionStamped: false,
   };
 }
 
+/*
+ * The three Linux x64 desktop packages are one compile and three wrappers over
+ * the same staged package root (§7): .deb, .rpm, and the prefix-preserving
+ * `.tar.zst` that Arch, ubi, and mise install straight from the release page.
+ */
+const LINUX_DESKTOP_ARTIFACT_NAMES = Object.freeze({
+  deb: (version) => [`ghostex_${version}_amd64.deb`],
+  rpm: (version) => [`ghostex-${version}-1.x86_64.rpm`],
+  tar: (version) => [`ghostex-${version}-linux-x64.tar.zst`],
+});
+
+const LINUX_DESKTOP_SCOPE_FLAGS = Object.freeze({ deb: "linuxDeb", rpm: "linuxRpm", tar: "linuxTar" });
+
 function linuxDesktopProduct(format) {
   return {
-    artifacts: (version) =>
-      format === "deb" ? [`ghostex_${version}_amd64.deb`] : [`ghostex-${version}-1.x86_64.rpm`],
+    artifacts: LINUX_DESKTOP_ARTIFACT_NAMES[format],
     composedFrom: ["gxserver-linux-x64", "cef"],
     id: `linux-${format}-x64`,
     kind: "product",
@@ -229,13 +241,12 @@ function linuxDesktopProduct(format) {
       { pathspec: ".github/workflows/release-gpui-linux.yml" },
     ],
     platform: { arch: "x64", os: "linux", runnerLabel: "ubuntu-24.04" },
-    scopeFlag: format === "deb" ? "linuxDeb" : "linuxRpm",
+    scopeFlag: LINUX_DESKTOP_SCOPE_FLAGS[format],
     sideFiles: [],
     signing: { mode: "unsigned" },
     values: {
       packageFormat: format,
-      zig015: TOOLCHAIN.zig015,
-      zig016: TOOLCHAIN.zig016,
+      zig: TOOLCHAIN.zig,
     },
     versionStamped: true,
   };
@@ -267,7 +278,7 @@ function windowsProduct(arch) {
       /* sign_windows changes the produced bytes and the release notes. */
       signingMode: (context) => (context.scope.signWindows ? "authenticode" : "unsigned"),
       vpk: TOOLCHAIN.vpk,
-      zigPin: TOOLCHAIN.zig016,
+      zigPin: TOOLCHAIN.zig,
     },
     versionStamped: true,
   };
@@ -393,6 +404,7 @@ const PRODUCT_LIST = [
   },
   linuxDesktopProduct("deb"),
   linuxDesktopProduct("rpm"),
+  linuxDesktopProduct("tar"),
   windowsProduct("x64"),
   windowsProduct("arm64"),
   wslProduct("x64"),
@@ -437,8 +449,7 @@ const PRODUCT_LIST = [
       signingMode: "developer-id+notarized",
       sparkleFeedUrl: SPARKLE_FEED_URL,
       updateSparkle: (context) => String(Boolean(context.scope.updateSparkle)),
-      zig015: TOOLCHAIN.zig015,
-      zig016: TOOLCHAIN.zig016,
+      zig: TOOLCHAIN.zig,
     },
     versionStamped: true,
   },
@@ -552,7 +563,7 @@ export function componentPlatformRequirements(productId) {
   if (productId === "macos-arm64") {
     return { cef: ["darwin-arm64"], "code-server": ["darwin-arm64", "linux-arm64", "linux-x64"] };
   }
-  if (productId === "linux-deb-x64" || productId === "linux-rpm-x64") {
+  if (productId === "linux-deb-x64" || productId === "linux-rpm-x64" || productId === "linux-tar-x64") {
     return { cef: ["linux-x64"] };
   }
   if (productId === "windows-x64" || productId === "windows-arm64") {
@@ -571,6 +582,7 @@ export function defaultScope(overrides = {}) {
     gxserverWslWindowsX64: true,
     linuxDeb: true,
     linuxRpm: true,
+    linuxTar: true,
     macos: true,
     prerelease: false,
     signWindows: false,

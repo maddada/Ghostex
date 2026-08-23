@@ -32,7 +32,9 @@ export function productIdsFromScopeFlags(scope) {
 export function packDependencies(productId) {
   productDefinition(productId);
   if (productId === "macos-arm64") return ["gxserver-linux-x64", "gxserver-linux-arm64"];
-  if (productId === "linux-deb-x64" || productId === "linux-rpm-x64") return ["gxserver-linux-x64"];
+  if (productId === "linux-deb-x64" || productId === "linux-rpm-x64" || productId === "linux-tar-x64") {
+    return ["gxserver-linux-x64"];
+  }
   if (productId === "windows-x64" || productId === "gxserver-wsl-windows-x64") return ["gxserver-linux-x64"];
   if (productId === "windows-arm64" || productId === "gxserver-wsl-windows-arm64") return ["gxserver-linux-arm64"];
   return [];
@@ -46,7 +48,16 @@ export function companionProducts(productId) {
 }
 
 export function consumersOfGxserver(arch) {
-  if (arch === "x64") return ["windows-x64", "gxserver-wsl-windows-x64", "linux-deb-x64", "linux-rpm-x64", "macos-arm64"];
+  if (arch === "x64") {
+    return [
+      "windows-x64",
+      "gxserver-wsl-windows-x64",
+      "linux-deb-x64",
+      "linux-rpm-x64",
+      "linux-tar-x64",
+      "macos-arm64",
+    ];
+  }
   if (arch === "arm64") return ["windows-arm64", "gxserver-wsl-windows-arm64", "macos-arm64"];
   throw new Error(`Unknown gxserver architecture: ${arch}`);
 }
@@ -250,6 +261,7 @@ export function scopeEnvFromFlags(scopeFlags) {
     GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64: String(Boolean(scopeFlags.gxserverWslWindowsX64)),
     GHOSTEX_RELEASE_LINUX_DEB: String(Boolean(scopeFlags.linuxDeb)),
     GHOSTEX_RELEASE_LINUX_RPM: String(Boolean(scopeFlags.linuxRpm)),
+    GHOSTEX_RELEASE_LINUX_TAR: String(Boolean(scopeFlags.linuxTar)),
     GHOSTEX_RELEASE_MACOS: String(Boolean(scopeFlags.macos)),
     GHOSTEX_RELEASE_WINDOWS_ARM64: String(Boolean(scopeFlags.windowsArm64)),
     GHOSTEX_RELEASE_WINDOWS_X64: String(Boolean(scopeFlags.windowsX64)),

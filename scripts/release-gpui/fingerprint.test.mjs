@@ -48,7 +48,7 @@ describe("release fingerprint algorithm", () => {
     };
     const first = computeNodeFingerprint({ ...shared, nodeId: "alpha" });
     const second = computeNodeFingerprint({ ...shared, nodeId: "beta" });
-    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp3");
+    expect(FINGERPRINT_ALGORITHM_REVISION).toBe("fp4");
     expect(first.fingerprint).not.toBe(second.fingerprint);
     expect(first.inputs.paths).toEqual([
       { digest: expect.stringMatching(/^[0-9a-f]{64}$/u), entryCount: 1, pathspec: "package.json" },
@@ -174,6 +174,7 @@ describe("release fingerprint algorithm", () => {
       "gxserver-wsl-windows-x64",
       "linux-deb-x64",
       "linux-rpm-x64",
+      "linux-tar-x64",
       "macos-arm64",
       "windows-arm64",
       "windows-x64",
@@ -249,7 +250,7 @@ describe("fingerprint helpers", () => {
         { digest: "1", entryCount: 1, pathspec: "apps/desktop/**" },
         { digest: "2", entryCount: 1, pathspec: "packages/shared/**" },
       ],
-      values: { zig015: "0.15.2" },
+      values: { zig: "0.16.0" },
     };
     const baseline = {
       composed: { "gxserver-linux-x64": "bb" },
@@ -257,16 +258,16 @@ describe("fingerprint helpers", () => {
         { digest: "1", entryCount: 1, pathspec: "apps/desktop/**" },
         { digest: "9", entryCount: 1, pathspec: "packages/shared/**" },
       ],
-      values: { zig015: "0.15.1" },
+      values: { zig: "0.15.2" },
     };
     const difference = explainFingerprintDifference(current, baseline);
     expect(difference).toEqual({
       composed: ["gxserver-linux-x64"],
       paths: ["packages/shared/**"],
-      values: ["zig015"],
+      values: ["zig"],
     });
     expect(describeFingerprintDifference(difference)).toBe(
-      "packages/shared/**; values zig015; embedded gxserver-linux-x64",
+      "packages/shared/**; values zig; embedded gxserver-linux-x64",
     );
   });
 });

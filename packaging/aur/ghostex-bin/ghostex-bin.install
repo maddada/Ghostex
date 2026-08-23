@@ -1,0 +1,25 @@
+# Arch ships pacman hooks for the icon cache (gtk-update-icon-cache) and the
+# desktop database (desktop-file-utils), so this scriptlet deliberately does not
+# run gtk-update-icon-cache or update-desktop-database itself. Doing so by hand
+# is redundant on Arch and is flagged by namcap.
+
+_ghostex_notice() {
+	cat <<'EOF'
+
+Ghostex does not bundle Chromium. The first GUI launch downloads the CEF
+browser runtime (~346 MB) into your user cache; that download only happens
+once per component version.
+
+  Launch:  ghostex        (the `gx` command is the same binary)
+  Payload: /opt/ghostex
+
+EOF
+}
+
+post_install() {
+	_ghostex_notice
+}
+
+post_upgrade() {
+	_ghostex_notice
+}
