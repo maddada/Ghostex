@@ -232,7 +232,7 @@ where the two differ, this section wins:
 - Unknown commands → log event (kind `message`) so gaps are visible, never throw.
 
 Status derivation rules (mirror `server/src/agent_hooks/api.rs read_hook_status` +
-`gpui_ghostex_cli_status_message` in `apps/desktop/src/app/helpers/os_cli.rs`):
+`gpui_ghostex_cli_status_message` in `apps/desktop/src/app/helpers/os_cli/cli_status.rs`):
 - per-agent status: `cliMissing` if `!cliInstalled`; else `installed` if
   `hookState === "installed"`; `updateRequired` if `"outdated"`; else `missing`.
 - firstLaunchSetup "hooks ready" gate (real fn `areFirstLaunchAgentHooksReady`): ANY of

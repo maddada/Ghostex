@@ -1012,7 +1012,7 @@ pub(crate) enum CommandPaneGroupBorderWidth {
 
 
 impl CommandPaneGroupBorderWidth {
-    #[allow(dead_code)] // no caller: group border widths are applied inline in render.rs; kept with the border-width chrome model
+    #[allow(dead_code)] // no caller: group border widths are applied inline in render/command_pane_tabs_core.rs; kept with the border-width chrome model
     pub(crate) fn px(self) -> u8 {
         match self {
             CommandPaneGroupBorderWidth::Focused => COMMAND_PANE_GROUP_FOCUSED_BORDER_WIDTH,
