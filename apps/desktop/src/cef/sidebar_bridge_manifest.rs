@@ -402,13 +402,12 @@ pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurface
     },
     /*
     CDXC:AgentHistorySearch 2026-08-20:
-    find.html is the Find pane surface — the GUI for `gx f`. It registers here
-    for the same reason chat.html does: the renderer installs the bounded
-    ghostexAppModalHost shim for this bundled entry so the page can post its
-    focus/launch/close requests to Rust, and nothing else. It never receives the
-    native-window identity fields, and it reuses the session-chat gxserver
-    bootstrap process message, which installs only
-    `window.ghostexGpui.gxserverBootstrap`.
+    find.html is the Search by Prompt child-window page — the GUI for `gx f`.
+    The renderer installs the bounded ghostexAppModalHost shim for this bundled
+    entry so the page can post its focus/launch/close requests to Rust, and
+    nothing else. It never receives the React modal-host identity fields, and
+    it reuses the narrow gxserver bootstrap process message, which installs
+    only `window.ghostexGpui.gxserverBootstrap`.
     */
     AppModalHostBridgeSurfaceSpec {
         surface: AppModalHostBridgeSurface::FindPrompts,

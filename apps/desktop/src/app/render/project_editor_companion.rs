@@ -210,12 +210,8 @@ impl GhostexGpuiApp {
         chat mode. The way back is the chat page's in-DOM cluster.
         */
         if let Some(session_id) = session_id {
-            // CDXC:AgentHistorySearch 2026-08-20: Find swaps the companion slot
-            // on the same terms as chat, so both go through one body.
             let pane_surface_content = if self.agents_chat_mode_sessions.contains(&session_id) {
                 Some(self.render_session_chat_surface_content(session_id))
-            } else if self.agents_find_mode_sessions.contains(&session_id) {
-                Some(self.render_session_find_surface_content(session_id))
             } else {
                 None
             };

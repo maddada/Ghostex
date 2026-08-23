@@ -2028,18 +2028,6 @@ impl GhostexGpuiApp {
                 if self.run_gpui_terminal_toolbar_hotkey_action(action_id, window, cx) {
                     return;
                 }
-                if action_id == "openFindPrompts" {
-                    /*
-                    CDXC:AgentHistorySearch 2026-08-20:
-                    Find swaps the focused pane the way Chat View does, so it
-                    resolves the focused Agents session directly rather than
-                    requiring a focused terminal view — the terminal is hidden
-                    behind the Find surface while it is open, and the same id
-                    must always be able to toggle back out.
-                    */
-                    self.toggle_agents_session_find_mode_for_focused_session(cx);
-                    return;
-                }
                 if action_id == "toggleChatView" {
                     /*
                     CDXC:GPUISessionChatSurface 2026-07-31:

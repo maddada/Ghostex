@@ -1148,6 +1148,17 @@ impl GhostexGpuiApp {
                 return;
             };
             url
+        } else if modal == GpuiAppModalKind::FindPrompts {
+            let Some(url) = self.agents_find_runtime_url() else {
+                if let Some(window) = source_window {
+                    window.push_notification(
+                        Notification::warning("The GPUI Search by Prompt bundle is missing."),
+                        cx,
+                    );
+                }
+                return;
+            };
+            url
         } else {
             GHOSTEX_TUTORIAL_VIDEO_URL.to_string()
         };
@@ -1190,6 +1201,7 @@ impl GhostexGpuiApp {
                     modal,
                     open_message,
                     sidebar_state_message,
+                    self.sidebar_gxserver_bootstrap.clone(),
                     event_handler,
                     page_load_end_handler,
                     cx,

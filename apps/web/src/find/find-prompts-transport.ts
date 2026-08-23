@@ -21,8 +21,8 @@ import { rpcForMachine } from "../connections/connection-registry";
 export interface WebFindPromptsHostActions {
   /** Brings an already-open session tab to the front. */
   focusSession(params: { projectId: string; sessionId: string }): void;
-  /** Leaves Find and shows the pane's terminal again. */
-  switchToTerminal(): void;
+  /** Closes the app-level Search by Prompt modal. */
+  close(): void;
 }
 
 export function createFindPromptsTransport(
@@ -31,7 +31,7 @@ export function createFindPromptsTransport(
 ): FindPromptsTransport {
   return {
     close() {
-      host.switchToTerminal();
+      host.close();
     },
     async copyText(text) {
       await navigator.clipboard.writeText(text);

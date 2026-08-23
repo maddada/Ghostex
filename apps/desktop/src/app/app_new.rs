@@ -210,8 +210,6 @@ impl GhostexGpuiApp {
                 ),
                 pending_agents_chat_launch_intents: HashSet::new(),
                 agents_chat_surfaces: HashMap::new(),
-                agents_find_mode_sessions: HashSet::new(),
-                agents_find_surfaces: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),
                 pending_session_chat_composer_focus: None,
                 pending_session_chat_composer_insert: HashMap::new(),

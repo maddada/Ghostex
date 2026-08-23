@@ -1503,7 +1503,6 @@ impl GhostexGpuiApp {
             .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
             .filter(|session_id| {
                 !self.agents_chat_mode_sessions.contains(session_id)
-                    && !self.agents_find_mode_sessions.contains(session_id)
             })
             .filter(|session_id| {
                 self.agents_session_chat_transcript_agent(*session_id)
@@ -1822,12 +1821,11 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:AgentHistorySearch 2026-08-20:
-    The Find pane surface. It mirrors the Session Chat surface deliberately —
-    same CefSurface construction, same app-modal host bridge, same reconcile
-    shape — because it occupies the same pane rectangle under the same rules.
-    What it does not need is session identity: prompt history is machine-wide,
-    so the page only wants the local gxserver bootstrap and the current theme.
+    CDXC:AgentHistorySearchModal 2026-08-23:
+    Search by Prompt is a native child-window page, matching the Settings
+    ownership model instead of replacing a pane body. Prompt history is
+    machine-wide, so the page URL carries only the current visual theme while
+    the child surface receives the local gxserver bootstrap separately.
     */
     pub(crate) fn agents_find_runtime_url(&self) -> Option<String> {
         let base_url = gpui_cef_html_entry_url("GHOSTEX_GPUI_FIND_URL", "find.html").ok()?;
@@ -1847,57 +1845,18 @@ impl GhostexGpuiApp {
         ))
     }
 
-    pub(crate) fn find_prompts_host_bridge_event_handler(
-        &self,
-        session_id: TerminalSessionId,
-        cx: &mut gpui::Context<Self>,
-    ) -> cef::AppModalHostBridgeEventHandler {
-        let app = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        let foreground = cx.foreground_executor().clone();
-
-        Rc::new(move |event: cef::AppModalHostBridgeEvent| {
-            let cef::AppModalHostBridgeEvent::Message(payload) = event else {
-                return;
-            };
-            let app = app.clone();
-            let mut async_cx = async_cx.clone();
-            foreground
-                .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        this.receive_find_prompts_host_action(session_id, &payload, window, cx);
-                    });
-                })
-                .detach();
-        })
-    }
-
-    /*
-    The Find page decides nothing about the workspace. gxserver resolves what
-    opening a result means (focus a live session, or run a command in a folder)
-    and the page forwards that decision here, because only Rust can move panes
-    and only the sidebar runtime can create sessions.
-    */
-    pub(crate) fn receive_find_prompts_host_action(
+    pub(crate) fn receive_find_prompts_modal_host_action(
         &mut self,
-        session_id: TerminalSessionId,
-        payload: &str,
+        message: &serde_json::Value,
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(payload) else {
-            return;
-        };
-        if message.get("type").and_then(serde_json::Value::as_str) != Some("findPromptsHostAction")
-        {
-            return;
-        }
         let Some(action) = message.get("action").and_then(serde_json::Value::as_str) else {
             return;
         };
         match action {
             "close" => {
-                self.toggle_agents_session_find_mode(session_id, cx);
+                self.close_gpui_app_modal_window_and_restore_command_focus(cx);
             }
             "focusSession" => {
                 let project_id = message
@@ -1905,25 +1864,22 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default()
                     .to_string();
-                let gxserver_session_id = message
+                let session_id = message
                     .get("sessionId")
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default()
                     .to_string();
-                if project_id.is_empty() || gxserver_session_id.is_empty() {
+                if project_id.is_empty() || session_id.is_empty() {
                     return;
                 }
-                // Leave Find first: the pane the focused session lands in may be
-                // this one, and a surfaced terminal must not stay hidden behind
-                // a search that already did its job.
-                self.toggle_agents_session_find_mode(session_id, cx);
+                self.close_gpui_app_modal_window_and_restore_command_focus(cx);
                 self.focus_local_workspace_terminal_from_message(
                     &GpuiSidebarWorkspaceTerminalFocusMessage {
                         force_remount: false,
                         placement_target_session_id: None,
                         preferred_interface: GpuiPreferredAgentInterface::Terminal,
                         project_id,
-                        session_id: gxserver_session_id,
+                        session_id,
                     },
                     cx,
                 );
@@ -1947,13 +1903,7 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default()
                     .to_string();
-                self.toggle_agents_session_find_mode(session_id, cx);
-                /*
-                Reuse the existing `ghostex://terminal` launcher contract: the
-                sidebar runtime registers (or reuses) the daemon project at that
-                folder and starts one agent session with this exact command.
-                Rust does not gain a second session factory for Find.
-                */
+                self.close_gpui_app_modal_window_and_restore_command_focus(cx);
                 self.dispatch_gpui_os_integration_command_message(
                     serde_json::json!({
                         "action": "createQuickTerminal",
@@ -1968,201 +1918,14 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn toggle_agents_session_find_mode_for_focused_session(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(session_id) = self.focused_agents_or_companion_shell_session_id() else {
-            return;
-        };
-        self.toggle_agents_session_find_mode(session_id, cx);
-    }
-
-    pub(crate) fn toggle_agents_session_find_mode(
-        &mut self,
-        session_id: TerminalSessionId,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.agents_find_mode_sessions.remove(&session_id) {
-            // Find's CEF child owns keyboard focus while visible. Queue the
-            // canonical terminal focus handoff for the exact shell-focused slot
-            // so the terminal reclaims first responder as it remounts.
-            match self.focused_terminal_text_mount_target() {
-                Some(FocusedTerminalTextMountTarget::Agents(slot_id))
-                    if slot_id.session_id == session_id =>
-                {
-                    self.request_agents_terminal_text_focus_handoff(slot_id);
-                }
-                Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id))
-                    if slot_id.session_id == session_id =>
-                {
-                    self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
-                }
-                _ => {}
-            }
-            self.reconcile_agents_find_surfaces(cx);
-            cx.notify();
-            return;
-        }
-        // Chat and Find claim the same pane rectangle, so entering one always
-        // leaves the other.
-        if self.agents_chat_mode_sessions.remove(&session_id) {
-            self.reconcile_agents_pane_surfaces(cx);
-            self.persist_shell_layout_state();
-        }
-        self.agents_find_mode_sessions.insert(session_id);
-        self.reconcile_agents_find_surfaces(cx);
-        cx.notify();
-    }
-
-    pub(crate) fn ensure_agents_find_surface(
-        &mut self,
-        session_id: TerminalSessionId,
-        cx: &mut gpui::Context<Self>,
-    ) -> Option<Entity<CefSurface>> {
-        if let Some(surface) = self.agents_find_surfaces.get(&session_id) {
-            return Some(surface.clone());
-        }
-        // Prompt history is local to this machine, so Find always talks to the
-        // local daemon. Without its bootstrap the page can do nothing; the next
-        // visibility reconcile retries once the bootstrap arrives.
-        let bootstrap = self.sidebar_gxserver_bootstrap.clone()?;
-        let url = self.agents_find_runtime_url()?;
-        let host_action_handler = self.find_prompts_host_bridge_event_handler(session_id, cx);
-        let theme = gpui_session_chat_theme_from_settings(
-            shared_settings::shared_sidebar_settings_snapshot().object(),
-        );
-        let prepaint_background = if theme == "light" {
-            CEF_LIGHT_PREPAINT_BACKGROUND_COLOR
-        } else {
-            CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR
-        };
-        let background = if theme == "light" {
-            rgb(0xfdfdfd).into()
-        } else {
-            rgb(0x111111).into()
-        };
-        let surface = match CefSurface::try_new(
-            format!("ghostex-gpui-find-prompts-{}", session_id.0),
-            self.parent_ns_view,
-            url,
-            "session-chat".to_string(),
-            prepaint_background,
-            false,
-            background,
-            None,
-            true,
-            None,
-            None,
-            None,
-            None,
-            Some(bootstrap),
-            None,
-            None,
-            None,
-            Some(cef::AppModalHostBridgeSurface::FindPrompts),
-            Some(host_action_handler),
-            None,
-            cx,
-        ) {
-            Ok(surface) => surface,
-            Err(error) => {
-                // Ensure-style reconcile: skip this pass, retried on the next
-                // visibility sync (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
-                support_logs::append(
-                    support_logs::GpuiSupportLog::CrashReports,
-                    "gpui.cefSurface.createFailed",
-                    serde_json::json!({ "surface": "findPrompts", "error": error }),
-                );
-                return None;
-            }
-        };
-        self.agents_find_surfaces.insert(session_id, surface.clone());
-        Some(surface)
-    }
-
-    pub(crate) fn reconcile_agents_find_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
-        let live_session_ids = self
-            .agents_workspace
-            .terminal_session_ids()
-            .into_iter()
-            .collect::<HashSet<_>>();
-        self.agents_find_mode_sessions
-            .retain(|session_id| live_session_ids.contains(session_id));
-        let stale_surface_ids = self
-            .agents_find_surfaces
-            .keys()
-            .copied()
-            .filter(|session_id| !self.agents_find_mode_sessions.contains(session_id))
-            .collect::<Vec<_>>();
-        for session_id in stale_surface_ids {
-            if let Some(surface) = self.agents_find_surfaces.remove(&session_id) {
-                surface.update(cx, |surface, _| surface.set_visible(false));
-            }
-        }
-
-        let drag_active = self.workspace_tab_drag_active
-            || self.browser_tab_drag_active
-            || self.command_tab_drag_active;
-        let visible_session_ids = if drag_active {
-            HashSet::new()
-        } else if self.active_mode == TitlebarMode::Agents {
-            self.agents_workspace
-                .rendered_leaf_order()
-                .into_iter()
-                .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
-                .filter(|session_id| self.agents_find_mode_sessions.contains(session_id))
-                .collect::<HashSet<_>>()
-        } else if self.active_mode.is_project_editor_mode() {
-            self.current_project_editor_companion_terminal_body_mount_slots()
-                .into_iter()
-                .map(|slot_id| slot_id.session_id)
-                .filter(|session_id| self.agents_find_mode_sessions.contains(session_id))
-                .collect::<HashSet<_>>()
-        } else {
-            HashSet::new()
-        };
-        for session_id in &visible_session_ids {
-            let _ = self.ensure_agents_find_surface(*session_id, cx);
-        }
-        for (session_id, surface) in &self.agents_find_surfaces {
-            let visible = visible_session_ids.contains(session_id);
-            surface.update(cx, |surface, _| surface.set_visible(visible));
-        }
-    }
-
-    /// Both pane surfaces at once. Every caller that used to reconcile chat
-    /// reconciles both, so the two can never disagree about which one owns a
-    /// pane.
+    /// Reconcile the per-session Chat surfaces that can occupy a workspace pane.
     pub(crate) fn reconcile_agents_pane_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
         self.reconcile_agents_chat_surfaces(cx);
-        self.reconcile_agents_find_surfaces(cx);
     }
 
-    pub(crate) fn remove_agents_find_surface_for_session(
-        &mut self,
-        session_id: TerminalSessionId,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        self.agents_find_mode_sessions.remove(&session_id);
-        if let Some(surface) = self.agents_find_surfaces.remove(&session_id) {
-            surface.update(cx, |surface, _| surface.set_visible(false));
-        }
-    }
-
-    pub(crate) fn remove_all_agents_find_surfaces(&mut self, cx: &mut gpui::Context<Self>) {
-        self.agents_find_mode_sessions.clear();
-        for surface in self.agents_find_surfaces.values() {
-            surface.update(cx, |surface, _| surface.set_visible(false));
-        }
-        self.agents_find_surfaces.clear();
-    }
-
-    /// The CEF surface currently occupying a session's pane, whichever it is.
+    /// The Chat CEF surface currently occupying a session's pane.
     pub(crate) fn agents_pane_cef_surface(&self, session_id: TerminalSessionId) -> Option<&Entity<CefSurface>> {
-        self.agents_chat_surfaces
-            .get(&session_id)
-            .or_else(|| self.agents_find_surfaces.get(&session_id))
+        self.agents_chat_surfaces.get(&session_id)
     }
 
     pub(crate) fn ensure_agents_chat_surface(

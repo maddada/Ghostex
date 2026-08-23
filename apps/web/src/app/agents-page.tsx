@@ -50,7 +50,6 @@ import { resolveSessionChatTranscriptAgent } from "@/packages/shared/session-cha
 import { SessionChatHostActionsCluster } from "@/packages/core-ui/chat/session-chat-host-actions-cluster";
 import { SessionChatQueuedPromptsButton } from "../chat/session-chat-queued-prompts-button";
 import { createWebSessionHostActions, SessionChatHost } from "./session-chat-host";
-import { FindPromptsHost } from "./find-prompts-host";
 import {
   createWorkspaceSessionId,
   domainSessionToWorkspaceSession,
@@ -579,9 +578,6 @@ export function IntegratedAgentsPage() {
           openRequest={openRequest}
           renderChatBody={(session, controls) => (
             <SessionChatHost onSwitchToTerminal={controls.switchToTerminal} session={session} />
-          )}
-          renderFindBody={(session, controls) => (
-            <FindPromptsHost onSwitchToTerminal={controls.switchToTerminal} session={session} />
           )}
           renderTerminalBody={(session, controls) => {
             const machine = connections.find(

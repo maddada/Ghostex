@@ -362,18 +362,6 @@ pub struct GhostexGpuiApp {
     /// mapped session enters Chat mode before any terminal focus handoff.
     pub(crate) pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
     pub(crate) agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
-    /*
-    CDXC:AgentHistorySearch 2026-08-20:
-    Find mode swaps a session's pane body for the shared Find surface — the GUI
-    for `gx f` — exactly like Chat mode does, and the two are mutually exclusive
-    because they claim the same rectangle.
-
-    Deliberately not persisted in the shell layout state: Find is a transient
-    search you open, pick from, and leave, so restoring an app to a pane full of
-    search results instead of the user's terminal would be wrong.
-    */
-    pub(crate) agents_find_mode_sessions: HashSet<TerminalSessionId>,
-    pub(crate) agents_find_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
     /// Chat surfaces whose page-side composer bridge has registered.
     pub(crate) session_chat_composer_ready_sessions: HashSet<TerminalSessionId>,
     /// One-shot terminal-to-chat keyboard handoff, completed only after the

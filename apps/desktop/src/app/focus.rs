@@ -543,24 +543,6 @@ impl GhostexGpuiApp {
             */
             return Some(FirstResponderCefSurface::SessionChat(session_id));
         }
-        if let Some(session_id) = self
-            .agents_find_surfaces
-            .iter()
-            .find_map(|(session_id, surface)| {
-                surface
-                    .read(cx)
-                    .native_view_contains_responder(responder)
-                    .then_some(*session_id)
-            })
-        {
-            /*
-            CDXC:AgentHistorySearch 2026-08-20:
-            The Find pane is a first-class work surface for focus arbitration in
-            exactly the way chat is, so it reports the same responder class:
-            keyboard focus must stay in the search box while the user types.
-            */
-            return Some(FirstResponderCefSurface::SessionChat(session_id));
-        }
         if self.titlebar_tips_panel.as_ref().is_some_and(|panel| {
             panel
                 .read(cx)
@@ -757,11 +739,7 @@ impl GhostexGpuiApp {
         let Some(session) = self.agents_workspace.session(session_id) else {
             return false;
         };
-        // CDXC:AgentHistorySearch 2026-08-20: a Find-mode pane parks its
-        // terminal exactly like a chat-mode pane, so every "is this tab showing
-        // a CEF surface instead of its terminal?" decision covers both.
-        let active_session_is_in_chat_view = self.agents_chat_mode_sessions.contains(&session_id)
-            || self.agents_find_mode_sessions.contains(&session_id);
+        let active_session_is_in_chat_view = self.agents_chat_mode_sessions.contains(&session_id);
         #[cfg(target_os = "windows")]
         {
             /*
@@ -845,8 +823,7 @@ impl GhostexGpuiApp {
                             == FirstResponderTarget::TerminalSurface(
                                 FirstResponderTerminalSurface::ProjectEditorCompanion(session_id),
                             )
-                            || ((self.agents_chat_mode_sessions.contains(&session_id)
-                                || self.agents_find_mode_sessions.contains(&session_id))
+                            || (self.agents_chat_mode_sessions.contains(&session_id)
                                 && self.first_responder_target
                                     == FirstResponderTarget::CefSurface(
                                         FirstResponderCefSurface::SessionChat(session_id),
@@ -2226,7 +2203,6 @@ impl GhostexGpuiApp {
                 GpuiWorkspaceTerminalSessionKey::Local(_) => None,
             });
         self.remove_agents_chat_surface_for_session(shell_session_id, cx);
-        self.remove_agents_find_surface_for_session(shell_session_id, cx);
         if let Some(remote_key) = scoped_remote_key.as_ref() {
             self.clear_project_editor_companion_remote_attach_state_for_key(remote_key);
             self.remote_attach_sessions.remove(remote_key);

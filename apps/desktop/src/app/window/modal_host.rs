@@ -31,6 +31,7 @@ impl GpuiAppModalHostWindow {
         modal: GpuiAppModalKind,
         open_message: serde_json::Value,
         sidebar_state_message: serde_json::Value,
+        sidebar_gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
         event_handler: cef::AppModalHostBridgeEventHandler,
         page_load_end_handler: Option<cef::PageLoadEndHandler>,
         cx: &mut App,
@@ -38,9 +39,15 @@ impl GpuiAppModalHostWindow {
         let parent_ns_view = cef_parent_native_view(window)
             .expect("GPUI app-modal host requires a native parent view");
         let uses_react_modal_host = modal.uses_react_modal_host();
+        let is_find_prompts = modal == GpuiAppModalKind::FindPrompts;
         let (bridge_surface, event_handler) = if uses_react_modal_host {
             (
                 Some(cef::AppModalHostBridgeSurface::NativeWindow),
+                Some(event_handler),
+            )
+        } else if is_find_prompts {
+            (
+                Some(cef::AppModalHostBridgeSurface::FindPrompts),
                 Some(event_handler),
             )
         } else {
@@ -54,21 +61,31 @@ impl GpuiAppModalHostWindow {
         */
         let app_served_resource_scope =
             uses_react_modal_host.then(gpui_app_modal_host_resource_scope);
+        let find_theme = is_find_prompts.then(|| {
+            gpui_session_chat_theme_from_settings(
+                shared_settings::shared_sidebar_settings_snapshot().object(),
+            )
+        });
+        let (prepaint_background, background) = match find_theme.as_deref() {
+            Some("light") => (CEF_LIGHT_PREPAINT_BACKGROUND_COLOR, rgb(0xfdfdfd).into()),
+            Some(_) => (CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR, rgb(0x111111).into()),
+            None => (CEF_DARK_PREPAINT_BACKGROUND_COLOR, titlebar_background()),
+        };
         let surface = CefSurface::try_new(
             APP_MODAL_HOST_ID.to_string(),
             parent_ns_view,
             url,
             APP_MODAL_HOST_CEF_PROFILE_ID.to_string(),
-            CEF_DARK_PREPAINT_BACKGROUND_COLOR,
+            prepaint_background,
             false,
-            titlebar_background(),
+            background,
             None,
             true,
             None,
             None,
             None,
             None,
-            None,
+            is_find_prompts.then_some(sidebar_gxserver_bootstrap).flatten(),
             None,
             None,
             app_served_resource_scope,

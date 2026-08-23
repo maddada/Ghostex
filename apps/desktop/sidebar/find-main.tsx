@@ -15,12 +15,11 @@ import { FindPromptsView } from "@/packages/core-ui/find/find-prompts-view";
 import type { FindPromptsTransport } from "@/packages/core-ui/find/find-prompts-transport";
 
 /*
-CDXC:AgentHistorySearch 2026-08-20:
-find.html is the Find CEF surface — the GUI for `gx f` — that swaps with the
-terminal pane body in the gpui Agents workspace. It follows chat.html exactly:
-the gxserver bootstrap (baseUrl/token/protocolVersion) is installed by Rust on
+CDXC:AgentHistorySearchModal 2026-08-23:
+find.html is the Search by Prompt child-window page — the GUI for `gx f`. The
+gxserver bootstrap (baseUrl/token/protocolVersion) is installed by Rust on
 window.ghostexGpui.gxserverBootstrap, the page owns its own RPCs, and workspace
-actions (focus a live session, open a new one, close the surface) post back to
+actions (focus a live session, open a new one, close the modal) post back to
 Rust over the app-modal-host bridge shim because only Rust can move panes.
 */
 

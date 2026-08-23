@@ -41,21 +41,6 @@ impl GhostexGpuiApp {
             if self.agents_chat_mode_sessions.contains(&session_id) {
                 return self.render_agents_session_chat_body(leaf.pane_id, session_id, cx);
             }
-            /*
-            CDXC:AgentHistorySearch 2026-08-20:
-            Find mode swaps this tab's body for the Find CEF surface on the same
-            terms as chat: the terminal mount is parked, not destroyed, and
-            toggling back reattaches through the normal parked-owner path.
-            */
-            if self.agents_find_mode_sessions.contains(&session_id) {
-                let content = self.render_session_find_surface_content(session_id);
-                return self.render_agents_session_chat_body_frame(
-                    leaf.pane_id,
-                    session_id,
-                    content,
-                    cx,
-                );
-            }
         }
         let mount_candidate = self.agents_workspace.terminal_body_mount_candidate(leaf);
         let pane_id = mount_candidate.pane_id;

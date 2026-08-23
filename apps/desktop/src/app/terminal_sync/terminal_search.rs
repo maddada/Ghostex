@@ -476,11 +476,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let session_id = leaf.tab_group.active_session_id()?;
-        // Chat and Find own this pane's body when they are on, and the chat view
-        // renders the queue rows themselves, so the chip has nothing to add.
-        if self.agents_chat_mode_sessions.contains(&session_id)
-            || self.agents_find_mode_sessions.contains(&session_id)
-        {
+        // Chat owns this pane's body when it is on and renders the queue rows
+        // itself, so the terminal chip has nothing to add.
+        if self.agents_chat_mode_sessions.contains(&session_id) {
             return None;
         }
         let counts = self

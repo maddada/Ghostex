@@ -726,6 +726,10 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         );
         return;
       }
+      case "searchPreviousSessionsByText": {
+        window.dispatchEvent(new CustomEvent("ghostex-web:openFindPrompts"));
+        return;
+      }
       case "runGhostexHotkeyAction": {
         /*
          * CDXC:NavigationHistory 2026-08-19:
@@ -740,9 +744,9 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         }
         /*
          * CDXC:AgentHistorySearch 2026-08-20:
-         * Find swaps the focused pane for the shared prompt-history surface,
-         * which the web workspace renders as its own surface layer. The
-         * workspace owns pane state, so this only announces the intent.
+         * Find is an app-level modal, matching Settings. The root modal host
+         * owns presentation, so native-style command actions only announce
+         * the intent here and never mutate the focused workspace pane.
          */
         if (message.actionId === "openFindPrompts") {
           window.dispatchEvent(new CustomEvent("ghostex-web:openFindPrompts"));

@@ -691,7 +691,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
   /*
   CDXC:AgentHistorySearch 2026-08-20:
   Search by Text used to create a terminal and type `gx f` into it. The same
-  search is now a first-class surface, so this forwards the native Find action
+  search is now a first-class modal, so this forwards the native Find action
   and both entry points — the Previous Sessions search row and the command
   palette — land on one implementation instead of two.
   */

@@ -34,6 +34,9 @@ impl GhostexGpuiApp {
         };
 
         match message_type {
+            "findPromptsHostAction" => {
+                self.receive_find_prompts_modal_host_action(&message, window, cx);
+            }
             #[cfg(target_os = "windows")]
             "downloadGhostexUpdate" => {
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
@@ -782,4 +785,3 @@ impl GhostexGpuiApp {
     }
 
 }
-

@@ -13,6 +13,7 @@ pub(crate) enum GpuiAppModalKind {
     Hotkeys,
     MissingProjectFolder,
     CommandPalette,
+    FindPrompts,
     PreviousSessions,
     RecentProjects,
     DaemonSessions,
@@ -49,6 +50,7 @@ impl GpuiAppModalKind {
             "hotkeys" => Some(Self::Hotkeys),
             "missingProjectFolder" => Some(Self::MissingProjectFolder),
             "commandPalette" => Some(Self::CommandPalette),
+            "findPrompts" => Some(Self::FindPrompts),
             "previousSessions" => Some(Self::PreviousSessions),
             "recentProjects" => Some(Self::RecentProjects),
             "daemonSessions" => Some(Self::DaemonSessions),
@@ -85,6 +87,7 @@ impl GpuiAppModalKind {
             Self::Hotkeys => "hotkeys",
             Self::MissingProjectFolder => "missingProjectFolder",
             Self::CommandPalette => "commandPalette",
+            Self::FindPrompts => "findPrompts",
             Self::PreviousSessions => "previousSessions",
             Self::RecentProjects => "recentProjects",
             Self::DaemonSessions => "daemonSessions",
@@ -124,6 +127,7 @@ impl GpuiAppModalKind {
             | Self::RecentProjects
             | Self::StashedPrompts => "Ghostex Quick Access",
             Self::DaemonSessions => "Ghostex Running Sessions",
+            Self::FindPrompts => "Ghostex Search by Prompt",
             Self::PinnedPrompts => "Ghostex Pinned Prompts",
             Self::ScratchPad => "Ghostex Scratch Pad",
             Self::AgentsHub => "Ghostex Agents Hub",
@@ -192,6 +196,7 @@ impl GpuiAppModalKind {
             */
             Self::Settings
             | Self::Hotkeys
+            | Self::FindPrompts
             | Self::AgentsHub
             | Self::ConfigureAgents
             | Self::ConfigureActions
@@ -265,7 +270,7 @@ impl GpuiAppModalKind {
     }
 
     pub(crate) fn uses_react_modal_host(self) -> bool {
-        self != Self::WatchGhostexVideo
+        !matches!(self, Self::FindPrompts | Self::WatchGhostexVideo)
     }
 
     pub(crate) fn is_settings_modal_entry(self) -> bool {
@@ -316,6 +321,7 @@ impl GpuiAppModalKind {
             }),
             Self::Settings
             | Self::Hotkeys
+            | Self::FindPrompts
             | Self::ConfigureAgents
             | Self::ConfigureActions
             | Self::OpenTargets
@@ -399,6 +405,7 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(action_id: &str) -> Optio
         "openSettings" => Some(GpuiAppModalKind::Settings),
         "openHotkeys" => Some(GpuiAppModalKind::Hotkeys),
         "openCommandPalette" => Some(GpuiAppModalKind::CommandPalette),
+        "openFindPrompts" => Some(GpuiAppModalKind::FindPrompts),
         "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
         "openPreviousSessions" => Some(GpuiAppModalKind::PreviousSessions),
         "daemonSessions" | "openDaemonSessions" => Some(GpuiAppModalKind::DaemonSessions),
