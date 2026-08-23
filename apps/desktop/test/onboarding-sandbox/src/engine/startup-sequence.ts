@@ -10,9 +10,9 @@ import type { GxserverHealthScenario } from "../state/types";
 
 export const CODE_REFS = {
   bootstrap: "apps/desktop/src/app/os_integration/gxserver_bootstrap.rs:33 start_gpui_local_gxserver_bootstrap",
-  cefReady: "apps/desktop/src/app/terminal_sync.rs:5426 initialize_cef → sidebar surface ready",
+  cefReady: "apps/desktop/src/app/terminal_sync/cef_and_command_terminal_focus.rs:222 initialize_cef → sidebar surface ready",
   firstRun: "apps/desktop/src/app/os_integration/first_run_onboarding.rs:82 start_gpui_first_run_onboarding",
-  healthProbe: "apps/desktop/src/app/helpers/board_gxserver.rs gpui_probe_local_gxserver_health",
+  healthProbe: "apps/desktop/src/app/helpers/board_gxserver/gxserver_health_and_daemon.rs gpui_probe_local_gxserver_health",
   modalSlot: "apps/desktop/src/app/modals.rs:1040 open_gpui_app_modal_window_inner (app_modal_window)",
   modalOpen: "apps/desktop/src/app/modals.rs:966 open_gpui_app_modal_window",
   modalReady: "apps/desktop/src/app/window/modal_host.rs:159 GpuiAppModalHost::receive_bridge_message",

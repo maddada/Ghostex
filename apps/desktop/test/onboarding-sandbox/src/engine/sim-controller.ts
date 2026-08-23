@@ -8,7 +8,7 @@
  *     │    healthy+tools → replay bootstrap → portless check → first-run onboarding
  *     │    any other health → toast + daemon restart → portless check +
  *     │                       first-run onboarding on the healed path
- *     └─ Track B  initialize_cef → sidebar surface ready (apps/desktop/src/app/terminal_sync.rs:5426)
+ *     └─ Track B  initialize_cef → sidebar surface ready (apps/desktop/src/app/terminal_sync/cef_and_command_terminal_focus.rs:222)
  *                  → first-run onboarding
  *
  * start_gpui_first_run_onboarding (apps/desktop/src/app/os_integration/first_run_onboarding.rs:82) returns immediately
