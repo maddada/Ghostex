@@ -470,8 +470,29 @@ pub(crate) fn gpui_application_keyboard_command_for_native_text(
 }
 
 
+/// The Option+1..5 workarea switchers (Agents, Code, Browser, Kanban, Docs).
+/// Switching the top-level view is app chrome rather than page content, so it
+/// belongs to the shell no matter which surface owns the keyboard.
+pub(crate) fn gpui_workarea_switch_hotkey_action_id(action_id: &str) -> bool {
+    gpui_command_palette_switch_workarea_hotkey_mode(action_id).is_some()
+}
+
+
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) -> bool {
+    /*
+    CDXC:GPUIWorkareaHotkeys 2026-08-23:
+    Workarea switching is shell chrome, so it is owner-independent. Only the
+    Source workarea listed the switch ids before, which meant every other
+    CEF-backed surface (Browser, Kanban, Automate, Docs, Session Chat, the
+    sidebar, and the unclassified `Other`/`None` responders) sent Option+1..5
+    onward as ordinary page keys: once focus left an Agents terminal the
+    keyboard could no longer change views at all. Answer here, before the
+    per-owner page-key policy, instead of repeating the ids in every arm.
+    */
+    if gpui_workarea_switch_hotkey_action_id(action_id) {
+        return true;
+    }
     match owner {
         GpuiKeyboardOwner::CompositedTerminal(_)
         | GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::TerminalSurface(_)) => true,

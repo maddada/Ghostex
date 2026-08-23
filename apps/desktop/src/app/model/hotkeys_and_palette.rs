@@ -205,20 +205,16 @@ pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(action_id: &str) 
 
 
 pub(crate) fn gpui_source_workarea_allowed_configured_hotkey_action_id(action_id: &str) -> bool {
-    matches!(
-        action_id,
-        "focusLeft"
-            | "focusRight"
-            | "navigateHistoryBack"
-            | "navigateHistoryForward"
-            | "openCommandsPanel"
-            | "switchAgentsView"
-            | "switchSourceView"
-            | "switchGitHubView"
-            | "switchKanbanView"
-            | "switchManageView"
-            | "toggleCompanionPane"
-    )
+    gpui_workarea_switch_hotkey_action_id(action_id)
+        || matches!(
+            action_id,
+            "focusLeft"
+                | "focusRight"
+                | "navigateHistoryBack"
+                | "navigateHistoryForward"
+                | "openCommandsPanel"
+                | "toggleCompanionPane"
+        )
 }
 
 
