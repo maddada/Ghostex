@@ -725,10 +725,7 @@ impl GhostexGpuiApp {
             fs::canonicalize(&candidate),
             fs::canonicalize(&project_root),
         ) else {
-            self.report_session_chat_file_open_failure(
-                "That file is not available on this machine.",
-                cx,
-            );
+            self.copy_unresolved_session_chat_file_path(trimmed, cx);
             return;
         };
         if !fs::metadata(&file_path).is_ok_and(|metadata| metadata.is_file()) {
@@ -809,6 +806,53 @@ impl GhostexGpuiApp {
                 level: GpuiAppToastLevel::from_raw(Some("success")),
                 title: "Copied to Clipboard!".to_string(),
                 description: Some(format!("({plugin_name} plugin is disabled)")),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /**
+    CDXC:GPUISessionChatLinks 2026-08-23:
+    A path that does not resolve here is still the answer to "which file was
+    that?", and the reason is usually not that the file is gone: an agent
+    quotes partial paths, paths relative to a subdirectory it was working in,
+    and paths on a remote checkout, any of which can name a file that is
+    sitting right there on disk. So the toast claims nothing about the file. It
+    copies the path and points at Code view's file search, which is the tool
+    that turns a fragment back into the real file. When Code is not reachable
+    at all this defers to the disabled-workarea copy, so the toast never names
+    a place the reader cannot go.
+    */
+    pub(crate) fn copy_unresolved_session_chat_file_path(
+        &mut self,
+        path: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
+            || !self.titlebar_mode_available(TitlebarMode::Source)
+        {
+            self.copy_path_for_disabled_project_workarea(path, "Code", cx);
+            return;
+        }
+        // Naming Code view is only useful advice when Code view can actually
+        // search: with the component uninstalled the tab is a prompt to install
+        // it, so the toast stops at the copy.
+        let description = if self.embedded_code_editor_unavailable_reason().is_some() {
+            "This path did not resolve in the active project.".to_string()
+        } else {
+            "This path did not resolve here. Search for the file in Code view.".to_string()
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: "gpui-session-chat-unresolved-file-path-copied".to_string(),
+                level: GpuiAppToastLevel::from_raw(Some("success")),
+                title: "Copied path to clipboard".to_string(),
+                description: Some(description),
                 loading: false,
                 persistent: false,
                 duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
