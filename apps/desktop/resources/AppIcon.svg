@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0" stop-color="#4eb0eb" />
+      <stop offset="1" stop-color="#1374cb" />
+    </linearGradient>
+    <filter id="mark-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#06487e" flood-opacity="0.24" />
+    </filter>
+  </defs>
+
+  <!-- The transparent canvas lets macOS keep its native Dock-icon spacing. -->
+  <path
+    d="M214 16h596c125 0 198 73 198 198v596c0 125-73 198-198 198H214C89 1008 16 935 16 810V214C16 89 89 16 214 16Z"
+    fill="url(#background)"
+  />
+
+  <g filter="url(#mark-shadow)">
+    <path
+      d="M285 240 640 512 285 784"
+      fill="none"
+      stroke="#fff"
+      stroke-width="190"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <rect x="745" y="417" width="190" height="190" rx="52" fill="#ffd166" />
+  </g>
+</svg>
