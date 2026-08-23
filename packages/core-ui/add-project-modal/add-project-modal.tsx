@@ -112,7 +112,7 @@ const ADD_PROJECT_ROW_ICON_CLASS = "size-4 text-muted-foreground/80";
 const ADD_PROJECT_ACTION_ADDON_CLASS =
   "h-full gap-0 self-stretch p-0 has-[>button]:ml-0 has-[>button]:mr-0";
 const ADD_PROJECT_ACTION_BUTTON_CLASS =
-  "h-full self-stretch border-y-0 border-r-0 border-l border-l-border/70 px-3";
+  "h-full self-stretch border-y-0 border-r-0 border-l border-l-border/70 px-3 text-sm";
 
 /*
  * CDXC:AddProjectChrome 2026-08-19:
@@ -926,7 +926,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
             <AppTooltip content={sourceReadiness.hint}>
               <Button
                 aria-label={`${addProjectSourceLabel(source)} setup required`}
-                className="ml-auto h-5 rounded-none px-1.5 text-[10px]"
+                className="ml-auto h-6 rounded-none px-2 text-sm"
                 data-add-project-field="setupRequired"
                 data-add-project-source={source}
                 onClick={(event) => {
@@ -1130,13 +1130,13 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 <IconArrowLeft aria-hidden="true" className="size-4" />
               </Button>
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-foreground">Review clone</h2>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                <h2 className="text-sm font-semibold text-foreground">Review clone</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
                   Confirm the destination and adjust optional Git settings.
                 </p>
               </div>
               {machine ? (
-                <span className="ml-auto inline-flex min-w-0 shrink-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                <span className="ml-auto inline-flex min-w-0 shrink-0 items-center gap-1.5 pt-1 text-sm text-muted-foreground">
                   <IconFolderPlus aria-hidden="true" className="size-3 shrink-0" />
                   <span className="max-w-32 truncate">{machine.label}</span>
                 </span>
@@ -1152,13 +1152,11 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                   {sourceIcon(cloneFlow.source)}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Repository
-                  </span>
-                  <span className="mt-1 truncate text-sm text-foreground">
+                  <span className="text-sm font-medium text-muted-foreground">Repository</span>
+                  <span className="mt-1 truncate text-sm font-medium text-foreground">
                     {cloneFlow.repository?.nameWithOwner ?? cloneFlow.repositoryInput}
                   </span>
-                  <span className="mt-0.5 truncate text-xs text-muted-foreground">
+                  <span className="mt-0.5 truncate text-sm text-muted-foreground">
                     {cloneFlow.repository?.url ?? cloneFlow.remoteUrl}
                   </span>
                 </span>
@@ -1178,18 +1176,16 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                   className="mt-0.5 size-4 shrink-0 text-muted-foreground/80"
                 />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Destination
-                  </span>
+                  <span className="text-sm font-medium text-muted-foreground">Destination</span>
                   <span
-                    className="mt-1 break-all text-sm text-foreground"
+                    className="mt-1 break-all text-sm font-medium text-foreground"
                     title={clonePreview.destinationPath}
                   >
                     {clonePreview.destinationPath}
                   </span>
                   <span
                     className={cn(
-                      "mt-0.5 text-xs leading-relaxed",
+                      "mt-0.5 text-sm leading-relaxed",
                       clonePreview.destinationBlocked
                         ? "text-destructive"
                         : "text-muted-foreground",
@@ -1203,21 +1199,19 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
             <div className="border border-border/60 bg-muted/10 px-3 py-3">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-foreground">Clone options</span>
-                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Optional
-                </span>
+                <span className="text-sm font-semibold text-foreground">Clone options</span>
+                <span className="text-sm font-medium text-muted-foreground">Optional</span>
               </div>
 
               <label className="block min-w-0">
-                <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                   <IconGitBranch aria-hidden="true" className="size-3.5" />
                   Branch
                 </span>
                 <Input
                   aria-invalid={hasInvalidBranchName || undefined}
                   autoComplete="off"
-                  className="h-9"
+                  className="h-9 text-sm"
                   disabled={busy !== null}
                   onChange={(event) => {
                     setCloneOptions((current) => ({
@@ -1232,7 +1226,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 />
                 <span
                   className={cn(
-                    "mt-1.5 block text-xs",
+                    "mt-1.5 block text-sm",
                     hasInvalidBranchName ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
@@ -1256,10 +1250,10 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                     }
                   />
                   <span className="min-w-0">
-                    <span className="block text-xs font-medium text-foreground">
+                    <span className="block text-sm font-medium text-foreground">
                       Clone branch only
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">
                       Fetch only the selected or default branch.
                     </span>
                   </span>
@@ -1278,10 +1272,10 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                     }
                   />
                   <span className="min-w-0">
-                    <span className="block text-xs font-medium text-foreground">
+                    <span className="block text-sm font-medium text-foreground">
                       Shallow clone
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">
                       Fetch only the latest commit history.
                     </span>
                   </span>
@@ -1291,7 +1285,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
             {errorMessage ? (
               <div
-                className="flex items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                className="flex items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
                 data-add-project-field="error"
                 role="alert"
               >
@@ -1302,7 +1296,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
             {isSlow && isCloning ? (
               <div
-                className="flex items-center gap-2 border border-border/60 px-3 py-2 text-xs text-muted-foreground"
+                className="flex items-center gap-2 border border-border/60 px-3 py-2 text-sm text-muted-foreground"
                 data-add-project-field="notice"
                 role="status"
               >
@@ -1323,7 +1317,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
         </div>
 
         <div
-          className="flex shrink-0 items-center gap-3 border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground"
+          className="flex shrink-0 items-center gap-3 border-t border-border/70 px-4 py-2.5 text-sm text-muted-foreground"
           data-add-project-field="footer"
         >
           <AddProjectFooterHint keys="Esc" label="Close" />
@@ -1384,6 +1378,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
             }
             autoComplete="off"
             autoFocus
+            className="text-sm"
             data-add-project-field={isNewFolderStep ? "newFolderInput" : "pathInput"}
             onChange={(event) => {
               if (isNewFolderStep) {
@@ -1438,7 +1433,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 variant="ghost"
               >
                 {busy === "lookup" ? "Working" : repositoryActionLabel}
-                <kbd className="rounded-none bg-muted-foreground/10 px-1 text-[10px]">Enter</kbd>
+                <kbd className="rounded-none bg-muted-foreground/10 px-1.5 text-sm">Enter</kbd>
               </Button>
             </InputGroupAddon>
           ) : isBrowsing ? (
@@ -1488,14 +1483,14 @@ function AddProjectModalBody(props: AddProjectModalProps) {
           className="mx-3 mt-2 flex min-w-0 shrink-0 flex-col gap-1 border border-border/60 px-3 py-2"
           data-add-project-field="repositoryCard"
         >
-          <span className="text-xs font-medium text-muted-foreground">Repository</span>
+          <span className="text-sm font-medium text-muted-foreground">Repository</span>
           <span className="flex min-w-0 items-center gap-2">
             <span className="text-muted-foreground/80">{sourceIcon(cloneFlow.source)}</span>
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm text-foreground">
+              <span className="truncate text-sm font-medium text-foreground">
                 {cloneFlow.repository?.nameWithOwner ?? cloneFlow.repositoryInput}
               </span>
-              <span className="truncate text-xs text-muted-foreground/85">
+              <span className="truncate text-sm text-muted-foreground/85">
                 {cloneFlow.repository?.url ?? cloneFlow.remoteUrl}
               </span>
             </span>
@@ -1505,7 +1500,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
       {errorMessage ? (
         <div
-          className="mx-3 mt-2 flex shrink-0 items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          className="mx-3 mt-2 flex shrink-0 items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           data-add-project-field="error"
           role="alert"
         >
@@ -1516,7 +1511,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 
       {isSlow && busy ? (
         <div
-          className="mx-3 mt-2 flex shrink-0 items-center gap-2 border border-border/60 px-3 py-2 text-xs text-muted-foreground"
+          className="mx-3 mt-2 flex shrink-0 items-center gap-2 border border-border/60 px-3 py-2 text-sm text-muted-foreground"
           data-add-project-field="notice"
           role="status"
         >
@@ -1549,7 +1544,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
           </div>
         ) : (
           <div>
-            <div className="px-2 pt-3 pb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/80 uppercase">
+            <div className="px-2 pt-3 pb-1.5 text-sm font-medium text-muted-foreground">
               {groupLabel}
             </div>
             {rows.map((row) => (
@@ -1584,7 +1579,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm text-foreground">{row.title}</span>
                   {row.description ? (
-                    <span className="truncate text-xs text-muted-foreground/85">
+                    <span className="truncate text-sm text-muted-foreground/85">
                       {row.description}
                     </span>
                   ) : null}
@@ -1596,7 +1591,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
         )}
         {pendingDiscoveryMachineId && currentView?.kind === "sources" ? (
           <div
-            className="px-2 py-2 text-xs text-muted-foreground"
+            className="px-2 py-2 text-sm text-muted-foreground"
             data-add-project-field="discoveryPending"
           >
             Checking source control providers...
@@ -1605,7 +1600,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
       </div>
 
       <div
-        className="flex shrink-0 items-center gap-4 border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground"
+        className="flex shrink-0 items-center gap-4 border-t border-border/70 px-4 py-2.5 text-sm text-muted-foreground"
         data-add-project-field="footer"
       >
         {isNewFolderStep ? null : <AddProjectFooterHint keys="↑ ↓" label="Navigate" />}
@@ -1655,7 +1650,7 @@ function AddProjectFooterHint({
       <span className="inline-flex items-center gap-1">
         {keys.split(" ").map((key) => (
           <kbd
-            className="inline-flex h-4 min-w-4 items-center justify-center rounded-none border border-border/70 bg-muted/60 px-1 font-sans text-[10px] leading-none text-muted-foreground"
+            className="inline-flex h-5 min-w-5 items-center justify-center rounded-none border border-border/70 bg-muted/60 px-1.5 font-sans text-sm leading-none text-muted-foreground"
             key={key}
           >
             {key}
