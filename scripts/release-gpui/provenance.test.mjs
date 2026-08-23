@@ -20,7 +20,7 @@ const commitNew = "2".repeat(40);
 const inputs = {
   composed: {},
   paths: [{ digest: digestA, entryCount: 1, pathspec: "mobile" }],
-  values: { bun: "1.3.10" },
+  values: { bun: "1.4.0" },
 };
 
 function androidRecord(overrides = {}) {

@@ -326,7 +326,7 @@ Plain CSS (`src/controls/*.css`), compact developer-tool aesthetic.
 
 ## Shared repo rules for ALL agents
 
-- Never run `bun run start`/`bun run s`/anything launching the real app. Running
+- Never run `bun run start` or anything launching the real app. Running
   `bunx vite --config apps/desktop/test/onboarding-sandbox/vite.config.ts` IS allowed.
 - `bunx tsc -p apps/desktop/test/onboarding-sandbox/tsconfig.json --noEmit` must pass for your
   files (pre-existing errors from imported production code are not yours to fix —

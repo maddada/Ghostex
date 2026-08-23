@@ -72,7 +72,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.4.0
       - name: Restore the code-server identity input
         run: git submodule update --init --depth=1 -- .dependencies/code-server
       - name: Resolve immutable code-server component identity

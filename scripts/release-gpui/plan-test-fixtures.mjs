@@ -61,7 +61,7 @@ const FIXTURE_FILES = {
       dependencies: { react: "19.0.0" },
       devDependencies: { vitest: "3.0.0" },
       name: "ghostex",
-      packageManager: "bun@1.3.10",
+      packageManager: "bun@1.4.0",
       private: true,
       scripts: { "release:test": "vitest run --config scripts/release-gpui/vitest.release.config.ts" },
       version: "7.7.0",

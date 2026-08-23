@@ -47,7 +47,7 @@ const quietLogDisplayLineHeadChars = 760;
 const quietLogDisplayLineTailChars = 260;
 /*
 CDXC:GPUIStartCommand 2026-07-08-04:55:
-`bun run gpui` builds the staged GPUI package and installs it to a stable,
+`bun run start` builds the staged GPUI package and installs it to a stable,
 platform-appropriate location before launch. macOS refreshes shared resources,
 then installs to /Applications and opens through LaunchServices. Windows installs
 the staged CEF package to Program Files, creates the machine Start Menu shortcut,
@@ -339,7 +339,7 @@ function validateStartArguments(args) {
       verbose = true;
       continue;
     }
-    throw new Error(`Unknown GPUI start argument: ${arg}. Use "bun run gpui" or "bun run gpui --verbose".`);
+    throw new Error(`Unknown GPUI start argument: ${arg}. Use "bun run start" or "bun run start --verbose".`);
   }
   return { verbose };
 }
@@ -389,7 +389,7 @@ function acquireWindowsLocalStartLock() {
       const holderPid = Number.parseInt(readFileSync(localStartLockFile, "utf8").trim(), 10);
       if (Number.isInteger(holderPid) && holderPid > 0 && processIsAlive(holderPid)) {
         throw new Error(
-          `Another "bun run gpui" (pid ${holderPid}) is already rebuilding the GPUI app.`,
+          `Another "bun run start" (pid ${holderPid}) is already rebuilding the GPUI app.`,
         );
       }
       rmSync(localStartLockFile, { force: true });
@@ -508,7 +508,7 @@ function formatDuration(durationMs) {
 function reexecUnderLocalStartLock() {
   /*
   CDXC:GPUIStartCommand 2026-06-21-18:43:
-  `bun run gpui` must be the GPUI equivalent of the macOS local start command: one root command builds the local CEF/GPUI bundle, prevents overlapping rebuilds, closes only the matching GPUI bundle before replacing it, and launches the rebuilt app without using Cua Driver or the main Ghostex start path.
+  `bun run start` is the canonical local desktop command: it builds the local CEF/GPUI bundle, prevents overlapping rebuilds, closes only the matching GPUI bundle before replacing it, and launches the rebuilt app without using Cua Driver.
 
   CDXC:GPUIDependencies 2026-08-02:
   Zed, cef-rs, and gpui-component are pinned submodules under the repository's
@@ -1376,7 +1376,7 @@ function reportQuietCommandFailure(label, status, logPath) {
   const relativeLogPath = path.relative(repoRoot, logPath);
   console.error(`${label} failed with exit code ${status}.`);
   console.error(`Full log: ${relativeLogPath}`);
-  console.error("Rerun with `bun run gpui --verbose` for live output.");
+  console.error("Rerun with `bun run start --verbose` for live output.");
   const tail = readQuietLogTail(logPath);
   if (tail) {
     console.error(`\nLast ${quietLogTailLines} log lines (long lines shortened; full lines remain in ${relativeLogPath}):\n${tail}`);

@@ -24,7 +24,7 @@ export const TOOLCHAIN = Object.freeze({
   androidBuildTools: "36.0.0",
   androidNdk: "29.0.14206865",
   androidPlatform: "android-36",
-  bun: "1.3.10",
+  bun: "1.4.0",
   dotnet: "8.0.x",
   goVersionFile: "build/pinned-beads-source/go.mod",
   java: "17.0.19+10",

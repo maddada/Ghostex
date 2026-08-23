@@ -164,7 +164,7 @@ validate_completion_sound_assets() {
 	done
 
 	if [[ "$missing" == "1" ]]; then
-		echo "Run \`bun run gpui\` from the repo root so GPUI-owned shared resources are refreshed before packaging." >&2
+		echo "Run \`bun run start\` from the repo root so GPUI-owned shared resources are refreshed before packaging." >&2
 		exit 1
 	fi
 }
@@ -177,7 +177,7 @@ validate_cli_resources() {
 	# binary staged inside the app-owned gxserver package (no Node module or
 	# shell launcher sources are needed anymore).
 	if [[ ! -x "$GXSERVER_SOURCE_DIR/bin/ghostex" ]]; then
-		echo "Missing GPUI CLI binary: $GXSERVER_SOURCE_DIR/bin/ghostex (run bun run gpui to refresh shared resources)" >&2
+		echo "Missing GPUI CLI binary: $GXSERVER_SOURCE_DIR/bin/ghostex (run bun run start to refresh shared resources)" >&2
 		missing=1
 	fi
 
@@ -242,8 +242,8 @@ validate_local_gxserver_runtime_resources() {
 	local required_path executable_path
 
 	# CDXC:GPUIStartCommand 2026-07-08-04:55:
-	# `bun run gpui` refreshes apps/desktop/runtime/macos/Web through the GPUI-owned
-	# shared-resource build as `bun run start`, then this packager seals the
+	# `bun run start` refreshes apps/desktop/runtime/macos/Web through the GPUI-owned
+	# shared-resource build, then this packager seals the
 	# app-owned gxserver package into the GPUI bundle. Runtime should resolve
 	# Contents/Resources/Web/gxserver first instead of depending on the main
 	# Ghostex.app install or source-tree daemon paths.

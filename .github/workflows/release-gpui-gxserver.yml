@@ -89,7 +89,7 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-${{ inputs.arch }}-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.4.0
       - uses: actions/setup-go@v6
         with:
           go-version-file: build/pinned-beads-source/go.mod
