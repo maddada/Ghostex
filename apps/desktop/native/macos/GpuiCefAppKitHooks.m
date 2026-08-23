@@ -75,6 +75,8 @@ static BOOL g_ghostexGpuiCEFEditCommandBridged = NO;
 static BOOL g_ghostexGpuiCEFSelectAllBridged = NO;
 static const void* GhostexGpuiFirstResponderObserverKey =
   &GhostexGpuiFirstResponderObserverKey;
+static const void* GhostexGpuiRootPointerTrackingAreaKey =
+  &GhostexGpuiRootPointerTrackingAreaKey;
 static const void* GhostexGpuiCEFMouseFocusPassiveKey =
   &GhostexGpuiCEFMouseFocusPassiveKey;
 static const void* GhostexGpuiCEFPassiveFocusGrantKey =
@@ -137,6 +139,7 @@ static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView* view);
 static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView* view);
 static NSEvent* GhostexGpuiNormalizedNavigationKeyEvent(NSEvent* event);
 static void GhostexGpuiFirstResponderReportWindow(NSWindow* window);
+static void GhostexGpuiInstallRootPointerTrackingArea(NSView* view);
 static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent* event);
 static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside);
 static BOOL GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
@@ -1135,6 +1138,8 @@ void GhostexGpuiInstallFirstResponderObserverForNativeView(void* nativeView) {
     return;
   }
 
+  GhostexGpuiInstallRootPointerTrackingArea(view);
+
   NSWindow* window = view.window;
   GhostexGpuiFirstResponderObserver* observer =
     objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
@@ -1151,6 +1156,40 @@ void GhostexGpuiInstallFirstResponderObserverForNativeView(void* nativeView) {
     window,
     GhostexGpuiFirstResponderObserverKey,
     observer,
+    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void GhostexGpuiInstallRootPointerTrackingArea(NSView* view) {
+  if (!view || objc_getAssociatedObject(view, GhostexGpuiRootPointerTrackingAreaKey)) {
+    return;
+  }
+
+  /*
+   CDXC:GPUICefGpuiHoverTracking 2026-08-23:
+   A normal GPUI macOS window asks NSWindow to distribute mouse-moved events,
+   but AppKit sends those generic moves to the first responder. Clicking a CEF
+   child correctly makes Chromium first responder for keyboard input, which
+   otherwise leaves the real GPUI root without pointer moves and freezes hover
+   state across the titlebar and pane tabs until a GPUI click restores it.
+
+   Give the actual GPUI root view its standard AppKit tracking area. The owner
+   then receives mouseMoved: while the pointer is inside its own visible bounds
+   regardless of which normal-layout child owns keyboard focus. This observes
+   the existing view geometry only; it adds no overlay, hit-test override, or
+   event rerouting, and CEF keeps first-responder ownership for page input.
+  */
+  NSTrackingArea* trackingArea = [[NSTrackingArea alloc]
+    initWithRect:NSZeroRect
+         options:NSTrackingMouseMoved |
+                 NSTrackingActiveInKeyWindow |
+                 NSTrackingInVisibleRect
+           owner:view
+        userInfo:nil];
+  [view addTrackingArea:trackingArea];
+  objc_setAssociatedObject(
+    view,
+    GhostexGpuiRootPointerTrackingAreaKey,
+    trackingArea,
     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
