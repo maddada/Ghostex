@@ -133,6 +133,10 @@ export type GxserverEndpointPath =
   | "/api/saveStashedPrompt"
   | "/api/listStashedPrompts"
   | "/api/deleteStashedPrompt"
+  | "/api/listStashedPromptTags"
+  | "/api/saveStashedPromptTag"
+  | "/api/deleteStashedPromptTag"
+  | "/api/setStashedPromptTags"
   | "/api/readAgentSkillStatus"
   | "/api/installAgentSkills"
   | "/api/readAgentHookStatus"
@@ -681,6 +685,11 @@ export interface GxserverStashedPrompt {
   content: string;
   createdAt: string;
   cwd: string | null;
+  /**
+   * Tags filed on this prompt, in rail order (built-ins first). Always present
+   * on rows read from gxserver; a prompt with no tags carries an empty array.
+   */
+  tagIds?: readonly string[];
   /** Origin project's identity icon, shaped for `WorkspaceProjectIconSource`. */
   projectIcon?: unknown;
   projectIconDataUrl?: string | null;
@@ -715,6 +724,62 @@ export interface GxserverListStashedPromptsParams {
 
 export interface GxserverListStashedPromptsResult {
   prompts: readonly GxserverStashedPrompt[];
+  /** The tag catalogue, so the modal paints its rail and its rows together. */
+  tags?: readonly GxserverStashedPromptTag[];
+}
+
+/*
+CDXC:StashedPromptTags 2026-08-23:
+Saved Prompts are filed under daemon-owned tags. Favorites is not a separate
+flag but a seeded builtin tag, so the star control and a user tag write the same
+link table. Colors are stored as literal `#rrggbb` because every client
+interpolates them into CSS.
+*/
+export interface GxserverStashedPromptTag {
+  color: string;
+  createdAt: string;
+  /** True only for Favorites, which cannot be deleted. */
+  isBuiltin: boolean;
+  name: string;
+  tagId: string;
+  updatedAt: string;
+}
+
+/** The tagId of the seeded builtin Favorites tag. */
+export const GXSERVER_FAVORITE_PROMPT_TAG_ID = "favorite";
+
+export interface GxserverListStashedPromptTagsResult {
+  tags: readonly GxserverStashedPromptTag[];
+}
+
+export interface GxserverSaveStashedPromptTagParams {
+  color?: string;
+  name: string;
+  /** When present, renames or recolors this tag instead of creating one. */
+  tagId?: string;
+}
+
+export interface GxserverSaveStashedPromptTagResult {
+  tag: GxserverStashedPromptTag;
+  tags: readonly GxserverStashedPromptTag[];
+}
+
+export interface GxserverDeleteStashedPromptTagParams {
+  tagId: string;
+}
+
+export interface GxserverDeleteStashedPromptTagResult {
+  deleted: boolean;
+  tags: readonly GxserverStashedPromptTag[];
+}
+
+export interface GxserverSetStashedPromptTagsParams {
+  promptId: string;
+  tagIds: readonly string[];
+}
+
+export interface GxserverSetStashedPromptTagsResult {
+  prompt: GxserverStashedPrompt;
 }
 
 export interface GxserverDeleteStashedPromptParams {

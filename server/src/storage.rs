@@ -1321,6 +1321,54 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 21;
     "#,
     },
+    Migration {
+        id: "0022_stashed_prompt_tags",
+        /*
+        CDXC:StashedPromptTags 2026-08-23:
+        Saved Prompts get user-defined tags, filtered from a pill rail above the
+        list. Favorites is not a separate column: it is a seeded builtin tag row
+        so the star, the Favorites pill, and a user tag all read and write the
+        same link table instead of two parallel truths that can disagree.
+        Deleting a tag only unfiles prompts (link cascade); the prompts survive.
+        The link rows cascade off `stashed_prompts` too, so the 200-row recency
+        cap in `save_stashed_prompt` cannot leave orphaned tag assignments.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS stashed_prompt_tags (
+        tagId     TEXT PRIMARY KEY,
+        name      TEXT NOT NULL CHECK (name <> ''),
+        color     TEXT NOT NULL,
+        isBuiltin INTEGER NOT NULL DEFAULT 0 CHECK (isBuiltin IN (0, 1)),
+        sortOrder REAL NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS stashed_prompt_tag_links (
+        promptId  TEXT NOT NULL REFERENCES stashed_prompts(promptId) ON DELETE CASCADE,
+        tagId     TEXT NOT NULL REFERENCES stashed_prompt_tags(tagId) ON DELETE CASCADE,
+        createdAt TEXT NOT NULL,
+        PRIMARY KEY (promptId, tagId)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_stashed_prompt_tag_links_tag
+        ON stashed_prompt_tag_links(tagId);
+
+      INSERT OR IGNORE INTO stashed_prompt_tags (
+        tagId, name, color, isBuiltin, sortOrder, createdAt, updatedAt
+      ) VALUES (
+        'favorite',
+        'Favorites',
+        '#e3b341',
+        1,
+        0,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+
+      PRAGMA user_version = 22;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1369,10 +1417,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 21);
+        assert_eq!(user_version, 22);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 21);
+        assert_eq!(schema_migration_count(&db), 22);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1393,6 +1441,7 @@ mod tests {
                 "idx_session_chat_queued_prompts_session".to_string(),
                 "idx_sessions_project_sidebar_order".to_string(),
                 "idx_sessions_project_updated".to_string(),
+                "idx_stashed_prompt_tag_links_tag".to_string(),
                 "idx_stashed_prompts_updated".to_string(),
             ]
         );

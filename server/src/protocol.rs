@@ -598,6 +598,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/listStashedPrompts"
         | "/api/deleteStashedPrompt"
         /*
+        CDXC:StashedPromptTags 2026-08-23:
+        Tag names are user-authored labels for those same prompt bodies, so the
+        tag catalogue and its assignments stay on the same local-only
+        authenticated listener as the prompts they describe.
+        */
+        | "/api/listStashedPromptTags"
+        | "/api/saveStashedPromptTag"
+        | "/api/deleteStashedPromptTag"
+        | "/api/setStashedPromptTags"
+        /*
         CDXC:GPUISidebarGit 2026-06-24-16:11:
         Commit-message generation carries staged diff content and generated
         commit text through the authenticated response. Keep this endpoint on

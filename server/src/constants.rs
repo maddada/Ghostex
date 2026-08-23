@@ -95,4 +95,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0019_remove_unsupported_session_kinds",
     "0020_delayed_sends",
     "0021_session_chat_queue",
+    "0022_stashed_prompt_tags",
 ];

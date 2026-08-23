@@ -269,7 +269,242 @@ impl<'a> DomainRepository<'a> {
                     .is_some_and(|project_id| family.contains(project_id)),
             })
             .collect::<Vec<_>>();
-        Ok(json!({ "prompts": prompts }))
+        /*
+        CDXC:StashedPromptTags 2026-08-23:
+        The modal needs the tag catalogue and every row's assignments in the
+        same paint as the prompts, otherwise the pill rail and the row chips
+        render a frame apart and the counts visibly jump. One list call answers
+        all three.
+        */
+        let tag_ids_by_prompt = read_stashed_prompt_tag_ids(self.db)?;
+        let prompts = prompts
+            .into_iter()
+            .map(|mut prompt| {
+                let prompt_id = prompt
+                    .get("promptId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if let Some(object) = prompt.as_object_mut() {
+                    object.insert(
+                        "tagIds".to_string(),
+                        json!(tag_ids_by_prompt.get(&prompt_id).cloned().unwrap_or_default()),
+                    );
+                }
+                prompt
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "prompts": prompts,
+            "tags": read_stashed_prompt_tags(self.db)?,
+        }))
+    }
+
+    pub fn list_stashed_prompt_tags(&self) -> DomainResult<Value> {
+        Ok(json!({ "tags": read_stashed_prompt_tags(self.db)? }))
+    }
+
+    /*
+    CDXC:StashedPromptTags 2026-08-23:
+    Create or rename a tag. Names are compared case-insensitively so a second
+    "Release" cannot shadow the first in the rail; a colliding create returns
+    the tag that already exists instead of erroring, because the user's intent
+    ("I want a Release tag") is already satisfied.
+    */
+    pub fn save_stashed_prompt_tag(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        let name = normalize_stashed_prompt_tag_name(required_string_param(params, "name")?)?;
+        let color = normalize_stashed_prompt_tag_color(
+            optional_trimmed_string_param(params, "color")?.as_deref(),
+        )?;
+        let requested_tag_id = optional_trimmed_string_param(params, "tagId")?;
+        let timestamp = now_iso();
+
+        let conflicting_tag_id: Option<String> = self
+            .db
+            .query_row(
+                r#"
+                SELECT tagId FROM stashed_prompt_tags
+                WHERE lower(name) = lower(?1) AND tagId <> COALESCE(?2, '')
+                LIMIT 1
+                "#,
+                params![name, requested_tag_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+
+        let tag_id = match (requested_tag_id, conflicting_tag_id) {
+            (Some(tag_id), _) => {
+                let updated = self
+                    .db
+                    .execute(
+                        r#"
+                        UPDATE stashed_prompt_tags
+                        SET name = ?2, color = ?3, updatedAt = ?4
+                        WHERE tagId = ?1
+                        "#,
+                        params![tag_id, name, color, timestamp],
+                    )
+                    .map_err(sql_error)?;
+                if updated == 0 {
+                    return Err(DomainStateError::not_found("Tag does not exist."));
+                }
+                tag_id
+            }
+            (None, Some(existing_tag_id)) => existing_tag_id,
+            (None, None) => {
+                let tag_id = create_unique_stashed_prompt_tag_id(self.db)?;
+                self.db
+                    .execute(
+                        r#"
+                        INSERT INTO stashed_prompt_tags (
+                          tagId, name, color, isBuiltin, sortOrder, createdAt, updatedAt
+                        ) VALUES (
+                          ?1, ?2, ?3, 0,
+                          (SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM stashed_prompt_tags),
+                          ?4, ?4
+                        )
+                        "#,
+                        params![tag_id, name, color, timestamp],
+                    )
+                    .map_err(sql_error)?;
+                tag_id
+            }
+        };
+
+        let tag = read_stashed_prompt_tag_row(self.db, &tag_id)?.ok_or_else(|| {
+            DomainStateError::corrupt_state("Tag vanished during save.")
+        })?;
+        Ok(json!({
+            "tag": tag,
+            "tags": read_stashed_prompt_tags(self.db)?,
+        }))
+    }
+
+    /*
+    CDXC:StashedPromptTags 2026-08-23:
+    Deleting a tag unfiles every prompt that carried it (the link rows cascade)
+    and never deletes a prompt. Favorites is builtin and stays, because the star
+    control on every row has nowhere to write once it is gone.
+    */
+    pub fn delete_stashed_prompt_tag(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        let tag_id = required_string_param(params, "tagId")?;
+        let is_builtin: Option<bool> = self
+            .db
+            .query_row(
+                "SELECT isBuiltin FROM stashed_prompt_tags WHERE tagId = ?1",
+                [tag_id],
+                |row| row.get::<_, i64>(0).map(|value| value != 0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+        if is_builtin == Some(true) {
+            return Err(DomainStateError::bad_request(
+                "Favorites is a built-in tag and cannot be deleted.",
+            ));
+        }
+        let deleted = self
+            .db
+            .execute("DELETE FROM stashed_prompt_tags WHERE tagId = ?1", [tag_id])
+            .map_err(sql_error)?;
+        Ok(json!({
+            "deleted": deleted > 0,
+            "tags": read_stashed_prompt_tags(self.db)?,
+        }))
+    }
+
+    /*
+    CDXC:StashedPromptTags 2026-08-23:
+    One prompt's whole tag set is replaced in a single call rather than
+    toggled one link at a time: the modal already knows the set it wants, and a
+    replace cannot drift out of sync the way a stream of toggles can when two
+    clients star the same prompt at once.
+    */
+    pub fn set_stashed_prompt_tags(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+        let prompt_id = required_string_param(params, "promptId")?.to_string();
+        let requested_tag_ids = match params.get("tagIds") {
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|tag_id| !tag_id.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+            None | Some(Value::Null) => Vec::new(),
+            Some(_) => {
+                return Err(DomainStateError::bad_request(
+                    "tagIds must be an array of strings.",
+                ))
+            }
+        };
+        let prompt_exists: bool = self
+            .db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM stashed_prompts WHERE promptId = ?1)",
+                [&prompt_id],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if !prompt_exists {
+            return Err(DomainStateError::not_found("Saved prompt does not exist."));
+        }
+
+        let known_tag_ids = read_stashed_prompt_tags(self.db)?
+            .iter()
+            .filter_map(|tag| tag.get("tagId").and_then(Value::as_str).map(str::to_string))
+            .collect::<HashSet<_>>();
+        let timestamp = now_iso();
+
+        /*
+        Replacing a set is a delete plus inserts, so it takes the writer
+        reservation first: a failure partway would otherwise leave the prompt
+        with the old links stripped and the new ones missing — an untagged
+        prompt the user never asked for.
+        */
+        self.db
+            .execute_batch("BEGIN IMMEDIATE TRANSACTION")
+            .map_err(sql_error)?;
+        let result = (|| -> DomainResult<()> {
+            self.db
+                .execute(
+                    "DELETE FROM stashed_prompt_tag_links WHERE promptId = ?1",
+                    [&prompt_id],
+                )
+                .map_err(sql_error)?;
+            let mut applied: HashSet<&str> = HashSet::new();
+            for tag_id in &requested_tag_ids {
+                if !known_tag_ids.contains(tag_id) || !applied.insert(tag_id.as_str()) {
+                    continue;
+                }
+                self.db
+                    .execute(
+                        r#"
+                        INSERT INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
+                        VALUES (?1, ?2, ?3)
+                        "#,
+                        params![prompt_id, tag_id, timestamp],
+                    )
+                    .map_err(sql_error)?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                if let Err(error) = self.db.execute_batch("COMMIT") {
+                    let _ = self.db.execute_batch("ROLLBACK");
+                    return Err(sql_error(error));
+                }
+            }
+            Err(error) => {
+                let _ = self.db.execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        }
+
+        let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
+            DomainStateError::corrupt_state("Saved prompt vanished while tagging.")
+        })?;
+        Ok(json!({ "prompt": prompt }))
     }
 
     pub fn delete_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -615,8 +850,9 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
 }
 
 fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Option<Value>> {
-    db.query_row(
-        r#"
+    let prompt = db
+        .query_row(
+            r#"
         SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
                s.createdAt, s.updatedAt, p.name, p.identityIconJson,
                p.path, p.worktreeJson
@@ -624,11 +860,187 @@ fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Opt
         LEFT JOIN projects p ON p.projectId = s.projectId
         WHERE s.promptId = ?1
         "#,
-        [prompt_id],
-        stashed_prompt_json_from_row,
+            [prompt_id],
+            stashed_prompt_json_from_row,
+        )
+        .optional()
+        .map_err(sql_error)?;
+    /*
+    CDXC:StashedPromptTags 2026-08-23:
+    Every single-row read carries tagIds for the same reason the list does: the
+    modal merges this row straight into its state, and a row that arrived
+    without its assignments would blank that prompt's chips on save.
+    */
+    let Some(mut prompt) = prompt else {
+        return Ok(None);
+    };
+    let mut statement = db
+        .prepare(
+            r#"
+            SELECT l.tagId
+            FROM stashed_prompt_tag_links l
+            JOIN stashed_prompt_tags t ON t.tagId = l.tagId
+            WHERE l.promptId = ?1
+            ORDER BY t.isBuiltin DESC, t.sortOrder ASC, t.tagId ASC
+            "#,
+        )
+        .map_err(sql_error)?;
+    let tag_ids = statement
+        .query_map([prompt_id], |row| row.get::<_, String>(0))
+        .map_err(sql_error)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    if let Some(object) = prompt.as_object_mut() {
+        object.insert("tagIds".to_string(), json!(tag_ids));
+    }
+    Ok(Some(prompt))
+}
+
+const STASHED_PROMPT_TAG_FALLBACK_COLOR: &str = "#7f9cf5";
+
+const MAX_STASHED_PROMPT_TAG_NAME_CHARS: usize = 40;
+
+fn normalize_stashed_prompt_tag_name(name: &str) -> DomainResult<String> {
+    let trimmed = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if trimmed.is_empty() {
+        return Err(DomainStateError::bad_request("name must not be empty."));
+    }
+    if trimmed.chars().count() > MAX_STASHED_PROMPT_TAG_NAME_CHARS {
+        return Err(DomainStateError::bad_request(format!(
+            "name must be at most {MAX_STASHED_PROMPT_TAG_NAME_CHARS} characters."
+        )));
+    }
+    Ok(trimmed)
+}
+
+/*
+CDXC:StashedPromptTags 2026-08-23:
+Tag colors are interpolated straight into CSS by every client, so the daemon
+stores only a literal `#rrggbb` and rejects anything else rather than letting a
+crafted value become a style expression downstream.
+*/
+fn normalize_stashed_prompt_tag_color(color: Option<&str>) -> DomainResult<String> {
+    let Some(color) = color else {
+        return Ok(STASHED_PROMPT_TAG_FALLBACK_COLOR.to_string());
+    };
+    let normalized = color.trim().to_ascii_lowercase();
+    let is_hex = normalized.len() == 7
+        && normalized.starts_with('#')
+        && normalized[1..].chars().all(|character| character.is_ascii_hexdigit());
+    if !is_hex {
+        return Err(DomainStateError::bad_request(
+            "color must be a #rrggbb hex string.",
+        ));
+    }
+    Ok(normalized)
+}
+
+fn create_unique_stashed_prompt_tag_id(db: &Connection) -> DomainResult<String> {
+    let millis = chrono::Utc::now().timestamp_millis();
+    for attempt in 0..MAX_ID_GENERATION_ATTEMPTS {
+        let candidate = if attempt == 0 {
+            format!("gxserver-prompt-tag-{millis}")
+        } else {
+            format!("gxserver-prompt-tag-{millis}-{attempt}")
+        };
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM stashed_prompt_tags WHERE tagId = ?1)",
+                [&candidate],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if !exists {
+            return Ok(candidate);
+        }
+    }
+    Err(DomainStateError::corrupt_state(
+        "Could not allocate a unique saved prompt tag id.",
+    ))
+}
+
+fn stashed_prompt_tag_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+    let tag_id: String = row.get(0)?;
+    let name: String = row.get(1)?;
+    let color: String = row.get(2)?;
+    let is_builtin: i64 = row.get(3)?;
+    let created_at: String = row.get(4)?;
+    let updated_at: String = row.get(5)?;
+    Ok(json!({
+        "color": color,
+        "createdAt": created_at,
+        "isBuiltin": is_builtin != 0,
+        "name": name,
+        "tagId": tag_id,
+        "updatedAt": updated_at,
+    }))
+}
+
+/*
+Builtin tags lead the rail so Favorites keeps the first slot no matter how many
+tags the user adds later; user tags follow in creation order.
+*/
+fn read_stashed_prompt_tags(db: &Connection) -> DomainResult<Vec<Value>> {
+    let mut statement = db
+        .prepare(
+            r#"
+            SELECT tagId, name, color, isBuiltin, createdAt, updatedAt
+            FROM stashed_prompt_tags
+            ORDER BY isBuiltin DESC, sortOrder ASC, tagId ASC
+            "#,
+        )
+        .map_err(sql_error)?;
+    let tags = statement
+        .query_map([], stashed_prompt_tag_json_from_row)
+        .map_err(sql_error)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    Ok(tags)
+}
+
+fn read_stashed_prompt_tag_row(db: &Connection, tag_id: &str) -> DomainResult<Option<Value>> {
+    db.query_row(
+        r#"
+        SELECT tagId, name, color, isBuiltin, createdAt, updatedAt
+        FROM stashed_prompt_tags
+        WHERE tagId = ?1
+        "#,
+        [tag_id],
+        stashed_prompt_tag_json_from_row,
     )
     .optional()
     .map_err(sql_error)
+}
+
+/*
+Assignments come back keyed by prompt, in the same rail order as the catalogue,
+so a row's chips and the pill rail never disagree about which tag comes first.
+*/
+fn read_stashed_prompt_tag_ids(db: &Connection) -> DomainResult<HashMap<String, Vec<String>>> {
+    let mut statement = db
+        .prepare(
+            r#"
+            SELECT l.promptId, l.tagId
+            FROM stashed_prompt_tag_links l
+            JOIN stashed_prompt_tags t ON t.tagId = l.tagId
+            ORDER BY t.isBuiltin DESC, t.sortOrder ASC, t.tagId ASC
+            "#,
+        )
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            let prompt_id: String = row.get(0)?;
+            let tag_id: String = row.get(1)?;
+            Ok((prompt_id, tag_id))
+        })
+        .map_err(sql_error)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    let mut tag_ids_by_prompt: HashMap<String, Vec<String>> = HashMap::new();
+    for (prompt_id, tag_id) in rows {
+        tag_ids_by_prompt.entry(prompt_id).or_default().push(tag_id);
+    }
+    Ok(tag_ids_by_prompt)
 }
 
 fn stashed_prompt_project_family(

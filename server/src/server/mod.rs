@@ -1678,6 +1678,40 @@ async fn route_http(
             |repository, _, params, _| repository.delete_stashed_prompt(params),
         ),
         /*
+        CDXC:StashedPromptTags 2026-08-23:
+        The Saved Prompts tag catalogue is daemon-owned like the prompts
+        themselves, so every client filters the same rail instead of keeping a
+        private list that drifts per machine.
+        */
+        "/api/listStashedPromptTags" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, _, _| repository.list_stashed_prompt_tags(),
+        ),
+        "/api/saveStashedPromptTag" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, params, _| repository.save_stashed_prompt_tag(params),
+        ),
+        "/api/deleteStashedPromptTag" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, params, _| repository.delete_stashed_prompt_tag(params),
+        ),
+        "/api/setStashedPromptTags" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, params, _| repository.set_stashed_prompt_tags(params),
+        ),
+        /*
         CDXC:MobileKeepAwake 2026-08-19:
         A client that is ATTACHED to a session (Ghostex mobile, over its SSH CLI
         bridge) renews a keep-awake lease here so this machine's Auto Sleep sweep
