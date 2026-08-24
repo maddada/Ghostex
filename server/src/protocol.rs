@@ -542,6 +542,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         selectors only; none is interpreted as a path or command.
         */
         | "/api/startBoardWork"
+        /*
+        CDXC:BoardAssociateSession 2026-08-24:
+        Associating is remote-allowed for the same reason dispatching is: the
+        board being worked can live on another daemon, and the call carries only
+        opaque beadId/projectId/sessionId selectors. It links a session that
+        daemon already owns; a session it does not know is rejected.
+        */
+        | "/api/associateBoardSession"
         | "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"
         | "/api/readRepositoryCloneJob"

@@ -107,6 +107,7 @@ const SKILL_INSTALL_COMMANDS: Record<string, BundledSkillId> = {
   installFable56OrchestrationSkill: 'fable56Orchestration',
   installFindPrevSessionSkill: 'findPrevSession',
   installGenerateTitleSkill: 'generateTitle',
+  installManageBeadsSkill: 'manageBeads',
   installMoveCodexSessionSkill: 'moveCodexSession',
 };
 
@@ -119,6 +120,7 @@ const BUNDLED_SKILL_ID_BY_CONTRACT_ID: Record<string, BundledSkillId> = {
   fable56Orchestration: 'fable56Orchestration',
   findPrevSession: 'findPrevSession',
   generateTitle: 'generateTitle',
+  manageBeads: 'manageBeads',
   moveCodexSession: 'moveCodexSession',
 };
 
@@ -874,6 +876,7 @@ export function createEngineActions(
       case 'installFable56OrchestrationSkill':
       case 'installFindPrevSessionSkill':
       case 'installGenerateTitleSkill':
+      case 'installManageBeadsSkill':
       case 'installMoveCodexSessionSkill':
       case 'installCuaDriver':
       case 'uninstallBundledAgentSkill':

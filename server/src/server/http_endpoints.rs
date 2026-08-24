@@ -225,6 +225,71 @@ pub(crate) fn hold_sessions_awake(
 }
 
 /*
+CDXC:BoardAssociateSession 2026-08-24:
+Linking a running session to a card takes the same gate as start-work: the gate
+serializes every write to a bead's conversation links, so an associate call and
+a concurrent dispatch cannot both decide what the card's links are. Nothing is
+created here, so there is no session to materialize afterwards.
+*/
+pub(crate) async fn handle_board_associate_session_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let bd = match require_system_bd() {
+        Ok(bd) => bd,
+        Err(message) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "dependencyUnavailable",
+                    message,
+                },
+            );
+        }
+    };
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let gate = Arc::clone(&state.board_start_work_gate);
+    let bd_executable_path = bd.executable_path;
+    let outcome = tokio::task::spawn_blocking(move || {
+        let _gate = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let db = open_gxserver_database(&paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, &server_id);
+        crate::board_start_work::associate_board_session(&repository, &params, &bd_executable_path)
+    })
+    .await;
+    let result = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => return domain_error_response(endpoint_path, request_id, error),
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: format!("Board associate-session task failed: {error}"),
+                },
+            )
+        }
+    };
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, result),
+    )
+}
+
+/*
 CDXC:BoardStartWork 2026-08-07:
 The daemon-owned Project Board "Start work" dispatch. The whole
 resolve → reuse-check → create → link sequence runs while holding the

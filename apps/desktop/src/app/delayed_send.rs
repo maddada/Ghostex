@@ -2378,6 +2378,12 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "installManageBeadsSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallManageBeadsSkill,
+                    cx,
+                );
+            }
             "installMoveCodexSessionSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallMoveCodexSessionSkill,

@@ -32,6 +32,13 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-find-prev-session",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
+    /*
+    CDXC:BoardAssociateSession 2026-08-24:
+    The Project Board beads skill teaches agents `ghostex board associate`, the
+    only way a hand-started session gets onto its card, so it must be installable
+    through the same allow-list as the other bundled skills.
+    */
+    "ghostex-manage-beads",
 ];
 
 pub const GHOSTEX_SKILLS_CLI_AGENT_IDS: &[&str] = &[

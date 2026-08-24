@@ -366,4 +366,5 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-find-prev-session",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
+    "ghostex-manage-beads",
 ];

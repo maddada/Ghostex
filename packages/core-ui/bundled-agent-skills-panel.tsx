@@ -1,5 +1,6 @@
 import {
   IconBrowser,
+  IconChecklist,
   IconCircleCheckFilled,
   IconDeviceDesktop,
   IconDownload,
@@ -74,6 +75,7 @@ const BUNDLED_AGENT_SKILL_ICONS: Record<BundledGhostexAgentSkillId, typeof IconB
   fable56Orchestration: IconSitemap,
   findPrevSession: IconHistory,
   generateTitle: IconPencil,
+  manageBeads: IconChecklist,
   moveCodexSession: IconGitPullRequest,
 };
 
@@ -359,6 +361,8 @@ function isBundledGhostexAgentSkillInstalled(
       return status?.findPrevSessionSkillInstalled === true;
     case 'generateTitle':
       return status?.generateTitleSkillInstalled === true;
+    case 'manageBeads':
+      return status?.manageBeadsSkillInstalled === true;
     case 'moveCodexSession':
       return status?.moveCodexSessionSkillInstalled === true;
   }
