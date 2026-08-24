@@ -264,6 +264,37 @@ export const Projects: Story = {
   render: () => <SettingsModalStory initialTab="projects" projects={storyProjects} />,
 };
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Review stories for the Codex restyle. Hotkeys is the densest list surface in
+ * Settings (recorder chips, per-row reset buttons), Agents is the densest
+ * management surface (cards, row actions, section header actions), and Theming
+ * is the densest control surface (color pickers, selects, sliders, switches on
+ * one card). Between them they cover every field primitive the redesign
+ * touches.
+ */
+export const Hotkeys: Story = {
+  render: () => <SettingsModalStory initialTab="hotkeys" />,
+};
+
+export const Agents: Story = {
+  render: () => <SettingsModalStory initialTab="agents" />,
+};
+
+export const Theming: Story = {
+  play: async ({ canvasElement, step }) => {
+    const body = within(canvasElement.ownerDocument.body);
+
+    await step("jump the General page to the Theming section", async () => {
+      await userEvent.click(await body.findByRole("button", { name: "Appearance" }));
+      await waitFor(() => {
+        expect(body.getByText("Accent Color")).toBeTruthy();
+      });
+    });
+  },
+  render: () => <SettingsModalStory />,
+};
+
 export const LightOrange: Story = {
   render: () => (
     <SettingsModalStory

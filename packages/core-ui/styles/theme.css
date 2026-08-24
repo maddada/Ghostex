@@ -39,6 +39,12 @@
   --app-input-background: #202020;
   --app-tooltip-background: #202020;
   --app-tooltip-foreground: #f0f0f0;
+  /*
+   * CDXC:AccentColor 2026-08-24:
+   * Fallback accent so surfaces paint the shipped sky tone before the
+   * accentColor setting hydrates onto <body>.
+   */
+  --ghostex-accent: #38bdf8;
   --custom-sidebar-titlebar-foreground-color: #d8d8d8;
   --custom-sidebar-titlebar-background-color: #0e0e0e;
   --background: var(--app-background);

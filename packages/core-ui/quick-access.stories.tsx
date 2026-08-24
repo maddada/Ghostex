@@ -304,6 +304,23 @@ function RecentSessionsStory() {
   return <PreviousSessionsModal isOpen={true} onClose={() => undefined} vscode={vscode} />;
 }
 
+/**
+ * The Sessions tab's tag filter is a portaled menu, so the redesign can only be
+ * reviewed with it open. The story opens it by clicking the real toggle after
+ * mount instead of adding a story-only prop to the modal.
+ */
+function RecentSessionsTagFilterStory() {
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector<HTMLButtonElement>('.previous-sessions-tag-filter-toggle')
+        ?.click();
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <RecentSessionsStory />;
+}
+
 function SavedPromptsStory() {
   const vscode = useQuickAccessStoryHost();
   return (
@@ -343,6 +360,7 @@ export const CommandPane: Story = { render: () => <CommandPaneStory /> };
 export const CommandPaneLoading: Story = { render: () => <CommandPaneLoadingStory /> };
 export const RecentProjects: Story = { render: () => <RecentProjectsStory /> };
 export const Sessions: Story = { render: () => <RecentSessionsStory /> };
+export const SessionsTagFilterMenu: Story = { render: () => <RecentSessionsTagFilterStory /> };
 export const SavedPrompts: Story = { render: () => <SavedPromptsStory /> };
 export const RecentProjectsLoading: Story = { render: () => <RecentProjectsLoadingStory /> };
 export const RecentSessionsLoading: Story = { render: () => <RecentSessionsLoadingStory /> };

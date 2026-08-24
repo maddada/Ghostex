@@ -239,10 +239,14 @@ export function RemoteMigrateGateNotice({
           }
         }}
       >
-        <DialogContent className="project-ticket-dialog">
-          <DialogHeader>
-            <DialogTitle>Confirm {confirmingOption ? beadsMigrationOptionLabel(confirmingOption.id) : "Beads command"}</DialogTitle>
-            <DialogDescription>{confirmationText}</DialogDescription>
+        <DialogContent className="project-ticket-dialog gap-4 p-5">
+          <DialogHeader className="gap-1">
+            <DialogTitle className="text-[15px] font-normal">
+              Confirm {confirmingOption ? beadsMigrationOptionLabel(confirmingOption.id) : "Beads command"}
+            </DialogTitle>
+            <DialogDescription className="text-xs font-normal text-muted-foreground">
+              {confirmationText}
+            </DialogDescription>
           </DialogHeader>
           {confirmingOption ? (
             <div className="project-board-notice-command project-board-confirm-command">

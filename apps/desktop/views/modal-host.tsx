@@ -1527,6 +1527,16 @@ function AppModalHost() {
 
   useEffect(() => {
     document.body.dataset.sidebarTheme = theme;
+    /**
+     * CDXC:AccentColor 2026-08-24:
+     * Modals read their accent from --ghostex-accent, so publish the setting
+     * onto the modal host body alongside the workspace theme variables. Before
+     * the HUD settings arrive the normalized default is the correct value.
+     */
+    document.body.style.setProperty(
+      "--ghostex-accent",
+      settings?.accentColor ?? DEFAULT_ghostex_SETTINGS.accentColor,
+    );
     const normalizedThemeColor = normalizeWorkspaceThemeColor(customThemeColor);
     if (normalizedThemeColor) {
       document.body.dataset.sidebarCustomTheme = "true";
@@ -1546,8 +1556,9 @@ function AppModalHost() {
       delete document.body.dataset.sidebarCustomTheme;
       document.body.style.removeProperty("--workspace-sidebar-theme-color");
       document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
+      document.body.style.removeProperty("--ghostex-accent");
     };
-  }, [customThemeColor, theme]);
+  }, [customThemeColor, settings?.accentColor, theme]);
 
   return (
     <>

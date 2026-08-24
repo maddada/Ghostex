@@ -371,8 +371,10 @@ export function automationRunStatusLabel(status: AutomationRun["status"]): strin
       return "No findings";
     case "needs_attention":
       return "Needs attention";
-    default:
-      return status.replace(/_/gu, " ");
+    default: {
+      const label = status.replace(/_/gu, " ");
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
   }
 }
 

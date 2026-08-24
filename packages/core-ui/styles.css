@@ -184,6 +184,15 @@ body {
   cursor: revert-layer;
   font: revert-layer;
   transition: revert-layer;
+  /*
+   * CDXC:ModalRedesign 2026-08-24:
+   * `font: revert-layer` rolls the whole font shorthand back to the shadcn
+   * utility layer, which reinstates Button's 14px/500. Re-state the redesign's
+   * quiet type here, after the shorthand, so buttons match the 13px/400 used
+   * by every other control in the same row.
+   */
+  font-size: 0.8125rem;
+  font-weight: 400;
 }
 
 .ghostex-settings-shadcn button[data-slot="button"]:disabled {
@@ -206,26 +215,74 @@ body {
   --app-modal-background-radius: 0;
 }
 
-.ghostex-settings-shadcn {
-  --background: var(--app-modal-background);
-  --card: var(--app-modal-background);
-  --popover: var(--app-dropdown-background);
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Every app modal that opts into .ghostex-settings-shadcn now shares the Codex
+ * surface language already approved for the Kanban/Automate/Docs pages:
+ *
+ *   page/window  #0e0e0e   modal surface #161616
+ *   raised card  #1d1d1d   raised hover  #232323
+ *   hairline     rgba(255, 255, 255, 0.08)
+ *
+ * with an 8px control radius, a 12px section/dialog radius, a 6px menu-item
+ * radius, one 32px control height, and no bold type anywhere (400 normally,
+ * 500 for small section labels). Keep this block structural — colors, radii,
+ * weights, control heights — so Settings, Ghostex Tips, Agents Hub, Quick
+ * Access, and Git Commit inherit one surface instead of forking it.
+ *
+ * The theme sheet targets `.ghostex-settings-shadcn[data-sidebar-theme=...]`,
+ * so the token list is repeated on an attribute-qualified selector: same
+ * specificity, later in the cascade, therefore it wins over the per-theme
+ * `--background`/`--card` assignments without needing !important.
+ */
+.ghostex-settings-shadcn,
+.ghostex-settings-shadcn[data-sidebar-theme] {
+  --settings-surface: #161616;
+  --settings-raised: #1d1d1d;
+  --settings-raised-hover: #232323;
+  --settings-hairline: rgba(255, 255, 255, 0.08);
+  --settings-accent: var(--ghostex-accent, #38bdf8);
+
+  --background: var(--settings-surface);
+  --card: var(--settings-raised);
+  --popover: var(--settings-surface);
+  --border: var(--settings-hairline);
+  --input: var(--settings-hairline);
+  --accent: var(--settings-raised-hover);
+  --accent-foreground: var(--foreground);
+
   /*
-   * CDXC:SettingsRoundness 2026-06-16-08:22:
-   * Settings should regain a small amount of roundness while the rest of the app can stay square. Use scoped radius tokens so controls, compact toggles, and larger section/card surfaces scale appropriately without changing global shadcn primitives.
-   *
-   * CDXC:SettingsRoundness 2026-06-16-08:33:
-   * The settings roundness should stay very subtle: compact elements use 2px, normal controls use 3px, larger section/card surfaces use 7px, and adaptive square/icon surfaces cap at 7px or 10% of their own size.
+   * CDXC:ModalRedesign 2026-08-24:
+   * Superseded the earlier near-square settings roundness (2/3/7px). Controls
+   * and cards are 8px, modal and section surfaces are 12px, menu rows are 6px,
+   * and switches are full pills.
    */
-  --radius: 3px;
-  --settings-radius-compact: 2px;
-  --settings-radius-control: 3px;
-  --settings-radius-section: 7px;
-  --settings-radius-adaptive: min(7px, 10%);
+  --radius: 8px;
+  --settings-radius-compact: 6px;
+  --settings-radius-control: 8px;
+  --settings-radius-section: 12px;
+  --settings-radius-menu-item: 6px;
+  --settings-radius-pill: 999px;
+  --settings-radius-adaptive: min(8px, 22%);
   --settings-control-radius: var(--settings-radius-control);
+  --settings-control-height: 2rem;
   --settings-content-inline-padding: 1.25rem;
   --settings-content-max-width: 770px;
   --settings-focus-border-color: color-mix(in srgb, var(--foreground) 58%, var(--border) 42%);
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * The Codex greys are dark-only. Light themes derive the same three-step
+ * elevation from their own modal background so the redesign does not paint
+ * black panels on a white surface.
+ */
+.ghostex-settings-shadcn[data-sidebar-theme="plain-light"],
+.ghostex-settings-shadcn[data-sidebar-theme^="light-"] {
+  --settings-surface: var(--app-modal-background);
+  --settings-raised: color-mix(in srgb, var(--app-modal-background) 95%, #000000 5%);
+  --settings-raised-hover: color-mix(in srgb, var(--app-modal-background) 90%, #000000 10%);
+  --settings-hairline: rgba(0, 0, 0, 0.1);
 }
 
 .settings-select-content {
@@ -235,18 +292,46 @@ body {
    * Set their accent tokens directly on the popup so focused and hovered menu
    * rows use an unsaturated context-menu gray instead of the active theme tint.
    */
-  --accent: var(--app-context-menu-hover-background, #202020);
+  /*
+   * CDXC:ModalRedesign 2026-08-24:
+   * The popup is portaled, so it repeats the Codex surface tokens instead of
+   * inheriting them: #161616 popover, 8px popup radius, 6px row radius.
+   */
+  --accent: #232323;
   --accent-foreground: var(--popover-foreground, currentColor);
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  padding: 4px !important;
+}
+
+.settings-select-content [data-slot="select-item"] {
+  border-radius: 6px !important;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  min-height: 1.75rem;
 }
 
 .settings-select-content [data-slot="select-item"]:is(:hover, :focus, :focus-visible),
 .settings-select-content [data-slot="select-item"][aria-selected="true"],
 .settings-select-content [data-slot="select-item"][data-highlighted],
-.settings-select-content [data-slot="select-item"][data-selected],
-.settings-select-content [data-slot="select-item"][data-state="checked"] {
-  background: var(--app-context-menu-hover-background, #202020) !important;
+.settings-select-content [data-slot="select-item"][data-selected] {
+  background: #232323 !important;
   color: var(--accent-foreground);
   outline: none;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * The selected row is the one place the accent belongs in a settings popup: it
+ * marks the value in effect, so it brightens the label (and its check glyph)
+ * instead of filling the row a second shade of grey. Base UI marks it with
+ * `data-selected`; `data-highlighted` is the separate hover/keyboard state.
+ */
+.settings-select-content [data-slot="select-item"][data-selected],
+.settings-select-content [data-slot="select-item"][aria-selected="true"] {
+  color: var(--ghostex-accent, #38bdf8) !important;
 }
 
 /*
@@ -358,9 +443,15 @@ body {
   border-radius: 9999px;
 }
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * The modal shell is the Codex modal surface (#161616) rather than the app
+ * window background, so raised cards inside it have something to sit on.
+ */
 .ghostex-settings-shadcn[data-slot="dialog-content"] {
-  background-color: var(--app-modal-background) !important;
-  border-radius: 0;
+  background-color: var(--settings-surface) !important;
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
 }
 
 /*
@@ -1350,10 +1441,12 @@ body {
    Story-backed modal preview frames should use the same tokenized background
    as native modal windows so screenshots and local QA do not preserve older
    app-modal shells.
-   */
-  background:
-    radial-gradient(circle at 18% 12%, rgb(34 64 94 / 24%), transparent 32rem),
-    var(--app-modal-background);
+
+   CDXC:ModalRedesign 2026-08-24:
+   The Codex window tone is a flat #0e0e0e page behind the #161616 modal, so the
+   preview frame drops the old blue radial wash.
+  */
+  background: #0e0e0e;
   height: 100vh;
   width: 100vw;
 }
@@ -1404,26 +1497,36 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-header {
-  border-bottom: 1px solid var(--border);
-  padding: 1.25rem 1.25rem 0.875rem;
+  border-bottom: 1px solid var(--settings-hairline);
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.ghostex-settings-shadcn .first-launch-setup-dialog-title {
+  /*
+   CDXC:ModalRedesign 2026-08-24:
+   The wizard title is a quiet 15px/500 heading, matching the section labels on
+   the redesigned Settings surface instead of a 20px display size.
+  */
+  font-size: 0.9375rem;
+  line-height: 1.35;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-progress {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.375rem;
   grid-auto-columns: 1fr;
   grid-auto-flow: column;
-  margin-top: 0.75rem;
+  margin-top: 0.875rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-progress-dot {
-  background: var(--muted);
-  border-radius: 0;
-  height: 0.25rem;
+  background: var(--settings-raised-hover);
+  border-radius: var(--settings-radius-pill);
+  height: 0.1875rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-progress-dot[data-active="true"] {
-  background: var(--primary);
+  background: var(--settings-accent);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-body {
@@ -1478,23 +1581,20 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-hooks-label {
   color: var(--muted-foreground);
   font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-title {
   color: var(--foreground);
-  font-size: 1.375rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.15;
+  font-size: 0.9375rem;
+  line-height: 1.35;
   margin: 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-description {
   color: var(--muted-foreground);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.5;
   margin: 0;
 }
@@ -1513,10 +1613,9 @@ body {
    grid row remains bounded while preserving a useful screenshot preview.
   */
   aspect-ratio: 16 / 10;
-  background: color-mix(in srgb, var(--background) 78%, var(--foreground) 8%);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   max-height: clamp(15rem, 28vh, 22rem);
   min-width: 0;
   overflow: hidden;
@@ -1532,13 +1631,14 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-benefits {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0;
   list-style: none;
   margin: 0;
+  overflow: hidden;
   padding: 0;
 }
 
@@ -1575,20 +1675,17 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-title {
   color: var(--foreground);
-  font-size: clamp(1.75rem, 2.7vw, 2.75rem);
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1.05;
+  font-size: 1.125rem;
+  line-height: 1.25;
   margin: 0;
   white-space: nowrap;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-lede {
   color: var(--muted-foreground);
-  font-size: 1.125rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
   line-height: 1.55;
-  margin: 0 0 8px;
+  margin: 0;
   max-width: 54rem;
 }
 
@@ -1599,12 +1696,12 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.5rem;
-  padding: 0.875rem;
+  padding: 0.875rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card-wide {
@@ -1620,8 +1717,9 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card-icon {
   align-items: center;
-  background: var(--muted);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: inline-flex;
   flex: 0 0 auto;
@@ -1632,9 +1730,8 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card h3 {
   color: var(--foreground);
-  font-size: 16.33px;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.8125rem;
+  line-height: 1.3;
   margin: 0;
 }
 
@@ -1645,17 +1742,16 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card-date {
-  color: color-mix(in srgb, var(--muted-foreground) 75%, transparent);
+  color: var(--muted-foreground);
   display: block;
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-card p {
   color: var(--muted-foreground);
-  font-size: 14.33px;
+  font-size: 0.75rem;
   line-height: 1.5;
   margin: 0;
 }
@@ -1665,14 +1761,13 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-link {
-  color: var(--primary);
-  font-weight: 600;
+  color: var(--settings-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-welcome-link:hover {
-  color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
+  color: color-mix(in srgb, var(--settings-accent) 82%, var(--foreground));
 }
 
 .ghostex-settings-shadcn .first-launch-setup-discord-logo {
@@ -1728,13 +1823,13 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-preference-card {
   align-content: start;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--settings-control-radius);
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.75rem;
   min-width: 0;
-  padding: 0.875rem;
+  padding: 0.875rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-card-wide {
@@ -1758,22 +1853,22 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-preference-icon {
   align-items: center;
-  background: var(--muted);
-  border-radius: calc(var(--settings-control-radius) - 2px);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: inline-flex;
-  height: 1.875rem;
+  height: 2rem;
   justify-content: center;
-  width: 1.875rem;
+  width: 2rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-card h3,
 .ghostex-settings-shadcn .first-launch-setup-preference-title {
   color: var(--foreground);
   display: block;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.8125rem;
+  line-height: 1.3;
   margin: 0;
 }
 
@@ -1781,9 +1876,9 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-preference-description {
   color: var(--muted-foreground);
   display: block;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 0.125rem 0 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preset-options {
@@ -1794,79 +1889,81 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-preset-button {
   align-items: center;
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--settings-control-radius) - 2px);
-  color: var(--secondary-foreground);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  color: var(--foreground);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
   font-size: 0.8125rem;
-  font-weight: 700;
   justify-content: center;
-  min-height: 2.25rem;
-  padding: 0.5rem 0.75rem;
+  min-height: var(--settings-control-height);
+  padding: 0 0.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preset-button[data-active="true"] {
-  background: color-mix(in srgb, var(--primary) 18%, var(--card));
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-  color: var(--foreground);
+  /*
+   CDXC:ModalRedesign 2026-08-24:
+   The selected preset is marked by the accent on its label plus a brightened
+   hairline, not by filling the button with a tinted block.
+  */
+  border-color: color-mix(in srgb, var(--settings-accent) 45%, var(--settings-hairline));
+  color: var(--settings-accent);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preset-custom {
   align-self: center;
   color: var(--muted-foreground);
   font-size: 0.75rem;
-  font-weight: 650;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-select {
   appearance: none;
   background:
-    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%) right 0.95rem center / 0.35rem 0.35rem no-repeat,
-    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%) right 0.7rem center / 0.35rem 0.35rem no-repeat,
-    color-mix(in srgb, var(--background) 88%, var(--foreground) 4%);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--settings-control-radius) - 2px);
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%) right 0.95rem center / 0.3rem 0.3rem no-repeat,
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%) right 0.72rem center / 0.3rem 0.3rem no-repeat,
+    var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 650;
-  min-height: 2.5rem;
-  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  padding: 0 2rem 0 0.625rem;
   width: 100%;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-input {
-  background: color-mix(in srgb, var(--background) 88%, var(--foreground) 4%);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--settings-control-radius) - 2px);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 650;
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  padding: 0 0.625rem;
   width: 100%;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-command-preview {
-  background: color-mix(in srgb, var(--background) 84%, var(--foreground) 5%);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--settings-control-radius) - 2px);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--muted-foreground);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 0.75rem;
-  line-height: 1.45;
+  line-height: 1.5;
   min-height: 5rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.625rem;
   resize: none;
   width: 100%;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-usage {
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-top: 1px solid var(--settings-hairline);
   display: grid;
   gap: 0.5rem;
   padding-top: 0.75rem;
@@ -1874,16 +1971,15 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-preference-usage-title {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-usage-list {
   color: var(--muted-foreground);
   display: grid;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   gap: 0.375rem;
-  line-height: 1.4;
+  line-height: 1.45;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1895,14 +1991,14 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-preference-usage-list li::before {
-  background: color-mix(in srgb, var(--primary) 70%, var(--muted-foreground));
-  border-radius: 50%;
+  background: color-mix(in srgb, var(--settings-accent) 60%, var(--muted-foreground));
+  border-radius: var(--settings-radius-pill);
   content: "";
-  height: 0.3125rem;
+  height: 0.25rem;
   left: 0.125rem;
   position: absolute;
   top: 0.5rem;
-  width: 0.3125rem;
+  width: 0.25rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox-setting {
@@ -1914,26 +2010,32 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox {
+  /*
+   CDXC:ModalRedesign 2026-08-24:
+   Onboarding checkboxes stay a small square affordance rather than the native
+   macOS rounded control, but pick up the redesign's adaptive corner so they sit
+   in the same family as the 8px controls around them.
+  */
   appearance: none;
-  background: color-mix(in srgb, var(--background) 85%, var(--foreground) 4%);
-  border: 2px solid color-mix(in srgb, var(--muted-foreground) 78%, transparent);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid color-mix(in srgb, var(--foreground) 32%, transparent);
+  border-radius: var(--settings-radius-adaptive);
   box-sizing: border-box;
   cursor: pointer;
   flex: none;
-  height: 1.125rem;
+  height: 1.0625rem;
   margin: 0;
   position: relative;
-  width: 1.125rem;
+  width: 1.0625rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox:checked {
-  background: var(--foreground);
-  border-color: var(--foreground);
+  background: var(--settings-accent);
+  border-color: transparent;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after {
-  border: solid var(--background);
+  border: solid #0e0e0e;
   border-width: 0 2px 2px 0;
   content: "";
   height: 9px;
@@ -1941,7 +2043,7 @@ body {
   position: absolute;
   top: 1px;
   transform: rotate(45deg);
-  width: 5px;
+  width: 4px;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox:focus-visible {
@@ -1950,7 +2052,7 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-benefit + .first-launch-setup-benefit {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--settings-hairline);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-cli-page {
@@ -1969,17 +2071,16 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-command-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.625rem;
-  padding: 0.875rem;
+  padding: 0.875rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-command-card[data-installed="true"] {
-  background: color-mix(in srgb, var(--success, #22c55e) 8%, var(--card));
-  border-color: color-mix(in srgb, var(--success, #22c55e) 48%, var(--border));
+  border-color: color-mix(in srgb, var(--success, #22c55e) 30%, var(--settings-hairline));
 }
 
 .ghostex-settings-shadcn .first-launch-setup-command-label {
@@ -1987,16 +2088,15 @@ body {
   color: var(--muted-foreground);
   display: inline-flex;
   font-size: 0.6875rem;
-  font-weight: 750;
   gap: 0.375rem;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-command-card code {
-  background: color-mix(in srgb, var(--background) 88%, var(--foreground) 4%);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: block;
   font-family:
@@ -2007,10 +2107,10 @@ body {
     Consolas,
     "Liberation Mono",
     monospace;
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.5;
   overflow-wrap: anywhere;
-  padding: 0.75rem;
+  padding: 0.625rem 0.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-command-actions {
@@ -2032,12 +2132,13 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-mobile-benefits {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   list-style: none;
   margin: 0;
+  overflow: hidden;
   padding: 0;
 }
 
@@ -2053,11 +2154,11 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-mobile-benefits li + li {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--settings-hairline);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-mobile-benefits svg {
-  color: var(--foreground);
+  color: var(--muted-foreground);
   margin-top: 0.125rem;
 }
 
@@ -2070,8 +2171,7 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-mobile-benefit-title {
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-mobile-benefit-text {
@@ -2088,15 +2188,15 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-app-link-button {
   align-items: center;
-  background: var(--secondary);
-  border-radius: 0;
-  color: var(--secondary-foreground);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  color: var(--foreground);
   display: inline-flex;
   font-size: 0.8125rem;
-  font-weight: 650;
   gap: 0.375rem;
-  min-height: 2.25rem;
-  padding: 0.5rem 0.75rem;
+  min-height: var(--settings-control-height);
+  padding: 0 0.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-mobile-download-note {
@@ -2108,14 +2208,15 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-benefit-icon {
   align-items: center;
-  background: var(--muted);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: inline-flex;
-  height: 1.625rem;
+  height: 1.75rem;
   justify-content: center;
   margin-top: 0.0625rem;
-  width: 1.625rem;
+  width: 1.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-benefit-copy {
@@ -2127,8 +2228,7 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-benefit-title {
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-benefit-text {
@@ -2138,12 +2238,12 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hooks-panel {
-  background: color-mix(in srgb, var(--background) 88%, var(--foreground) 4%);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0.875rem 1rem;
 }
 
 /*
@@ -2165,7 +2265,7 @@ body {
 */
 .ghostex-settings-shadcn .first-launch-setup-warning-backdrop {
   align-items: center;
-  background: rgb(0 0 0 / 58%);
+  background: rgb(0 0 0 / 62%);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -2175,32 +2275,31 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-warning {
+  /*
+   CDXC:ModalRedesign 2026-08-24:
+   The continue-warning alert is the raised card tone on the modal surface with
+   one hairline and a plain drop shadow, instead of the primary-tinted gradient
+   panel the earlier design used.
+  */
   align-items: flex-start;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--popover) 96%, var(--primary) 4%),
-      color-mix(in srgb, var(--card) 92%, var(--background) 8%)
-    );
-  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
-  border-radius: 0;
-  box-shadow:
-    0 1rem 3rem rgb(0 0 0 / 32%),
-    inset 0 1px 0 color-mix(in srgb, var(--primary) 12%, transparent);
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 45%);
   display: grid;
-  gap: 0.75rem;
+  gap: 0.875rem;
   grid-template-columns: auto minmax(0, 1fr);
   max-width: 34rem;
-  padding: 0.875rem;
+  padding: 1rem;
   width: min(100%, 34rem);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-warning-icon {
   align-items: center;
-  background: color-mix(in srgb, var(--primary) 12%, var(--background));
-  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border));
-  border-radius: 0;
-  color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  color: var(--settings-accent);
   display: inline-flex;
   height: 2rem;
   justify-content: center;
@@ -2215,16 +2314,15 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-warning h3 {
   color: var(--foreground);
-  font-size: 0.9375rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.8125rem;
+  line-height: 1.3;
   margin: 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-warning p {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.5;
   margin: 0;
 }
 
@@ -2256,25 +2354,23 @@ body {
   align-items: center;
   color: var(--muted-foreground);
   display: flex;
-  font-size: 0.8125rem;
-  font-weight: 650;
+  font-size: 0.75rem;
   gap: 0.375rem;
-  letter-spacing: 0;
   line-height: 1.2;
   margin-bottom: 4px;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-group-count {
   align-items: center;
-  background: var(--muted);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border-radius: var(--settings-radius-pill);
   color: var(--foreground);
   display: inline-flex;
   font-size: 0.625rem;
   height: 1rem;
   justify-content: center;
   min-width: 1rem;
-  padding-inline: 0.3125rem;
+  padding-inline: 0.375rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-grid {
@@ -2292,15 +2388,16 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent {
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   display: grid;
   font-size: 0.75rem;
   gap: 0.375rem;
   grid-template-columns: auto minmax(0, 1fr);
   line-height: 1.2;
-  min-height: 1.75rem;
-  padding: 0.3125rem 0.5rem;
+  min-height: var(--settings-control-height);
+  padding: 0.3125rem 0.625rem;
   width: 100%;
 }
 
@@ -2312,15 +2409,14 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-name {
   color: var(--foreground);
-  font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-installed {
-  background: color-mix(in srgb, #22c55e 8%, var(--card));
-  border-color: color-mix(in srgb, #22c55e 24%, var(--border));
+  background: color-mix(in srgb, #22c55e 8%, var(--settings-raised-hover));
+  border-color: color-mix(in srgb, #22c55e 26%, var(--settings-hairline));
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-installed .first-launch-setup-hook-agent-icon {
@@ -2328,8 +2424,8 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-missing {
-  background: color-mix(in srgb, var(--destructive) 6%, var(--card));
-  border-color: color-mix(in srgb, var(--destructive) 22%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 6%, var(--settings-raised-hover));
+  border-color: color-mix(in srgb, var(--destructive) 20%, var(--settings-hairline));
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-missing .first-launch-setup-hook-agent-icon {
@@ -2338,8 +2434,8 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-update-required,
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-cli-missing {
-  background: color-mix(in srgb, var(--muted-foreground) 6%, var(--card));
-  border-color: var(--border);
+  background: var(--settings-raised-hover);
+  border-color: var(--settings-hairline);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-update-required .first-launch-setup-hook-agent-icon,
@@ -2348,7 +2444,7 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-unknown {
-  background: var(--background);
+  background: var(--settings-raised);
 }
 
 .ghostex-settings-shadcn .first-launch-setup-hook-agent-unknown .first-launch-setup-hook-agent-icon {
@@ -2376,13 +2472,14 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-guide-icon-shell {
   align-items: center;
-  background: var(--primary);
-  border-radius: 0;
-  color: var(--primary-foreground);
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  color: var(--settings-accent);
   display: inline-flex;
-  height: 3rem;
+  height: 2.5rem;
   justify-content: center;
-  width: 3rem;
+  width: 2.5rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-copy {
@@ -2392,10 +2489,9 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-visual-shell {
-  background: color-mix(in srgb, var(--background) 78%, var(--foreground) 8%);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   min-width: 0;
   overflow: hidden;
 }
@@ -2409,8 +2505,8 @@ body {
    */
   aspect-ratio: 16 / 9;
   background: #000;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   margin-inline: auto;
   max-width: 760px;
   min-width: 0;
@@ -2439,12 +2535,12 @@ body {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-callout {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.625rem;
-  padding: 0.875rem;
+  padding: 0.875rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-callout-heading {
@@ -2454,56 +2550,54 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-guide-callout-title {
   color: var(--foreground);
-  font-size: 0.875rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.8125rem;
+  line-height: 1.3;
   margin: 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-callout-subtitle {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.5;
   margin: 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-callout p {
   color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.5;
   margin: 0;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-examples {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
   display: grid;
   gap: 0.625rem;
-  padding: 0.875rem;
+  padding: 0.875rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-examples-title {
-  color: var(--foreground);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
   line-height: 1.2;
   margin: 0;
   text-transform: uppercase;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-snippet {
-  background: color-mix(in srgb, var(--background) 82%, var(--foreground) 6%);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1.55;
   margin: 0;
   overflow-x: auto;
-  padding: 0.75rem;
+  padding: 0.625rem 0.75rem;
   white-space: pre;
 }
 
@@ -2517,12 +2611,12 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-guide-list-item {
   align-items: flex-start;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: grid;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   gap: 0.75rem;
   grid-template-columns: auto minmax(0, 1fr);
   line-height: 1.5;
@@ -2531,14 +2625,15 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-guide-list-icon {
   align-items: center;
-  background: var(--muted);
-  border-radius: 0;
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
   color: var(--foreground);
   display: inline-flex;
-  height: 1.5rem;
+  height: 1.75rem;
   justify-content: center;
   margin-top: 0.0625rem;
-  width: 1.5rem;
+  width: 1.75rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-list-copy {
@@ -2550,8 +2645,7 @@ body {
 .ghostex-settings-shadcn .first-launch-setup-guide-list-title {
   color: var(--foreground);
   font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-guide-list-text {
@@ -2569,18 +2663,18 @@ body {
 
 .ghostex-settings-shadcn .first-launch-setup-footer {
   align-items: center;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--settings-hairline);
   display: flex;
-  gap: 0.625rem;
+  gap: 0.5rem;
   justify-content: flex-end;
-  padding: 0.875rem 1.25rem 1.25rem;
+  padding: 0.875rem 1.25rem 1rem;
 }
 
 .ghostex-settings-shadcn .first-launch-setup-footer-actions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.625rem;
+  gap: 0.5rem;
   justify-content: flex-end;
 }
 
@@ -2992,10 +3086,15 @@ body {
    * The macOS Settings sidebar container should sit 1px higher so its card
    * aligns with the native Settings window content chrome.
    */
-  background: color-mix(in srgb, var(--app-modal-background) 78%, var(--muted) 22%);
-  border: 1px solid var(--border);
+  /*
+   * CDXC:ModalRedesign 2026-08-24:
+   * The navigation rail is a raised panel at the same elevation as the section
+   * cards it navigates, with a single hairline and no drop shadow.
+   */
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
   border-radius: var(--settings-radius-section);
-  box-shadow: 0 0.75rem 1.75rem rgb(0 0 0 / 24%);
+  box-shadow: none;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -3070,10 +3169,10 @@ body {
 .ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"] {
   background: transparent !important;
   border: 0 !important;
-  border-radius: var(--settings-radius-control) !important;
-  color: var(--foreground) !important;
+  border-radius: var(--settings-radius-menu-item) !important;
+  color: color-mix(in srgb, var(--foreground) 82%, transparent) !important;
   font-size: 0.8125rem;
-  font-weight: 500 !important;
+  font-weight: 400 !important;
   gap: 0.5rem;
   height: auto;
   justify-content: flex-start !important;
@@ -3090,10 +3189,22 @@ body {
   min-width: 0;
 }
 
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]:hover,
-.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"][data-active] {
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]:hover {
   background: transparent !important;
-  color: var(--accent-foreground) !important;
+  color: var(--foreground) !important;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * The selected page is the one nav element that carries the accent, so the
+ * rail can be scanned without a bold weight or a saturated fill.
+ */
+.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"][data-active],
+.ghostex-settings-shadcn
+  .settings-sidebar-tab-trigger[data-slot="tabs-trigger"][data-active]:hover {
+  background: transparent !important;
+  color: var(--ghostex-accent, #38bdf8) !important;
+  font-weight: 500 !important;
 }
 
 .ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]::after {
@@ -3422,18 +3533,23 @@ body {
 }
 
 .ghostex-settings-shadcn .settings-modal-search-input {
-  background: color-mix(in srgb, var(--input) 30%, transparent);
-  border: 1px solid var(--input);
+  /*
+   * CDXC:ModalRedesign 2026-08-24:
+   * Search joins the one 32px control height shared by every dropdown, input,
+   * and button in the modal, on the raised card tone with a single hairline.
+   */
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
   border-radius: var(--settings-radius-control);
   box-sizing: border-box;
   color: var(--foreground);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 400;
-  height: 2.5rem;
+  height: var(--settings-control-height);
   letter-spacing: 0;
   line-height: 1.25rem;
-  min-height: 2.5rem;
-  padding: 0.25rem 2.5rem 0.25rem 0.75rem;
+  min-height: var(--settings-control-height);
+  padding: 0.25rem 2.25rem 0.25rem 0.75rem;
   width: 100%;
 }
 
@@ -3573,14 +3689,32 @@ body {
   border-radius: var(--settings-radius-control) !important;
 }
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Switches and slider tracks are pills, and portaled/inline menu rows use the
+ * 6px menu-item radius rather than the 8px control radius.
+ */
 .ghostex-settings-shadcn [data-slot="slider-track"],
+.ghostex-settings-shadcn [data-slot="slider-thumb"],
 .ghostex-settings-shadcn [data-slot="switch"],
-.ghostex-settings-shadcn [data-slot="switch-thumb"],
+.ghostex-settings-shadcn [data-slot="switch-thumb"] {
+  border-radius: var(--settings-radius-pill) !important;
+}
+
+.ghostex-settings-shadcn [data-slot="command-item"],
+.ghostex-settings-shadcn [data-slot="dropdown-menu-item"],
+.ghostex-settings-shadcn [data-slot="dropdown-menu-sub-trigger"],
+.ghostex-settings-shadcn [data-slot="select-item"],
+.ghostex-settings-shadcn .command-icon-picker-option {
+  border-radius: var(--settings-radius-menu-item);
+}
+
 .ghostex-settings-shadcn .settings-row-advanced-button,
 .ghostex-settings-shadcn .settings-row-info-button {
   border-radius: var(--settings-radius-compact);
 }
 
+.ghostex-settings-shadcn[data-slot="dialog-content"],
 .ghostex-settings-shadcn [data-slot="card"],
 .ghostex-settings-shadcn [data-slot="dialog-content"],
 .ghostex-settings-shadcn [data-slot="empty"],
@@ -3598,20 +3732,161 @@ body {
   border-radius: var(--settings-radius-adaptive);
 }
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Shared control geometry. Every dropdown, text input, and segmented toggle in
+ * a redesigned modal is exactly one 32px row tall so a label + select + button
+ * on the same line share one baseline. shadcn Button and SelectTrigger already
+ * default to 32px; Input defaults to 36px, so it is pinned down here rather
+ * than at each of the ~90 call sites.
+ */
+.ghostex-settings-shadcn [data-slot="input"],
+.ghostex-settings-shadcn [data-slot="select-trigger"],
+.ghostex-settings-shadcn [data-slot="toggle"],
+.ghostex-settings-shadcn [data-slot="toggle-group-item"] {
+  font-size: 0.8125rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+}
+
+.ghostex-settings-shadcn [data-slot="button"],
+.ghostex-settings-shadcn [data-slot="textarea"] {
+  font-size: 0.8125rem;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * One quiet type scale for field copy: 13px labels in the foreground tone and
+ * 12px descriptions in the muted tone, so a settings page reads as one column
+ * of text rather than three competing sizes.
+ */
+.ghostex-settings-shadcn [data-slot="field-label"] {
+  font-size: 0.8125rem;
+}
+
+.ghostex-settings-shadcn [data-slot="field-description"] {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Segmented toggles are one raised strip: unselected segments stay flat on the
+ * card, and the selected segment lifts to the hover tone and takes the accent
+ * label instead of a heavier weight.
+ */
+.ghostex-settings-shadcn [data-slot="toggle-group-item"] {
+  background: color-mix(in srgb, var(--settings-raised-hover) 55%, transparent);
+  border-color: var(--settings-hairline);
+  color: color-mix(in srgb, var(--foreground) 82%, transparent);
+}
+
+.ghostex-settings-shadcn [data-slot="toggle-group-item"]:hover {
+  background: var(--settings-raised-hover);
+  color: var(--foreground);
+}
+
+.ghostex-settings-shadcn [data-slot="toggle-group-item"][data-pressed],
+.ghostex-settings-shadcn [data-slot="toggle-group-item"][data-state="on"],
+.ghostex-settings-shadcn [data-slot="toggle-group-item"][aria-pressed="true"] {
+  background: var(--settings-raised-hover);
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+.ghostex-settings-shadcn [data-slot="input"],
+.ghostex-settings-shadcn [data-slot="textarea"] {
+  background: color-mix(in srgb, var(--settings-raised) 82%, transparent);
+  border: 1px solid var(--settings-hairline);
+}
+
+.ghostex-settings-shadcn [data-slot="select-trigger"] {
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+}
+
+.ghostex-settings-shadcn [data-slot="select-trigger"]:hover {
+  background: var(--settings-raised-hover);
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Switches are pills on the raised card tone, and an enabled switch is the one
+ * control that carries the accent so an "on" row can be spotted while scanning.
+ */
+.ghostex-settings-shadcn [data-slot="switch"] {
+  background: var(--settings-raised-hover);
+  border: 1px solid var(--settings-hairline);
+}
+
+.ghostex-settings-shadcn [data-slot="switch"][data-checked],
+.ghostex-settings-shadcn [data-slot="switch"][data-state="checked"] {
+  background: var(--ghostex-accent, #38bdf8);
+  border-color: transparent;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * One quiet type scale: 400 everywhere, 500 as the heaviest weight, reserved
+ * for small section labels and headings. The doubled class is deliberate — it
+ * outranks the 600-800 weights the earlier modal design set per component, so
+ * those rules can stay where they are and keep documenting their own size and
+ * spacing intent instead of being rewritten one by one.
+ */
+.ghostex-settings-shadcn.ghostex-settings-shadcn * {
+  font-weight: 400;
+}
+
+.ghostex-settings-shadcn.ghostex-settings-shadcn
+  :is(
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    b,
+    strong,
+    th,
+    legend,
+    summary,
+    [data-slot="alert-title"],
+    [data-slot="card-title"],
+    [data-slot="dialog-title"],
+    [data-slot="tabs-trigger"]
+  ) {
+  font-weight: 500;
+}
+
 .ghostex-settings-shadcn .settings-section-with-actions {
-  padding-top: 2.75rem;
+  /*
+   * CDXC:ModalRedesign 2026-08-24:
+   * Header actions now sit inside the card next to the section label, so the
+   * with-actions variant shares the same 48px header band as a plain section.
+   */
+  padding-top: 3rem;
 }
 
 .ghostex-settings-shadcn .settings-section-card {
   /*
    * CDXC:SettingsSurfaces 2026-06-16-08:12:
-   * Section cards and their floating title pills need a subtly lighter surface
-   * than the modal background so each group remains visible inside the centered
-   * 770px settings column.
+   * Superseded by CDXC:ModalRedesign 2026-08-24.
+   *
+   * CDXC:ModalRedesign 2026-08-24:
+   * Section cards are the raised tone (#1d1d1d) on the #161616 modal surface,
+   * with a single hairline and no shadow, so groups separate by elevation
+   * instead of by the old mixed-in tint.
    */
-  background: color-mix(in srgb, var(--app-modal-background) 82%, var(--muted) 18%) !important;
-  background-color: color-mix(in srgb, var(--app-modal-background) 82%, var(--muted) 18%) !important;
+  background: var(--settings-raised) !important;
+  background-color: var(--settings-raised) !important;
+  border: 1px solid var(--settings-hairline) !important;
   border-radius: var(--settings-radius-section) !important;
+  box-shadow: none !important;
+  /*
+   * The title label and any header actions are absolutely positioned inside
+   * the card's top inset, so the card reserves one 48px band for them.
+   */
+  padding-top: 3rem !important;
 }
 
 /*
@@ -3635,18 +3910,24 @@ body {
   pointer-events: auto;
 }
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Section header actions used to straddle the card's top border next to the
+ * floating title pill. The title is now a quiet label inside the card, so the
+ * actions sit on the same line inside the card instead of cutting the border.
+ */
 .ghostex-settings-shadcn .settings-section-header-actions {
   align-items: center;
-  background: var(--app-modal-background);
+  background: transparent;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: flex-end;
   max-width: calc(100% - 9rem);
-  padding: 0 0.25rem;
+  padding: 0;
   position: absolute;
   right: 1rem;
-  top: -1.125rem;
+  top: 0.5rem;
   z-index: 1;
 }
 
@@ -3704,6 +3985,19 @@ body {
   max-width: 100%;
 }
 
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * "New"/"Beta" chips beside a setting label: hairline chip on the raised tone
+ * with the accent doing the work, instead of a filled primary badge.
+ */
+.ghostex-settings-shadcn .settings-row-badge {
+  background: color-mix(in srgb, var(--settings-raised-hover) 70%, transparent);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-menu-item);
+  color: var(--ghostex-accent, #38bdf8);
+  line-height: 1.25;
+}
+
 .ghostex-settings-shadcn .settings-row-advanced-button {
   /*
    * CDXC:SettingsAdvanced 2026-06-16-18:22:
@@ -3745,28 +4039,38 @@ body {
    CDXC:SidebarTheme 2026-06-15-01:43:
    Settings section header chrome follows the modal token so Dark 1, Dark 2,
    and Light do not leave old dark islands inside the chosen mode. */
+/*
+ * CDXC:ModalRedesign 2026-08-24:
+ * Superseded the floating bordered pill that straddled the card's top border.
+ * The section name is now a quiet 13px/500 label sitting inside the card, so a
+ * settings page reads as a stack of clean cards instead of notched boxes. The
+ * absolute positioning and max-content sizing stay, because they are what keep
+ * multi-word headings like "Session Cards" on one line.
+ */
 .ghostex-settings-shadcn .settings-section-title-pill {
   align-items: center !important;
-  background: color-mix(in srgb, var(--app-modal-background) 74%, var(--muted) 26%) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--settings-radius-control) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   display: inline-flex !important;
   flex-direction: column !important;
   gap: 0 !important;
   justify-content: center !important;
-  left: 1rem !important;
-  max-width: calc(100% - 2rem) !important;
+  left: 1.25rem !important;
+  max-width: calc(100% - 2.5rem) !important;
   min-width: max-content !important;
   overflow: visible !important;
-  padding: 0.25rem 0.75rem !important;
+  padding: 0 !important;
   position: absolute !important;
-  top: -1rem !important;
+  top: 1.0625rem !important;
   width: max-content !important;
 }
 
 .ghostex-settings-shadcn .settings-section-title-pill-text {
+  color: var(--foreground);
   display: block;
-  font-size: 1.125rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
   line-height: 1;
   min-width: max-content;
   white-space: nowrap;
@@ -3812,4 +4116,446 @@ body {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+/*
+ * CDXC:ModalRedesign 2026-08-24 — Ghostex Quick Access
+ *
+ * Quick Access is one window frame shared by four sibling pages (Command Pane,
+ * Recent Projects, Sessions, Saved Prompts), so its redesign is one block that
+ * every page inherits through `.quick-access-surface` rather than four forks.
+ * It adopts the same Codex language as Settings:
+ *
+ *   modal surface #161616   raised row #1d1d1d   raised hover #232323
+ *   hairline rgba(255,255,255,0.08)
+ *   12px shell radius, 8px controls, 6px list/menu rows
+ *   one quiet scale (13px rows, 11-12px muted metadata), no bold anywhere
+ *   accent (var(--ghostex-accent)) only on the active tab and checked filters
+ *
+ * The block is last in the sheet on purpose: the legacy Quick Access rules
+ * above still document their own layout intent (row grids, tag rails, portal
+ * placement), and this pass changes only their surface, radius, and type.
+ */
+.quick-access-surface {
+  --quick-access-item-color: var(--foreground, var(--app-foreground));
+  --quick-access-item-font-size: 13px;
+  --quick-access-item-line-height: 18px;
+  --quick-access-group-heading-height: 26px;
+  --quick-access-list-padding-x: 6px;
+  --quick-access-list-padding-y: 6px;
+  --quick-access-row-height: 32px;
+  --quick-access-row-padding-x: 10px;
+  --quick-access-row-padding-y: 7px;
+  background: var(--settings-surface);
+}
+
+/*
+ * CommandDialog ships Tailwind's `rounded-none!`, and an important declaration
+ * inside a cascade layer outranks any unlayered one, so the outer dialog box
+ * can never be rounded from this sheet. The frame is therefore drawn by the
+ * Quick Access surface itself — which is the dialog's only child and already
+ * fills it — and the dialog element is reduced to a transparent, ring-free
+ * positioner. Recent Projects and Sessions use the bespoke portal shell, where
+ * that same surface element is the dialog, so both paths land on one rule.
+ */
+.ghostex-settings-shadcn.ghostex-command-palette-dialog {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0;
+  box-shadow: none !important;
+}
+
+/*
+ * The doubled class matches the weight of the shared base's `.rounded-none`
+ * rewrite (Command ships that utility), so the shell keeps the 12px modal
+ * radius rather than falling back to the 8px control radius.
+ */
+.quick-access-surface.quick-access-surface {
+  border-radius: var(--settings-radius-section) !important;
+  overflow: hidden;
+}
+
+.ghostex-command-palette-dialog > .quick-access-surface,
+.previous-sessions-modal.quick-access-surface {
+  background: var(--settings-surface);
+  border: 1px solid var(--settings-hairline);
+  height: 100%;
+}
+
+/* Tab header -------------------------------------------------------------- */
+
+.quick-access-surface .quick-access-tabs {
+  background: transparent;
+  border-bottom: 1px solid var(--settings-hairline);
+  gap: 2px;
+  padding: 6px;
+}
+
+.quick-access-surface .quick-access-tab {
+  border-radius: var(--settings-radius-menu-item);
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 13px;
+  gap: 6px;
+  height: var(--settings-control-height, 2rem);
+  line-height: 1;
+  padding: 0 10px;
+}
+
+/* The tabs separate by gap now, so the old vertical rules are removed. */
+.quick-access-surface .quick-access-tab + .quick-access-tab {
+  border-left: 0;
+}
+
+.quick-access-surface .quick-access-tab:hover,
+.quick-access-surface .quick-access-tab:focus-visible {
+  background: var(--settings-raised);
+  color: var(--foreground);
+  outline: none;
+}
+
+.quick-access-surface .quick-access-tab[data-active="true"] {
+  background: var(--settings-raised);
+  color: var(--ghostex-accent, #38bdf8);
+  font-weight: 500;
+}
+
+.quick-access-surface .quick-access-tab kbd {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.55;
+}
+
+/*
+ * The legacy tab desaturated its label so a themed tint could not leak into the
+ * header. The accent on the active tab is the design's one deliberate color
+ * here, so the filter is dropped rather than working around it.
+ */
+.quick-access-surface .quick-access-tab > span,
+.quick-access-surface .quick-access-tab kbd {
+  filter: none;
+}
+
+/* Search field ------------------------------------------------------------ */
+
+.quick-access-surface [data-slot="command-input-wrapper"] {
+  padding: 6px 6px 2px;
+}
+
+/*
+ * CommandInput and QuickAccessSearchInput both render InputGroup with h-9.
+ * Quick Access uses the redesign's single 32px control height instead.
+ */
+.quick-access-surface [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+  background: var(--settings-raised) !important;
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  height: var(--settings-control-height, 2rem);
+  min-height: var(--settings-control-height, 2rem);
+}
+
+.quick-access-surface
+  [data-slot="command-input-wrapper"]:focus-within
+  [data-slot="input-group"] {
+  border-color: var(--settings-focus-border-color, rgba(255, 255, 255, 0.34));
+}
+
+.quick-access-surface [data-slot="command-input"],
+.quick-access-surface [data-slot="quick-access-search-input"] {
+  font-size: 13px;
+}
+
+/* Lists ------------------------------------------------------------------- */
+
+.quick-access-surface [cmdk-group-heading],
+.quick-access-surface .previous-sessions-day-label {
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  min-height: var(--quick-access-group-heading-height);
+  padding: 5px var(--quick-access-row-padding-x);
+}
+
+/*
+ * Command rows carry Tailwind's `rounded-none`, which the shared modal base
+ * rewrites to the 8px control radius with !important. Quick Access rows are
+ * list rows, not controls, so they take the 6px menu-item radius the same way.
+ */
+.quick-access-surface [data-slot="command-item"],
+.quick-access-surface .recent-projects-row,
+.quick-access-surface .session-history-card {
+  border-radius: var(--settings-radius-menu-item) !important;
+}
+
+/*
+ * cmdk marks the active row with `data-selected`, which Tailwind fills with
+ * `bg-muted`. Every Quick Access list highlights on the same raised tone.
+ */
+.quick-access-surface [data-slot="command-item"][data-selected="true"],
+.quick-access-surface [data-slot="command-item"]:hover {
+  background: var(--settings-raised);
+}
+
+.quick-access-surface .recent-projects-row {
+  height: var(--quick-access-row-height);
+  min-height: var(--quick-access-row-height);
+  padding: 0 var(--quick-access-row-padding-x);
+}
+
+.quick-access-surface .recent-projects-row:hover,
+.quick-access-surface .recent-projects-row:focus-visible,
+.quick-access-surface .recent-projects-row[data-search-selected="true"],
+.quick-access-surface .recent-projects-row[data-context-menu-open="true"] {
+  background: var(--settings-raised);
+  outline: none;
+}
+
+.quick-access-surface .recent-projects-row-title,
+.quick-access-surface .recent-projects-session-count {
+  font-size: 13px;
+}
+
+.quick-access-surface .recent-projects-session-count {
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 12px;
+}
+
+/*
+ * Session rows paint their hover through a ::after fill, so the raised tone and
+ * the row radius go on that layer rather than on the button background.
+ */
+.quick-access-surface.previous-sessions-modal .group-sessions {
+  gap: 2px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-card::after {
+  background: var(--settings-raised);
+  border-radius: var(--settings-radius-menu-item);
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-project-label,
+.quick-access-surface.previous-sessions-modal
+  .session-history-card
+  .session-last-interaction-time {
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.quick-access-surface .previous-sessions-empty-state,
+.quick-access-surface .ghostex-stashed-prompts-empty {
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 13px;
+}
+
+/* Sessions toolbar: scope toggle + tag filter ----------------------------- */
+
+/*
+ * Both trailing controls live inside the 32px search field, so they are 24px
+ * chips on the raised tone. The scope toggle is a state, not a command, so the
+ * selected state is the accent label rather than a second filled control.
+ */
+.quick-access-surface .quick-access-session-scope-toggle {
+  align-self: center;
+  border-radius: var(--settings-radius-menu-item);
+  color: var(--muted-foreground, var(--app-muted));
+  font-size: 12px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 7px;
+}
+
+.quick-access-surface .quick-access-session-scope-toggle:hover,
+.quick-access-surface .quick-access-session-scope-toggle:focus-visible {
+  background: var(--settings-raised-hover);
+  color: var(--foreground);
+}
+
+.quick-access-surface .quick-access-session-scope-toggle[data-selected="true"] {
+  background: transparent;
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+.quick-access-surface
+  .quick-access-session-scope-toggle[data-selected="true"]:hover,
+.quick-access-surface
+  .quick-access-session-scope-toggle[data-selected="true"]:focus-visible {
+  background: var(--settings-raised-hover);
+}
+
+.quick-access-surface .quick-access-session-scope-toggle kbd {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.quick-access-surface .previous-sessions-tag-filter-toggle {
+  align-self: center;
+  border-radius: var(--settings-radius-menu-item);
+  color: var(--muted-foreground, var(--app-muted));
+  height: 24px;
+  min-width: 24px;
+  width: 24px;
+}
+
+.quick-access-surface .previous-sessions-tag-filter-toggle:hover,
+.quick-access-surface .previous-sessions-tag-filter-toggle:focus-visible {
+  background: var(--settings-raised-hover);
+  color: var(--foreground);
+}
+
+.quick-access-surface .previous-sessions-tag-filter-toggle[data-selected="true"] {
+  background: transparent;
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+/*
+ * The tag filter menu is portaled to <body>, outside `.ghostex-settings-shadcn`
+ * and outside the modal, so it restates the Codex popup surface the same way
+ * `.settings-select-content` does instead of inheriting it.
+ */
+.previous-sessions-tag-filter-menu.session-context-menu {
+  backdrop-filter: none;
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  gap: 1px;
+  padding: 4px;
+}
+
+.previous-sessions-tag-filter-menu .previous-sessions-tag-filter-item {
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--app-muted, #9a9a9a) 55%, var(--app-foreground, #fff) 45%);
+  font-size: 13px;
+  font-weight: 400;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.previous-sessions-tag-filter-menu .previous-sessions-tag-filter-item:hover,
+.previous-sessions-tag-filter-menu .previous-sessions-tag-filter-item:focus-visible {
+  background: #232323;
+  color: var(--app-foreground, #ffffff);
+  outline: none;
+}
+
+.previous-sessions-tag-filter-menu
+  .previous-sessions-tag-filter-item[data-selected="true"] {
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+.previous-sessions-tag-filter-menu .session-context-menu-divider {
+  background: rgba(255, 255, 255, 0.08);
+  margin: 3px 0;
+}
+
+/* Saved Prompts ----------------------------------------------------------- */
+
+.quick-access-surface .ghostex-stashed-prompt-tag-rail-wrap {
+  border-bottom: 1px solid var(--settings-hairline);
+  padding: 6px 6px 8px;
+}
+
+.quick-access-surface .ghostex-stashed-prompt-tag-rail-wrap::after {
+  background: linear-gradient(90deg, transparent, var(--settings-surface) 82%);
+}
+
+.quick-access-surface .ghostex-stashed-prompt-tag-pill {
+  background: var(--settings-raised);
+  border-color: var(--settings-hairline);
+  font-size: 12px;
+  height: 24px;
+}
+
+.quick-access-surface .ghostex-stashed-prompt-tag-pill:hover,
+.quick-access-surface .ghostex-stashed-prompt-tag-pill:focus-visible {
+  background: var(--settings-raised-hover);
+}
+
+.quick-access-surface .ghostex-stashed-prompt-tag-pill-add {
+  width: 24px;
+}
+
+.quick-access-surface .ghostex-stashed-prompt-tag-rail-separator {
+  background: var(--settings-hairline);
+}
+
+.ghostex-command-palette-dialog .ghostex-stashed-prompt-item {
+  border-radius: var(--settings-radius-menu-item);
+  height: 56px;
+  margin-bottom: 2px;
+  min-height: 56px;
+}
+
+.quick-access-surface .ghostex-stashed-prompt-row-meta,
+.quick-access-surface .ghostex-stashed-prompt-time {
+  font-size: 11px;
+}
+
+.quick-access-surface .ghostex-stashed-prompt-action {
+  border-radius: var(--settings-radius-menu-item);
+}
+
+.quick-access-surface .ghostex-stashed-prompt-action:hover {
+  background: var(--settings-raised-hover);
+}
+
+.quick-access-surface .ghostex-stashed-prompts-stash-hint {
+  background: var(--settings-raised);
+  border-color: var(--settings-hairline);
+}
+
+.quick-access-surface .ghostex-stashed-prompts-stash-hint:hover,
+.quick-access-surface .ghostex-stashed-prompts-stash-hint:focus-visible {
+  background: var(--settings-raised-hover);
+}
+
+/*
+ * The Saved Prompts tag popover is portaled like the session tag filter, so it
+ * restates the same popup surface.
+ */
+.ghostex-stashed-prompt-tag-popover[data-slot="popover-content"] {
+  backdrop-filter: none;
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  padding: 4px;
+}
+
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item {
+  border-radius: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-menu-item:hover,
+.ghostex-stashed-prompt-tag-popover
+  .ghostex-stashed-prompt-tag-menu-item:focus-visible {
+  background: #232323;
+}
+
+.ghostex-stashed-prompt-tag-popover
+  .ghostex-stashed-prompt-tag-menu-item[data-active="true"] {
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-popover-input {
+  background: #1d1d1d;
+  border-color: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  height: 28px;
+}
+
+.ghostex-stashed-prompt-tag-popover .ghostex-stashed-prompt-tag-popover-title {
+  /*
+   * The redesign has one quiet scale, so the popup's section label is a small
+   * muted label rather than an uppercase letter-spaced micro-heading.
+   */
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 5px 8px;
+  text-transform: none;
 }

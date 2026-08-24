@@ -396,7 +396,7 @@ export function TerminalDevServerIgnoredPortsField({
           <SettingsInput
             aria-invalid={Boolean(error)}
             aria-label="Ignored port or range"
-            className="h-10 min-w-0 flex-1 px-3 text-sm"
+            className="h-8 min-w-0 flex-1 px-3 text-[13px]"
             onChange={(event) => {
               setInputValue(event.currentTarget.value);
               if (error) {
@@ -588,7 +588,7 @@ export function SliderNumberField({
         />
         <SettingsInput
           id={id}
-          className="h-10 px-3 text-sm tabular-nums"
+          className="h-8 px-3 text-[13px] tabular-nums"
           onBlur={(event) => commitValue(Number(event.currentTarget.value))}
           onChange={(event) => updateInputText(event.currentTarget.value)}
           onFocus={(event) => event.currentTarget.select()}
@@ -644,7 +644,7 @@ export function ActionButtonField({
   const id = useId();
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
-      <Button className="h-10 w-full justify-start px-3 text-sm" id={id} onClick={onClick} type="button">
+      <Button className="h-8 w-full justify-start px-3 text-[13px]" id={id} onClick={onClick} type="button">
         {children}
       </Button>
     </SettingRow>
@@ -668,7 +668,7 @@ export function ActionButtonPairField({
       <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
         {actions.map((action, index) => (
           <Button
-            className="h-10 w-full justify-center px-3 text-center text-sm"
+            className="h-8 w-full justify-center px-3 text-center text-[13px]"
             id={index === 0 ? id : undefined}
             key={action.label}
             onClick={action.onClick}
@@ -728,7 +728,7 @@ export function SelectField({
         onValueChange={onChange}
         value={value}
       >
-        <SelectTrigger className="h-10 w-full px-3 text-sm" disabled={disabled} id={id}>
+        <SelectTrigger className="h-8 w-full px-3 text-[13px]" disabled={disabled} id={id}>
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent className={contentClassName} showScrollButtons={showScrollButtons}>
@@ -807,7 +807,7 @@ export function PetPickerField({
             onValueChange={(nextValue) => onChange(nextValue as PetId)}
             value={value}
           >
-            <SelectTrigger className="h-10 w-full px-3 text-sm" id={id}>
+            <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={id}>
               <SelectValue />
             </SelectTrigger>
             <SettingsSelectContent>
@@ -969,7 +969,7 @@ export function SoundField({
           onValueChange={(nextValue) => onChange(nextValue as CompletionSoundSetting)}
           value={value}
         >
-          <SelectTrigger className="h-10 w-full px-3 text-sm" id={id}>
+          <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={id}>
             <SelectValue />
           </SelectTrigger>
           <SettingsSelectContent className="max-h-72" showScrollButtons={false}>
@@ -991,7 +991,7 @@ export function SoundField({
               render={
                 <Button
                   aria-label={`Play ${label}`}
-                  className="h-10 w-10 rounded-none"
+                  className="size-8 rounded-none"
                   disabled={!onPlay}
                   onClick={() => onPlay?.(value)}
                   size="icon"
@@ -1068,7 +1068,7 @@ export function TextField({
         <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
           <SettingsInput
             id={id}
-            className="h-10 px-3 text-sm"
+            className="h-8 px-3 text-[13px]"
             onBlur={(event) => updateInputValue(event.currentTarget.value)}
             onChange={(event) => updateInputValue(event.currentTarget.value)}
             placeholder={placeholder}
@@ -1080,7 +1080,7 @@ export function TextField({
               render={
                 <Button
                   aria-label={browseLabel ?? `Browse for ${label}`}
-                  className="h-10 w-10 rounded-none"
+                  className="size-8 rounded-none"
                   onClick={onBrowse}
                   size="icon"
                   type="button"
@@ -1096,7 +1096,7 @@ export function TextField({
       ) : (
         <SettingsInput
           id={id}
-          className="h-10 px-3 text-sm"
+          className="h-8 px-3 text-[13px]"
           onBlur={(event) => updateInputValue(event.currentTarget.value)}
           onChange={(event) => updateInputValue(event.currentTarget.value)}
           placeholder={placeholder}
@@ -1162,14 +1162,14 @@ export function ColorField({
       <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3">
         <SettingsInput
           aria-label={`${label} picker`}
-          className="h-10 cursor-pointer rounded-none p-1"
+          className="h-8 cursor-pointer rounded-none p-1"
           onChange={(event) => onChange(event.currentTarget.value)}
           type="color"
           value={colorValue}
         />
         <SettingsInput
           id={id}
-          className="h-10 px-3 text-sm"
+          className="h-8 px-3 text-[13px]"
           onChange={(event) => onChange(event.currentTarget.value)}
           value={value}
         />
@@ -2072,7 +2072,7 @@ export function SidebarTagListSettingsRow({
       <Button
         aria-label={`Reorder ${label}`}
         ref={handleRef}
-        size="icon-sm"
+        size="icon"
         type="button"
         variant="ghost"
       >
@@ -2118,7 +2118,7 @@ export function SidebarTagListSettingsRow({
               aria-label={`${item.visible ? "Hide" : "Show"} ${label}`}
               className="shrink-0"
               onClick={() => onVisibleChange(!item.visible)}
-              size="icon-sm"
+              size="icon"
               type="button"
               variant="ghost"
             >
@@ -2203,8 +2203,12 @@ export function SettingRow({
                * The badge reads the shadcn theme tokens the rest of this modal
                * uses, so it inverts with the Light themes instead of painting a
                * fixed dark-theme sky tint that washes out on white.
+               *
+               * CDXC:ModalRedesign 2026-08-24:
+               * Quiet chip: the accent label carries the emphasis, so the chip
+               * itself drops to a hairline on the raised tone and normal weight.
                */
-              <span className="inline-flex rounded-none border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              <span className="settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal">
                 {badge}
               </span>
             ) : null}

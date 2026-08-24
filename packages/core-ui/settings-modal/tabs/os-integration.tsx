@@ -69,7 +69,7 @@ export function OSIntegrationSettingsTab({
            */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <SettingButton
-              className="h-10 w-full justify-start px-4"
+              className="h-8 w-full justify-start px-3"
               disabled={!onSetDefaults}
               disabledReason="macOS default-app changes aren’t available here."
               disabledTooltipClassName="w-full"
@@ -81,7 +81,7 @@ export function OSIntegrationSettingsTab({
               Set as Default Editor
             </SettingButton>
             <SettingButton
-              className="h-10 w-full justify-start px-4"
+              className="h-8 w-full justify-start px-3"
               disabled={!onSetDefaults}
               disabledReason="macOS default-app changes aren’t available here."
               disabledTooltipClassName="w-full"
@@ -93,7 +93,7 @@ export function OSIntegrationSettingsTab({
               Set Terminal Links
             </SettingButton>
             <SettingButton
-              className="h-10 w-full justify-start px-4"
+              className="h-8 w-full justify-start px-3"
               disabled={!onSetDefaults}
               disabledReason="macOS default-app changes aren’t available here."
               disabledTooltipClassName="w-full"
@@ -105,7 +105,7 @@ export function OSIntegrationSettingsTab({
               Set Script Runner
             </SettingButton>
             <SettingButton
-              className="h-10 w-full justify-start px-4"
+              className="h-8 w-full justify-start px-3"
               disabled={!onSetDefaults}
               disabledReason="macOS default-app changes aren’t available here."
               disabledTooltipClassName="w-full"

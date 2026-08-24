@@ -658,7 +658,7 @@ export function ActionSettingsEditor({
             }}
             value={actionType}
           >
-            <SelectTrigger className="h-10 w-full px-3 text-sm" id={actionTypeId}>
+            <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={actionTypeId}>
               <SelectValue />
             </SelectTrigger>
             <SettingsSelectContent>
@@ -679,7 +679,7 @@ export function ActionSettingsEditor({
         <SettingsInput
           autoFocus
           aria-invalid={hasDuplicateTitle || undefined}
-          className="h-10 px-3 text-sm"
+          className="h-8 px-3 text-[13px]"
           id={nameId}
           onChange={(event) => setName(event.currentTarget.value)}
           placeholder={actionType === "browser" ? "Docs" : "Dev"}
@@ -773,7 +773,7 @@ export function ActionSettingsEditor({
                     <SettingsInput
                       aria-label={`Link ${index + 1} URL`}
                       autoFocus={link.url.length === 0}
-                      className="h-10 min-w-0 flex-1 px-3 text-sm"
+                      className="h-8 min-w-0 flex-1 px-3 text-[13px]"
                       onChange={(event) => updateLink(index, { url: event.currentTarget.value })}
                       placeholder={DEFAULT_BROWSER_ACTION_URL}
                       value={link.url}
@@ -788,7 +788,7 @@ export function ActionSettingsEditor({
                     >
                       <SelectTrigger
                         aria-label={`Link ${index + 1} target`}
-                        className="h-10 w-44 shrink-0 px-3 text-sm"
+                        className="h-8 w-44 shrink-0 px-3 text-[13px]"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -819,7 +819,6 @@ export function ActionSettingsEditor({
             <Button
               className="self-start"
               onClick={() => setLinks([...links, { target: "integrated", url: "" }])}
-              size="sm"
               type="button"
               variant="outline"
             >

@@ -36,8 +36,18 @@ export function AutomationAgentIcon({ icon }: { icon: SidebarAgentIcon }) {
       data-agent-icon={icon}
       style={{
         backgroundColor: AGENT_LOGO_COLORS[icon],
+        display: "block",
+        flex: "0 0 auto",
+        height: 14,
         maskImage: `url("${AGENT_LOGOS[icon]}")`,
+        maskPosition: "center",
+        maskRepeat: "no-repeat",
+        maskSize: "contain",
+        width: 14,
         WebkitMaskImage: `url("${AGENT_LOGOS[icon]}")`,
+        WebkitMaskPosition: "center",
+        WebkitMaskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
       }}
     />
   );

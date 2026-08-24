@@ -169,6 +169,16 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     customSidebarTitlebarBackgroundDarknessPercent,
     customSidebarTitlebarBackgroundTintColor,
   );
+  /**
+   * CDXC:AccentColor 2026-08-24:
+   * The accent color is a plain hex color like the sidebar/titlebar colors, so
+   * it uses the same six-digit hex normalization and falls back to the default
+   * sky tone when the stored value is not a usable color.
+   */
+  const accentColor = normalizeSidebarTitlebarHexColor(
+    readString(source, "accentColor", DEFAULT_ghostex_SETTINGS.accentColor),
+    DEFAULT_ghostex_SETTINGS.accentColor,
+  );
   return {
     actionCompletionSound: clampCompletionSoundSetting(
       readString(source, "actionCompletionSound", DEFAULT_ghostex_SETTINGS.actionCompletionSound),
@@ -850,6 +860,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     customSidebarTitlebarBackgroundTintColor,
     customSidebarTitlebarBackgroundDarknessPercent,
     customSidebarTitlebarBackgroundColor,
+    accentColor,
     terminalCursorStyle: normalizeTerminalCursorStyle(
       readString(source, "terminalCursorStyle", DEFAULT_ghostex_SETTINGS.terminalCursorStyle),
     ),

@@ -920,7 +920,7 @@ export function AgentSettingsEditor({
           onValueChange={updateAgentType}
           value={icon}
         >
-          <SelectTrigger className="h-10 w-full px-3 text-sm" id={agentTypeId}>
+          <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={agentTypeId}>
             <SelectValue />
           </SelectTrigger>
           <SettingsSelectContent>
@@ -943,7 +943,7 @@ export function AgentSettingsEditor({
         </FieldContent>
         <SettingsInput
           autoFocus
-          className="h-10 px-3 text-sm"
+          className="h-8 px-3 text-[13px]"
           id={nameId}
           onChange={(event) => setName(event.currentTarget.value)}
           placeholder="Codex"
@@ -983,7 +983,7 @@ export function AgentSettingsEditor({
           onValueChange={(value) => setAcceptAllMode(value as AgentAcceptAllMode)}
           value={acceptAllMode}
         >
-          <SelectTrigger className="h-10 w-full px-3 text-sm" id={acceptAllModeId}>
+          <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={acceptAllModeId}>
             <SelectValue />
           </SelectTrigger>
           <SettingsSelectContent>

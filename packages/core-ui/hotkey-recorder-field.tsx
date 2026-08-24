@@ -98,7 +98,7 @@ export function HotkeyRecorderField({
       <Button
         aria-invalid={ariaInvalid}
         className={cn(
-          "h-10 w-full justify-start overflow-hidden px-3 pr-9 font-mono text-sm",
+          "h-8 w-full justify-start overflow-hidden px-3 pr-9 font-mono text-[13px]",
           className,
         )}
         id={id}
@@ -116,7 +116,7 @@ export function HotkeyRecorderField({
             <AppTooltip content={`Reset to ${originalHotkeyLabel}`}>
               <Button
                 aria-label={`Reset hotkey to ${originalHotkeyLabel}`}
-                className="h-7 rounded-none border border-border bg-background/95 px-2 font-mono text-xs text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
+                className="h-6 rounded-none border border-border bg-background/95 px-2 font-mono text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -134,7 +134,7 @@ export function HotkeyRecorderField({
             <AppTooltip content="Remove hotkey">
               <Button
                 aria-label="Remove hotkey"
-                className="size-7 rounded-none border border-border bg-background/95 p-0 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
+                className="size-6 rounded-none border border-border bg-background/95 p-0 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

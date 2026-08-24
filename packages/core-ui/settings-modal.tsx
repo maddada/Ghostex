@@ -1468,6 +1468,22 @@ export function SettingsModal({
                     value={draft.customSidebarTitlebarBackgroundTintColor}
                   />
                 ) : null}
+                {/*
+                  CDXC:AccentColor 2026-08-24:
+                  The accent color drives --ghostex-accent on every React
+                  surface, so it uses the same web color picker as Background
+                  Tint instead of a native input[type=color].
+                */}
+                {mainSettingVisible(settingsSearch.theming, "accentColor") ? (
+                  <WebColorPickerField
+                    description="Highlight color for accent text and status highlights."
+                    label="Accent Color"
+                    {...getSettingModificationProps("accentColor")}
+                    onChange={(value) => updateDraftDebounced("accentColor", value)}
+                    onCommit={(value) => updateDraft("accentColor", value)}
+                    value={draft.accentColor}
+                  />
+                ) : null}
                 {mainSettingVisible(settingsSearch.theming, "workspaceActivePaneBorderColor") ? (
                   <TextField
                     description="CSS color for the focused pane border."
@@ -2805,7 +2821,7 @@ export function SettingsModal({
             {isFirstLaunchSetup ? (
               <div className="flex justify-end pt-2">
                 <Button
-                  className="h-10 px-5 text-sm"
+                  className="h-8 px-3 text-[13px]"
                   onClick={closeSettingsModal}
                   type="button"
                 >
@@ -2817,7 +2833,7 @@ export function SettingsModal({
                 <Separator className="bg-border" />
                 <div className="flex justify-between gap-3">
                   <Button
-                    className="h-10 px-5 text-sm"
+                    className="h-8 px-3 text-[13px]"
                     onClick={resetSettings}
                     type="button"
                     variant="outline"
@@ -3078,7 +3094,6 @@ function SettingsSearchNoMatchesNotice({
               <Button
                 key={page.id}
                 onClick={() => onSelectPage(page.id)}
-                size="sm"
                 type="button"
                 variant="outline"
               >
@@ -3327,14 +3342,14 @@ function GhosttySettingsActions({
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Button className="h-10 px-4 text-sm" onClick={onResetDefaults} type="button" variant="outline">
+      <Button className="h-8 px-3 text-[13px]" onClick={onResetDefaults} type="button" variant="outline">
         Reset Ghostty defaults
       </Button>
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
-              className="h-10 px-4 text-sm"
+              className="h-8 px-3 text-[13px]"
               onClick={onApplyRecommended}
               type="button"
               variant="outline"
@@ -3347,11 +3362,11 @@ function GhosttySettingsActions({
           {GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES.join("\n")}
         </TooltipContent>
       </Tooltip>
-      <Button className="h-10 px-4 text-sm" onClick={onOpenDocs} type="button" variant="outline">
+      <Button className="h-8 px-3 text-[13px]" onClick={onOpenDocs} type="button" variant="outline">
         Open Ghostty docs
       </Button>
       <Button
-        className="h-10 px-4 text-sm"
+        className="h-8 px-3 text-[13px]"
         onClick={onOpenConfigFile}
         type="button"
         variant="outline"
@@ -3389,7 +3404,7 @@ function PromptEditorBackendField({
         onValueChange={(value) => onChange(value as PromptEditorBackend)}
         value={backend}
       >
-        <SelectTrigger className="h-10 w-full px-3 text-sm" id={id}>
+        <SelectTrigger className="h-8 w-full px-3 text-[13px]" id={id}>
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent>

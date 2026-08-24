@@ -100,10 +100,10 @@ export function BoardColumnsDialog({
 
   return (
     <Dialog onOpenChange={(next) => (next ? undefined : closeDialog())} open={open}>
-      <DialogContent className="project-ticket-dialog project-board-columns-dialog">
-        <DialogHeader>
-          <DialogTitle>Board columns</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="project-ticket-dialog project-board-columns-dialog gap-4 p-5">
+        <DialogHeader className="gap-1">
+          <DialogTitle className="text-[15px] font-normal">Board columns</DialogTitle>
+          <DialogDescription className="text-xs font-normal text-muted-foreground">
             Extra columns come from this board&apos;s Beads status config. The six built-in lanes are fixed.
           </DialogDescription>
         </DialogHeader>
@@ -138,11 +138,10 @@ export function BoardColumnsDialog({
                             setRenamingName("");
                           })
                         }
-                        size="sm"
                       >
                         Save
                       </Button>
-                      <Button onClick={() => setRenamingName("")} size="sm" variant="ghost">
+                      <Button onClick={() => setRenamingName("")} variant="ghost">
                         Cancel
                       </Button>
                     </>
@@ -156,7 +155,6 @@ export function BoardColumnsDialog({
                         aria-label={`Move ${name} up`}
                         disabled={busy || index === 0}
                         onClick={() => void run(() => onReorder(name, -1))}
-                        size="sm"
                         variant="ghost"
                       >
                         ↑
@@ -165,7 +163,6 @@ export function BoardColumnsDialog({
                         aria-label={`Move ${name} down`}
                         disabled={busy || index === managedNames.length - 1}
                         onClick={() => void run(() => onReorder(name, 1))}
-                        size="sm"
                         variant="ghost"
                       >
                         ↓
@@ -176,7 +173,6 @@ export function BoardColumnsDialog({
                           setRenamingName(name);
                           setRenameDraft(name);
                         }}
-                        size="sm"
                         variant="ghost"
                       >
                         Rename
@@ -184,7 +180,6 @@ export function BoardColumnsDialog({
                       <Button
                         disabled={busy || ticketCount > 0}
                         onClick={() => void run(() => onDelete(name))}
-                        size="sm"
                         title={
                           ticketCount > 0
                             ? `Move its ${ticketCount === 1 ? "card" : "cards"} out first.`
@@ -216,7 +211,6 @@ export function BoardColumnsDialog({
                   setDraftName("");
                 })
               }
-              size="sm"
             >
               Add column
             </Button>

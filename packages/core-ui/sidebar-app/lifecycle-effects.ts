@@ -338,6 +338,13 @@ export function useSidebarDocumentChromeEffects({
       document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
     }
 
+    /**
+     * CDXC:AccentColor 2026-08-24:
+     * The accent color is a plain always-on chrome token, so publish it next to
+     * the theme variables instead of gating it behind the custom chrome toggle.
+     */
+    document.body.style.setProperty("--ghostex-accent", effectiveSettings.accentColor);
+
     if (customSidebarTitlebarColorsEnabled) {
       /**
        * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
@@ -387,6 +394,7 @@ export function useSidebarDocumentChromeEffects({
       delete document.body.dataset.customSidebarTitlebarColors;
       document.body.style.removeProperty("--workspace-sidebar-theme-color");
       document.body.style.removeProperty("--workspace-sidebar-theme-foreground");
+      document.body.style.removeProperty("--ghostex-accent");
       document.body.style.removeProperty("--custom-sidebar-titlebar-foreground-color");
       document.body.style.removeProperty("--custom-sidebar-titlebar-background-color");
       document.body.style.removeProperty("--custom-sidebar-titlebar-gradient-top-color");
@@ -394,6 +402,7 @@ export function useSidebarDocumentChromeEffects({
     };
   }, [
     customThemeColor,
+    effectiveSettings.accentColor,
     effectiveSettings.customSidebarTitlebarBackgroundColor,
     effectiveSettings.customSidebarTitlebarColorsEnabled,
     theme,

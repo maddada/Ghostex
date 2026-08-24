@@ -353,6 +353,7 @@ function AgentsHubSurface({
               <div className="agents-hub-search">
                 <Input
                   aria-label={`Search ${tabLabels[tab]}`}
+                  className="h-8"
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={`Search ${tabLabels[tab]}`}
                   value={query}
@@ -855,7 +856,7 @@ function EditorToolbarButton({
                 onClick();
               }
             }}
-            size="icon-sm"
+            size="icon"
             type="button"
             variant="outline"
           >

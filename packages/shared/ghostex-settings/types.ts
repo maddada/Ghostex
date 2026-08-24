@@ -124,6 +124,13 @@ export type AppShotsHotkey =
   | "double-left-option";
 export type KeepAwakeDurationMinutes = 0 | 120 | 300;
 export type AutoSleepIdleMinutes = 5 | 10 | 15 | 30 | 60 | 120 | 300;
+/**
+ * CDXC:AccentColor 2026-08-24:
+ * The Codex-style redesign paints its accent text (Automate "Active", unread
+ * counts, and upcoming modal accents) from a single user-configurable color.
+ * The default is the sky tone those surfaces shipped hardcoded.
+ */
+export const DEFAULT_ACCENT_COLOR = "#38bdf8";
 export const DEFAULT_TERMINAL_PANE_PADDING_PX = 0;
 export const MIN_TERMINAL_PANE_PADDING_PX = 0;
 export const MAX_TERMINAL_PANE_PADDING_PX = 64;
@@ -604,6 +611,11 @@ export type ghostexSettings = {
   customSidebarTitlebarBackgroundTintColor: string;
   customSidebarTitlebarBackgroundDarknessPercent: number;
   customSidebarTitlebarBackgroundColor: string;
+  /**
+   * CDXC:AccentColor 2026-08-24:
+   * Hex accent color published to every React surface as --ghostex-accent.
+   */
+  accentColor: string;
   terminalCursorStyle: TerminalCursorStyle;
   terminalCursorStyleBlink: boolean;
   terminalEngine: TerminalEngine;

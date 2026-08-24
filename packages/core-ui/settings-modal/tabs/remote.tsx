@@ -435,7 +435,6 @@ export function RemoteSettingsTab({
                 render={
                   <Button
                     className="settings-management-help-button"
-                    size="sm"
                     type="button"
                     variant="outline"
                   />

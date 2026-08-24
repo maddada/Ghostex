@@ -470,6 +470,11 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: "Background Tint",
       },
       {
+        key: "accentColor",
+        subtitle: "Highlight color for accent text and status highlights.",
+        title: "Accent Color",
+      },
+      {
         key: "workspaceActivePaneBorderColor",
         subtitle: "CSS color for the focused pane border.",
         title: "Active Pane Border",

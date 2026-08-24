@@ -17,6 +17,7 @@ import {
   getSidebarTitlebarBackgroundForDarkness,
 } from "./titlebar-color";
 import {
+  DEFAULT_ACCENT_COLOR,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
@@ -535,6 +536,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
     DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
   ),
+  accentColor: DEFAULT_ACCENT_COLOR,
   /**
    * CDXC:GhosttyDefaults 2026-05-22-12:29:
    * New Ghostex terminals should default to the requested GitHub Dark terminal

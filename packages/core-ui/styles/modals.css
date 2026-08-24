@@ -1692,15 +1692,18 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .command-config-modal-shadcn [data-slot="dialog-title"] {
+  /* CDXC:CodexModalRestyle 2026-08-24:
+     The Codex-style modal language drops bold chrome everywhere: dialog titles
+     render at the regular weight and small section labels stop above 500. */
   font-family: inherit;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .command-config-modal-shadcn [data-slot="field-label"],
 .command-config-modal-shadcn .command-config-label {
   color: var(--foreground);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -3416,15 +3419,38 @@ html:has(body.app-modal-host-native-window-body) {
    * enabled switches. A single trigger selector owns the mutually-exclusive
    * send modes, and the duration fields only appear for the delay mode.
    */
+  /**
+   * CDXC:CodexModalRestyle 2026-08-24:
+   * Session Automations follows the Codex-style language already shipped on
+   * the Kanban/Automate pages: a #0e0e0e window, #161616 automation panels,
+   * #1d1d1d raised controls, hairline rgba(255,255,255,0.08) edges, 12px
+   * sections / 8px controls / 6px menu items / pill switches, one 32px control
+   * height, and no bold weights. `--app-modal-background` is redeclared here
+   * (instead of fighting the native-host `!important` background rule) so the
+   * shell resolves to the window color on every theme.
+   */
   max-width: min(460px, calc(100vw - 2rem));
-  --delayed-send-radius-compact: 2px;
-  --delayed-send-radius-control: 3px;
-  --delayed-send-radius-section: 7px;
+  --app-modal-background: #0e0e0e;
+  --delayed-send-surface: #0e0e0e;
+  --delayed-send-panel: #161616;
+  --delayed-send-raised: #1d1d1d;
+  --delayed-send-raised-hover: #232323;
+  --delayed-send-hairline: rgba(255, 255, 255, 0.08);
+  --delayed-send-radius-pill: 999px;
+  --delayed-send-radius-menu: 6px;
+  --delayed-send-radius-control: 8px;
+  --delayed-send-radius-section: 12px;
+  --delayed-send-control-height: 32px;
   border-radius: var(--delayed-send-radius-section) !important;
 }
 
 .delayed-send-modal-shadcn [data-slot="card"] {
+  background: var(--delayed-send-panel);
+  border: 1px solid var(--delayed-send-hairline);
   border-radius: var(--delayed-send-radius-section) !important;
+  /* Card ships `ring-1 ring-foreground/10`; this unlayered rule outranks the
+     Tailwind utilities layer, so the ring is replaced by the hairline border. */
+  box-shadow: none;
 }
 
 .delayed-send-modal-shadcn :is(
@@ -3433,19 +3459,74 @@ html:has(body.app-modal-host-native-window-body) {
     [data-slot="select-trigger"]
   ) {
   border-radius: var(--delayed-send-radius-control) !important;
+  font-weight: 400;
+  height: var(--delayed-send-control-height);
+  min-height: var(--delayed-send-control-height);
+}
+
+.delayed-send-modal-shadcn :is([data-slot="input"], [data-slot="select-trigger"]) {
+  background: var(--delayed-send-raised);
+  border: 1px solid var(--delayed-send-hairline);
+  color: var(--foreground);
+}
+
+.delayed-send-modal-shadcn
+  :is([data-slot="input"], [data-slot="select-trigger"]):hover:not(:disabled, :focus, :focus-visible) {
+  background: var(--delayed-send-raised-hover);
 }
 
 .delayed-send-modal-shadcn [data-slot="switch"],
 .delayed-send-modal-shadcn [data-slot="switch-thumb"] {
-  border-radius: var(--delayed-send-radius-compact) !important;
+  border-radius: var(--delayed-send-radius-pill) !important;
 }
 
-.delayed-send-select-content {
-  border-radius: 7px !important;
+.delayed-send-modal-shadcn [data-slot="dialog-title"] {
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.delayed-send-modal-shadcn [data-slot="dialog-description"],
+.delayed-send-modal-shadcn [data-slot="card-description"] {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.delayed-send-modal-shadcn [data-slot="card-title"] {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.delayed-send-modal-shadcn [data-slot="field-label"] {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.delayed-send-modal-shadcn
+  [data-slot="card-description"].delayed-send-automation-status-active {
+  color: var(--ghostex-accent, #38bdf8);
+}
+
+/*
+ * The trigger popover portals to <body>, outside the modal element, so it
+ * cannot inherit the dialog's tokens. styles.css pins every select-content to
+ * --app-dropdown-background with `!important` at the same specificity and from
+ * a later sheet, so this rule qualifies with the slot attribute to win.
+ */
+[data-slot="select-content"].delayed-send-select-content {
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
 }
 
 .delayed-send-select-content [data-slot="select-item"] {
-  border-radius: 3px !important;
+  border-radius: 6px !important;
+  font-weight: 400;
 }
 
 .app-modal-host-native-window-body .delayed-send-modal-shadcn {
@@ -3488,7 +3569,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--foreground);
   display: flex;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   gap: 7px;
   line-height: 1.25;
   min-width: 0;
@@ -3541,7 +3622,8 @@ html:has(body.app-modal-host-native-window-body) {
 
 .delayed-send-trigger-description {
   color: var(--muted-foreground);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1.45;
   margin: 0;
 }

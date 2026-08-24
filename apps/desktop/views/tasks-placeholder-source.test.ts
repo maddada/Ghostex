@@ -7,6 +7,9 @@ const boardStateSource = readFileSync(new URL("./project-board/board-state.ts", 
 const ticketDetailSource = readFileSync(new URL("./project-board/ticket-detail.tsx", import.meta.url), "utf8");
 const boardLaneCardSource = readFileSync(new URL("./project-board/board-lane-card.tsx", import.meta.url), "utf8");
 const constantsSource = readFileSync(new URL("./project-board/constants.ts", import.meta.url), "utf8");
+const ticketDialogsSource = readFileSync(new URL("./project-board/ticket-dialogs.tsx", import.meta.url), "utf8");
+const automationDialogSource = readFileSync(new URL("./project-board/automation-dialog.tsx", import.meta.url), "utf8");
+const boardColumnsDialogSource = readFileSync(new URL("./project-board/board-columns-dialog.tsx", import.meta.url), "utf8");
 
 function sourceBetweenIn(source: string, start: string, end: string): string {
   const startIndex = source.indexOf(start);
@@ -54,16 +57,19 @@ function collectFunctionalUpdaterCalls(source: string, setterCallStart: string):
 }
 
 describe("Project Board form event handling", () => {
-  test("keeps Kanban swimlanes adjacent with a single separator", () => {
+  test("renders Kanban swimlanes as rounded panels with a gutter", () => {
     /*
-     * CDXC:ProjectBoardLanes 2026-06-19-09:59:
-     * Kanban swimlanes should remove horizontal gutters to give cards more width while avoiding doubled borders where lanes touch.
+     * CDXC:ProjectBoardRedesign 2026-08-23:
+     * The Codex-style board separates swimlanes with a gutter and gives each
+     * lane its own rounded panel, replacing the old zero-gap shared-border
+     * strip. Layout lives in Tailwind on the components, not styles.ts.
      */
-    const laneLayoutSource = sourceBetweenIn(stylesSource, ".project-board-lanes {", ".project-board-lane-header");
+    const lanesSource = sourceBetweenIn(projectBoardAppSource, 'aria-label="Project issue board"', "</section>");
+    const laneSource = sourceBetweenIn(boardLaneCardSource, "function BoardLane({", "function TicketCard(");
 
-    expect(laneLayoutSource).toContain("gap: 0;");
-    expect(laneLayoutSource).toContain(".project-board-lane + .project-board-lane");
-    expect(laneLayoutSource).toContain("border-left-width: 0;");
+    expect(projectBoardAppSource).toContain("gap-2.5 overflow-x-auto");
+    expect(lanesSource).toContain("<BoardLane");
+    expect(laneSource).toContain("rounded-xl border border-border/80");
   });
 
   test("keeps the Kanban board scrollbars grabbable with the mouse", () => {
@@ -78,7 +84,7 @@ describe("Project Board form event handling", () => {
     const boardScrollbarSource = sourceBetweenIn(
       stylesSource,
       ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
-      ".project-board-toolbar {",
+      ".project-automation-dialog {",
     );
 
     expect(boardScrollbarSource).toContain("scrollbar-width: auto;");
@@ -108,11 +114,16 @@ describe("Project Board form event handling", () => {
     const dialogScrollbarSource = sourceBetweenIn(
       stylesSource,
       ".project-board-lanes,\n  .project-board-lane-scroll,\n  .project-ticket-dialog-body {",
-      ".project-board-toolbar {",
+      ".project-automation-dialog {",
     );
+    /*
+     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * The dialog body thumb reveals on :hover only; :focus-within kept the bar
+     * permanently visible because a form dialog always has a focused field.
+     */
     const dialogThumbHoverSource = sourceBetweenIn(
       stylesSource,
-      ".project-ticket-dialog-body:focus-within::-webkit-scrollbar-thumb {",
+      ".project-ticket-dialog-body:hover::-webkit-scrollbar-thumb {",
       '.project-ticket-comment-list [data-slot="scroll-area-scrollbar"] {',
     );
 
@@ -130,7 +141,7 @@ describe("Project Board form event handling", () => {
      * The first macOS Kanban open should cover the mounted lanes with a spinner until initial Beads loading finishes, while later refreshes should not replay that mask.
      */
     const projectBoardSource = sourceFrom(projectBoardAppSource, "function ProjectBoardApp()");
-    const overlayStyleSource = sourceBetweenIn(stylesSource, ".project-board-board-region {", ".project-board-lanes {");
+    const overlayStyleSource = sourceBetweenIn(stylesSource, ".project-board-board-region {", ".project-board-notice {");
 
     expect(projectBoardSource).toContain(
       "const [hasCompletedInitialBoardLoad, setHasCompletedInitialBoardLoad] = useState(false);",
@@ -150,32 +161,59 @@ describe("Project Board form event handling", () => {
     expect(overlayStyleSource).toContain("@keyframes project-board-loading-spin");
   });
 
-  test("keeps ticket dialog controls aligned with footer buttons", () => {
+  test("gives every Kanban dialog control one height and one text size", () => {
     /*
-     * CDXC:ProjectBoardForms 2026-06-21-15:30:
-     * New-ticket and edit-ticket action rows should use one shared Project Board control height for buttons and adjacent dropdowns so the macOS Kanban dialogs do not mix default shadcn button height with taller select triggers.
-     *
-     * CDXC:ProjectBoardForms 2026-06-22-02:17:
-     * Kanban modal controls above the prompt editor should match footer button height too, including top metadata dropdowns, the label add row, and the ticket title text field.
+     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * The dialogs used to opt individual classes into the Project Board control
+     * height, so anything the list missed rendered at shadcn's own size: select
+     * triggers came out taller than the buttons beside them and dropdowns
+     * disagreed with each other on font size. One rule now covers every input
+     * and select trigger in a dialog, and one rule pins the shared 14px text
+     * scale across inputs, textareas, dropdowns, and buttons. The per-class
+     * height opt-ins and every size="sm" control in a dialog row must stay gone.
      */
-    const ticketDialogControlSource = sourceBetweenIn(
+    const dialogControlSource = sourceBetweenIn(
       stylesSource,
-      ".project-ticket-footer-select,",
-      ".project-ticket-meta-grid {",
+      "CDXC:ProjectBoardDialogRedesign 2026-08-24:",
+      "CDXC:ProjectBoardRoundness 2026-06-29-20:55:",
     );
 
-    expect(ticketDialogControlSource).toContain('.project-ticket-meta-grid [data-slot="select-trigger"]');
-    expect(ticketDialogControlSource).toContain(
-      '.project-ticket-conversation-controls [data-slot="select-trigger"]',
-    );
-    expect(ticketDialogControlSource).toContain(".project-ticket-title-input");
-    expect(ticketDialogControlSource).toContain(".project-ticket-label-editor input");
-    expect(ticketDialogControlSource).toContain('height: var(--project-board-control-height);');
-    expect(ticketDialogControlSource).toContain('min-height: var(--project-board-control-height);');
-    expect(ticketDialogControlSource).toContain('.project-ticket-dialog-footer [data-slot="button"]');
-    expect(ticketDialogControlSource).toContain('.project-ticket-create-actions > [data-slot="button"]');
-    expect(ticketDialogControlSource).toContain('.project-ticket-label-editor > [data-slot="button"]');
-    expect(ticketDialogControlSource).toContain('.project-ticket-conversation-controls > [data-slot="button"]');
+    expect(dialogControlSource).toContain('.project-ticket-dialog [data-slot="input"]');
+    expect(dialogControlSource).toContain('.project-ticket-dialog [data-slot="select-trigger"]');
+    expect(dialogControlSource).toContain('.project-ticket-dialog [data-slot="textarea"]');
+    expect(dialogControlSource).toContain('.project-ticket-dialog [data-slot="button"]');
+    expect(dialogControlSource).toContain("height: var(--project-board-control-height);");
+    expect(dialogControlSource).toContain("min-height: var(--project-board-control-height);");
+    expect(dialogControlSource).toContain("font-size: 14px;");
+    expect(dialogControlSource).toContain("font-weight: 400;");
+    expect(stylesSource).not.toContain('.project-ticket-dialog-footer [data-slot="button"],');
+    expect(stylesSource).not.toContain(".project-ticket-title-input,\n  .project-ticket-label-editor input {");
+    expect(ticketDialogsSource).not.toContain('size="sm"');
+    expect(ticketDetailSource).not.toContain('size="sm"');
+    expect(boardColumnsDialogSource).not.toContain('size="sm"');
+    // The automation dialog keeps one size="sm", on its pill Switch, which is
+    // not a form-row control.
+    expect(automationDialogSource).not.toContain('<SelectTrigger size="sm"');
+    expect(automationDialogSource).not.toContain('<Button size="sm"');
+  });
+
+  test("keeps the Kanban dialogs on the raised panel surface without bold chrome", () => {
+    /*
+     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * Dialogs sit on the board's #161616 panel token with the 12px section
+     * radius, and their titles, labels, and section headers stay at regular or
+     * 500 weight so no dialog text reads bolder than the page behind it.
+     */
+    const dialogSurfaceSource = sourceBetweenIn(stylesSource, "  .project-ticket-dialog {", ".project-ticket-dialog-body {");
+
+    expect(dialogSurfaceSource).toContain("background: var(--popover, #161616);");
+    expect(dialogSurfaceSource).toContain("border-radius: var(--project-board-radius-section);");
+    expect(dialogSurfaceSource).not.toContain("--app-modal-background");
+    expect(stylesSource).not.toContain("font-weight: 650;");
+    expect(stylesSource).not.toContain("font-weight: 700;");
+    expect(ticketDialogsSource).toContain('<DialogTitle className="text-[15px] font-normal">');
+    expect(automationDialogSource).toContain('<DialogTitle className="text-[15px] font-normal">');
+    expect(boardColumnsDialogSource).toContain('<DialogTitle className="text-[15px] font-normal">');
   });
 
   test("uses brighter Kanban bead card surfaces than lane panels", () => {
@@ -185,9 +223,9 @@ describe("Project Board form event handling", () => {
      */
     const variableSource = sourceBetweenIn(stylesSource, ":root {", "* { box-sizing: border-box; }");
 
-    expect(variableSource).toContain("--project-board-panel: #171717;");
-    expect(variableSource).toContain("--project-board-card: #242424;");
-    expect(variableSource).toContain("--project-board-card-hover: #2b2b2b;");
+    expect(variableSource).toContain("--project-board-panel: #161616;");
+    expect(variableSource).toContain("--project-board-card: #1d1d1d;");
+    expect(variableSource).toContain("--project-board-card-hover: #232323;");
   });
 
   test("prevents accidental text selection inside Kanban bead cards", () => {
@@ -195,9 +233,9 @@ describe("Project Board form event handling", () => {
      * CDXC:ProjectBoardCards 2026-06-13-13:55:
      * Kanban bead cards are draggable and right-clickable, so card text should not be user-selectable by accidental pointer movement.
      */
-    const cardStyleSource = sourceBetweenIn(stylesSource, ".project-board-card {", ".project-board-card:hover");
+    const ticketCardSource = sourceBetweenIn(boardLaneCardSource, "function TicketCard(", "function ProjectBoardTicketContextMenu(");
 
-    expect(cardStyleSource).toContain("user-select: none;");
+    expect(ticketCardSource).toContain("select-none");
   });
 
   test("renders Kanban bead context-menu Start work and Delete actions", () => {
@@ -227,22 +265,14 @@ describe("Project Board form event handling", () => {
      */
     const ticketCardSource = sourceBetweenIn(boardLaneCardSource, "function TicketCard(", "function ProjectBoardTicketContextMenu(");
     const metaFieldsSource = sourceBetweenIn(ticketDetailSource, "function TicketMetaFields(", "function DependencyPicker(");
-    const creatorStyleSource = sourceBetweenIn(
-      stylesSource,
-      ".project-board-card-creator {",
-      ".project-board-card-assignee {",
-    );
-
     expect(ticketCardSource).toContain("ticketCreatorName(ticket.created_by, ticket.assignee)");
-    expect(ticketCardSource).toContain('className="project-board-card-creator"');
-    expect(ticketCardSource).toContain("by {creator}");
+    expect(ticketCardSource).toContain("Created by {creator}");
     expect(ticketCardSource).toContain("title={`Assigned to ${ticket.assignee}`}");
     expect(metaFieldsSource).toContain("ticketCreatorName(createdBy, assignee)");
     expect(metaFieldsSource).toContain("{creator ? (");
     expect(metaFieldsSource).toContain("<span>Created by</span>");
     expect(metaFieldsSource).toContain('className="project-ticket-creator-value"');
-    expect(creatorStyleSource).toContain("text-overflow: ellipsis;");
-    expect(projectBoardAppSource).toContain("createdBy={detail.ticket?.created_by}");
+    expect(ticketDialogsSource).toContain("createdBy={detail.ticket?.created_by}");
   });
 
   test("reports sanitized focus-owner events for native Kanban focus arbitration", () => {
@@ -389,7 +419,7 @@ describe("Project Board form event handling", () => {
     const projectBoardSource = sourceFrom(projectBoardAppSource, "function ProjectBoardApp()");
     const filtersSource = sourceBetweenIn(
       projectBoardAppSource,
-      '<section className="project-board-filters"',
+      'aria-label="Ticket filters"',
       '{activeSurfaceTab === "triage" ? (',
     );
     const laneSource = sourceBetweenIn(boardLaneCardSource, "function BoardLane({", "function TicketCard(");
@@ -449,12 +479,16 @@ describe("Project Board form event handling", () => {
      * New automation and ticket text entry should keep the Kanban page mounted even when React defers functional state updaters.
      * Updater closures must use already-captured primitives instead of reading value or checked from the React event object.
      */
-    const projectBoardSource = sourceFrom(projectBoardAppSource, "function ProjectBoardApp()");
-    const updaterCalls = [
-      ...collectFunctionalUpdaterCalls(projectBoardSource, "setAutomationDraft((current) =>"),
-      ...collectFunctionalUpdaterCalls(projectBoardSource, "setDetail((current) =>"),
-      ...collectFunctionalUpdaterCalls(projectBoardSource, "setNewTicket((current) =>"),
+    const dialogSources = [
+      sourceFrom(projectBoardAppSource, "function ProjectBoardApp()"),
+      ticketDialogsSource,
+      automationDialogSource,
     ];
+    const updaterCalls = dialogSources.flatMap((source) => [
+      ...collectFunctionalUpdaterCalls(source, "setAutomationDraft((current) =>"),
+      ...collectFunctionalUpdaterCalls(source, "setDetail((current) =>"),
+      ...collectFunctionalUpdaterCalls(source, "setNewTicket((current) =>"),
+    ]);
 
     expect(updaterCalls).not.toHaveLength(0);
     expect(

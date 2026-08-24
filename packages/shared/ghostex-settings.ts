@@ -62,6 +62,7 @@ export {
   type AppShotsHotkey,
   type KeepAwakeDurationMinutes,
   type AutoSleepIdleMinutes,
+  DEFAULT_ACCENT_COLOR,
   DEFAULT_TERMINAL_PANE_PADDING_PX,
   MIN_TERMINAL_PANE_PADDING_PX,
   MAX_TERMINAL_PANE_PADDING_PX,

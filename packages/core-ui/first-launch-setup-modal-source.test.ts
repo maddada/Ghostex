@@ -97,8 +97,15 @@ describe("first launch setup modal source", () => {
       ".ghostex-settings-shadcn .first-launch-setup-warning-backdrop {",
       ".ghostex-settings-shadcn .first-launch-setup-warning-actions {",
     );
-    expect(warningStyles).toContain("var(--popover) 96%");
-    expect(warningStyles).toContain("var(--primary) 22%");
+    /*
+    CDXC:ModalRedesign 2026-08-24:
+    The alert now uses the shared Codex surface tokens — raised card tone, one
+    hairline, section radius — instead of the primary-tinted gradient panel.
+    */
+    expect(warningStyles).toContain("background: var(--settings-raised);");
+    expect(warningStyles).toContain("border: 1px solid var(--settings-hairline);");
+    expect(warningStyles).toContain("border-radius: var(--settings-radius-section);");
+    expect(warningStyles).not.toContain("var(--popover) 96%");
     expect(warningStyles).not.toContain("#f59e0b");
     expect(warningStyles).not.toContain("#fcd34d");
   });
@@ -132,6 +139,11 @@ describe("first launch setup modal source", () => {
     The first-time defaults modal should show square checkbox controls instead
     of native macOS rounded checkboxes while keeping the shape scoped to the
     onboarding preference tiles.
+
+    CDXC:ModalRedesign 2026-08-24:
+    The control stays a small square affordance rather than the native rounded
+    checkbox, but takes the redesign's adaptive corner so it belongs to the same
+    family as the 8px controls beside it.
     */
     const checkboxStyles = sourceBetween(
       sidebarStylesSource,
@@ -140,7 +152,7 @@ describe("first launch setup modal source", () => {
     );
 
     expect(checkboxStyles).toContain("appearance: none;");
-    expect(checkboxStyles).toContain("border-radius: 0;");
+    expect(checkboxStyles).toContain("border-radius: var(--settings-radius-adaptive);");
     expect(checkboxStyles).toContain(
       ".ghostex-settings-shadcn .first-launch-setup-checkbox:checked::after",
     );

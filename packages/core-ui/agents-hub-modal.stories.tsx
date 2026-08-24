@@ -10,7 +10,67 @@ const mockVscode: WebviewApi = {
 const mockCatalog: AgentsHubCatalogMessage = {
   generatedAt: "2026-05-15T11:41:00.000Z",
   groupsByTab: {
-    configs: [],
+    configs: [
+      {
+        description: "MCP servers and CLI config owned by the Codex profile.",
+        files: [
+          {
+            content: '{\n  "mcpServers": {}\n}\n',
+            id: "codex-config",
+            language: "json",
+            name: "config.toml",
+            path: "/Users/madda/.codex/config.toml",
+          },
+          {
+            content: '{\n  "servers": []\n}\n',
+            id: "codex-mcp",
+            language: "json",
+            name: "mcp.json",
+            path: "/Users/madda/.codex/mcp.json",
+          },
+        ],
+        id: "config-codex",
+        name: "Codex configuration",
+        path: "/Users/madda/.codex",
+        profiles: [
+          {
+            agentIcon: "codex",
+            filePath: "/Users/madda/.codex/config.toml",
+            label: "Codex main",
+            profilePath: "/Users/madda/.codex",
+          },
+          {
+            agentIcon: "claude",
+            filePath: "/Users/madda/.claude-profiles/work/settings.json",
+            label: "Claude Code work",
+            profilePath: "/Users/madda/.claude-profiles/work",
+          },
+        ],
+      },
+      {
+        description: "Claude Code settings for every installed profile.",
+        files: [
+          {
+            content: '{\n  "permissions": {}\n}\n',
+            id: "claude-settings",
+            language: "json",
+            name: "settings.json",
+            path: "/Users/madda/.claude/settings.json",
+          },
+        ],
+        id: "config-claude",
+        name: "Claude Code settings",
+        path: "/Users/madda/.claude",
+        profiles: [
+          {
+            agentIcon: "claude",
+            filePath: "/Users/madda/.claude/settings.json",
+            label: "Claude Code main",
+            profilePath: "/Users/madda/.claude",
+          },
+        ],
+      },
+    ],
     hooks: [],
     mds: [
       {
@@ -68,7 +128,19 @@ const mockCatalog: AgentsHubCatalogMessage = {
   type: "agentsHubCatalog",
 };
 
-function AgentsHubModalStory({ initialTab }: { initialTab: AgentsHubTab }) {
+const emptyCatalog: AgentsHubCatalogMessage = {
+  generatedAt: "2026-08-24T09:00:00.000Z",
+  groupsByTab: { configs: [], hooks: [], mds: [], skills: [] },
+  type: "agentsHubCatalog",
+};
+
+function AgentsHubModalStory({
+  catalog = mockCatalog,
+  initialTab,
+}: {
+  catalog?: AgentsHubCatalogMessage;
+  initialTab: AgentsHubTab;
+}) {
   return (
     <div
       style={{
@@ -78,7 +150,7 @@ function AgentsHubModalStory({ initialTab }: { initialTab: AgentsHubTab }) {
       }}
     >
       <AgentsHubModal
-        catalog={mockCatalog}
+        catalog={catalog}
         initialTab={initialTab}
         isOpen
         onClose={() => undefined}
@@ -115,5 +187,28 @@ export const ProfileTooltip: Story = {
      * The tooltip story opens the MDs tab with a linked Claude work profile so profile tooltip spacing, path wrapping, and target-arrow layout can be inspected against the real profile-link content shape.
      */
     <AgentsHubModalStory initialTab="mds" />
+  ),
+};
+
+export const ConfigsWithSelectedFile: Story = {
+  render: () => (
+    /*
+     * CDXC:AgentsHubRedesign 2026-08-24:
+     * The Configs tab auto-expands its groups, so this story is the review
+     * target for the redesigned raised group cards, the nested file tree, the
+     * accent-highlighted selected file row, and the profile chips.
+     */
+    <AgentsHubModalStory initialTab="configs" />
+  ),
+};
+
+export const EmptyCatalog: Story = {
+  render: () => (
+    /*
+     * CDXC:AgentsHubRedesign 2026-08-24:
+     * Empty-state chrome (list pane and editor frame with no selection) has to
+     * read as the same quiet panel surface as the populated modal.
+     */
+    <AgentsHubModalStory catalog={emptyCatalog} initialTab="configs" />
   ),
 };

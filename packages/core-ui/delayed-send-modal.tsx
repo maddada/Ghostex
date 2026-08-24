@@ -268,6 +268,13 @@ export function DelayedSendModal({
         : delayedSendRemainingLabel
           ? `Active. Enter sends in ${delayedSendRemainingLabel}.`
           : "Press Enter later using the selected trigger.";
+  /*
+   * CDXC:CodexModalRestyle 2026-08-24:
+   * The Codex-style language reserves the accent color for live status text, so
+   * the Send Enter summary only takes the accent class while an automation is
+   * actually armed.
+   */
+  const sendAutomationIsActive = sendEnterEnabled && hasActiveSend;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -317,7 +324,7 @@ export function DelayedSendModal({
       >
         <form className="delayed-send-form" onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle className="text-xl">Session Automations</DialogTitle>
+            <DialogTitle>Session Automations</DialogTitle>
             <DialogDescription className="delayed-send-dialog-description">
               <span>Configure automations for this agent session.</span>
               <span className="delayed-send-session-target">
@@ -336,7 +343,13 @@ export function DelayedSendModal({
             <Card className="delayed-send-automation-card" size="sm">
               <CardHeader>
                 <CardTitle>Send Enter</CardTitle>
-                <CardDescription>{sendAutomationDescription}</CardDescription>
+                <CardDescription
+                  className={
+                    sendAutomationIsActive ? "delayed-send-automation-status-active" : undefined
+                  }
+                >
+                  {sendAutomationDescription}
+                </CardDescription>
                 <CardAction>
                   <Switch
                     aria-label="Send Enter automation"

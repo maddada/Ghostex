@@ -23,6 +23,13 @@ export const MANAGE_STYLES = `
     --manage-accent: #95d7f6;
     --manage-accent-muted: rgba(255, 255, 255, 0.055);
     --manage-row-surface: #202020;
+    /*
+     * CDXC:DocsControlHeight 2026-08-23:
+     * One control height for every free-standing in-row control (inputs,
+     * buttons, dropdowns that share a row), matching the Kanban/Automate
+     * 32px convention. Header bars keep their own 35px full-height segments.
+     */
+    --manage-control-height: 32px;
     --manage-green: #86efac;
     --manage-red: #fda4af;
     --manage-yellow: #fde68a;
@@ -357,7 +364,7 @@ export const MANAGE_STYLES = `
     color: rgba(244, 244, 245, 0.88);
     display: flex;
     font-size: 12.5px;
-    font-weight: 620;
+    font-weight: 400;
     gap: 9px;
     line-height: 16px;
     min-height: 34px;
@@ -455,7 +462,7 @@ export const MANAGE_STYLES = `
     box-sizing: border-box;
     display: flex;
     gap: 11px;
-    height: 34px;
+    height: var(--manage-control-height);
     margin: 0 0 4px;
     padding: 7px 10px;
     width: 100%;
@@ -680,7 +687,7 @@ export const MANAGE_STYLES = `
     color: var(--manage-yellow);
     display: inline-flex;
     font-size: 10px;
-    font-weight: 750;
+    font-weight: 500;
     height: 17px;
     justify-content: center;
     min-width: 17px;
@@ -791,7 +798,7 @@ export const MANAGE_STYLES = `
   .manage-rename-header span {
     flex: 1 1 auto;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 500;
     min-width: 0;
   }
 
@@ -805,7 +812,7 @@ export const MANAGE_STYLES = `
     border: 1px solid var(--manage-border);
     color: var(--manage-text);
     font-size: 13px;
-    height: 34px;
+    height: var(--manage-control-height);
     min-width: 0;
     outline: 0;
     padding: 0 9px;
@@ -834,8 +841,8 @@ export const MANAGE_STYLES = `
     border: 1px solid var(--manage-border);
     display: inline-flex;
     font-size: 12px;
-    font-weight: 680;
-    height: 30px;
+    font-weight: 500;
+    height: var(--manage-control-height);
     justify-content: center;
     min-width: 76px;
     padding: 0 11px;
@@ -925,7 +932,7 @@ export const MANAGE_STYLES = `
     display: flex;
     flex: 1 1 0;
     font-size: 12px;
-    font-weight: 680;
+    font-weight: 500;
     gap: 7px;
     line-height: 35px;
     min-width: 0;
@@ -951,7 +958,7 @@ export const MANAGE_STYLES = `
     display: flex;
     flex: 0 0 auto;
     font-size: 10.5px;
-    font-weight: 650;
+    font-weight: 400;
     gap: 9px;
     line-height: 35px;
     min-width: max-content;
@@ -1062,7 +1069,7 @@ export const MANAGE_STYLES = `
     align-items: center;
     display: inline-flex;
     font-size: 11px;
-    font-weight: 750;
+    font-weight: 500;
     gap: 5px;
     justify-content: center;
     min-width: 0;
@@ -1073,7 +1080,7 @@ export const MANAGE_STYLES = `
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--manage-border);
     color: var(--manage-muted);
-    height: 28px;
+    height: var(--manage-control-height);
     padding: 0 8px;
   }
 
@@ -1086,7 +1093,7 @@ export const MANAGE_STYLES = `
     box-sizing: border-box;
     color: rgba(255, 255, 255, 0.84);
     font-size: 10.5px;
-    font-weight: 650;
+    font-weight: 500;
     height: 35px;
     line-height: 35px;
     max-height: 35px;
@@ -1651,7 +1658,7 @@ export const MANAGE_STYLES = `
     color: var(--manage-muted);
     display: flex;
     font-size: 12px;
-    font-weight: 750;
+    font-weight: 500;
     justify-content: space-between;
     min-height: 40px;
     padding: 0 12px;
@@ -1752,7 +1759,7 @@ export const MANAGE_STYLES = `
     color: var(--manage-muted);
     display: flex;
     font-size: 11px;
-    font-weight: 760;
+    font-weight: 500;
     justify-content: space-between;
   }
 
@@ -1881,11 +1888,11 @@ export const MANAGE_STYLES = `
     border-radius: 6px;
     color: var(--manage-toolbar-action-color);
     display: inline-flex;
-    height: 30px;
+    height: var(--manage-control-height);
     justify-content: center;
     padding: 0;
     position: relative;
-    width: 30px;
+    width: var(--manage-control-height);
   }
 
   .manage-markdown-selection-toolbar button svg {
@@ -1919,7 +1926,7 @@ export const MANAGE_STYLES = `
     align-items: center;
     display: flex;
     font-size: 10px;
-    font-weight: 760;
+    font-weight: 500;
     justify-content: space-between;
     letter-spacing: 0;
     line-height: 1.1;
@@ -1932,7 +1939,7 @@ export const MANAGE_STYLES = `
 
   .manage-annotation-preview-card header span:last-child {
     color: var(--manage-muted);
-    font-weight: 680;
+    font-weight: 500;
     text-transform: none;
   }
 
@@ -2022,7 +2029,7 @@ export const MANAGE_STYLES = `
   .manage-comment-popover-actions button {
     border-radius: 7px;
     color: var(--manage-text);
-    height: 30px;
+    height: var(--manage-control-height);
     padding: 0 11px;
   }
 
@@ -2101,7 +2108,7 @@ export const MANAGE_STYLES = `
 
   .manage-preview-message span {
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 500;
     min-width: 0;
     overflow-wrap: anywhere;
   }

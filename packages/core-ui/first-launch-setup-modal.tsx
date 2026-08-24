@@ -814,7 +814,7 @@ export function FirstLaunchSetupModal({
         data-sidebar-theme={theme}
       >
         <DialogHeader className="first-launch-setup-header">
-          <DialogTitle className="text-xl">Welcome to Ghostex</DialogTitle>
+          <DialogTitle className="first-launch-setup-dialog-title">Welcome to Ghostex</DialogTitle>
           <div className="first-launch-setup-progress" aria-hidden="true">
             {FIRST_LAUNCH_SETUP_PAGES.map((page) => (
               <span
@@ -933,7 +933,7 @@ function FirstLaunchReadyPage() {
       className="flex min-h-0 flex-1 items-center justify-center"
     >
       <div className="flex max-w-xl flex-col items-center gap-4 text-center">
-        <IconCircleCheckFilled aria-hidden="true" className="size-16 text-emerald-500" />
+        <IconCircleCheckFilled aria-hidden="true" className="size-12 text-emerald-500" />
         <h2 className="first-launch-setup-title" id="first-launch-ready-title">
           Ghostex is ready
         </h2>

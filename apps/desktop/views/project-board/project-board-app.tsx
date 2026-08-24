@@ -1,12 +1,10 @@
 import {
-  IconExternalLink,
+  IconAdjustmentsHorizontal,
+  IconLayoutColumns,
   IconLoader2,
-  IconLink,
-  IconPlayerPlay,
   IconPlus,
   IconRefresh,
   IconSearch,
-  IconTrash,
   IconX,
 } from "@tabler/icons-react";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -17,7 +15,6 @@ import {
   useRef,
   useState,
   type ComponentProps,
-  type KeyboardEvent,
 } from "react";
 import {
   Toaster,
@@ -26,16 +23,14 @@ import {
 import { Button } from "@/packages/components/ui/button";
 import { isDiagnosticLoggingScenarioEnabled } from "@/packages/shared/ghostex-settings";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/packages/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/packages/components/ui/dropdown-menu";
 import { Input } from "@/packages/components/ui/input";
-import { ScrollArea } from "@/packages/components/ui/scroll-area";
-import { Switch } from "@/packages/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -43,16 +38,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/packages/components/ui/select";
-import { Textarea } from "@/packages/components/ui/textarea";
 import {
   PROJECT_BOARD_VIEW_PREFERENCES_STORAGE_KEY,
   addBoardColumn,
-  appendImageMarkdownToDescription,
   beginBoardColumnRename,
   beadsErrorMessage,
   beadsStatusToBoardStatus,
   boardStatusBeadsValue,
-  boardStatusLabel,
   boardTagFilterOptions,
   buildAgentWorkPrompt,
   buildBoardColumns,
@@ -64,19 +56,16 @@ import {
   extractPreviewableDescriptionImageReferences,
   filterBoardTickets,
   formatProjectBoardCommentText,
-  formatShortDate,
   getBlockedByIds,
   getBlockingIds,
   normalizeBeadsPayload,
   normalizeDisplayIssueKey,
   normalizeIssuePrefix,
-  parseProjectBoardCommentText,
   parseBeadsJson,
   parseBeadsRejection,
   prioritySelectValue,
   projectBoardRawProjectIdFromUrlParam,
   readWorkflowStatuses,
-  removeDescriptionImageReference,
   resolveAssignedAgentId,
   resolveBoardTagFilter,
   sortBoardTickets,
@@ -104,7 +93,6 @@ import {
 import type { AppToastLevel } from "@/packages/shared/app-toast-contract";
 import {
   type AutomationDefinition,
-  type AutomationExecutionMode,
   type AutomationRun,
   type ProjectAutomationsBridgeState,
 } from "@/packages/shared/automations";
@@ -130,7 +118,6 @@ import {
   NATIVE_SETTINGS_STORAGE_KEY,
   readExperimentalFeaturesEnabled,
   readProjectBoardViewPreferences,
-  PROJECT_BOARD_START_LOCATION_SELECT_ITEMS,
   PROJECT_BOARD_PRIORITY_FILTER_SELECT_ITEMS,
   PROJECT_BOARD_ESTIMATE_FILTER_SELECT_ITEMS,
   PROJECT_BOARD_SORT_SELECT_ITEMS,
@@ -161,13 +148,8 @@ import {
   mergeKnownLabels,
   deriveKnownLabelsFromIssues,
   prioritizeDependencyTickets,
-  hasProjectBoardImagePastePayload,
 } from "./board-state";
 import {
-  TicketMetaFields,
-  DependencySummary,
-  ImagePreviewStrip,
-  ConversationSection,
   getPrimaryUsableConversationLink,
   projectBoardCommentMetadataFromLink,
   compareConversationLinksNewestFirst,
@@ -186,8 +168,6 @@ import {
 } from "./automations";
 import {
   AUTOMATION_SCHEDULE_PRESETS,
-  type AutomationScheduleMode,
-  type AutomationTimerUnit,
   AUTOMATION_WEEKDAY_OPTIONS,
   AUTOMATION_TIMER_UNIT_OPTIONS,
   type AutomationDraft,
@@ -197,13 +177,21 @@ import {
   createAutomationDraftFromDefinition,
   createAutomationDefinitionFromDraft,
 } from "./automations-drafts";
-import { AutomationAgentOptionLabel } from "./agent-labels";
 import {
   beadsRejectionToastId,
   formatIssueIdList,
   ProjectBoardNotice,
 } from "./remote-migrate-gate";
 import { BoardColumnsDialog } from "./board-columns-dialog";
+import { AutomationDialog } from "./automation-dialog";
+import { EditTicketDialog, NewTicketDialog } from "./ticket-dialogs";
+import {
+  BOARD_CARD_VIEW_FIELDS,
+  BOARD_CARD_VIEW_STORAGE_KEY,
+  loadBoardCardViewOptions,
+  saveBoardCardViewOptions,
+  type BoardCardViewOptions,
+} from "./card-view-options";
 
 export type LoadState = "idle" | "loading" | "ready" | "error";
 
@@ -213,13 +201,6 @@ export type TicketDetailSaveDraft = Omit<DetailDraft, "isDeleting" | "isSaving" 
 };
 
 export const PROJECT_BOARD_FOCUS_OWNER_MIN_INTERVAL_MS = 250;
-
-export function handleCmdEnter(event: KeyboardEvent, action: () => void) {
-  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-    event.preventDefault();
-    action();
-  }
-}
 
 export function ProjectBoardApp() {
   const urlSearchParams = new URLSearchParams(window.location.search);
@@ -264,6 +245,29 @@ export function ProjectBoardApp() {
   const boardColumnConfigRef = useRef("");
   const [boardColumnConfig, setBoardColumnConfig] = useState("");
   const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
+  /*
+   * CDXC:ProjectBoardRedesign 2026-08-24:
+   * Card-detail visibility is one app-wide preference shared by every
+   * project's board: it loads from localStorage on mount, saves on every
+   * toggle, and follows cross-window storage events so all open boards match.
+   */
+  const [cardView, setCardView] = useState<BoardCardViewOptions>(loadBoardCardViewOptions);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === BOARD_CARD_VIEW_STORAGE_KEY) {
+        setCardView(loadBoardCardViewOptions());
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  const toggleCardViewField = useCallback((key: keyof BoardCardViewOptions, value: boolean) => {
+    setCardView((current) => {
+      const next = { ...current, [key]: value };
+      saveBoardCardViewOptions(next);
+      return next;
+    });
+  }, []);
   const [tickets, setTickets] = useState<BoardTicket[]>([]);
   const [allIssues, setAllIssues] = useState<BeadsIssue[]>([]);
   const [knownLabels, setKnownLabels] = useState<string[]>([]);
@@ -2455,79 +2459,77 @@ export function ProjectBoardApp() {
        * CDXC:Automations 2026-06-30-12:51:
        * The Quick-level all-project page is named Automations Overview and should not repeat "Automations" in both the eyebrow and page title. Keep the project-scoped Automate surface eyebrow explicit while the overview uses only "Experimental" above the title.
        */}
+      {/*
+       * CDXC:ProjectBoardRedesign 2026-08-23:
+       * Codex-style header shared by the Kanban and Automate surfaces: quiet
+       * eyebrow + regular-weight project title on the left, plain text tabs
+       * centered (Automate only), default-size (h-8) actions on the right.
+       */}
       <section
-        className="project-board-toolbar"
+        className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4"
         data-surface={activeSurfaceTab === "board" ? "board" : "automations"}
       >
-        <div className="project-board-toolbar-heading">
-          {activeSurfaceTab !== "board" ? (
-            <span className="project-automation-eyebrow">
-              {automationIsExperimental
+        <div className="min-w-0 justify-self-start">
+          <div className="text-xs font-normal text-muted-foreground">
+            {activeSurfaceTab !== "board"
+              ? automationIsExperimental
                 ? isAutomationGlobalScope
                   ? "Experimental"
                   : "Automations (Experimental)"
-                : "Automations"}
-            </span>
-          ) : null}
-          <h1 className="project-board-toolbar-title">{projectName}</h1>
+                : "Automations"
+              : "Project"}
+          </div>
+          <h1 className="m-0 truncate text-[15px] font-normal text-foreground">{projectName}</h1>
         </div>
         {activeSurfaceTab !== "board" && !showAutomationComingSoonOverlay ? (
-          <>
-            {/*
-             * CDXC:Automations 2026-06-30-09:36:
-             * The dedicated Automation page header needs an experimental eyebrow, project title, centered section tabs, and right-aligned refresh/create actions in one row so the page reads as one gxserver-backed control surface instead of a separate tab strip above the content.
-             */}
-            <nav className="project-automation-tabs" aria-label="Automation sections">
-              {(["automations", "runs", "triage"] as const).map((tab) => (
-                <button
-                  aria-current={activeSurfaceTab === tab ? "page" : undefined}
-                  className="project-automation-tab"
-                  data-active={activeSurfaceTab === tab ? "true" : "false"}
-                  key={tab}
-                  onClick={() => setActiveSurfaceTab(tab)}
-                  type="button"
-                >
-                  {tab === "automations" ? "Automations" : tab === "runs" ? "Runs" : "Triage"}
-                </button>
-              ))}
-            </nav>
-          </>
-        ) : null}
-        {!showAutomationComingSoonOverlay ? (
-          <div className="project-board-toolbar-actions">
+          <nav className="flex items-center gap-1 justify-self-center" aria-label="Automation sections">
+            {(["automations", "runs", "triage"] as const).map((tab) => (
+              <button
+                aria-current={activeSurfaceTab === tab ? "page" : undefined}
+                className={`h-8 cursor-pointer rounded-lg border-0 px-3 text-sm font-normal transition-colors ${
+                  activeSurfaceTab === tab
+                    ? "bg-white/[0.06] text-foreground"
+                    : "bg-transparent text-muted-foreground hover:text-foreground/80"
+                }`}
+                data-active={activeSurfaceTab === tab ? "true" : "false"}
+                key={tab}
+                onClick={() => setActiveSurfaceTab(tab)}
+                type="button"
+              >
+                {tab === "automations" ? "Automations" : tab === "runs" ? "Runs" : "Triage"}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <div />
+        )}
+        {/*
+         * CDXC:ProjectBoardRedesign 2026-08-23:
+         * On the board surface the refresh and + Ticket actions live at the
+         * right end of the filter row below, so the header is just the title.
+         * The Automate surfaces keep their actions up here beside the tabs.
+         */}
+        {activeSurfaceTab !== "board" && !showAutomationComingSoonOverlay ? (
+          <div className="flex items-center gap-1.5 justify-self-end">
             <Button
               aria-label="Refresh project"
               disabled={loadState === "loading"}
               onClick={() => {
-                if (activeSurfaceTab === "board") {
-                  void loadTickets({ mode: "manual" });
-                  void loadConversationState();
-                }
                 void loadAutomationState();
               }}
-              size="icon-sm"
+              size="icon"
               variant="ghost"
             >
               <IconRefresh />
             </Button>
-            {activeSurfaceTab === "board" ? (
-              <Button onClick={() => openNewTicket()} size="sm" variant="secondary">
-                <IconPlus data-icon="inline-start" />
-                Ticket
-              </Button>
-            ) : (
-              <Button
-                className="project-automation-toolbar-button"
-                onClick={openNewAutomationDialog}
-                size="sm"
-                variant="secondary"
-              >
-                <IconPlus data-icon="inline-start" />
-                Automation
-              </Button>
-            )}
+            <Button onClick={openNewAutomationDialog} variant="secondary">
+              <IconPlus data-icon="inline-start" />
+              Automation
+            </Button>
           </div>
-        ) : null}
+        ) : (
+          <div />
+        )}
       </section>
 
       {showAutomationComingSoonOverlay ? (
@@ -2535,8 +2537,8 @@ export function ProjectBoardApp() {
       ) : (
         <>
           {activeSurfaceTab === "board" ? (
-        <section className="project-board-filters" aria-label="Ticket filters">
-          <div className="project-board-search">
+        <section className="flex shrink-0 flex-wrap items-center gap-2" aria-label="Ticket filters">
+          <div className="relative w-64">
             {/*
              * CDXC:SearchInputs 2026-06-04-03:11:
              * Project Board ticket search is hosted by the native tasks bundle,
@@ -2546,6 +2548,7 @@ export function ProjectBoardApp() {
              */}
             <Input
               aria-label="Search tickets"
+              className="h-8 border-border pr-8"
               onChange={(event) => setSearchQuery(event.currentTarget.value)}
               onKeyDown={(event) => {
                 if (event.key !== "Escape" || searchQuery.length === 0) {
@@ -2563,7 +2566,7 @@ export function ProjectBoardApp() {
             {searchQuery.length > 0 ? (
               <button
                 aria-label="Clear ticket search"
-                className="project-board-search-clear-button"
+                className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground [&_svg]:size-4"
                 onClick={() => {
                   setSearchQuery("");
                   searchInputRef.current?.focus();
@@ -2573,7 +2576,10 @@ export function ProjectBoardApp() {
                 <IconX aria-hidden="true" />
               </button>
             ) : (
-              <IconSearch aria-hidden="true" className="project-board-search-icon" />
+              <IconSearch
+                aria-hidden="true"
+                className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
             )}
           </div>
           <Select
@@ -2581,7 +2587,7 @@ export function ProjectBoardApp() {
             onValueChange={(value) => setPriorityFilter(value as BoardPriorityFilter)}
             value={priorityFilter}
           >
-            <SelectTrigger aria-label="Filter by priority" className="project-board-filter-select" size="sm">
+            <SelectTrigger aria-label="Filter by priority">
               <SelectValue placeholder="All priorities" />
             </SelectTrigger>
             <SelectContent>
@@ -2597,7 +2603,7 @@ export function ProjectBoardApp() {
             onValueChange={(value) => setEstimateFilter(value as BoardEstimateFilter)}
             value={estimateFilter}
           >
-            <SelectTrigger aria-label="Filter by estimate" className="project-board-filter-select" size="sm">
+            <SelectTrigger aria-label="Filter by estimate">
               <SelectValue placeholder="All estimates" />
             </SelectTrigger>
             <SelectContent>
@@ -2608,46 +2614,101 @@ export function ProjectBoardApp() {
               ))}
             </SelectContent>
           </Select>
-          <select
-            aria-label="Filter by tag"
-            className="project-board-filter-select project-board-native-filter-select"
-            onChange={(event) => setTagFilter(event.currentTarget.value as BoardTagFilter)}
+          {/*
+           * CDXC:ProjectBoardRedesign 2026-08-23:
+           * Tag and sort move from native <select>s onto the shared shadcn
+           * Select so every control on this row has the same 32px height,
+           * font, and popup styling.
+           */}
+          <Select
+            items={tagFilterSelectItems}
+            onValueChange={(value) => setTagFilter(value as BoardTagFilter)}
             value={activeTagFilter}
           >
-            {tagFilterSelectItems.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Sort tickets"
-            className="project-board-filter-select project-board-native-filter-select"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setSortOption(value as BoardSortOption);
-            }}
+            <SelectTrigger aria-label="Filter by tag">
+              <SelectValue placeholder="All tags" />
+            </SelectTrigger>
+            <SelectContent>
+              {tagFilterSelectItems.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            items={PROJECT_BOARD_SORT_SELECT_ITEMS}
+            onValueChange={(value) => setSortOption(value as BoardSortOption)}
             value={sortOption}
           >
-            {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="Sort tickets">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_BOARD_SORT_SELECT_ITEMS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {/*
            * CDXC:ProjectBoardColumnManagement 2026-08-21:
            * Columns sits with the filters because it changes what the board shows, and it is the only
            * control here that writes to the board rather than to this client's view preferences.
            */}
           <Button
-            className="project-board-columns-button"
+            aria-label="Board columns"
             onClick={() => setColumnsDialogOpen(true)}
-            size="sm"
+            size="icon"
+            title="Columns"
             variant="outline"
           >
-            Columns
+            <IconLayoutColumns />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button aria-label="Card details" size="icon" title="View" variant="outline">
+                  <IconAdjustmentsHorizontal />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Card details</DropdownMenuLabel>
+                {BOARD_CARD_VIEW_FIELDS.map((field) => (
+                  <DropdownMenuCheckboxItem
+                    checked={cardView[field.key]}
+                    closeOnClick={false}
+                    key={field.key}
+                    onCheckedChange={(checked: boolean) => toggleCardViewField(field.key, checked)}
+                  >
+                    {field.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              aria-label="Refresh project"
+              disabled={loadState === "loading"}
+              onClick={() => {
+                void loadTickets({ mode: "manual" });
+                void loadConversationState();
+                void loadAutomationState();
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <IconRefresh />
+            </Button>
+            <Button onClick={() => openNewTicket()} variant="secondary">
+              <IconPlus data-icon="inline-start" />
+              Ticket
+            </Button>
+          </div>
         </section>
       ) : null}
 
@@ -2657,7 +2718,7 @@ export function ProjectBoardApp() {
            * CDXC:Automations 2026-06-30-15:35:
            * Empty Runs and Triage tabs should show one centered empty state in a single panel, not the split view with a second "No run selected" placeholder on the right. Match the Automations tab pattern.
            */
-          <section className="project-automation-panel">
+          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
             <AutomationRunList
               actionId={automationActionId}
               agents={automationState.agents}
@@ -2674,7 +2735,7 @@ export function ProjectBoardApp() {
             />
           </section>
         ) : (
-        <section className="project-automation-split">
+        <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
           <AutomationRunList
             actionId={automationActionId}
             agents={automationState.agents}
@@ -2706,7 +2767,7 @@ export function ProjectBoardApp() {
 
       {activeSurfaceTab === "automations" ? (
         automationState.automations.length === 0 ? (
-          <section className="project-automation-panel">
+          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
             {/*
              * CDXC:Automations 2026-06-30-09:36:
              * An empty Automation page should show one centered empty state, not the empty list plus the "No automation selected" detail placeholder. Only restore the split view after at least one automation exists.
@@ -2728,7 +2789,7 @@ export function ProjectBoardApp() {
             />
           </section>
         ) : (
-          <section className="project-automation-split">
+          <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
           <AutomationDefinitionList
             actionId={automationActionId}
             agents={automationState.agents}
@@ -2762,7 +2823,7 @@ export function ProjectBoardApp() {
 
       {activeSurfaceTab === "runs" ? (
         visibleAutomationRuns.length === 0 ? (
-          <section className="project-automation-panel">
+          <section className="flex min-h-0 flex-1 flex-col border-t border-border/60 pt-1">
             <AutomationRunList
               actionId={automationActionId}
               agents={automationState.agents}
@@ -2779,7 +2840,7 @@ export function ProjectBoardApp() {
             />
           </section>
         ) : (
-        <section className="project-automation-split">
+        <section className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60">
           <AutomationRunList
             actionId={automationActionId}
             agents={automationState.agents}
@@ -2835,9 +2896,13 @@ export function ProjectBoardApp() {
                 masked scrollers, so their ends fade with the content instead of
                 staying crisp.
               */}
-              <section className="project-board-lanes horizontal-scroll-fade-mask" aria-label="Project issue board">
+              <section
+                className="project-board-lanes horizontal-scroll-fade-mask grid min-h-0 flex-1 auto-cols-[minmax(230px,1fr)] grid-flow-col items-stretch gap-2.5 overflow-x-auto overflow-y-hidden [--edge-fade-distance:18px]"
+                aria-label="Project issue board"
+              >
                 {boardColumns.map((column) => (
                   <BoardLane
+                    cardView={cardView}
                     column={column}
                     conversationAction={conversationAction}
                     key={column.key}
@@ -2918,376 +2983,39 @@ export function ProjectBoardApp() {
       )}
 
       {experimentalFeaturesEnabled ? (
-      <Dialog open={automationDialogOpen} onOpenChange={setAutomationDialogOpen}>
-        <DialogContent className="project-ticket-dialog project-automation-dialog">
-          <DialogHeader>
-            <DialogTitle>{automationDraft.id ? "Edit automation" : "Create automation"}</DialogTitle>
-            <DialogDescription>
-              {isAutomationGlobalScope ? "Schedule agent work once or repeatedly for a selected project." : `Schedule agent work once or repeatedly for ${projectName}.`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="project-ticket-dialog-body project-automation-form vertical-scroll-fade-mask">
-            {/*
-             * CDXC:ProjectAutomations 2026-06-09-10:30:
-             * Automation setup is scoped to the Project board's current project, so the create/edit dialog drops project switching and keeps dropdown widths aligned at 250px for agent, schedule, weekday, and thread-session fields.
-             *
-             * CDXC:Automations 2026-06-30-11:05:
-             * The Quick-level global Automations page shows all projects, so its create/edit dialog restores a Project selector. Project-scoped Automate pages keep the original no-project-switch form.
-             */}
-            <label className="project-automation-field-full">
-              <span>Name</span>
-              <Input
-                onChange={(event) => {
-                  const name = event.currentTarget.value;
-                  setAutomationDraft((current) => ({ ...current, name }));
-                }}
-                value={automationDraft.name}
-              />
-            </label>
-            <div className="project-automation-form-grid">
-              {isAutomationGlobalScope ? (
-                <label>
-                  <span>Project</span>
-                  <Select
-                    items={automationProjectSelectItems}
-                    onValueChange={(value) => {
-                      const selectedProject = automationProjectsById.get(value);
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        executionKind:
-                          current.executionKind === "worktree" && selectedProject?.canUseWorktrees !== true
-                            ? "local"
-                            : current.executionKind,
-                        projectId: value,
-                        threadSessionId: "",
-                      }));
-                      void loadAutomationConversationState(value);
-                    }}
-                    value={automationDraft.projectId}
-                  >
-                    <SelectTrigger className="project-automation-select">
-                      <SelectValue placeholder="Choose project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {automationState.projects.map((project) => (
-                        <SelectItem key={project.projectId} value={project.projectId}>
-                          {project.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-              ) : null}
-              <label>
-                <span>Agent</span>
-                <Select
-                  disabled={automationState.agents.length === 0}
-                  items={automationAgentSelectItems}
-                  onValueChange={(value) =>
-                    setAutomationDraft((current) => ({ ...current, agentId: value }))
-                  }
-                  value={automationDraft.agentId}
-                >
-                  <SelectTrigger className="project-automation-select">
-                    <SelectValue placeholder={automationState.agents.length === 0 ? "No agents configured" : "Choose agent"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {automationState.agents.map((agent) => (
-                      <SelectItem key={agent.agentId} value={agent.agentId}>
-                        <AutomationAgentOptionLabel agent={agent} />
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </label>
-            </div>
-            <div className="project-automation-form-section">
-              <div className="project-automation-form-section-title">Timing</div>
-              <div className="project-automation-segmented" role="group" aria-label="Schedule type">
-                {[
-                  ["repeat", "Repeat"],
-                  ["timer", "Timer"],
-                  ["date", "Date"],
-                ].map(([value, label]) => (
-                  <button
-                    data-active={automationDraft.scheduleMode === value}
-                    key={value}
-                    onClick={() =>
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        scheduleMode: value as AutomationScheduleMode,
-                      }))
-                    }
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {automationDraft.scheduleMode === "repeat" ? (
-                <div className="project-automation-form-grid">
-                  <label>
-                    <span>Repeat</span>
-                    <Select
-                      items={automationScheduleSelectItems}
-                      onValueChange={(value) =>
-                        setAutomationDraft((current) => ({
-                          ...current,
-                          schedulePreset: value as AutomationDraft["schedulePreset"],
-                        }))
-                      }
-                      value={automationDraft.schedulePreset}
-                    >
-                      <SelectTrigger className="project-automation-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AUTOMATION_SCHEDULE_PRESETS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  {automationDraft.schedulePreset === "weekly" ? (
-                    <label>
-                      <span>Day</span>
-                      <Select
-                        items={automationWeekdaySelectItems}
-                        onValueChange={(value) =>
-                          setAutomationDraft((current) => ({ ...current, weeklyDay: value }))
-                        }
-                        value={automationDraft.weeklyDay}
-                      >
-                        <SelectTrigger className="project-automation-select">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AUTOMATION_WEEKDAY_OPTIONS.map((day, index) => (
-                            <SelectItem key={day} value={String(index)}>
-                              {day}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  ) : null}
-                  {automationDraft.schedulePreset === "daily" ||
-                  automationDraft.schedulePreset === "weekly" ||
-                  automationDraft.schedulePreset === "weekdays" ? (
-                    <label>
-                      <span>Time</span>
-                      <Input
-                        className="project-automation-select"
-                        onChange={(event) => {
-                          const scheduleTime = event.currentTarget.value;
-                          setAutomationDraft((current) => ({
-                            ...current,
-                            scheduleTime,
-                          }));
-                        }}
-                        type="time"
-                        value={automationDraft.scheduleTime}
-                      />
-                    </label>
-                  ) : null}
-                </div>
-              ) : automationDraft.scheduleMode === "timer" ? (
-                <div className="project-automation-form-grid">
-                  <label>
-                    <span>Run in</span>
-                    <Input
-                      className="project-automation-select"
-                      min="1"
-                      onChange={(event) => {
-                        const timerAmount = event.currentTarget.value;
-                        setAutomationDraft((current) => ({
-                          ...current,
-                          timerAmount,
-                        }));
-                      }}
-                      step="1"
-                      type="number"
-                      value={automationDraft.timerAmount}
-                    />
-                  </label>
-                  <label>
-                    <span>Unit</span>
-                    <Select
-                      items={automationTimerUnitSelectItems}
-                      onValueChange={(value) =>
-                        setAutomationDraft((current) => ({
-                          ...current,
-                          timerUnit: value as AutomationTimerUnit,
-                        }))
-                      }
-                      value={automationDraft.timerUnit}
-                    >
-                      <SelectTrigger className="project-automation-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AUTOMATION_TIMER_UNIT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                </div>
-              ) : (
-                <label className="project-automation-field-full">
-                  <span>Run on</span>
-                  <Input
-                    onChange={(event) => {
-                      const runAt = event.currentTarget.value;
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        runAt,
-                      }));
-                    }}
-                    type="datetime-local"
-                    value={automationDraft.runAt}
-                  />
-                </label>
-              )}
-              {automationDraft.scheduleMode === "repeat" && automationDraft.schedulePreset === "cron" ? (
-                <label className="project-automation-field-full">
-                  <span>Cron</span>
-                  <Input
-                    onChange={(event) => {
-                      const cronExpression = event.currentTarget.value;
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        cronExpression,
-                      }));
-                    }}
-                    placeholder="*/15 * * * *"
-                    value={automationDraft.cronExpression}
-                  />
-                </label>
-              ) : null}
-            </div>
-            <div className="project-automation-form-section">
-              <div className="project-automation-form-section-title">Execution</div>
-            <div className="project-automation-segmented" role="group" aria-label="Execution mode">
-              {[
-                ["worktree", "Worktree"],
-                ["local", "Local"],
-                ["thread", "Thread"],
-              ].map(([value, label]) => {
-                const disabled = value === "worktree" && !automationDraftCanUseWorktrees;
-                return (
-                  <button
-                    data-active={automationDraft.executionKind === value}
-                    disabled={disabled}
-                    key={value}
-                    onClick={() =>
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        executionKind: value as AutomationExecutionMode["kind"],
-                      }))
-                    }
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            {!automationDraftCanUseWorktrees && automationDraftWorktreeUnavailableReason ? (
-              <p className="project-automation-inline-note">{automationDraftWorktreeUnavailableReason}</p>
-            ) : null}
-            {automationDraft.executionKind === "worktree" ? (
-              <label>
-                <span>Setup command</span>
-                <Input
-                  onChange={(event) => {
-                    const setupCommand = event.currentTarget.value;
-                    setAutomationDraft((current) => ({
-                      ...current,
-                      setupCommand,
-                    }));
-                  }}
-                  placeholder="Use project worktree command"
-                  value={automationDraft.setupCommand}
-                />
-              </label>
-            ) : null}
-            {automationDraft.executionKind === "thread" ? (
-              <div className="project-automation-form-grid">
-                <label>
-                  <span>Session</span>
-                  <Select
-                    items={automationSessionSelectItems}
-                    onValueChange={(value) =>
-                      setAutomationDraft((current) => ({ ...current, threadSessionId: value }))
-                    }
-                    value={automationDraft.threadSessionId}
-                  >
-                    <SelectTrigger className="project-automation-select">
-                      <SelectValue placeholder="Choose session" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {automationConversationState.sessions.map((session) => (
-                        <SelectItem key={session.sessionId} value={session.sessionId}>
-                          {session.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <label>
-                  <span>Expires</span>
-                  <Input
-                    className="project-automation-select"
-                    onChange={(event) => {
-                      const expiresAt = event.currentTarget.value;
-                      setAutomationDraft((current) => ({
-                        ...current,
-                        expiresAt,
-                      }));
-                    }}
-                    type="datetime-local"
-                    value={automationDraft.expiresAt}
-                  />
-                </label>
-              </div>
-            ) : null}
-            </div>
-            <label className="project-automation-prompt-field">
-              <span>Prompt</span>
-              <Textarea
-                onChange={(event) => {
-                  const prompt = event.currentTarget.value;
-                  setAutomationDraft((current) => ({ ...current, prompt }));
-                }}
-                value={automationDraft.prompt}
-              />
-            </label>
-            <div className="project-automation-enabled">
-              <Switch
-                checked={automationDraft.enabled}
-                onCheckedChange={(enabled: boolean) => {
-                  setAutomationDraft((current) => ({ ...current, enabled }));
-                }}
-                size="sm"
-              />
-              <span>Enabled</span>
-            </div>
-          </div>
-          <DialogFooter className="project-ticket-dialog-footer">
-            <Button onClick={() => setAutomationDialogOpen(false)} type="button" variant="ghost">
-              Cancel
-            </Button>
-            <Button disabled={Boolean(automationActionId)} onClick={saveAutomation} type="button">
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <AutomationDialog
+          automationActionId={automationActionId}
+          automationAgentSelectItems={automationAgentSelectItems}
+          automationConversationState={automationConversationState}
+          automationDraft={automationDraft}
+          automationDraftCanUseWorktrees={automationDraftCanUseWorktrees}
+          automationDraftWorktreeUnavailableReason={automationDraftWorktreeUnavailableReason}
+          automationProjectSelectItems={automationProjectSelectItems}
+          automationScheduleSelectItems={automationScheduleSelectItems}
+          automationSessionSelectItems={automationSessionSelectItems}
+          automationState={automationState}
+          automationTimerUnitSelectItems={automationTimerUnitSelectItems}
+          automationWeekdaySelectItems={automationWeekdaySelectItems}
+          isAutomationGlobalScope={isAutomationGlobalScope}
+          onOpenChange={setAutomationDialogOpen}
+          onProjectChange={(value) => {
+            const selectedProject = automationProjectsById.get(value);
+            setAutomationDraft((current) => ({
+              ...current,
+              executionKind:
+                current.executionKind === "worktree" && selectedProject?.canUseWorktrees !== true
+                  ? "local"
+                  : current.executionKind,
+              projectId: value,
+              threadSessionId: "",
+            }));
+            void loadAutomationConversationState(value);
+          }}
+          onSave={() => void saveAutomation()}
+          open={automationDialogOpen}
+          projectName={projectName}
+          setAutomationDraft={setAutomationDraft}
+        />
       ) : null}
 
       <BoardColumnsDialog
@@ -3301,417 +3029,68 @@ export function ProjectBoardApp() {
         open={columnsDialogOpen}
         tickets={tickets}
       />
-      <Dialog
-        open={Boolean(detail.ticket)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteConfirmingTicketId("");
-            setDetail(createEmptyDetailDraft());
-          }
+      <EditTicketDialog
+        boardColumns={boardColumns}
+        conversationAction={conversationAction}
+        conversationState={conversationState}
+        deleteConfirmingTicketId={deleteConfirmingTicketId}
+        detail={detail}
+        detailCommentMetadataLink={detailCommentMetadataLink}
+        detailConversationLinks={detailConversationLinks}
+        detailPrimaryActionDisabled={detailPrimaryActionDisabled}
+        detailPrimaryActionKind={detailPrimaryActionKind}
+        detailPrimaryActionLabel={detailPrimaryActionLabel}
+        detailPrimaryConversationLink={detailPrimaryConversationLink}
+        imagePreviewDataUrls={imagePreviewDataUrls}
+        knownLabels={knownLabels}
+        onAssociateFocusedSession={() => void associateFocusedSession()}
+        onClose={() => {
+          setDeleteConfirmingTicketId("");
+          setDetail(createEmptyDetailDraft());
         }}
-      >
-        <DialogContent className="project-ticket-dialog">
-          <DialogHeader>
-            <DialogTitle>Edit ticket</DialogTitle>
-            <DialogDescription>
-              {detail.ticket?.displayId} · {detail.ticket?.id}
-            </DialogDescription>
-          </DialogHeader>
-          <div
-            className="project-ticket-dialog-body vertical-scroll-fade-mask"
-            onKeyDown={(event) => handleCmdEnter(event, () => void saveTicketDetail())}
-          >
-            <TicketMetaFields
-              assignee={detail.ticket?.assignee}
-              blockedByIds={detail.blockedByIds}
-              blockingIds={detail.blockingIds}
-              boardColumns={boardColumns}
-              createdBy={detail.ticket?.created_by}
-              knownLabels={knownLabels}
-              labels={detail.labels}
-              onBlockedByChange={(blockedByIds) =>
-                setDetail((current) => ({ ...current, blockedByIds }))
-              }
-              onBlockingChange={(blockingIds) =>
-                setDetail((current) => ({ ...current, blockingIds }))
-              }
-              onLabelsChange={(labels) => setDetail((current) => ({ ...current, labels }))}
-              onPriorityChange={(priority) => setDetail((current) => ({ ...current, priority }))}
-              onStatusChange={(status) => setDetail((current) => ({ ...current, status }))}
-              onTshirtChange={(tshirt) => setDetail((current) => ({ ...current, tshirt }))}
-              priority={detail.priority}
-              status={detail.status}
-              ticketOptions={ticketOptions.filter((option) => option.id !== detail.ticket?.id)}
-              tshirt={detail.tshirt}
-            />
-            <label className="project-ticket-field">
-              <span>Title</span>
-              <Input
-                className="project-ticket-title-input"
-                onChange={(event) => {
-                  const title = event.currentTarget.value;
-                  setDetail((current) => ({ ...current, title }));
-                }}
-                value={detail.title}
-              />
-            </label>
-            <label className="project-ticket-field">
-              <span>Prompt</span>
-              <Textarea
-                className="project-ticket-prompt-input"
-                onChange={(event) => {
-                  const description = event.currentTarget.value;
-                  setDetail((current) => ({
-                    ...current,
-                    description,
-                  }));
-                }}
-                onPaste={(event) => {
-                  if (!hasProjectBoardImagePastePayload(event.clipboardData)) {
-                    return;
-                  }
-                  event.preventDefault();
-                  const selectionStart = event.currentTarget.selectionStart;
-                  const selectionEnd = event.currentTarget.selectionEnd;
-                  void sendProjectBoardImageRequest({ action: "pasteImage" }).then((response) => {
-                    if (!response.imagePath) {
-                      setErrorMessage(response.error || "Clipboard image could not be converted to a path.");
-                      return;
-                    }
-                    setDetail((current) => ({
-                      ...current,
-                      description: appendImageMarkdownToDescription(
-                        current.description,
-                        response.imagePath ?? "",
-                        selectionStart,
-                        selectionEnd,
-                      ),
-                    }));
-                  }).catch((error) => {
-                    setErrorMessage(error instanceof Error ? error.message : "Clipboard image paste failed.");
-                  });
-                }}
-                placeholder="Write the full prompt for this ticket."
-                value={detail.description}
-              />
-            </label>
-            <ImagePreviewStrip
-              description={detail.description}
-              imagePreviewDataUrls={imagePreviewDataUrls}
-              onRemove={(image) =>
-                setDetail((current) => ({
-                  ...current,
-                  description: removeDescriptionImageReference(current.description, image.id),
-                }))
-              }
-            />
-            <DependencySummary
-              blockedByIds={detail.blockedByIds}
-              blockingIds={detail.blockingIds}
-              tickets={tickets}
-            />
-            {detail.ticket ? (
-              <ConversationSection
-                agents={conversationState.agents}
-                action={conversationAction}
-                focusedSessionId={conversationState.focusedTerminalSessionId}
-                links={detailConversationLinks}
-                onAssociateFocusedSession={() => void associateFocusedSession()}
-                onJumpToConversation={(link) => void jumpToConversation(link)}
-                onSelectedAgentChange={selectTicketAgent}
-                onUnlinkConversation={(link) => void unlinkConversation(link)}
-                selectedAgentId={selectedAgentId}
-              />
-            ) : null}
-            <section className="project-ticket-comments" aria-label="Comments">
-              <div className="project-ticket-section-title">Comments</div>
-              <ScrollArea className="project-ticket-comment-list">
-                {detail.ticket?.comments?.length ? (
-                  detail.ticket.comments.map((comment, index) => {
-                    const parsedComment = parseProjectBoardCommentText(comment.text);
-                    const fallbackMetadata = projectBoardCommentMetadataFromLink(detailCommentMetadataLink);
-                    const agentName = parsedComment.agentName ?? fallbackMetadata.agentName;
-                    const sessionId = parsedComment.sessionId ?? fallbackMetadata.sessionId;
-                    const createdAtLabel = formatShortDate(comment.created_at);
-                    return (
-                      <article className="project-ticket-comment" key={`${comment.created_at}-${index}`}>
-                        <div className="project-ticket-comment-header">
-                          <div className="project-ticket-comment-author-row">
-                            <strong className="project-ticket-comment-author">
-                              {comment.author || "Comment"}
-                            </strong>
-                            {agentName ? (
-                              <span className="project-ticket-comment-agent">({agentName})</span>
-                            ) : null}
-                          </div>
-                          {createdAtLabel ? (
-                            <time dateTime={comment.created_at} className="project-ticket-comment-date">
-                              {createdAtLabel}
-                            </time>
-                          ) : null}
-                        </div>
-                        <p>{parsedComment.body || comment.text}</p>
-                        {sessionId ? (
-                          <footer className="project-ticket-comment-session">
-                            <span>Session</span>
-                            <code>{sessionId}</code>
-                          </footer>
-                        ) : null}
-                      </article>
-                    );
-                  })
-                ) : (
-                  <p className="project-ticket-empty">No comments yet.</p>
-                )}
-              </ScrollArea>
-            </section>
-            <label className="project-ticket-field">
-              <span>Add comment</span>
-              <Textarea
-                onChange={(event) => {
-                  const comment = event.currentTarget.value;
-                  setDetail((current) => ({ ...current, comment }));
-                }}
-                placeholder="Add a note for the team."
-                value={detail.comment}
-              />
-            </label>
-          </div>
-          <DialogFooter className="project-ticket-dialog-footer">
-            <Button
-              disabled={detail.isDeleting || detail.isSaving}
-              onClick={() => {
-                if (deleteConfirmingTicketId === detail.ticket?.id) {
-                  void deleteTicket();
-                  return;
-                }
-                setDeleteConfirmingTicketId(detail.ticket?.id ?? "");
-              }}
-              type="button"
-              variant="destructive"
-            >
-              <IconTrash data-icon="inline-start" />
-              {deleteConfirmingTicketId === detail.ticket?.id
-                ? detail.isDeleting
-                  ? "Deleting"
-                  : "Confirm delete"
-                : "Delete"}
-            </Button>
-            <div className="project-ticket-dialog-primary-actions">
-              <Button
-                disabled={detailPrimaryActionDisabled}
-                onClick={() => {
-                  if (detailPrimaryConversationLink) {
-                    void jumpToConversation(detailPrimaryConversationLink);
-                    return;
-                  }
-                  setDeleteConfirmingTicketId("");
-                  setDetail(createEmptyDetailDraft());
-                  void startTicketWork();
-                }}
-                type="button"
-                variant="outline"
-              >
-                {detailPrimaryConversationLink ? (
-                  detailPrimaryActionKind === "resume" ? (
-                    <IconPlayerPlay data-icon="inline-start" />
-                  ) : (
-                    <IconExternalLink data-icon="inline-start" />
-                  )
-                ) : (
-                  <IconLink data-icon="inline-start" />
-                )}
-                {detailPrimaryActionLabel}
-              </Button>
-              <Button disabled={detail.isDeleting || detail.isSaving} onClick={() => void saveTicketDetail()}>
-                {detail.isSaving ? "Saving" : "Save"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onDeleteTicket={() => void deleteTicket()}
+        onJumpToConversation={(link) => void jumpToConversation(link)}
+        onSaveTicketDetail={() => void saveTicketDetail()}
+        onSelectedAgentChange={selectTicketAgent}
+        onStartTicketWork={() => {
+          setDeleteConfirmingTicketId("");
+          setDetail(createEmptyDetailDraft());
+          void startTicketWork();
+        }}
+        onUnlinkConversation={(link) => void unlinkConversation(link)}
+        selectedAgentId={selectedAgentId}
+        setDeleteConfirmingTicketId={setDeleteConfirmingTicketId}
+        setDetail={setDetail}
+        setErrorMessage={setErrorMessage}
+        ticketOptions={ticketOptions}
+        tickets={tickets}
+      />
 
-      <Dialog
-        open={newTicketOpen}
+      <NewTicketDialog
+        agentSelectItems={agentSelectItems}
+        boardColumns={boardColumns}
+        conversationAction={conversationAction}
+        conversationState={conversationState}
+        imagePreviewDataUrls={imagePreviewDataUrls}
+        knownLabels={knownLabels}
+        newPromptRef={newPromptRef}
+        newTicket={newTicket}
+        newTicketStartLocation={newTicketStartLocation}
+        onCreateTicket={(options) => void createTicket(options)}
         onOpenChange={(open) => {
           setNewTicketOpen(open);
           if (!open) {
             setNewTicketStartLocation("currentProject");
           }
         }}
-      >
-        <DialogContent className="project-ticket-dialog">
-          <DialogHeader>
-            <DialogTitle>New Ticket</DialogTitle>
-            <DialogDescription>
-              Leave the title empty to auto-generate it from the prompt. Creates in{" "}
-              {boardStatusLabel(newTicket.status, boardColumns)}.
-            </DialogDescription>
-          </DialogHeader>
-          <div
-            className="project-ticket-dialog-body vertical-scroll-fade-mask"
-            onKeyDown={(event) => handleCmdEnter(event, () => void createTicket())}
-          >
-            <TicketMetaFields
-              blockedByIds={newTicket.blockedByIds}
-              blockingIds={newTicket.blockingIds}
-              boardColumns={boardColumns}
-              knownLabels={knownLabels}
-              labels={newTicket.labels}
-              onBlockedByChange={(blockedByIds) =>
-                setNewTicket((current) => ({ ...current, blockedByIds }))
-              }
-              onBlockingChange={(blockingIds) =>
-                setNewTicket((current) => ({ ...current, blockingIds }))
-              }
-              onLabelsChange={(labels) => setNewTicket((current) => ({ ...current, labels }))}
-              onPriorityChange={(priority) => setNewTicket((current) => ({ ...current, priority }))}
-              onStatusChange={() => undefined}
-              onTshirtChange={(tshirt) => setNewTicket((current) => ({ ...current, tshirt }))}
-              priority={newTicket.priority}
-              status="todo"
-              showStatus={false}
-              ticketOptions={ticketOptions}
-              tshirt={newTicket.tshirt}
-            />
-            <label className="project-ticket-field">
-              <span>Title</span>
-              <Input
-                className="project-ticket-title-input"
-                onChange={(event) => {
-                  const title = event.currentTarget.value;
-                  setNewTicket((current) => ({ ...current, title }));
-                }}
-                placeholder="Auto-generated from prompt when left empty"
-                value={newTicket.title}
-              />
-            </label>
-            <label className="project-ticket-field">
-              <span>Prompt</span>
-              <Textarea
-                className="project-ticket-prompt-input"
-                onChange={(event) => {
-                  const description = event.currentTarget.value;
-                  setNewTicket((current) => ({
-                    ...current,
-                    description,
-                  }));
-                }}
-                onPaste={(event) => {
-                  if (!hasProjectBoardImagePastePayload(event.clipboardData)) {
-                    return;
-                  }
-                  event.preventDefault();
-                  const selectionStart = event.currentTarget.selectionStart;
-                  const selectionEnd = event.currentTarget.selectionEnd;
-                  void sendProjectBoardImageRequest({ action: "pasteImage" }).then((response) => {
-                    if (!response.imagePath) {
-                      setErrorMessage(response.error || "Clipboard image could not be converted to a path.");
-                      return;
-                    }
-                    setNewTicket((current) => ({
-                      ...current,
-                      description: appendImageMarkdownToDescription(
-                        current.description,
-                        response.imagePath ?? "",
-                        selectionStart,
-                        selectionEnd,
-                      ),
-                    }));
-                  }).catch((error) => {
-                    setErrorMessage(error instanceof Error ? error.message : "Clipboard image paste failed.");
-                  });
-                }}
-                placeholder="Write the full prompt for this ticket."
-                ref={newPromptRef}
-                value={newTicket.description}
-              />
-            </label>
-            <ImagePreviewStrip
-              description={newTicket.description}
-              imagePreviewDataUrls={imagePreviewDataUrls}
-              onRemove={(image) =>
-                setNewTicket((current) => ({
-                  ...current,
-                  description: removeDescriptionImageReference(current.description, image.id),
-                }))
-              }
-            />
-          </div>
-          <DialogFooter className="project-ticket-create-footer">
-            <section className="project-ticket-create-start" aria-label="Create and start options">
-              <div className="project-ticket-section-title">Start work</div>
-              <div className="project-ticket-create-start-controls">
-                <Select
-                  disabled={conversationState.agents.length === 0}
-                  items={agentSelectItems}
-                  onValueChange={setSelectedAgentId}
-                  value={selectedAgentId}
-                >
-                  <SelectTrigger
-                    aria-label="Agent for Create and Start"
-                    className="project-ticket-footer-select"
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Choose agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {conversationState.agents.map((agent) => (
-                      <SelectItem key={agent.agentId} value={agent.agentId}>
-                        {agent.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  items={PROJECT_BOARD_START_LOCATION_SELECT_ITEMS}
-                  onValueChange={(value) =>
-                    setNewTicketStartLocation(value as ProjectBoardStartLocation)
-                  }
-                  value={newTicketStartLocation}
-                >
-                  <SelectTrigger
-                    aria-label="Start location"
-                    className="project-ticket-footer-select"
-                    size="sm"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROJECT_BOARD_START_LOCATION_SELECT_ITEMS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </section>
-            <div className="project-ticket-create-actions">
-              <Button
-                disabled={!newTicket.description.trim()}
-                onClick={() => void createTicket()}
-                type="button"
-                variant="outline"
-              >
-                Create
-              </Button>
-              <Button
-                disabled={
-                  !newTicket.description.trim() ||
-                  conversationState.agents.length === 0 ||
-                  Boolean(conversationAction)
-                }
-                onClick={() => void createTicket({ startAfterCreate: true })}
-                type="button"
-              >
-                <IconLink data-icon="inline-start" />
-                Create & Start
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onSelectedAgentChange={setSelectedAgentId}
+        open={newTicketOpen}
+        selectedAgentId={selectedAgentId}
+        setErrorMessage={setErrorMessage}
+        setNewTicket={setNewTicket}
+        setNewTicketStartLocation={setNewTicketStartLocation}
+        ticketOptions={ticketOptions}
+      />
       {/*
        * CDXC:ProjectBoardBlockedMove 2026-08-20:
        * The board's own toaster lives in this surface rather than the native

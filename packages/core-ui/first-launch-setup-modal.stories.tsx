@@ -257,10 +257,38 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
+/*
+ CDXC:ModalRedesign 2026-08-24:
+ Only the pages in FIRST_LAUNCH_SETUP_PAGES can be opened directly; the modal
+ normalizes any other id back to the first page. Video, Intro, Hooks, Skills,
+ and Ready are therefore the stories that actually render distinct surfaces, and
+ the guide/preferences/cli stories below still fall back to the video page.
+*/
+export const Video: Story = {
+  args: {
+    cliInstalled: true,
+    initialPage: "video",
+  },
+};
+
 export const Intro: Story = {
   args: {
     cliInstalled: true,
     initialPage: "welcome",
+  },
+};
+
+export const Skills: Story = {
+  args: {
+    cliInstalled: false,
+    initialPage: "skills",
+  },
+};
+
+export const Ready: Story = {
+  args: {
+    cliInstalled: true,
+    initialPage: "ready",
   },
 };
 

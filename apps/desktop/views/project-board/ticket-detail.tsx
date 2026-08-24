@@ -112,7 +112,7 @@ export function TicketMetaFields({
             onValueChange={(value) => onStatusChange(value as BoardStatusKey)}
             value={status}
           >
-            <SelectTrigger size="sm">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -132,7 +132,7 @@ export function TicketMetaFields({
           onValueChange={onPriorityChange}
           value={priority}
         >
-          <SelectTrigger size="sm">
+          <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -151,7 +151,7 @@ export function TicketMetaFields({
           onValueChange={(value) => onTshirtChange(value === "none" ? undefined : (value as TshirtSize))}
           value={tshirt ?? "none"}
         >
-          <SelectTrigger size="sm">
+          <SelectTrigger>
             <SelectValue placeholder="None" />
           </SelectTrigger>
           <SelectContent>
@@ -216,7 +216,6 @@ export function TicketMetaFields({
               }
               setLabelDraft("");
             }}
-            size="sm"
             type="button"
             variant="outline"
           >
@@ -300,7 +299,7 @@ export function DependencyPicker({
         }}
         value={draft}
       >
-        <SelectTrigger size="sm">
+        <SelectTrigger>
           <SelectValue placeholder={`Add ${label.toLowerCase()} ticket`} />
         </SelectTrigger>
         <SelectContent>
@@ -329,15 +328,17 @@ export function DependencySummary({
   }
   const labelFor = (id: string) => tickets.find((ticket) => ticket.id === id)?.displayId ?? id;
   return (
-    <div className="project-ticket-dependencies">
+    <div className="flex flex-col gap-1 text-xs font-normal text-muted-foreground">
       {blockedByIds.length > 0 ? (
-        <p>
-          <strong>Blocked by:</strong> {blockedByIds.map(labelFor).join(", ")}
+        <p className="m-0">
+          <span className="text-foreground/80">Blocked by:</span>{" "}
+          {blockedByIds.map(labelFor).join(", ")}
         </p>
       ) : null}
       {blockingIds.length > 0 ? (
-        <p>
-          <strong>Blocking:</strong> {blockingIds.map(labelFor).join(", ")}
+        <p className="m-0">
+          <span className="text-foreground/80">Blocking:</span>{" "}
+          {blockingIds.map(labelFor).join(", ")}
         </p>
       ) : null}
     </div>
@@ -483,7 +484,7 @@ export function ConversationSection({
           onValueChange={onSelectedAgentChange}
           value={selectedAgentId}
         >
-          <SelectTrigger aria-label="Agent for Start work" size="sm">
+          <SelectTrigger aria-label="Agent for Start work">
             <SelectValue placeholder="Choose agent" />
           </SelectTrigger>
           <SelectContent>
@@ -497,7 +498,6 @@ export function ConversationSection({
         <Button
           disabled={!focusedSessionId || hasActiveConversationAction}
           onClick={onAssociateFocusedSession}
-          size="sm"
           type="button"
           variant="outline"
         >
