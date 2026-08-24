@@ -1073,6 +1073,28 @@ void GhostexGpuiCEFOrderNativeViewFront(void *nativeView) {
   [parent addSubview:view positioned:NSWindowAbove relativeTo:nil];
 }
 
+void GhostexGpuiCEFRemoveNativeViewFromSuperview(void *nativeView) {
+  if (!nativeView) {
+    return;
+  }
+
+  /*
+   CDXC:GPUICefCloseContract 2026-08-24:
+   Completes CEF's close contract for browsers whose DoClose returns handled
+   (cef_life_span_handler.h: the app must still finish the close by proceeding
+   with window/view-hierarchy tear-down, otherwise the browser stays partially
+   closed). CEF creates this child NSView, adds it to the GPUI content view and
+   releases it, so the superview holds its only strong reference: removing it
+   deallocs the view, CEF observes the window destruction, fires OnBeforeClose
+   and the renderer process exits. Without this every closed CEF surface left a
+   live renderer subprocess parented to the long-lived GPUI window.
+   `__bridge` (never `__bridge_transfer`): Rust holds a borrowed pointer to a
+   CEF-owned view, so ARC must not consume a reference here.
+  */
+  NSView *view = (__bridge NSView *)nativeView;
+  [view removeFromSuperview];
+}
+
 void GhostexGpuiCEFPrepareNativeViewForFocus(void *nativeView) {
   NSView *view = (__bridge NSView *)nativeView;
   if (!view) {

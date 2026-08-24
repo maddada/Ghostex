@@ -24,10 +24,10 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetFocus, SetFocus};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GA_ROOT, GetAncestor, HWND_MESSAGE, HWND_TOP, IsChild,
-    KillTimer, PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetTimer, SetWindowPos, ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_APP,
-    WM_TIMER, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GetAncestor, HWND_MESSAGE, HWND_TOP,
+    IsChild, IsWindow, KillTimer, PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetTimer, SetWindowPos, ShowWindow,
+    USER_DEFAULT_SCREEN_DPI, WM_APP, WM_TIMER, WNDCLASSW,
 };
 
 const PUMP_WINDOW_CLASS_NAME: &str = "GhostexGpuiCefMessagePump";
@@ -349,9 +349,42 @@ pub(super) fn native_view_has_direct_focus(native_view: *mut c_void) -> bool {
     !hwnd.is_null() && unsafe { GetFocus() == hwnd }
 }
 
-pub(super) fn release_native_view(_native_view: *mut c_void) {
-    // CEF owns the child HWND lifecycle on Windows; only the Linux adapter
-    // holds per-surface embed-host state that needs explicit teardown.
+pub(super) fn release_native_view(native_view: *mut c_void) {
+    /*
+    CDXC:GPUICefCloseContract 2026-08-24:
+    GhostexGpuiLifeSpanHandler::do_close returns handled, so per
+    cef_life_span_handler.h's DoClose docs the app is still required to complete
+    the close by proceeding with window-hierarchy tear-down. Without it the
+    browser stays partially closed, on_before_close never fires, and every
+    closed surface keeps a live renderer subprocess. DestroyWindow on the CEF
+    child HWND is that tear-down: WM_DESTROY reaches Chromium's own window
+    procedure and lets CEF finish the close, mirroring what macOS does by
+    removing the CEF child NSView from its superview and Linux by destroying its
+    embed-host X window. `native_view` is the CEF-created child window CEF
+    reported through native_view_ptr — the same handle every other per-surface
+    function in this file drives — so this destroys the browser's child tree
+    (DestroyWindow tears down child windows depth-first) and never the parent
+    GPUI window.
+
+    Threading: this runs from `impl Drop for CefBrowser` on the main/UI thread,
+    which is the thread that owns this window — the same thread assumption the
+    pump window above documents. DestroyWindow must be called from the window's
+    creating thread, and that requirement is satisfied here.
+    */
+    let hwnd: HWND = native_view.cast();
+    if hwnd.is_null() {
+        return;
+    }
+    unsafe {
+        // Win32 recycles HWND values. If the parent GPUI window was destroyed
+        // first, Win32 already destroyed this child and the handle may now name
+        // an unrelated window; destroy only a handle that is still a live
+        // window.
+        if IsWindow(hwnd) == 0 {
+            return;
+        }
+        DestroyWindow(hwnd);
+    }
 }
 
 fn pump_hwnd() -> HWND {

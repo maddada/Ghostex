@@ -43,6 +43,7 @@ unsafe extern "C" {
     );
     fn GhostexGpuiCEFSetNativeViewVisible(native_view: *mut c_void, visible: bool);
     fn GhostexGpuiCEFOrderNativeViewFront(native_view: *mut c_void);
+    fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
     fn GhostexGpuiCEFSetNativeViewMouseFocusPassive(native_view: *mut c_void, passive: bool);
     fn GhostexGpuiCEFSetNativeViewPassiveFocusGrant(native_view: *mut c_void, granted: bool);
@@ -329,9 +330,25 @@ pub(super) fn order_native_view_front(native_view: *mut c_void) {
     }
 }
 
-pub(super) fn release_native_view(_native_view: *mut c_void) {
-    // CEF owns the child NSView lifecycle on macOS; only the Linux adapter
-    // holds per-surface embed-host state that needs explicit teardown.
+pub(super) fn release_native_view(native_view: *mut c_void) {
+    /*
+    CDXC:GPUICefCloseContract 2026-08-24:
+    GhostexGpuiLifeSpanHandler::do_close returns handled so CEF never sends a
+    native close to the host GPUI window. Per cef_life_span_handler.h's DoClose
+    docs, the app is then still required to complete the close by proceeding
+    with window/view-hierarchy tear-down; skipping it leaves the browser
+    partially closed. This adapter used to no-op here on the claim that "CEF
+    owns the child NSView lifecycle on macOS" — that claim was the leak: the
+    CEF child view stayed a subview of the long-lived GPUI content view
+    forever, on_before_close never fired, and every closed surface kept a live
+    renderer subprocess (measured at tens of GiB over a long session).
+    Removing the view from its superview drops its only strong reference and
+    performs exactly the tear-down CEF is waiting for, mirroring what the Linux
+    adapter does with its embed-host X window.
+    */
+    unsafe {
+        GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view);
+    }
 }
 
 pub(super) fn install_first_responder_observer(native_view: *mut c_void) {
