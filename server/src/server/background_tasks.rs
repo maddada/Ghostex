@@ -133,6 +133,37 @@ pub(crate) fn spawn_portless_background_sync_task(state: &Arc<AppState>) -> toki
 }
 
 /*
+CDXC:SessionChatFollowerLiveness 2026-08-24:
+Follower health used to be reconciled ONLY when a presentation session delta
+happened to arrive for that session. A follower that died or wedged while the
+session produced no delta (which is exactly what a frozen chat looks like) then
+stayed broken indefinitely. This sweep runs the same sync on gxserver's own
+clock, so a dead or wedged task is aborted and respawned within one cadence.
+
+Cost: `sync_session_chat_followers_for_all_sessions` returns before touching the
+database whenever no follower entry has subscribers, so on an idle daemon this
+is a map lock every ten seconds.
+*/
+pub(crate) fn spawn_session_chat_follower_sync_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
+    let sync_state = state.clone();
+    let mut shutdown_rx = state.shutdown_tx.subscribe();
+    tokio::spawn(async move {
+        loop {
+            let pass_state = sync_state.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                sync_session_chat_followers_for_all_sessions(&pass_state, "periodic-follower-sync")
+            })
+            .await;
+
+            tokio::select! {
+                _ = shutdown_rx.recv() => break,
+                _ = tokio::time::sleep(SESSION_CHAT_FOLLOWER_SYNC_INTERVAL) => {}
+            }
+        }
+    })
+}
+
+/*
 CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
 Sidebar V2's auto-settle window and spent-snooze collection are server rules, so
 they run on gxserver's own clock instead of whichever client happens to be open.

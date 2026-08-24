@@ -65,7 +65,15 @@ pub const SESSION_CHAT_NOTICE_UPDATE_PROMPT: &str = "updatePrompt";
 pub const SESSION_CHAT_NOTICE_AGENT_EXITED: &str = "agentExited";
 /// Input accepted but held client-side until the running turn ends.
 pub const SESSION_CHAT_NOTICE_QUEUED_INPUT: &str = "queuedInput";
-/// The send watchdog could not prove a message reached the agent.
+/*
+The send watchdog could not prove a message reached the agent. ONE kind covers
+every watchdog verdict about a lost send — including the affirmative one built
+by `session_chat_delivery_mismatch_notice` — because the kind is what carries
+this state's rules: it blocks the prompt queue, it is exempt from clean-screen
+retirement (it describes a past event, not anything painted right now), and
+clients already render it. Splitting the affirmative case into a second kind
+would silently opt it out of all three.
+*/
 pub const SESSION_CHAT_NOTICE_DELIVERY_FAILED: &str = "deliveryFailed";
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
@@ -1201,8 +1209,9 @@ When they ever disagree, ANY blocking rule wins: holding costs a visible failed
 row the user can retry, delivering into a dialog costs the turn.
 
 The two watchdog-only kinds have no catalog rule and are answered here:
-  - `deliveryFailed` — the watchdog could not prove the LAST message arrived,
-    so the terminal has already demonstrated it is not accepting sends.
+  - `deliveryFailed` — the watchdog could not prove the LAST message arrived (or
+    proved that something else was submitted in its place), so the terminal has
+    already demonstrated it is not accepting sends.
   - `queuedInput` — the opposite: the CLI accepted the message and is holding
     it client-side. Nothing is lost, so failing a row for it would be a false
     alarm. The scheduler's own idle gate is what keeps it from piling on.
@@ -1394,6 +1403,45 @@ pub fn session_chat_screen_shows_queued_input(agent: Option<&str>, screen_text: 
 /// The trimmed screen tail a watchdog notice attaches as evidence.
 pub fn session_chat_terminal_screen_tail(screen_text: &str) -> Option<String> {
     NoticeScreen::new(screen_text).screen_tail()
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-24:
+The one delivery verdict that is not reasoning from silence: the agent recorded
+a user turn AFTER the send that is not the message we sent — normally an EMPTY
+one, because the send's trailing Enter submitted the composer before the paste
+had been ingested into it. The agent then answers that empty turn, which is why
+this case used to be swallowed by the watchdog's "already working, still
+working" suppression: the working turn is the SYMPTOM, not proof of delivery.
+
+The wording lives here, with the rest of the catalog, and says the two things
+the user cannot see from chat: the message was not delivered, and where the text
+went. It did not vanish — it stays in the terminal's composer, and the moment a
+later send runs its draft-preservation step that leftover text is stashed, which
+surfaces in the UI as Saved Prompts.
+*/
+pub fn session_chat_delivery_mismatch_notice(
+    submitted_empty: bool,
+    screen_tail: Option<String>,
+) -> SessionChatTerminalNotice {
+    let recorded = if submitted_empty {
+        "an empty prompt"
+    } else {
+        "a different prompt"
+    };
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+        SessionChatTerminalNoticeSeverity::Error,
+        SessionChatTerminalNoticeSource::Watchdog,
+        "Your message was not delivered to the agent",
+    )
+    .with_detail(format!(
+        "The agent recorded {recorded} where your message should be, and started answering that instead, so your message never reached it. Your text is most likely still sitting unsent in this session's terminal composer. If you have sent another message since, Ghostex preserved that leftover composer text as a draft — look for it in Saved Prompts."
+    ))
+    .with_screen_tail(screen_tail)
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
 }
 
 // ---------------------------------------------------------------------------

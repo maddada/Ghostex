@@ -394,9 +394,23 @@ fn run_zsh_script_blocking(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| error.to_string())?;
+    /*
+    CDXC:ZmxSendStdinDelivery 2026-08-24:
+    `zmx send` reads the payload from this pipe, so a failed or short write
+    means the agent gets a truncated prompt or nothing at all while zmx still
+    exits 0. Discarding the error here made gxserver report those sends as
+    delivered. Report the write failure as a command failure instead, and kill
+    the child first so a half-fed `zmx send` cannot submit the prefix it did
+    receive.
+    */
     if let Some(mut stdin) = child.stdin.take() {
         let input = options.stdin.clone().unwrap_or_default();
-        let _ = stdin.write_all(input.as_bytes());
+        if let Err(error) = stdin.write_all(input.as_bytes()) {
+            drop(stdin);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("writing zmx command stdin failed: {error}"));
+        }
     }
     let terminate = Arc::new(AtomicBool::new(false));
     let stdout = child

@@ -125,6 +125,8 @@ pub(crate) fn missing_provider_state_patch(
         .unwrap_or_default();
     provider_state.remove("killError");
     provider_state.remove("probeError");
+    // No daemon, so nothing was spawned by any zmx binary. See CDXC:ZmxWireCycle.
+    provider_state.remove(ZMX_BINARY_STAMP_KEY);
     provider_state.insert("lifecycleState".to_string(), json!("missing"));
     provider_state.insert("probedAt".to_string(), json!(timestamp));
     provider_state.insert(

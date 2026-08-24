@@ -82,10 +82,18 @@ pub(crate) fn schedule_presentation_session_delta(
             sync_zmx_title_observer_for_session(state, &session, "presentation-session-delta");
             sync_session_chat_follower_for_session(state, &session, "presentation-session-delta");
         }
-        _ => {
+        Ok(None) => {
             stop_zmx_title_observer(state, project_id, session_id, "session-removed");
             stop_session_chat_follower(state, project_id, session_id, "session-removed");
         }
+        /*
+        CDXC:SessionChatFollowerLiveness 2026-08-24:
+        Only `Ok(None)` means the session is gone. A read error is the database
+        being busy, not a removal, and tearing the observers down for it killed
+        a healthy chat follower whose respawn then had to wait for some later
+        delta to arrive. Leave them running: the session state is unchanged.
+        */
+        Err(_) => {}
     }
     Ok(())
 }

@@ -184,7 +184,33 @@ fn codex_event_message(
         */
         Some("item_completed") => {
             let item = as_record(payload.get("item"))?;
-            let role = match item.get("type").and_then(Value::as_str) {
+            let item_type = item.get("type").and_then(Value::as_str);
+            /*
+            CDXC:SessionChatCore 2026-08-23:
+            Compaction is a thread item, not a message, and it carries no
+            content of its own — the whole record is its type. Codex keeps the
+            summarised turns in the rollout, so without this row the chat gives
+            the reader nothing at all to explain why the agent stopped knowing
+            what it just did; the TUI prints `• Context compacted` at exactly
+            this point. Read from the transcript rather than the screen so past
+            compactions are still there when the user scrolls back, and so an
+            AUTOMATIC one (`compact_token_budget`, no command typed) is marked
+            too. It is the only `item_completed` variant decoded here that is
+            not a visible message.
+            */
+            if item_type == Some("ContextCompaction") {
+                return Some(SessionChatMessage {
+                    id: extract_string(item.get("id")).unwrap_or(id),
+                    role: SessionChatRole::System,
+                    blocks: vec![text_block(CONTEXT_COMPACTED_STATUS_TEXT)],
+                    timestamp,
+                    source: SessionChatSource::Transcript,
+                    turn_id: None,
+                    byte_offset: None,
+                    queued: false,
+                });
+            }
+            let role = match item_type {
                 Some("UserMessage") => SessionChatRole::User,
                 Some("AgentMessage") => SessionChatRole::Assistant,
                 _ => return None,

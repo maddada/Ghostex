@@ -54,7 +54,16 @@ pub(crate) fn log_temporary_zmx_input_write(
         }
     }
     let title_flow = source.contains("title");
-    if controls.is_empty() && !title_flow {
+    /*
+    CDXC:SessionChatVerifyPaste 2026-08-24: chat's queue writes are recorded
+    whatever they carry. A lost message's paste body and its Enter contain no
+    listed control byte, so the control-byte filter used to drop exactly the
+    two entries a delivery report needs — the sequence left no trace at all.
+    Still metadata only (byte length and classifications, never the text), and
+    still gated behind the diagnostic scenario like every other routine entry.
+    */
+    let session_chat_queue_write = operation == "sessionChatQueueWrite";
+    if controls.is_empty() && !title_flow && !session_chat_queue_write {
         return;
     }
     let paths = get_gxserver_paths(None);
@@ -209,17 +218,18 @@ pub(crate) fn create_started_workspace_terminal(
     update.insert("projectId".to_string(), json!(project_id));
     update.insert("sessionId".to_string(), json!(session_id));
     update.insert("lifecycleState".to_string(), json!("running"));
-    let provider_state_patch = match provider_state_patch(&session, &provider_state) {
-        Ok(provider_state_patch) => provider_state_patch,
-        Err(error) => {
-            return Err(workspace_terminal_failure_with_cleanup(
-                error.into(),
-                compensate_created_workspace_terminal(repository, &created_identity),
-                &project_id,
-                &session_id,
-            ));
-        }
-    };
+    let provider_state_patch =
+        match started_provider_state_patch(&session, &provider_state, &zmx.executable_path) {
+            Ok(provider_state_patch) => provider_state_patch,
+            Err(error) => {
+                return Err(workspace_terminal_failure_with_cleanup(
+                    error.into(),
+                    compensate_created_workspace_terminal(repository, &created_identity),
+                    &project_id,
+                    &session_id,
+                ));
+            }
+        };
     update.insert(
         "providerState".to_string(),
         Value::Object(provider_state_patch),
@@ -562,6 +572,97 @@ pub(crate) fn read_zmx_session_history_capture(
     read_zmx_session_screen_capture(&zmx_name).map_err(ZmxEndpointError::DependencyUnavailable)
 }
 
+/*
+CDXC:SessionChatSerializedWriters 2026-08-24:
+One `/api/sendSessionText` or `/api/sendSessionEnter` call, resolved against the
+repository BEFORE anything is awaited — a rusqlite handle cannot be held across
+an await point, and the awaited variant needs the queue's answer.
+*/
+pub struct ZmxQueuedSessionWrite {
+    pub project_id: String,
+    pub session_id: String,
+    pub zmx_name: String,
+    pub session: Value,
+    /// `diagnosticInputSource`, carried through so the temporary input log keeps
+    /// attributing the write to its caller instead of to the queue.
+    pub source: String,
+    pub text: String,
+}
+
+pub fn read_zmx_queued_session_write(
+    repository: &DomainRepository<'_>,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> ZmxEndpointResult<ZmxQueuedSessionWrite> {
+    require_zmx()?;
+    let lifecycle = read_lifecycle_params(params)?;
+    let session = require_session(repository, &lifecycle)?;
+    let zmx_name = provider_zmx_session_name(&session)?;
+    let text = if endpoint_path == "/api/sendSessionEnter" {
+        "\r".to_string()
+    } else {
+        read_interaction_text(params.get("text"), "sendSessionText")?
+    };
+    Ok(ZmxQueuedSessionWrite {
+        project_id: lifecycle.project_id,
+        session_id: lifecycle.session_id,
+        zmx_name,
+        session,
+        source: read_diagnostic_input_source(params).to_string(),
+        text,
+    })
+}
+
+impl ZmxQueuedSessionWrite {
+    fn steps(&self) -> Vec<crate::session_chat_send::SessionChatSendStep> {
+        vec![crate::session_chat_send::SessionChatSendStep::Write(
+            self.text.clone(),
+        )]
+    }
+
+    /// The unchanged `sendSession*` response shape. `exitCode` is 0 because the
+    /// queue reports a refused burst as an error rather than as a zmx status.
+    fn into_result(self) -> Value {
+        send_result(0, self.session, &self.text, false, self.zmx_name)
+    }
+
+    /// Awaited delivery, used by the HTTP layer.
+    pub async fn execute(self) -> ZmxEndpointResult<Value> {
+        let steps = self.steps();
+        crate::session_chat_send::execute_session_chat_send(
+            &self.project_id,
+            &self.session_id,
+            &self.zmx_name,
+            &self.source,
+            steps,
+        )
+        .await
+        .map_err(|error| ZmxEndpointError::DependencyUnavailable(error.message))?;
+        Ok(self.into_result())
+    }
+
+    /// Fire-and-forget enqueue, used by the synchronous in-process dispatch.
+    pub fn enqueue(self) -> Value {
+        crate::session_chat_send::enqueue_session_chat_send(
+            &self.project_id,
+            &self.session_id,
+            &self.zmx_name,
+            &self.source,
+            self.steps(),
+        );
+        self.into_result()
+    }
+}
+
+fn read_diagnostic_input_source(params: &Map<String, Value>) -> &str {
+    params
+        .get("diagnosticInputSource")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("external-api")
+}
+
 pub fn dispatch_zmx_session_interaction_endpoint(
     repository: &DomainRepository<'_>,
     endpoint_path: &str,
@@ -571,12 +672,7 @@ pub fn dispatch_zmx_session_interaction_endpoint(
     let lifecycle = read_lifecycle_params(params)?;
     let session = require_session(repository, &lifecycle)?;
     let zmx_name = provider_zmx_session_name(&session)?;
-    let diagnostic_source = params
-        .get("diagnosticInputSource")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("external-api");
+    let diagnostic_source = read_diagnostic_input_source(params);
     match endpoint_path {
         "/api/readSessionText" => {
             let result = run_zmx_interaction_command(
@@ -610,54 +706,30 @@ pub fn dispatch_zmx_session_interaction_endpoint(
             output.insert("zmxName".to_string(), Value::String(zmx_name));
             Ok(Value::Object(output))
         }
-        "/api/sendSessionText" => {
-            let text = read_interaction_text(params.get("text"), "sendSessionText")?;
-            log_temporary_zmx_input_write(
-                &lifecycle.project_id,
-                &lifecycle.session_id,
-                &zmx_name,
-                endpoint_path,
-                diagnostic_source,
-                &text,
-            );
-            let result = run_zmx_interaction_command(
-                build_zmx_send_command(&zmx_name, &zmx.executable_path),
-                ZmxCommandOptions {
-                    stdin: Some(text.clone()),
-                    ..ZmxCommandOptions::default()
-                },
-            )?;
-            Ok(send_result(
-                result.exit_code,
-                session,
-                &text,
-                false,
+        /*
+        CDXC:SessionChatSerializedWriters 2026-08-24: these two write raw bytes
+        into the session's TUI input line, which is the same line an in-flight
+        Session Chat send owns from its clear burst until its Enter, so they go
+        through that per-session queue instead of straight to the pty. This
+        synchronous dispatch enqueues without waiting; the HTTP layer takes the
+        awaited path below so its callers still learn that the terminal refused
+        the bytes.
+        */
+        "/api/sendSessionText" | "/api/sendSessionEnter" => {
+            let text = if endpoint_path == "/api/sendSessionEnter" {
+                "\r".to_string()
+            } else {
+                read_interaction_text(params.get("text"), "sendSessionText")?
+            };
+            Ok(ZmxQueuedSessionWrite {
+                project_id: lifecycle.project_id.clone(),
+                session_id: lifecycle.session_id.clone(),
                 zmx_name,
-            ))
-        }
-        "/api/sendSessionEnter" => {
-            log_temporary_zmx_input_write(
-                &lifecycle.project_id,
-                &lifecycle.session_id,
-                &zmx_name,
-                endpoint_path,
-                diagnostic_source,
-                "\r",
-            );
-            let result = run_zmx_interaction_command(
-                build_zmx_send_command(&zmx_name, &zmx.executable_path),
-                ZmxCommandOptions {
-                    stdin: Some("\r".to_string()),
-                    ..ZmxCommandOptions::default()
-                },
-            )?;
-            Ok(send_result(
-                result.exit_code,
                 session,
-                "\r",
-                false,
-                zmx_name,
-            ))
+                source: diagnostic_source.to_string(),
+                text,
+            }
+            .enqueue())
         }
         "/api/sendSessionMessage" => {
             let text = read_interaction_text(params.get("text"), "sendSessionMessage")?;

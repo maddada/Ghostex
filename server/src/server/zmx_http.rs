@@ -242,6 +242,35 @@ pub(crate) async fn handle_zmx_session_interaction_http(
             );
         }
     };
+    /*
+    CDXC:SessionChatSerializedWriters 2026-08-24:
+    The two raw input-line writers ride the per-session send queue, so their
+    delivery is awaited here rather than performed inside the synchronous
+    dispatch. The repository is scoped and the connection dropped before the
+    await, because a rusqlite handle cannot be held across one.
+    */
+    if matches!(
+        endpoint_path.as_str(),
+        "/api/sendSessionText" | "/api/sendSessionEnter"
+    ) {
+        let queued = {
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            crate::zmx::read_zmx_queued_session_write(&repository, &endpoint_path, &params)
+        };
+        drop(db);
+        let queued = match queued {
+            Ok(queued) => queued,
+            Err(error) => return zmx_error_response(endpoint_path, request_id, error),
+        };
+        return match queued.execute().await {
+            Ok(result) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            ),
+            Err(error) => zmx_error_response(endpoint_path, request_id, error),
+        };
+    }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     match dispatch_zmx_session_interaction_endpoint(&repository, &endpoint_path, &params) {
         Ok(result) => routed_json(

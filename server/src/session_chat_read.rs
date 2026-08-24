@@ -145,6 +145,14 @@ pub(crate) fn resolve_session_chat_read_state(
         None => 0u8.hash(&mut hasher),
     }
     /*
+    CDXC:SessionChatAppCommands 2026-08-23:
+    Ids only, and in-memory only — this term must wake an SSH-only long-poller
+    when Ghostex renames its session out from under it, without costing the
+    500ms loop a spawn or a query.
+    */
+    crate::session_chat_app_command::session_chat_app_commands_identity(project_id, session_id)
+        .hash(&mut hasher);
+    /*
     CDXC:SessionChatTerminalActivity 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
     that says the same thing must not churn the fingerprint; a progress bar that
@@ -358,6 +366,18 @@ pub(crate) async fn handle_read_session_chat_http(
         ) {
             result.insert("terminalNotice".to_string(), notice.to_value());
         }
+        /*
+        CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex itself typed
+        into this session. Inside the running gate with the screen-derived
+        fields because a stopped session is not one anything is renaming, and
+        on the read path as well as the frames so a followerless mobile client
+        sees them too.
+        */
+        crate::session_chat_app_command::insert_session_chat_app_commands(
+            &mut result,
+            &project_id,
+            &session_id,
+        );
         /*
         CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache,
         same running-only gate. Omitted means the client clears its progress row.

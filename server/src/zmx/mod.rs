@@ -9,6 +9,7 @@ pub mod session_glue;
 #[cfg(test)]
 mod tests;
 pub mod types;
+pub mod wire_cycle;
 
 pub use endpoint::*;
 pub(crate) use env::*;
@@ -19,3 +20,4 @@ pub(crate) use screen_capture::*;
 pub(crate) use scripts::*;
 pub(crate) use session_glue::*;
 pub use types::*;
+pub(crate) use wire_cycle::*;

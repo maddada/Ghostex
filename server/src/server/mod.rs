@@ -156,11 +156,11 @@ use crate::{
     worktree_sessions,
     zmx::{
         append_zmx_endpoint_error_context, compensate_created_workspace_terminal,
-        create_started_workspace_terminal, dispatch_zmx_lifecycle_endpoint,
-        dispatch_zmx_session_interaction_endpoint, get_persisted_provider_startup_text_for_session,
-        merge_session_with_renderer_result, prepare_focus_session_renderer_command,
-        read_zmx_existing_session_names, read_zmx_session_process_identities, ZmxEndpointError,
-        ZmxServerContext,
+        create_started_workspace_terminal, cycle_wire_incompatible_zmx_session_daemons,
+        dispatch_zmx_lifecycle_endpoint, dispatch_zmx_session_interaction_endpoint,
+        get_persisted_provider_startup_text_for_session, merge_session_with_renderer_result,
+        prepare_focus_session_renderer_command, read_zmx_existing_session_names,
+        read_zmx_session_process_identities, ZmxEndpointError, ZmxServerContext,
     },
 };
 
@@ -269,12 +269,22 @@ pub(crate) struct SessionChatFollowerEntry {
     pub(crate) task: Option<tokio::task::JoinHandle<()>>,
     pub(crate) stream: Arc<crate::session_chat::SessionChatStream>,
     pub(crate) resnapshot: Arc<tokio::sync::Notify>,
+    /*
+    CDXC:SessionChatFollowerLiveness 2026-08-24:
+    Progress the running task publishes for itself, because `task.is_finished()`
+    cannot tell a healthy follower apart from one wedged in an inline await.
+    Replaced on every respawn (see `sync_session_chat_follower_for_session`).
+    */
+    pub(crate) heartbeat: Arc<crate::session_chat::SessionChatFollowerHeartbeat>,
 }
 
 const GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS: u64 = 3_000;
 const GXSERVER_FORK_INITIAL_RENAME_READY_DELAY_MS: u64 = 4_000;
 const GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS: u64 = 4_000;
 const GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS: u64 = 300;
+/// How long the manual "generate name" job lets its `/rename` submit settle in
+/// the CLI before it yanks the user's killed composer draft back.
+const MANUAL_TITLE_DRAFT_RESTORE_DELAY_MS: u64 = 500;
 const GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH: usize = 250;
 const GXSERVER_GENERATED_SESSION_TITLE_MAX_LENGTH: usize = 39;
 /*
@@ -319,6 +329,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
 ];
 const PORTLESS_BACKGROUND_SYNC_INTERVAL: Duration = Duration::from_secs(10);
 const AGENT_METADATA_TITLE_SYNC_INTERVAL: Duration = Duration::from_secs(1);
+const SESSION_CHAT_FOLLOWER_SYNC_INTERVAL: Duration = Duration::from_secs(10);
 const SESSION_LIFECYCLE_SWEEP_INTERVAL: Duration =
     Duration::from_secs(session_lifecycle::SESSION_LIFECYCLE_SWEEP_INTERVAL_SECONDS);
 const SESSION_GIT_STATUS_REFRESH_INTERVAL: Duration =
@@ -506,6 +517,23 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_notice_reader(&state),
     )
     .start(shutdown_tx.subscribe());
+    /*
+    CDXC:ZmxWireCycle 2026-08-23:
+    An app or remote-package update replaces the bundled zmx binary underneath
+    daemons that keep running the code of the binary that started them, and the
+    two ends of a broken IPC tag contract cannot talk at all — the user sees
+    blank panes. Cycle those daemons before the first client can attach to one,
+    and before the title observers and chat followers below subscribe to them,
+    so each affected session is simply sleeping and the ordinary wake-on-open
+    path restores it with its saved resume plan.
+    */
+    if let Ok(db) = open_gxserver_database(&paths) {
+        cycle_wire_incompatible_zmx_session_daemons(
+            &DomainRepository::new(&db, metadata.server_id.as_str()),
+            &logger,
+            &metadata.server_id,
+        );
+    }
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
@@ -513,6 +541,7 @@ pub async fn run_gxserver_foreground(
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);
     let worktree_branch_rename_task = spawn_worktree_branch_rename_task(&state);
+    let session_chat_follower_sync_task = spawn_session_chat_follower_sync_task(&state);
 
     let mut shutdown_rx = shutdown_tx.subscribe();
     let shutdown_for_signal = shutdown_tx.clone();
@@ -533,6 +562,7 @@ pub async fn run_gxserver_foreground(
     session_lifecycle_sweep_task.abort();
     session_git_status_refresh_task.abort();
     worktree_branch_rename_task.abort();
+    session_chat_follower_sync_task.abort();
     serve_result.with_context(|| "run gxserver HTTP listener")?;
 
     remove_runtime_metadata(&paths)?;

@@ -25,6 +25,13 @@ Delivery is checked in two tiers because neither alone is complete:
   b. a JSON-escaped substring scan of the appended raw bytes — catches Claude's
      `queue-operation` enqueue rows (typed while a turn runs) and Codex's
      `response_item` message lane, neither of which the decoders surface.
+
+CDXC:SessionChatTerminalNotices 2026-08-24: a third tier answers the opposite
+question — not "can delivery be proven?" but "was something ELSE submitted in
+its place?" (`observe_mismatched_input`). It is the only tier with affirmative
+evidence, so it does not wait out the deadline and it is not silenced by the
+"the agent was already working" suppression, which is precisely what used to
+swallow an empty submit.
 */
 
 use std::{
@@ -39,22 +46,23 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::session_chat::{
-    read_incremental_transcript_messages, resolve_session_chat_transcript_agent,
-    resolve_session_chat_transcript_path, session_chat_line_decoder, SessionChatBlock,
-    SessionChatIncrementalState, SessionChatLineDecoder, SessionChatMessage, SessionChatRole,
+    is_noise_message, parse_json_object, read_incremental_transcript_messages,
+    resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
+    session_chat_line_decoder, text_block, SessionChatBlock, SessionChatIncrementalState,
+    SessionChatLineDecoder, SessionChatMessage, SessionChatRole, SessionChatSource,
     SessionChatTranscriptAgent,
 };
 use crate::session_chat_notice::{
     classify_session_chat_terminal_notice, clear_session_chat_watchdog_notice,
-    session_chat_notice_key, session_chat_screen_shows_queued_input,
-    session_chat_terminal_screen_tail, session_chat_watchdog_notice,
-    set_session_chat_watchdog_notice, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeSeverity, SessionChatTerminalNoticeSource,
-    SESSION_CHAT_NOTICE_AGENT_EXITED, SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-    SESSION_CHAT_NOTICE_QUEUED_INPUT,
+    session_chat_delivery_mismatch_notice, session_chat_notice_key,
+    session_chat_screen_shows_queued_input, session_chat_terminal_screen_tail,
+    session_chat_watchdog_notice, set_session_chat_watchdog_notice, SessionChatTerminalNotice,
+    SessionChatTerminalNoticeAction, SessionChatTerminalNoticeSeverity,
+    SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_AGENT_EXITED,
+    SESSION_CHAT_NOTICE_DELIVERY_FAILED, SESSION_CHAT_NOTICE_QUEUED_INPUT,
 };
 use crate::session_chat_options::session_chat_option_agent;
 
@@ -73,6 +81,15 @@ const WATCHDOG_RAW_SCAN_MIN_CHARS: usize = 12;
 /// A decoded turn that carries most of what was sent counts as delivered: TUIs
 /// trim and re-wrap, and a partial match still proves the message landed.
 const WATCHDOG_PREFIX_MATCH_PERCENT: usize = 80;
+/*
+CDXC:SessionChatTerminalNotices 2026-08-24:
+Once the transcript has recorded a user turn that is NOT ours AND the agent has
+started answering it, waiting out the rest of the deadline buys nothing: the
+composer has already been submitted past our message. These extra polls exist
+only so a transcript that writes the agent's rows before the user row it is
+answering cannot be read as a mismatch.
+*/
+const WATCHDOG_MISMATCH_GRACE_POLLS: u32 = 2;
 /// Registry files are one per live CLI; a machine has a handful, not thousands.
 const CLAUDE_REGISTRY_SCAN_LIMIT: usize = 256;
 
@@ -320,7 +337,26 @@ struct WatchdogCursor {
     path: Option<PathBuf>,
     /// Where the send happened; the raw scan always re-reads from here.
     base_offset: u64,
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-24:
+    Whether `base_offset` really marks THIS send. The mismatch tier below reads
+    every user turn past it as "recorded after the message was typed", so a
+    baseline that was never sampled (the transcript resolved only later) or that
+    was reset when the file was rewritten under us would make the whole file
+    look post-send and turn a session's own history into a false alarm. The
+    delivery tiers do not care — finding the sent text anywhere still proves
+    delivery — so this gates only the mismatch scan.
+    */
+    baseline_trusted: bool,
     state: SessionChatIncrementalState,
+    /*
+    Sticky affirmative evidence, monotone once set: the first post-send user
+    turn that is not the message we sent (`true` ⇒ it was empty), and whether
+    the agent produced output after it. Re-derived from the whole window on
+    every poll, so ordering is never carried across polls; only the verdict is.
+    */
+    mismatched_input: Option<bool>,
+    agent_answered_mismatch: bool,
 }
 
 async fn run_session_chat_send_watchdog(
@@ -358,11 +394,16 @@ async fn run_session_chat_send_watchdog(
     let mut cursor = WatchdogCursor {
         path: probe.transcript_path.clone(),
         base_offset: probe.transcript_offset,
+        baseline_trusted: probe.transcript_path.is_some(),
         state: SessionChatIncrementalState::new(),
+        mismatched_input: None,
+        agent_answered_mismatch: false,
     };
     cursor.state.rebase(probe.transcript_offset);
 
     let started = Instant::now();
+    // Polls observed since the affirmative evidence became complete.
+    let mut mismatch_polls = 0u32;
     loop {
         tokio::time::sleep(WATCHDOG_POLL_INTERVAL).await;
         if superseded() {
@@ -396,6 +437,15 @@ async fn run_session_chat_send_watchdog(
             }
             return;
         }
+        // Affirmative non-delivery: the composer was submitted past our message
+        // and the agent is answering what it submitted instead. Nothing the
+        // remaining deadline could observe would change that verdict.
+        if cursor.mismatched_input.is_some() && cursor.agent_answered_mismatch {
+            if mismatch_polls >= WATCHDOG_MISMATCH_GRACE_POLLS {
+                break;
+            }
+            mismatch_polls += 1;
+        }
         if started.elapsed() >= WATCHDOG_DEADLINE {
             break;
         }
@@ -404,14 +454,11 @@ async fn run_session_chat_send_watchdog(
     if superseded() {
         return;
     }
-    escalate_undelivered_send(
-        &probe,
-        cursor.path.is_some(),
-        &publish,
-        &read_state,
-        UndeliveredSendReason::TranscriptSilent,
-    )
-    .await;
+    let reason = match cursor.mismatched_input {
+        Some(submitted_empty) => UndeliveredSendReason::MismatchedInput { submitted_empty },
+        None => UndeliveredSendReason::TranscriptSilent,
+    };
+    escalate_undelivered_send(&probe, cursor.path.is_some(), &publish, &read_state, reason).await;
 }
 
 /*
@@ -427,6 +474,17 @@ enum UndeliveredSendReason {
     /// explanation (a client-side queue, a turn still running, no transcript to
     /// watch at all) has to win over the alarm.
     TranscriptSilent,
+    /*
+    CDXC:SessionChatTerminalNotices 2026-08-24:
+    The terminal took the message and then recorded a DIFFERENT user turn —
+    usually an empty one, submitted by the send's trailing Enter before the
+    paste had been ingested. Non-delivery is evidenced rather than inferred, so
+    the "already working, still working" suppression must not apply: the turn it
+    points at is the one this mismatched input started.
+    */
+    MismatchedInput {
+        submitted_empty: bool,
+    },
     /// The send itself failed: the message was never typed into the terminal.
     /// Non-delivery is a FACT here, so there is nothing to suppress against and
     /// exactly one of the three verdicts is always published.
@@ -435,8 +493,9 @@ enum UndeliveredSendReason {
 
 /*
 CDXC:SessionChatTerminalNotices 2026-08-19:
-The message is undelivered — either the deadline passed with nothing in the
-transcript, or the send itself failed (see `UndeliveredSendReason`). Exactly one
+The message is undelivered — the deadline passed with nothing in the transcript,
+the transcript recorded a different prompt in its place, or the send itself
+failed (see `UndeliveredSendReason`). Exactly one
 terminal capture happens here — never in the poll loop — and the verdict is
 decided in suppression-first order, because a false "your message was lost" is
 worse than a missed one:
@@ -452,8 +511,11 @@ worse than a missed one:
   3. Clean screen: consult Claude's own session registry before blaming the
      process.
   4. A turn was already running when the message was typed and is still running
-     — normal, stay silent. (Silence only.)
-  5. Otherwise the honest verdict: nothing proves the message arrived.
+     — normal, stay silent. (Silence only, and NOT for `MismatchedInput`: there
+     the running turn is the one the mismatched input started, so reading it as
+     an innocent explanation is exactly what swallowed this alarm before.)
+  5. Otherwise the honest verdict: nothing proves the message arrived — or, for
+     `MismatchedInput`, positive proof that something else was submitted.
 */
 async fn escalate_undelivered_send(
     probe: &SessionChatSendProbe,
@@ -462,9 +524,19 @@ async fn escalate_undelivered_send(
     read_state: &SessionChatWatchdogStateReader,
     reason: UndeliveredSendReason,
 ) {
+    /*
+    Two different questions, deliberately not one flag:
+      - `typed_into_terminal` — the message DID reach the terminal, so an
+        innocent explanation (a client-side queue, a command the CLI ran itself,
+        a session with no transcript yet) can still outrank the alarm. A send
+        that failed has none of those.
+      - `reasoning_from_silence` — the verdict rests on nothing having been
+        recorded. `MismatchedInput` does not: it recorded the wrong thing.
+    */
+    let typed_into_terminal = reason != UndeliveredSendReason::WriteFailed;
     let reasoning_from_silence = reason == UndeliveredSendReason::TranscriptSilent;
     let screen = crate::session_chat_send::capture_session_terminal_text(&probe.zmx_name).await;
-    if let Some(screen) = screen.as_deref().filter(|_| reasoning_from_silence) {
+    if let Some(screen) = screen.as_deref().filter(|_| typed_into_terminal) {
         // A queue banner explains a silent transcript; it explains nothing about
         // a message the terminal never accepted.
         if session_chat_screen_shows_queued_input(probe.agent.as_deref(), screen) {
@@ -498,8 +570,7 @@ async fn escalate_undelivered_send(
     mid-turn nothing ever clears it, and that stuck "working" is exactly the
     state this feature exists to explain.
     */
-    let screen_explains_the_send =
-        !(reasoning_from_silence && probe.intercepted.is_some());
+    let screen_explains_the_send = !(typed_into_terminal && probe.intercepted.is_some());
     if let Some(screen) = screen.as_deref().filter(|_| screen_explains_the_send) {
         if let Some(mut notice) =
             classify_session_chat_terminal_notice(probe.agent.as_deref(), screen)
@@ -533,6 +604,7 @@ async fn escalate_undelivered_send(
             )
             .with_detail(match reason {
                 UndeliveredSendReason::TranscriptSilent => "Your message was never recorded, and the Claude Code process that owned this session is no longer registered as running — it appears to have exited. Start it again in the terminal before sending more messages.",
+                UndeliveredSendReason::MismatchedInput { .. } => "Your message was not recorded — a different prompt was submitted in its place — and the Claude Code process that owned this session is no longer registered as running. Start it again in the terminal before sending more messages.",
                 UndeliveredSendReason::WriteFailed => "Your message could not be typed into this session, and the Claude Code process that owned it is no longer registered as running — it appears to have exited. Start it again in the terminal before sending more messages.",
             })
             .with_screen_tail(screen_tail)
@@ -544,11 +616,22 @@ async fn escalate_undelivered_send(
         return;
     }
 
-    if reasoning_from_silence {
-        // Typed into a running turn that is still running, with a clean screen
-        // and a live agent: the transcript is silent for a reason that is not a
-        // failure.
-        if probe.working_at_send && live.working {
+    if typed_into_terminal {
+        /*
+        Typed into a running turn that is still running, with a clean screen and
+        a live agent: the transcript is silent for a reason that is not a
+        failure — the input is queued behind the turn that was already going
+        when it was typed (the Codex queue banner above is the same story with a
+        visible witness).
+
+        CDXC:SessionChatTerminalNotices 2026-08-24: `MismatchedInput` is
+        excluded, and that exclusion is the whole fix. There the transcript
+        recorded a user turn AFTER the send that is not ours and the agent went
+        to work on it, so "still working" describes the turn that ATE the send.
+        Treating it as an innocent explanation is what let an empty submit lose
+        a message with no notice at all.
+        */
+        if reasoning_from_silence && probe.working_at_send && live.working {
             return;
         }
         /*
@@ -578,27 +661,35 @@ async fn escalate_undelivered_send(
         }
     }
 
-    publish_watchdog_notice(
-        probe,
-        SessionChatTerminalNotice::new(
-            SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-            SessionChatTerminalNoticeSeverity::Error,
-            SessionChatTerminalNoticeSource::Watchdog,
-            match reason {
-                UndeliveredSendReason::TranscriptSilent => "Your message did not reach the agent",
-                UndeliveredSendReason::WriteFailed => "Your message could not be sent to the agent",
-            },
-        )
-        .with_detail(match reason {
-            UndeliveredSendReason::TranscriptSilent => "Nothing was written to the session transcript in the 10 seconds after this message was sent, so it most likely never reached the agent. Open the terminal to see what it is showing.",
-            UndeliveredSendReason::WriteFailed => "This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing.",
-        })
-        .with_screen_tail(screen_tail)
-        .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-            "Open terminal",
-        )]),
-        publish,
-    );
+    let notice = match reason {
+        // The affirmative verdict has its own card, built in the notice catalog
+        // because it is the one that tells the user where their text went.
+        UndeliveredSendReason::MismatchedInput { submitted_empty } => {
+            session_chat_delivery_mismatch_notice(submitted_empty, screen_tail)
+        }
+        UndeliveredSendReason::TranscriptSilent | UndeliveredSendReason::WriteFailed => {
+            SessionChatTerminalNotice::new(
+                SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+                SessionChatTerminalNoticeSeverity::Error,
+                SessionChatTerminalNoticeSource::Watchdog,
+                match reason {
+                    UndeliveredSendReason::WriteFailed => {
+                        "Your message could not be sent to the agent"
+                    }
+                    _ => "Your message did not reach the agent",
+                },
+            )
+            .with_detail(match reason {
+                UndeliveredSendReason::WriteFailed => "This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing.",
+                _ => "Nothing was written to the session transcript in the 10 seconds after this message was sent, so it most likely never reached the agent. Open the terminal to see what it is showing.",
+            })
+            .with_screen_tail(screen_tail)
+            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+                "Open terminal",
+            )])
+        }
+    };
+    publish_watchdog_notice(probe, notice, publish);
 }
 
 /// Leads the detail of a classified screen notice with what the send did.
@@ -606,6 +697,9 @@ fn undelivered_prefix(reason: UndeliveredSendReason) -> &'static str {
     match reason {
         UndeliveredSendReason::TranscriptSilent => {
             "Your message was not recorded by the agent — this is what its terminal is showing instead."
+        }
+        UndeliveredSendReason::MismatchedInput { .. } => {
+            "Your message was not delivered — the agent recorded a different prompt in its place — and this is what its terminal is showing."
         }
         UndeliveredSendReason::WriteFailed => {
             "Your message could not be typed into this session's terminal — this is what it is showing instead."
@@ -653,6 +747,11 @@ fn poll_transcript_for_send(
         if cursor.path.is_some() {
             cursor.base_offset = 0;
             cursor.state.rebase(0);
+            // A file that only appeared now was never sampled at send time, so
+            // "everything past the baseline is post-send" is an assumption, not
+            // a measurement. Good enough to look for the sent text in; not good
+            // enough to read other people's turns as evidence against it.
+            cursor.baseline_trusted = false;
         }
     }
     let Some(path) = cursor.path.clone() else {
@@ -663,9 +762,11 @@ fn poll_transcript_for_send(
     };
     if metadata.len() < cursor.state.offset {
         // The file was replaced or rewritten under us; re-read it whole rather
-        // than tailing an offset that no longer exists.
+        // than tailing an offset that no longer exists. The send's baseline is
+        // gone with it, so the mismatch scan stops trusting it.
         cursor.base_offset = 0;
         cursor.state.rebase(0);
+        cursor.baseline_trusted = false;
     }
 
     let mut matched = false;
@@ -707,7 +808,13 @@ fn poll_transcript_for_send(
     intercepted adds its own shapes to look for: it is never a user turn, but
     Claude does record `<command-name>` / `<bash-input>` rows naming it.
     */
-    if raw_needles.is_empty() {
+    /*
+    The same appended window answers the mismatch question below, so it is read
+    once. Skipping the read entirely when neither tier can use it keeps a short
+    send on a session with no usable baseline at zero filesystem cost.
+    */
+    let scan_for_mismatch = cursor.baseline_trusted && !cursor.agent_answered_mismatch;
+    if raw_needles.is_empty() && !scan_for_mismatch {
         return false;
     }
     let Some(appended) =
@@ -715,16 +822,29 @@ fn poll_transcript_for_send(
     else {
         return false;
     };
-    raw_needles
+    if raw_needles
         .iter()
         .any(|raw_needle| appended.contains(raw_needle))
+    {
+        return true;
+    }
+    if scan_for_mismatch {
+        observe_mismatched_input(probe.transcript_agent, cursor, &appended, needle);
+    }
+    false
 }
 
 fn user_message_matches(message: &SessionChatMessage, needle: &str) -> bool {
-    if message.role != SessionChatRole::User || needle.is_empty() {
+    message.role == SessionChatRole::User
+        && watchdog_text_matches(&message_plain_text(message), needle)
+}
+
+/// Whitespace-folded containment, or a prefix that carries most of the send.
+fn watchdog_text_matches(text: &str, needle: &str) -> bool {
+    if needle.is_empty() {
         return false;
     }
-    let text = normalize_watchdog_text(&message_plain_text(message));
+    let text = normalize_watchdog_text(text);
     if text.is_empty() {
         return false;
     }
@@ -751,6 +871,209 @@ fn message_plain_text(message: &SessionChatMessage) -> String {
 /// comparison are reduced to single-spaced words.
 fn normalize_watchdog_text(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+// ---------------------------------------------------------------------------
+// Mismatched-input evidence
+// ---------------------------------------------------------------------------
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-24:
+The tiers above answer "did our message arrive?" and can only ever fail to prove
+it. This one answers the sharper question "was something ELSE submitted in its
+place?", which is what actually happened in the incident this exists for: the
+send's trailing Enter committed the composer before the pasted text had been
+ingested into it, so the agent recorded an EMPTY user turn, started answering it,
+and the message stayed behind in the composer until a later send's
+draft-preservation step stashed it into Saved Prompts.
+
+It cannot reuse the decoders. Both of them drop a contentless user row on the
+floor (`claude_content_blocks` returns no blocks for an empty string, and
+`extract_string` discards empty text), which is precisely the row that proves
+the failure — so this reads the appended records itself, and deliberately reads
+only the two lanes that mean "the human's composer submitted this": Claude's
+`user` rows and Codex's event lanes. Harness-injected user turns, tool results,
+queue rows and Codex's envelope-carrying `response_item` message twin are all
+excluded, because none of them is something a person submitted.
+*/
+enum WatchdogRecord {
+    /// A composer submission, with its plain text — EMPTY when a bare Enter
+    /// submitted nothing.
+    UserSubmission(String),
+    /// The agent produced output of its own: a turn is under way.
+    AgentOutput,
+}
+
+/// BLOCKING-free: scans the already-read window. Re-derived from the whole
+/// window every poll so record ORDER is never carried across polls; only the
+/// verdict is, and only ever in one direction.
+fn observe_mismatched_input(
+    agent: SessionChatTranscriptAgent,
+    cursor: &mut WatchdogCursor,
+    appended: &str,
+    needle: &str,
+) {
+    let mut mismatch: Option<bool> = None;
+    let mut agent_answered = false;
+    for line in appended.lines() {
+        match classify_watchdog_record(agent, line) {
+            Some(WatchdogRecord::UserSubmission(text)) => {
+                if mismatch.is_none() && !watchdog_text_matches(&text, needle) {
+                    mismatch = Some(text.trim().is_empty());
+                }
+            }
+            // Only output that follows the mismatched turn says the agent went
+            // to work on it; the tail of the turn our send was typed into does
+            // not.
+            Some(WatchdogRecord::AgentOutput) => agent_answered |= mismatch.is_some(),
+            None => {}
+        }
+    }
+    let Some(submitted_empty) = mismatch else {
+        return;
+    };
+    cursor.mismatched_input.get_or_insert(submitted_empty);
+    cursor.agent_answered_mismatch |= agent_answered;
+}
+
+fn classify_watchdog_record(
+    agent: SessionChatTranscriptAgent,
+    line: &str,
+) -> Option<WatchdogRecord> {
+    let record = parse_json_object(line)?;
+    match agent {
+        SessionChatTranscriptAgent::Claude => claude_watchdog_record(&record),
+        SessionChatTranscriptAgent::Codex => codex_watchdog_record(&record),
+        // No catalogued record shapes, so no evidence either way. The delivery
+        // tiers and the 10s deadline still cover these agents unchanged.
+        SessionChatTranscriptAgent::Grok | SessionChatTranscriptAgent::Pi => None,
+    }
+}
+
+fn claude_watchdog_record(record: &Map<String, Value>) -> Option<WatchdogRecord> {
+    match record.get("type").and_then(Value::as_str)? {
+        "assistant" => Some(WatchdogRecord::AgentOutput),
+        "user" => {
+            // Harness plumbing wearing the user role: replayed summaries, the
+            // injected meta turns, and the marker row an interrupt writes.
+            if record.get("isMeta") == Some(&Value::Bool(true))
+                || record.get("isSynthetic") == Some(&Value::Bool(true))
+                || record.get("isCompactSummary") == Some(&Value::Bool(true))
+                || record.contains_key("interruptedMessageId")
+            {
+                return None;
+            }
+            let message = record.get("message")?.as_object()?;
+            let text = claude_submitted_text(message.get("content")?)?;
+            user_submission_record(text)
+        }
+        // `queue-operation` and `attachment` rows describe a prompt the CLI is
+        // HOLDING, not one it submitted past ours, and the raw needle tier
+        // already reads them as delivery proof.
+        _ => None,
+    }
+}
+
+/// The text a Claude `user` row submitted. `None` for content that is not a
+/// composer submission at all (tool results, images, attachments).
+fn claude_submitted_text(content: &Value) -> Option<String> {
+    match content {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(items) => {
+            let mut parts: Vec<&str> = Vec::new();
+            for item in items {
+                match item {
+                    Value::String(text) => parts.push(text),
+                    Value::Object(block) => match block.get("type").and_then(Value::as_str) {
+                        Some("text") => parts.push(
+                            block
+                                .get("text")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default(),
+                        ),
+                        _ => return None,
+                    },
+                    _ => return None,
+                }
+            }
+            Some(parts.join(" "))
+        }
+        _ => None,
+    }
+}
+
+fn codex_watchdog_record(record: &Map<String, Value>) -> Option<WatchdogRecord> {
+    let payload = record.get("payload")?.as_object()?;
+    let payload_type = payload.get("type").and_then(Value::as_str)?;
+    match record.get("type").and_then(Value::as_str)? {
+        "event_msg" => match payload_type {
+            "user_message" => {
+                user_submission_record(payload.get("message").and_then(Value::as_str)?.to_string())
+            }
+            "agent_message" | "task_started" => Some(WatchdogRecord::AgentOutput),
+            "item_completed" => {
+                let item = payload.get("item")?.as_object()?;
+                match item.get("type").and_then(Value::as_str)? {
+                    "UserMessage" => {
+                        user_submission_record(codex_item_submitted_text(item.get("content")?)?)
+                    }
+                    "AgentMessage" => Some(WatchdogRecord::AgentOutput),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        /*
+        The `response_item` message lane is the envelope-carrying twin of the
+        event lane (see `codex_response_item`), so its user rows are NOT
+        submissions; its assistant and tool lanes are still the agent working.
+        */
+        "response_item" => match payload_type {
+            "reasoning" | "function_call" | "local_shell_call" | "custom_tool_call"
+            | "web_search_call" | "tool_search_call" => Some(WatchdogRecord::AgentOutput),
+            "message" => (payload.get("role").and_then(Value::as_str) == Some("assistant"))
+                .then_some(WatchdogRecord::AgentOutput),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// `item_completed` UserMessage content, which spells its text block `text`.
+fn codex_item_submitted_text(content: &Value) -> Option<String> {
+    let items = content.as_array()?;
+    let mut parts: Vec<&str> = Vec::new();
+    for item in items {
+        let block = item.as_object()?;
+        match block.get("type").and_then(Value::as_str) {
+            Some("text" | "Text" | "input_text") => parts.push(
+                block
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            ),
+            // The slash-skill chip carries no typed text of its own.
+            Some("skill") => {}
+            _ => return None,
+        }
+    }
+    Some(parts.join(" "))
+}
+
+/// Wraps submitted text as evidence, minus the harness envelopes that ride the
+/// user role. An EMPTY submission is kept: it is the whole point of this tier.
+fn user_submission_record(text: String) -> Option<WatchdogRecord> {
+    let probe = SessionChatMessage {
+        id: String::new(),
+        role: SessionChatRole::User,
+        blocks: vec![text_block(text.clone())],
+        timestamp: None,
+        source: SessionChatSource::Transcript,
+        turn_id: None,
+        byte_offset: None,
+        queued: false,
+    };
+    (!is_noise_message(&probe)).then_some(WatchdogRecord::UserSubmission(text))
 }
 
 /// The needle as it appears INSIDE a JSON string on disk (no surrounding

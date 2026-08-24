@@ -1801,11 +1801,13 @@ pub(crate) fn emit_session_chat_options_state_frame(
     let agent_session_id = read_runtime_text(&session, "agentSessionId");
     let queue =
         crate::session_chat_queue::read_session_chat_queue_snapshot(paths, project_id, session_id);
-    let (epoch, _) = stream.current();
-    // Same seq discipline as the prompt frame: take the seq and publish as one
-    // step, because the follower task publishes into the SAME counter.
+    // Same seq discipline as the prompt frame: take the epoch and the seq and
+    // publish as one step, because the follower task publishes into the SAME
+    // counter and can start a new generation in between
+    // (CDXC:SessionChatFollowerLiveness 2026-08-24).
     stream.emit_sequenced(
         |seq| {
+            let (epoch, _) = stream.current();
             crate::session_chat::build_session_chat_prompt_state_frame(
                 project_id,
                 session_id,

@@ -63,6 +63,27 @@ pub(crate) fn parse_process_rows(ps_output: &str) -> Vec<ProcessRow> {
     rows
 }
 
+/// PID of the daemon that owns `session_name`, read from the process table.
+///
+/// CDXC:ZmxWireCycle 2026-08-23: `zmx run <name> -d` keeps its argv across
+/// daemonization, so the owning process identifies itself without answering any
+/// IPC. `zmx list` reports the same PID but pays a per-session probe that a
+/// pre-wire-break daemon cannot complete, which is exactly the case this exists
+/// for.
+pub(crate) fn find_zmx_daemon_process_id(ps_output: &str, session_name: &str) -> Option<i64> {
+    parse_process_rows(ps_output).into_iter().find_map(|row| {
+        let mut arguments = row.command.split_whitespace();
+        let executable = arguments.next()?;
+        if Path::new(executable).file_stem()?.to_str()? != "zmx" {
+            return None;
+        }
+        if arguments.next()? != "run" || arguments.next()? != session_name {
+            return None;
+        }
+        (row.pid > 0).then_some(row.pid)
+    })
+}
+
 fn looks_like_process_terminal_name(value: &str) -> bool {
     value == "??"
         || value == "-"

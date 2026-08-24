@@ -207,7 +207,11 @@ pub(crate) fn start_session_provider(
     update.insert("lifecycleState".to_string(), json!("running"));
     update.insert(
         "providerState".to_string(),
-        Value::Object(provider_state_patch(&probed_session, &provider_state)?),
+        Value::Object(started_provider_state_patch(
+            &probed_session,
+            &provider_state,
+            &zmx.executable_path,
+        )?),
     );
     if explicit_startup_text.is_none() {
         if let Some(launch_settings) =

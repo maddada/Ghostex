@@ -1021,6 +1021,7 @@ mod tests {
             config,
             Arc::new(SessionChatStream::new()),
             Arc::new(tokio::sync::Notify::new()),
+            Arc::new(SessionChatFollowerHeartbeat::new()),
             emit,
         ));
 

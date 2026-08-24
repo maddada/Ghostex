@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -71,6 +71,76 @@ impl Default for SessionChatStream {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/*
+CDXC:SessionChatFollowerLiveness 2026-08-24:
+A follower task that is alive but WEDGED — stuck in an inline await inside the
+reconcile loop (the blocking drain, the steady-state detection probe, a path
+re-resolution, a successor scan) — still passes `task.is_finished()`, so
+`sync_session_chat_follower_for_session` reads it as healthy and never respawns
+it. The transcript keeps growing while chat freezes, and hook ingest keeps
+publishing "working" state frames, so the surface even looks alive.
+
+The task therefore publishes its own progress: it stamps at the top of every
+reconcile iteration, and marks itself PARKED before each await it is SUPPOSED
+to sit in for a long time (the reconcile sleep, the resolve-poll backoff, the
+unsupported-agent resnapshot wait), clearing the flag when that await returns.
+"Not parked AND the stamp is older than the wedge deadline" is then the only
+wedged signature, and it is the one the sync path aborts and respawns. Parked
+waits are exempt, so the deadline never has to clear MAX_RESOLVE_POLL.
+*/
+pub struct SessionChatFollowerHeartbeat {
+    last_progress_ms: AtomicI64,
+    parked: AtomicBool,
+}
+
+impl SessionChatFollowerHeartbeat {
+    pub fn new() -> Self {
+        Self {
+            last_progress_ms: AtomicI64::new(now_epoch_ms()),
+            parked: AtomicBool::new(false),
+        }
+    }
+
+    /// The task reached a new reconcile iteration / returned from an await.
+    pub fn stamp(&self) {
+        self.last_progress_ms.store(now_epoch_ms(), Ordering::SeqCst);
+    }
+
+    /// Entering a deliberate long wait: no stamp is expected until it returns.
+    pub fn park(&self) {
+        self.stamp();
+        self.parked.store(true, Ordering::SeqCst);
+    }
+
+    pub fn unpark(&self) {
+        self.parked.store(false, Ordering::SeqCst);
+        self.stamp();
+    }
+
+    /// True when the task is running (not parked) but has not made progress
+    /// within `deadline` — i.e. it is stuck in an inline await.
+    pub fn is_wedged(&self, deadline: Duration) -> bool {
+        if self.parked.load(Ordering::SeqCst) {
+            return false;
+        }
+        let elapsed_ms = now_epoch_ms() - self.last_progress_ms.load(Ordering::SeqCst);
+        elapsed_ms > deadline.as_millis() as i64
+    }
+}
+
+impl Default for SessionChatFollowerHeartbeat {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------

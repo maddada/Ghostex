@@ -102,6 +102,41 @@ pub(crate) fn zmx_session_socket_path(session_name: &str) -> PathBuf {
     zmx_socket_directory().join(session_name)
 }
 
+/// Whether a daemon still owns this session name, decided from the socket file
+/// alone. `Some(false)` means the name is free; `None` means this platform
+/// cannot see the daemon's socket namespace at all, so callers must treat the
+/// daemon as unobservable rather than absent.
+///
+/// CDXC:ZmxWireCycle 2026-08-23: this is the liveness signal for daemons that
+/// cannot answer IPC. A probe would time out on a pre-wire-break daemon and on
+/// a merely busy one alike, and the second must never be terminated.
+#[cfg(unix)]
+pub(crate) fn zmx_session_daemon_socket_present(session_name: &str) -> Option<bool> {
+    use std::os::unix::fs::FileTypeExt;
+
+    Some(
+        fs::symlink_metadata(zmx_session_socket_path(session_name))
+            .map(|metadata| metadata.file_type().is_socket())
+            .unwrap_or(false),
+    )
+}
+
+#[cfg(not(unix))]
+pub(crate) fn zmx_session_daemon_socket_present(_session_name: &str) -> Option<bool> {
+    None
+}
+
+/// Frees a session name whose daemon was signalled rather than asked to quit.
+/// zmx unlinks the socket only on its own graceful shutdown, so without this
+/// the name stays unusable and the restored session cannot claim it back.
+#[cfg(unix)]
+pub(crate) fn remove_zmx_session_socket(session_name: &str) {
+    let _ = fs::remove_file(zmx_session_socket_path(session_name));
+}
+
+#[cfg(not(unix))]
+pub(crate) fn remove_zmx_session_socket(_session_name: &str) {}
+
 /// The live screen plus the tail of the scrollback, read straight off the
 /// daemon's IPC socket. See `CDXC:SessionChatScreenCapture`.
 #[cfg(unix)]

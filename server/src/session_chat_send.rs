@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
     AppState,
@@ -35,8 +36,11 @@ Session Chat send path (upstream chat spec §7/§8 port). The agent is a TUI, so
 writing bytes to its pty via `zmx send` stdin. The spec's measured discipline is
 preserved verbatim: a Ctrl+U/Ctrl+K clear burst sized by the 2N-1 law, a
 bracketed-paste body with ESC sanitized and newlines normalized to CR, and a
-SEPARATE Enter write after a 500ms settle (a trailing \r inside the paste
-burst is read as newline text and the message stays staged). A per-session
+SEPARATE Enter write (a trailing \r inside the paste burst is read as newline
+text and the message stays staged). What is NOT preserved is the blind 500ms
+settle that used to precede that Enter: the Enter now waits until a screen
+capture proves the composer actually took the body, and is never written when
+the body is provably absent (CDXC:SessionChatVerifyPaste below). A per-session
 queue serializes sequences: each send owns the input line from its clear
 until its Enter fires. HTTP handlers enqueue and return immediately.
 */
@@ -57,6 +61,46 @@ delayed Enter.
 */
 pub const SESSION_CHAT_CLEAR_INPUT_SETTLE_MS: u64 = 150;
 pub const SESSION_CHAT_SUBMIT: &str = "\r";
+/*
+CDXC:SessionChatVerifyPaste 2026-08-24:
+Why the Enter is closed-loop. The old sequence wrote the paste body, slept
+SESSION_CHAT_SUBMIT_DELAY_MS, then wrote a bare "\r" with nothing checking
+that the composer had taken the body. Claude Code ingests a multi-KB paste
+asynchronously — it paints "Pasting text…" and only later collapses the body
+into a "[Pasted text #N +M lines]" placeholder — and under machine load that
+ingestion takes LONGER than 500ms. Reproduced deterministically 2026-08-23
+with a 69-line / 4.6KB message: the bare Enter submitted an EMPTY composer,
+the body arrived afterwards, and the user's message was silently lost (it
+ended up stranded in the composer and later swept into Saved Prompts by the
+next send's draft preservation). zmx transport was byte-perfect at that size,
+so the race is purely TUI ingestion time versus a fixed delay.
+
+The fix is to watch the screen instead of the clock: settle briefly (so a
+paste that already landed costs no extra latency), then poll captures until
+the body is provably on screen. A send whose body cannot be proven present is
+ABORTED without an Enter — losing the send with an error the user sees is
+strictly better than submitting an empty turn and dropping their text.
+*/
+pub const SESSION_CHAT_VERIFY_SETTLE_MS: u64 = SESSION_CHAT_SUBMIT_DELAY_MS;
+pub const SESSION_CHAT_VERIFY_POLL_MS: u64 = 150;
+pub const SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS: u64 = 2_000;
+pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = 8_000;
+/// Bytes of payload per millisecond of extra patience: a paste twice the size
+/// takes about twice as long to ingest.
+pub const SESSION_CHAT_VERIFY_BYTES_PER_MS: u64 = 2;
+/// "Pasting text…" is the TUI telling us ingestion is still running, so the
+/// deadline is worth extending — once, so a wedged indicator cannot stall the
+/// queue indefinitely.
+pub const SESSION_CHAT_VERIFY_PASTING_EXTENSION_MS: u64 = 4_000;
+/// Claude Code's collapsed large-paste placeholder, `[Pasted text #1 +69
+/// lines]`, as `normalize_session_chat_screen_text` renders it.
+const SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE: &str = "Pastedtext";
+/// Claude Code's still-ingesting indicator, `Pasting text…`, normalized.
+const SESSION_CHAT_PASTING_INDICATOR_NEEDLE: &str = "Pastingtext";
+/// Shown to the user when the composer never took the body. Deliberately
+/// describes the terminal, not the network: nothing was submitted.
+pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str =
+    "The terminal did not accept the pasted message.";
 /*
 Esc in the kitty CSI-u encoding (CSI 27 u). Ghostex agent sessions always run
 under zmx, whose VT layer answers the kitty keyboard-protocol query, so Claude
@@ -81,6 +125,7 @@ pub const SESSION_CHAT_SHIFT_UP: &str = "\u{1b}[1;2A";
 pub const SESSION_CHAT_SHIFT_DOWN: &str = "\u{1b}[1;2B";
 pub const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}"; // Ctrl+U — clear toward start
 pub const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}"; // Ctrl+K — clear toward end
+pub const AGENT_TUI_RESTORE_INPUT_LINE: &str = "\u{19}"; // Ctrl+Y — yank back a killed line
 pub const AGENT_TUI_CLEAR_LINE_SLACK: usize = 8;
 pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
 const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
@@ -385,11 +430,43 @@ pub enum SessionChatSendStep {
     },
     /// One `zmx send` stdin burst.
     Write(String),
+    /// One `zmx send` stdin burst logged under its OWN diagnostic-input source
+    /// instead of the job's. Out-of-band writers (the title jobs) fold a whole
+    /// sequence — draft kill → command text → settle → Enter → draft restore —
+    /// into a SINGLE job so no other job can land between its writes, and this
+    /// keeps every one of those writes attributed the way its own dispatch used
+    /// to attribute it (`auto-title-command`, `manual-title-submit`, …).
+    WriteFrom {
+        source: String,
+        payload: String,
+    },
     SleepMs(u64),
+    /// Hold the sequence until the session's screen proves `text` reached the
+    /// agent's composer (CDXC:SessionChatVerifyPaste). Settles `settle_ms`,
+    /// then polls captures until the deadline `timeout_ms` sets. Failing this
+    /// step aborts the sequence, so the Enter that follows it can never
+    /// submit a composer the body never reached.
+    VerifyPasteLanded {
+        text: String,
+        settle_ms: u64,
+        timeout_ms: u64,
+    },
+}
+
+/// The screen-watch window for a payload: a floor that covers small pastes,
+/// plus time proportional to the byte count, capped so a wedged TUI cannot
+/// hold the per-session queue.
+pub fn session_chat_verify_timeout_ms(text_bytes: usize) -> u64 {
+    let scaled = SESSION_CHAT_VERIFY_SETTLE_MS
+        .saturating_add(text_bytes as u64 / SESSION_CHAT_VERIFY_BYTES_PER_MS);
+    scaled
+        .max(SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS)
+        .min(SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS)
 }
 
 /// clear burst → 150ms settle → image pastes back-to-back → (300ms settle
-/// when text follows images) → paste body → 500ms → SEPARATE Enter.
+/// when text follows images) → paste body → screen-verified wait → SEPARATE
+/// Enter.
 pub fn build_session_chat_message_steps(
     text: &str,
     image_paths: &[String],
@@ -416,9 +493,92 @@ pub fn build_session_chat_message_steps(
             text,
         )));
     }
-    steps.push(SessionChatSendStep::SleepMs(SESSION_CHAT_SUBMIT_DELAY_MS));
+    steps.push(
+        session_chat_verify_step(text)
+            // Nothing on screen could confirm this payload, so the Enter keeps
+            // the original blind settle. That is only an images-only send,
+            // whose payload is one short path — the size that never lost a
+            // message.
+            .unwrap_or(SessionChatSendStep::SleepMs(SESSION_CHAT_SUBMIT_DELAY_MS)),
+    );
     steps.push(SessionChatSendStep::Write(SESSION_CHAT_SUBMIT.to_string()));
     steps
+}
+
+// ---------------------------------------------------------------------------
+// Paste verification (CDXC:SessionChatVerifyPaste)
+// ---------------------------------------------------------------------------
+
+/// Longest needle taken from one line of the message. Long enough that a hit
+/// is evidence, short enough to survive a composer that re-wraps and truncates.
+const SESSION_CHAT_VERIFY_NEEDLE_CHARS: usize = 40;
+
+/// Everything a composer is free to change about text it was handed: the frame
+/// it draws around the input line, its continuation indent, and the row breaks
+/// it inserts — which land mid-word for long tokens. Dropping whitespace and
+/// box drawing from BOTH sides is what makes a needle survive re-wrapping.
+///
+/// The comparison is deliberately lossy in the safe direction: a false match
+/// only degrades this step to the old blind-Enter behaviour, while a false
+/// miss would abort a message the agent did receive.
+fn normalize_session_chat_screen_text(text: &str) -> String {
+    text.chars()
+        .filter(|character| {
+            !character.is_whitespace()
+                && !matches!(character, '\u{2500}'..='\u{259f}')
+                && !character.is_control()
+        })
+        .collect()
+}
+
+/// Normalized fragments of the message to look for on screen. Both ends are
+/// sampled because a long composer shows only part of what it holds — the head
+/// while it is still being filled, the tail once it scrolled.
+fn session_chat_paste_needles(text: &str) -> Vec<String> {
+    let mut needles: Vec<String> = Vec::new();
+    let lines: Vec<&str> = text
+        .split(['\r', '\n'])
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    for line in [lines.first(), lines.last()].into_iter().flatten() {
+        let normalized: String = normalize_session_chat_screen_text(line)
+            .chars()
+            .take(SESSION_CHAT_VERIFY_NEEDLE_CHARS)
+            .collect();
+        if !normalized.is_empty() && !needles.contains(&normalized) {
+            needles.push(normalized);
+        }
+    }
+    needles
+}
+
+/// The verify step for a message body, or `None` when no capture could ever
+/// recognise this payload: an images-only send (the composer renders an
+/// attachment chip, never the pasted path) or a body with no characters that
+/// survive normalization.
+fn session_chat_verify_step(text: &str) -> Option<SessionChatSendStep> {
+    if text.trim().is_empty() || session_chat_paste_needles(text).is_empty() {
+        return None;
+    }
+    Some(SessionChatSendStep::VerifyPasteLanded {
+        text: text.to_string(),
+        settle_ms: SESSION_CHAT_VERIFY_SETTLE_MS,
+        timeout_ms: session_chat_verify_timeout_ms(text.len()),
+    })
+}
+
+/// What a capture said about the pasted body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SessionChatPasteVerification {
+    /// The body (or its collapsed placeholder) is on screen.
+    Landed,
+    /// The screen was readable for the whole window and never showed it.
+    Absent,
+    /// Every capture failed or was truncated: the screen proves nothing.
+    Unreadable,
+    /// The send was superseded or cancelled while waiting.
+    Cancelled,
 }
 
 /*
@@ -522,9 +682,13 @@ impl SessionChatSendError {
 
 struct SessionChatSendJob {
     completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
+    /// Set only by `capture_session_chat_terminal_draft`: the standalone
+    /// draft-handoff endpoint needs the draft its `PreserveTerminalDraft` step
+    /// captured, not merely whether the step succeeded.
+    captured_draft: Option<oneshot::Sender<CapturedTerminalDraft>>,
     project_id: String,
     session_id: String,
-    source: &'static str,
+    source: String,
     zmx_name: String,
     generation: u64,
     steps: Vec<SessionChatSendStep>,
@@ -550,15 +714,43 @@ remaining steps of an in-flight job before its next write/sleep. A failed
 zmx write aborts the rest of its sequence so a dangling Enter can never
 follow a body that was not delivered. Must be called from within the tokio
 runtime (HTTP handlers are).
+
+CDXC:SessionChatSerializedWriters 2026-08-24:
+"Each sequence owns the input line" only holds if EVERY server-side writer to
+that pty goes through here. Until this date several did not — the first-prompt
+auto-title job, the manual "generate name" job (which writes a Ctrl+U draft
+kill!), delayed sends, the raw `/api/sendSessionText` + `/api/sendSessionEnter`
+endpoints, and the draft-handoff BEL — and they interleaved with in-flight send
+sequences (measured: an auto-title write landed 70ms after a corrupted send,
+because the auto-title job is triggered by the FIRST user prompt, i.e. exactly
+while that prompt is still being delivered). They all enqueue now, and a writer
+whose bytes must not be split apart (text → settle → Enter) enqueues them as ONE
+job, because separate jobs may be separated by somebody else's job.
 */
 pub fn enqueue_session_chat_send(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
-    source: &'static str,
+    source: &str,
     steps: Vec<SessionChatSendStep>,
 ) {
-    let _ = queue_session_chat_send(project_id, session_id, zmx_name, source, steps, None);
+    let _ = queue_session_chat_send(project_id, session_id, zmx_name, source, steps, None, None);
+}
+
+/// The same fire-and-forget enqueue for a server-side writer that holds a
+/// repository session row rather than a resolved zmx name. The name is resolved
+/// exactly as the zmx endpoints resolve it, so a session whose provider is not
+/// a zmx pty is rejected instead of written to blindly.
+pub fn enqueue_session_write_sequence(
+    session: &Value,
+    project_id: &str,
+    session_id: &str,
+    source: &str,
+    steps: Vec<SessionChatSendStep>,
+) -> std::result::Result<(), DomainStateError> {
+    let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
+    enqueue_session_chat_send(project_id, session_id, &zmx_name, source, steps);
+    Ok(())
 }
 
 /// Enqueues one sequence on the same per-session worker as fire-and-forget
@@ -569,7 +761,7 @@ pub async fn execute_session_chat_send(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
-    source: &'static str,
+    source: &str,
     steps: Vec<SessionChatSendStep>,
 ) -> Result<(), SessionChatSendError> {
     let (completion_tx, completion_rx) = oneshot::channel();
@@ -580,6 +772,7 @@ pub async fn execute_session_chat_send(
         source,
         steps,
         Some(completion_tx),
+        None,
     )
     .map_err(SessionChatSendError::not_attempted)?;
     completion_rx.await.map_err(|_| {
@@ -593,9 +786,10 @@ fn queue_session_chat_send(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
-    source: &'static str,
+    source: &str,
     steps: Vec<SessionChatSendStep>,
     completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
+    captured_draft: Option<oneshot::Sender<CapturedTerminalDraft>>,
 ) -> Result<(), String> {
     if steps.is_empty() {
         return Ok(());
@@ -614,9 +808,10 @@ fn queue_session_chat_send(
         });
     let job = SessionChatSendJob {
         completion,
+        captured_draft,
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
-        source,
+        source: source.to_string(),
         zmx_name: zmx_name.to_string(),
         generation: queue.generation.load(Ordering::SeqCst),
         steps,
@@ -648,6 +843,7 @@ async fn run_session_chat_send_worker(
     while let Some(job) = rx.recv().await {
         let SessionChatSendJob {
             mut completion,
+            mut captured_draft,
             project_id,
             session_id,
             source,
@@ -676,7 +872,7 @@ async fn run_session_chat_send_worker(
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
                 SessionChatSendStep::PreserveTerminalDraft { state_dir } => {
-                    if let Err(error) = preserve_terminal_draft(
+                    match preserve_terminal_draft(
                         &state_dir,
                         &project_id,
                         &session_id,
@@ -686,8 +882,15 @@ async fn run_session_chat_send_worker(
                     )
                     .await
                     {
-                        outcome = Err(error);
-                        break;
+                        Ok(draft) => {
+                            if let Some(sink) = captured_draft.take() {
+                                let _ = sink.send(draft);
+                            }
+                        }
+                        Err(error) => {
+                            outcome = Err(error);
+                            break;
+                        }
                     }
                 }
                 SessionChatSendStep::Write(payload) => {
@@ -695,7 +898,7 @@ async fn run_session_chat_send_worker(
                         &project_id,
                         &session_id,
                         &zmx_name,
-                        source,
+                        &source,
                         &payload,
                     )
                     .await
@@ -705,6 +908,88 @@ async fn run_session_chat_send_worker(
                             error,
                         ));
                         break;
+                    }
+                }
+                SessionChatSendStep::WriteFrom {
+                    source: write_source,
+                    payload,
+                } => {
+                    if let Err(error) = write_session_chat_payload(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &write_source,
+                        &payload,
+                    )
+                    .await
+                    {
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            error,
+                        ));
+                        break;
+                    }
+                }
+                SessionChatSendStep::VerifyPasteLanded {
+                    text,
+                    settle_ms,
+                    timeout_ms,
+                } => {
+                    let verification = verify_session_chat_paste_landed(
+                        &zmx_name,
+                        &text,
+                        settle_ms,
+                        timeout_ms,
+                        &generation,
+                        job_generation,
+                    )
+                    .await;
+                    match verification {
+                        SessionChatPasteVerification::Landed => {}
+                        SessionChatPasteVerification::Unreadable => {
+                            /*
+                            The observation channel itself is down, so neither
+                            "landed" nor "absent" can be shown. Submitting is
+                            the pre-2026-08-24 behaviour and the only choice
+                            that still delivers messages on a host whose screen
+                            captures do not work — but it is never silent.
+                            */
+                            log_session_chat_paste_verification(
+                                LogLevel::Warn,
+                                "sessionChatPasteVerificationSkipped",
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                text.len(),
+                                timeout_ms,
+                                "The session screen could not be read, so the pasted message could not be verified before Enter.",
+                            );
+                        }
+                        SessionChatPasteVerification::Absent => {
+                            log_session_chat_paste_verification(
+                                LogLevel::Error,
+                                "sessionChatPasteVerificationFailed",
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                text.len(),
+                                timeout_ms,
+                                SESSION_CHAT_PASTE_NOT_ACCEPTED,
+                            );
+                            outcome = Err(SessionChatSendError::new(
+                                SessionChatSendFailure::Write,
+                                SESSION_CHAT_PASTE_NOT_ACCEPTED.to_string(),
+                            ));
+                            break;
+                        }
+                        SessionChatPasteVerification::Cancelled => {
+                            outcome = Err(SessionChatSendError::not_attempted(
+                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                            ));
+                            break;
+                        }
                     }
                 }
             }
@@ -720,7 +1005,7 @@ async fn write_session_chat_payload(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
-    source: &'static str,
+    source: &str,
     payload: &str,
 ) -> Result<(), String> {
     crate::zmx::log_temporary_zmx_input_write(
@@ -757,6 +1042,100 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
     .ok()?
     .ok()?;
     (!capture.truncated).then_some(capture.text)
+}
+
+/*
+CDXC:SessionChatVerifyPaste 2026-08-24:
+The screen watch that stands between a paste body and its Enter. It settles
+once (so a paste the TUI already took costs nothing extra), then polls captures
+until one of three things is true: the body — or Claude Code's collapsed
+`[Pasted text …]` placeholder — is on screen, the deadline passed, or the send
+was superseded. "Pasting text…" is the TUI saying ingestion is still running,
+which buys one deadline extension rather than an abort.
+
+Absence is only ever reported from a screen that was actually readable. When
+every capture failed or came back truncated the observation channel is what is
+broken, not the send, and the caller submits with a warn record instead of
+destroying a message on evidence it does not have.
+*/
+async fn verify_session_chat_paste_landed(
+    zmx_name: &str,
+    text: &str,
+    settle_ms: u64,
+    timeout_ms: u64,
+    generation: &AtomicU64,
+    job_generation: u64,
+) -> SessionChatPasteVerification {
+    let needles = session_chat_paste_needles(text);
+    let mut deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
+    let mut readable = false;
+    let mut extended = false;
+    tokio::time::sleep(Duration::from_millis(settle_ms)).await;
+    loop {
+        if job_generation != generation.load(Ordering::SeqCst) {
+            return SessionChatPasteVerification::Cancelled;
+        }
+        if let Some(screen) = capture_session_terminal_text(zmx_name).await {
+            readable = true;
+            let normalized = normalize_session_chat_screen_text(&screen);
+            if normalized.contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
+                || needles.iter().any(|needle| normalized.contains(needle))
+            {
+                return SessionChatPasteVerification::Landed;
+            }
+            if !extended && normalized.contains(SESSION_CHAT_PASTING_INDICATOR_NEEDLE) {
+                extended = true;
+                deadline += Duration::from_millis(SESSION_CHAT_VERIFY_PASTING_EXTENSION_MS);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(SESSION_CHAT_VERIFY_POLL_MS)).await;
+    }
+    if readable {
+        SessionChatPasteVerification::Absent
+    } else {
+        SessionChatPasteVerification::Unreadable
+    }
+}
+
+static SESSION_CHAT_SEND_LOGGER: OnceLock<GxserverLogger> = OnceLock::new();
+
+/// A send that could not be verified is a message the user may never see
+/// again, so this is persisted unconditionally (warn/error), unlike the
+/// scenario-gated per-write input log. Metadata only — never the message text.
+#[allow(clippy::too_many_arguments)]
+fn log_session_chat_paste_verification(
+    level: LogLevel,
+    event: &str,
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    text_bytes: usize,
+    timeout_ms: u64,
+    error: &str,
+) {
+    let logger = SESSION_CHAT_SEND_LOGGER
+        .get_or_init(|| GxserverLogger::new(crate::paths::get_gxserver_paths(None)));
+    let _ = logger.log(GxserverLogInput {
+        level,
+        event: event.to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(error.to_string()),
+        details: Some(json!({
+            "projectId": project_id,
+            "providerSessionId": zmx_name,
+            "sessionId": session_id,
+            "source": source,
+            "textBytes": text_bytes,
+            "timeoutMs": timeout_ms,
+        })),
+    });
 }
 
 fn prompt_stash_request_path(state_dir: &Path, project_id: &str, session_id: &str) -> PathBuf {
@@ -799,7 +1178,7 @@ async fn preserve_terminal_draft(
     zmx_name: &str,
     generation: &AtomicU64,
     job_generation: u64,
-) -> Result<(), SessionChatSendError> {
+) -> Result<CapturedTerminalDraft, SessionChatSendError> {
     run_terminal_draft_capture(
         state_dir,
         project_id,
@@ -808,7 +1187,6 @@ async fn preserve_terminal_draft(
         Some((generation, job_generation)),
     )
     .await
-    .map(|_| ())
     .map_err(|message| {
         /*
         CDXC:SessionChatTerminalNotices 2026-08-19:
@@ -825,18 +1203,54 @@ async fn preserve_terminal_draft(
     })
 }
 
-/// Standalone terminal-draft capture for the `/api/handoffSessionChatDraft`
-/// endpoint. It deliberately does NOT ride the per-session send queue: the
-/// marker's `create_new` open is already the mutual exclusion against a
-/// concurrent chat send's preserve step, and a view switch never races a send
-/// from the same client.
+/*
+CDXC:SessionChatSerializedWriters 2026-08-24:
+Standalone terminal-draft capture for the `/api/handoffSessionChatDraft`
+endpoint, as a QUEUED job.
+
+This used to run the handshake directly, on the reasoning that the stash
+marker's `create_new` open already excludes a concurrent chat send's preserve
+step and that a view switch never races a send from the same client. Both
+halves were wrong. The marker only stops two CAPTURES from overlapping; it says
+nothing about the rest of a send sequence, so the handoff's BEL — which makes
+the CLI stash and CLEAR the composer — could land between another sequence's
+paste and its Enter and turn that send into an empty-line submit. And the
+desktop fires this on every terminal→chat view switch, which is emphatically not
+serialized against the sends that same client just made.
+
+Riding the queue cannot self-deadlock: the only caller is the HTTP handler, and
+the in-worker draft capture (`SessionChatSendStep::PreserveTerminalDraft`) calls
+`run_terminal_draft_capture` directly rather than coming back through here, so
+nothing ever enqueues onto the queue it is currently draining.
+*/
 pub async fn capture_session_chat_terminal_draft(
     state_dir: &Path,
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
 ) -> Result<CapturedTerminalDraft, String> {
-    run_terminal_draft_capture(state_dir, project_id, session_id, zmx_name, None).await
+    let (completion_tx, completion_rx) = oneshot::channel();
+    let (draft_tx, draft_rx) = oneshot::channel();
+    queue_session_chat_send(
+        project_id,
+        session_id,
+        zmx_name,
+        "session-chat-draft-handoff",
+        vec![SessionChatSendStep::PreserveTerminalDraft {
+            state_dir: state_dir.to_path_buf(),
+        }],
+        Some(completion_tx),
+        Some(draft_tx),
+    )?;
+    completion_rx
+        .await
+        .map_err(|_| {
+            "The session chat send worker stopped before preserving the draft.".to_string()
+        })?
+        .map_err(|error| error.message)?;
+    draft_rx
+        .await
+        .map_err(|_| "The terminal draft capture reported no result.".to_string())
 }
 
 async fn run_terminal_draft_capture(
@@ -1035,7 +1449,7 @@ mod tests {
     }
 
     #[test]
-    fn message_steps_keep_enter_as_separate_delayed_write() {
+    fn message_steps_verify_the_paste_before_the_separate_enter() {
         let steps = build_session_chat_message_steps("hi", &[]);
         assert_eq!(
             steps,
@@ -1043,7 +1457,11 @@ mod tests {
                 SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("hi")),
                 SessionChatSendStep::SleepMs(150),
                 SessionChatSendStep::Write("hi".to_string()),
-                SessionChatSendStep::SleepMs(500),
+                SessionChatSendStep::VerifyPasteLanded {
+                    text: "hi".to_string(),
+                    settle_ms: 500,
+                    timeout_ms: 2_000,
+                },
                 SessionChatSendStep::Write("\r".to_string()),
             ]
         );
@@ -1061,11 +1479,16 @@ mod tests {
                 ),
                 SessionChatSendStep::SleepMs(300),
                 SessionChatSendStep::Write("what is this".to_string()),
-                SessionChatSendStep::SleepMs(500),
+                SessionChatSendStep::VerifyPasteLanded {
+                    text: "what is this".to_string(),
+                    settle_ms: 500,
+                    timeout_ms: 2_000,
+                },
                 SessionChatSendStep::Write("\r".to_string()),
             ]
         );
-        // Images without text: no body write, still the delayed Enter.
+        // Images without text: no body write, nothing on screen to verify, so
+        // the Enter keeps the original blind settle.
         let images_only = build_session_chat_message_steps("", &["/tmp/a.png".to_string()]);
         assert_eq!(
             images_only,
@@ -1077,6 +1500,24 @@ mod tests {
                 SessionChatSendStep::Write("\r".to_string()),
             ]
         );
+        // The window scales with the payload and is capped.
+        assert_eq!(session_chat_verify_timeout_ms(0), 2_000);
+        assert_eq!(session_chat_verify_timeout_ms(4_600), 2_800);
+        assert_eq!(session_chat_verify_timeout_ms(1_000_000), 8_000);
+    }
+
+    #[test]
+    fn paste_needles_survive_composer_rewrapping() {
+        // Both ends are sampled, whitespace and box drawing are dropped.
+        let needles = session_chat_paste_needles("first line here\n\nmiddle\nlast line here");
+        assert_eq!(needles, vec!["firstlinehere", "lastlinehere"]);
+        // One logical line yields one needle, capped at 40 characters.
+        let long = "a".repeat(80);
+        assert_eq!(session_chat_paste_needles(&long), vec!["a".repeat(40)]);
+        // A composer that framed, indented and wrapped the text still matches.
+        let screen = "╭──────────────╮\n│ > first line │\n│   here       │\n╰──────────────╯";
+        let normalized = normalize_session_chat_screen_text(screen);
+        assert!(normalized.contains("firstlinehere"));
     }
 
     #[test]

@@ -60,10 +60,35 @@ pub(crate) const MAX_RESOLVE_POLL: Duration = Duration::from_millis(5_000);
 /// How long a subscribe waits for its one model/effort probe before emitting
 /// the snapshot anyway. See `CDXC:SessionChatSeedDetection`.
 pub(crate) const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(500);
+/// How long the steady-state model/effort/notice probe may take before the
+/// reconcile pass abandons it. The probe runs on the blocking pool but is
+/// awaited inline, so without a deadline a daemon that accepts the capture
+/// connection and never answers wedges the whole follower.
+pub(crate) const STEADY_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(10_000);
+/*
+CDXC:SessionChatFollowerLiveness 2026-08-24:
+How long a follower task may run without reaching a new reconcile iteration
+before the sync path calls it wedged and respawns it. Every legitimate long
+wait PARKS the heartbeat and is exempt, so this only has to clear the longest
+inline await a healthy pass can contain (the 10s steady-state probe deadline,
+plus the blocking drain / re-resolution / successor scan behind it).
+*/
+pub(crate) const SESSION_CHAT_FOLLOWER_WEDGE_DEADLINE: Duration = Duration::from_millis(45_000);
 /// A working session whose transcript has been silent this long is tailing a
 /// file the agent has moved on from; re-resolve the path.
 pub(crate) const STALE_TRANSCRIPT_IDLE: Duration = Duration::from_millis(10_000);
 pub(crate) const INTERRUPTED_STATUS_TEXT: &str = "Conversation interrupted";
+/*
+CDXC:SessionChatCore 2026-08-23:
+Codex's compaction seam. Unlike Claude, Codex leaves every summarised turn in
+the rollout, so a compaction changes nothing a transcript projection can see —
+the conversation just silently stops carrying the older turns' context. Its TUI
+draws the seam as an info row (`• Context compacted`), and chat draws the same
+one from the `ContextCompaction` thread item behind it. The wording is Codex's
+own so the two surfaces read alike; the client renders it as the completed-
+action status row Claude's compaction already gets.
+*/
+pub(crate) const CONTEXT_COMPACTED_STATUS_TEXT: &str = "Context compacted";
 /*
 The upstream chat spec persists pasted clipboard images as `<host>-paste-*.png`
 temp files whose absolute path Grok concatenates with the typed prompt. Ghostex

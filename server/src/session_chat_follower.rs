@@ -367,14 +367,51 @@ CDXC:SessionChatQueueCarriage 2026-08-21:
 Queue + draft ride snapshot / replaced / state frames only. `queue` is written
 even when empty — present is the daemon capability probe — while `draft` is
 written only when the server actually holds one, because an omitted draft means
-UNCHANGED and never "cleared". Reads the state database, so this runs inside the
-frame builders and never on the reconcile tick.
+UNCHANGED and never "cleared". Read only when a frame that carries it is
+actually being emitted, never on the reconcile tick.
+
+CDXC:SessionChatFollowerLiveness 2026-08-24: the READ moved out of the frame
+builders. `emit_sequenced`'s build closure runs under the stream's emit-order
+mutex and must not block, but the reader opens the state database — SQLite busy
+contention there held the mutex every other publisher (hook ingest, options
+detection) has to take. The snapshot is taken first and only inserted here.
 */
-fn insert_optional_queue(frame: &mut Map<String, Value>, config: &SessionChatFollowerConfig) {
-    let Some(reader) = config.queue_reader.as_ref() else {
+fn insert_optional_queue(
+    frame: &mut Map<String, Value>,
+    queue: Option<&crate::session_chat_queue::SessionChatQueueSnapshot>,
+) {
+    let Some(queue) = queue else {
         return;
     };
-    reader().insert_into(frame);
+    queue.insert_into(frame);
+}
+
+/// Reads the queue snapshot a state/snapshot frame will carry, outside the
+/// emit lock. Absent reader ⇒ absent fields (the client's "no queue" probe).
+fn read_optional_queue(
+    config: &SessionChatFollowerConfig,
+) -> Option<crate::session_chat_queue::SessionChatQueueSnapshot> {
+    config.queue_reader.as_ref().map(|reader| reader())
+}
+
+/*
+CDXC:SessionChatAppCommands 2026-08-23:
+Rides on `config` rather than on a new parameter through four frame builders:
+the rows live in a process-global store keyed by exactly the ids the config
+already carries, and unlike the screen state they are not read from a capture
+this frame took, so bundling them into SessionChatScreenState would tie a
+value with its own lifetime to one that must never survive a frame that
+cleared it.
+*/
+fn insert_optional_app_commands(
+    frame: &mut Map<String, Value>,
+    config: &SessionChatFollowerConfig,
+) {
+    crate::session_chat_app_command::insert_session_chat_app_commands(
+        frame,
+        &config.project_id,
+        &config.session_id,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -389,6 +426,7 @@ fn emit_state_frame(
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
     screen: SessionChatScreenState<'_>,
 ) {
+    let queue = read_optional_queue(config);
     stream.emit_sequenced(
         |seq| {
             let mut frame = session_chat_frame(config, "sessionChatState", epoch, seq);
@@ -399,7 +437,8 @@ fn emit_state_frame(
             }
             insert_optional_selected_options(&mut frame, selected_options);
             insert_screen_state(&mut frame, screen);
-            insert_optional_queue(&mut frame, config);
+            insert_optional_queue(&mut frame, queue.as_ref());
+            insert_optional_app_commands(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -420,6 +459,7 @@ fn emit_snapshot_frame(
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
     screen: SessionChatScreenState<'_>,
 ) {
+    let queue = read_optional_queue(config);
     stream.emit_sequenced(
         |seq| {
             let mut frame = session_chat_frame(config, frame_type, epoch, seq);
@@ -440,7 +480,8 @@ fn emit_snapshot_frame(
             insert_optional_prompt(&mut frame, prompt);
             insert_optional_selected_options(&mut frame, selected_options);
             insert_screen_state(&mut frame, screen);
-            insert_optional_queue(&mut frame, config);
+            insert_optional_queue(&mut frame, queue.as_ref());
+            insert_optional_app_commands(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -620,6 +661,9 @@ pub async fn run_session_chat_follower(
     mut config: SessionChatFollowerConfig,
     stream: Arc<SessionChatStream>,
     resnapshot: Arc<tokio::sync::Notify>,
+    // CDXC:SessionChatFollowerLiveness 2026-08-24: the task's own progress
+    // signal, read by `sync_session_chat_follower_for_session`.
+    heartbeat: Arc<SessionChatFollowerHeartbeat>,
     emit: SessionChatFrameEmitter,
 ) {
     let read_live_state = || match config.state_reader.as_ref() {
@@ -650,7 +694,9 @@ pub async fn run_session_chat_follower(
                 None,
                 SessionChatScreenState::default(),
             );
+            heartbeat.park();
             resnapshot.notified().await;
+            heartbeat.unpark();
         }
     };
     let decode = session_chat_line_decoder(transcript_agent);
@@ -743,6 +789,7 @@ pub async fn run_session_chat_follower(
     }
 
     loop {
+        heartbeat.stamp();
         if resolved.is_none() {
             let agent_session_id = identity.agent_session_id.clone();
             let agent_session_path = identity.agent_session_path.clone();
@@ -788,6 +835,7 @@ pub async fn run_session_chat_follower(
                     published_fleet = detection.fleet;
                     emitted_starting = true;
                 }
+                heartbeat.park();
                 tokio::select! {
                     _ = tokio::time::sleep(resolve_delay) => {}
                     _ = resnapshot.notified() => {
@@ -796,6 +844,7 @@ pub async fn run_session_chat_follower(
                         want_snapshot = true;
                     }
                 }
+                heartbeat.unpark();
                 resolve_delay = (resolve_delay * 2).min(MAX_RESOLVE_POLL);
                 // A stale hook identity is the usual reason the path never
                 // appears: re-read the session's current identity each poll.
@@ -1072,84 +1121,103 @@ pub async fn run_session_chat_follower(
             && (startup_probe_due || periodic_probe_due)
         {
             let reader = config.options_reader.clone();
-            let mut detection = tokio::task::spawn_blocking(move || {
-                reader
-                    .map(|reader| {
-                        reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
-                    })
-                    .unwrap_or_default()
-            })
-            .await
-            .unwrap_or_default();
-            if !published_working {
-                detection.activity = None;
-            }
-            let options_changed = detection
-                .options
-                .as_ref()
-                .is_some_and(|detected| !detected.same_selection(published_options.as_ref()));
-            let notice_changed = detection.captured
-                && !crate::session_chat_notice::same_session_chat_terminal_notice(
-                    detection.notice.as_ref(),
-                    published_notice.as_ref(),
-                );
-            // Same capture rule as the notice: only a WHOLE capture proves the
-            // progress line is gone, so a capped read leaves the row standing.
-            let activity_changed = detection.captured
-                && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
-                    detection.activity.as_ref(),
-                    published_activity.as_ref(),
-                );
             /*
-            CDXC:SessionChatScreenProbed 2026-08-22: the first successful
-            capture is publishable on its own, even when it changed nothing.
-            An agent whose screen names no model detects nothing forever, and
-            without this the composer would never hear that detection HAD run
-            and would hold its loading skeleton for the life of the session.
+            CDXC:SessionChatFollowerLiveness 2026-08-24:
+            Awaited inline on the reconcile loop, so a capture that never
+            answers used to stall the follower forever while the transcript
+            grew. Missing the deadline means this pass simply publishes
+            nothing and changes no published state — the next probe tick
+            tries again.
             */
-            // Same capture rule again: only a whole screen proves the fleet is
-            // gone, and only the roster counts as a change — the per-row clocks
-            // tick locally off `detectedAt`.
-            let fleet_changed = detection.captured
-                && !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
-                    detection.fleet.as_ref(),
-                    published_fleet.as_ref(),
-                );
-            let probed_changed = detection.attempted && !published_screen_probed;
-            if options_changed || notice_changed || activity_changed || fleet_changed || probed_changed {
-                if options_changed {
-                    published_options = detection.options;
+            let probe = tokio::time::timeout(
+                STEADY_OPTION_DETECTION_DEADLINE,
+                tokio::task::spawn_blocking(move || {
+                    reader
+                        .map(|reader| {
+                            reader(crate::session_chat_options::SessionChatOptionsReadMode::Refresh)
+                        })
+                        .unwrap_or_default()
+                }),
+            )
+            .await;
+            if let Ok(Ok(mut detection)) = probe {
+                if !published_working {
+                    detection.activity = None;
                 }
-                if notice_changed {
-                    published_notice = detection.notice;
+                let options_changed = detection
+                    .options
+                    .as_ref()
+                    .is_some_and(|detected| !detected.same_selection(published_options.as_ref()));
+                let notice_changed = detection.captured
+                    && !crate::session_chat_notice::same_session_chat_terminal_notice(
+                        detection.notice.as_ref(),
+                        published_notice.as_ref(),
+                    );
+                // Same capture rule as the notice: only a WHOLE capture proves
+                // the progress line is gone, so a capped read leaves the row
+                // standing.
+                let activity_changed = detection.captured
+                    && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                        detection.activity.as_ref(),
+                        published_activity.as_ref(),
+                    );
+                /*
+                CDXC:SessionChatScreenProbed 2026-08-22: the first successful
+                capture is publishable on its own, even when it changed
+                nothing. An agent whose screen names no model detects nothing
+                forever, and without this the composer would never hear that
+                detection HAD run and would hold its loading skeleton for the
+                life of the session.
+                */
+                // Same capture rule again: only a whole screen proves the fleet
+                // is gone, and only the roster counts as a change — the per-row
+                // clocks tick locally off `detectedAt`.
+                let fleet_changed = detection.captured
+                    && !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
+                        detection.fleet.as_ref(),
+                        published_fleet.as_ref(),
+                    );
+                let probed_changed = detection.attempted && !published_screen_probed;
+                if options_changed
+                    || notice_changed
+                    || activity_changed
+                    || fleet_changed
+                    || probed_changed
+                {
+                    if options_changed {
+                        published_options = detection.options;
+                    }
+                    if notice_changed {
+                        published_notice = detection.notice;
+                    }
+                    if activity_changed {
+                        published_activity = detection.activity;
+                    }
+                    if fleet_changed {
+                        published_fleet = detection.fleet;
+                    }
+                    published_screen_probed = published_screen_probed || detection.attempted;
+                    emit_state_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        if published_working {
+                            SessionChatStatus::Working
+                        } else {
+                            SessionChatStatus::Ready
+                        },
+                        published_prompt.as_ref(),
+                        Some(published_working),
+                        published_options.as_ref(),
+                        SessionChatScreenState {
+                            notice: published_notice.as_ref(),
+                            activity: published_activity.as_ref(),
+                            fleet: published_fleet.as_ref(),
+                            probed: published_screen_probed,
+                        },
+                    );
                 }
-                if activity_changed {
-                    published_activity = detection.activity;
-                }
-                if fleet_changed {
-                    published_fleet = detection.fleet;
-                }
-                published_screen_probed = published_screen_probed || detection.attempted;
-                emit_state_frame(
-                    &emit,
-                    &config,
-                    &stream,
-                    epoch,
-                    if published_working {
-                        SessionChatStatus::Working
-                    } else {
-                        SessionChatStatus::Ready
-                    },
-                    published_prompt.as_ref(),
-                    Some(published_working),
-                    published_options.as_ref(),
-                    SessionChatScreenState {
-                        notice: published_notice.as_ref(),
-                        activity: published_activity.as_ref(),
-                        fleet: published_fleet.as_ref(),
-                        probed: published_screen_probed,
-                    },
-                );
             }
         }
 
@@ -1238,6 +1306,7 @@ pub async fn run_session_chat_follower(
             }
         }
 
+        heartbeat.park();
         tokio::select! {
             _ = tokio::time::sleep(config.tuning.reconcile_interval) => {}
             _ = resnapshot.notified() => {
@@ -1245,6 +1314,7 @@ pub async fn run_session_chat_follower(
                 want_snapshot = true;
             }
         }
+        heartbeat.unpark();
     }
 }
 
@@ -1355,7 +1425,25 @@ pub(crate) fn sync_session_chat_follower_for_session(state: &AppState, session: 
         return;
     }
     let fingerprint = session_chat_identity_fingerprint(session);
-    let task_alive = entry.task.as_ref().is_some_and(|task| !task.is_finished());
+    /*
+    CDXC:SessionChatFollowerLiveness 2026-08-24:
+    `is_finished()` alone only catches a task that RETURNED. A task wedged in an
+    inline await (a blocking read against a daemon that never answers, a path
+    resolution on a stalled filesystem) stays "unfinished" forever, so this
+    healed nothing while chat sat frozen. The task's heartbeat closes that gap:
+    running but no reconcile progress within the wedge deadline is dead too, and
+    respawning starts a fresh generation + snapshot, so subscribed clients
+    recover on the next frame.
+    */
+    let task_running = entry.task.as_ref().is_some_and(|task| !task.is_finished());
+    let wedged = task_running
+        && entry
+            .heartbeat
+            .is_wedged(crate::session_chat::SESSION_CHAT_FOLLOWER_WEDGE_DEADLINE);
+    if wedged {
+        log_session_chat_follower_wedged(state, &project_id, &session_id);
+    }
+    let task_alive = task_running && !wedged;
     if task_alive && entry.fingerprint == fingerprint {
         return;
     }
@@ -1590,14 +1678,35 @@ pub(crate) fn sync_session_chat_follower_for_session(state: &AppState, session: 
     let event_hub = state.event_hub.clone();
     let emit: crate::session_chat::SessionChatFrameEmitter =
         Arc::new(move |event| event_hub.broadcast(event));
+    // CDXC:SessionChatFollowerLiveness 2026-08-24: a fresh heartbeat per task, so
+    // the aborted one's last stamp can never be read as the new task's progress.
+    let heartbeat = Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new());
+    entry.heartbeat = heartbeat.clone();
     entry.task = Some(tokio::spawn(
         crate::session_chat::run_session_chat_follower(
             config,
             entry.stream.clone(),
             entry.resnapshot.clone(),
+            heartbeat,
             emit,
         ),
     ));
+}
+
+fn log_session_chat_follower_wedged(state: &AppState, project_id: &str, session_id: &str) {
+    let _ = state.logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "sessionChatFollowerWedged".to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(json!({
+            "projectId": project_id,
+            "sessionId": session_id,
+        })),
+    });
 }
 
 pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, reason: &str) {
@@ -1695,6 +1804,7 @@ pub(crate) fn subscribe_session_chat_follower(
                 task: None,
                 stream: Arc::new(crate::session_chat::SessionChatStream::new()),
                 resnapshot: Arc::new(tokio::sync::Notify::new()),
+                heartbeat: Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
             });
         if new_subscriber {
             entry.subscribers += 1;

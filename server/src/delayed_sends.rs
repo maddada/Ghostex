@@ -18,7 +18,6 @@ use crate::{
         build_presentation_session_delta, increment_presentation_revision, presentation_activity,
     },
     storage::open_gxserver_database,
-    zmx::{dispatch_zmx_session_interaction_endpoint, ZmxEndpointError},
 };
 
 const DELAYED_SEND_TICK_SECONDS: u64 = 1;
@@ -356,26 +355,49 @@ impl DelayedSendRuntime {
         }
         self.publish_session_change(db, &record.project_id, &record.session_id)?;
         let repository = DomainRepository::new(db, self.server_id.as_str());
-        let mut params = Map::new();
-        params.insert(
-            "projectId".to_string(),
-            Value::String(record.project_id.clone()),
-        );
-        params.insert(
-            "sessionId".to_string(),
-            Value::String(record.session_id.clone()),
-        );
-        match dispatch_zmx_session_interaction_endpoint(
-            &repository,
-            "/api/sendSessionEnter",
-            &params,
-        ) {
-            Ok(_) => self.finish_record(db, record, "completed", None),
+        let Some(session) = repository.get_session(&record.project_id, &record.session_id)? else {
+            return self.finish_record(db, record, "failed", Some("The target session no longer exists."));
+        };
+        let zmx_name = match crate::zmx::provider_zmx_session_name(&session) {
+            Ok(zmx_name) => zmx_name,
             Err(error) => {
-                let error = zmx_error(error);
-                self.finish_record(db, record, "failed", Some(error.message.as_str()))
+                return self.finish_record(db, record, "failed", Some(error.message.as_str()));
             }
-        }
+        };
+        /*
+        CDXC:SessionChatSerializedWriters 2026-08-24:
+        A Delayed Send is a bare `\r` into a session's input line, and its idle
+        condition ("the agent stopped working") says nothing about whether a
+        chat send is mid-sequence — the send queue can be paced across seconds
+        while the agent looks idle. So the Enter rides that queue instead of
+        being written straight to the pty, and the row is settled from the
+        queue's answer rather than from a subprocess exit code. Waiting our turn
+        only ever delays the Enter, which the trigger already tolerates.
+        */
+        let runtime = self.clone();
+        let record = record.clone();
+        tokio::spawn(async move {
+            let outcome = crate::session_chat_send::execute_session_chat_send(
+                &record.project_id,
+                &record.session_id,
+                &zmx_name,
+                "delayed-send-submit",
+                vec![crate::session_chat_send::SessionChatSendStep::Write(
+                    crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+                )],
+            )
+            .await;
+            let Ok(db) = open_gxserver_database(&runtime.paths) else {
+                return;
+            };
+            let _ = match outcome {
+                Ok(()) => runtime.finish_record(&db, &record, "completed", None),
+                Err(error) => {
+                    runtime.finish_record(&db, &record, "failed", Some(error.message.as_str()))
+                }
+            };
+        });
+        Ok(())
     }
 
     fn finish_record(
@@ -685,16 +707,6 @@ fn parse_timestamp(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|value| value.with_timezone(&Utc))
-}
-
-fn zmx_error(error: ZmxEndpointError) -> DomainStateError {
-    match error {
-        ZmxEndpointError::Domain(error) => error,
-        ZmxEndpointError::DependencyUnavailable(message) => DomainStateError {
-            code: "dependencyUnavailable",
-            message,
-        },
-    }
 }
 
 fn internal_error(error: anyhow::Error) -> DomainStateError {

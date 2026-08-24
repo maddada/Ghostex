@@ -184,6 +184,12 @@ pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialR
             return;
         }
         let command = agent_session_title_command(Some(&target.agent_name), &target.title);
+        // CDXC:SessionChatAppCommands 2026-08-23: see the auto-title dispatch.
+        crate::session_chat_app_command::record_session_chat_app_command(
+            &target.project_id,
+            &target.session_id,
+            &command,
+        );
         let mut params = Map::new();
         params.insert("projectId".to_string(), json!(target.project_id.clone()));
         params.insert("sessionId".to_string(), json!(target.session_id.clone()));
@@ -478,25 +484,66 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         ) {
             return Ok(());
         }
-        let mut send_params = Map::new();
-        send_params.insert("projectId".to_string(), json!(project_id.clone()));
-        send_params.insert("sessionId".to_string(), json!(session_id.clone()));
-        send_params.insert(
-            "diagnosticInputSource".to_string(),
-            json!("auto-title-command"),
-        );
-        send_params.insert("text".to_string(), json!(command_text));
-        dispatch_zmx_session_interaction_endpoint(
-            &repository,
-            "/api/sendSessionText",
-            &send_params,
+        /*
+        CDXC:SessionChatSerializedWriters 2026-08-24:
+        Command text, settle, and Enter are ONE queued job. They used to be two
+        separate zmx dispatches around a bare `tokio::time::sleep`, which is
+        exactly the shape that let this job's bytes land inside another
+        sequence: it is triggered by the FIRST user prompt, so it runs while
+        that prompt may still be mid-delivery. A single job also means no other
+        writer can slip between the staged command and its submit.
+
+        What the fold gives up is the re-check that used to sit inside the
+        delay: the Enter is no longer skipped when a newer auto-title attempt
+        supersedes this one mid-settle. Submitting the staged command is the
+        better of the two outcomes anyway — the alternative left `/rename …`
+        sitting unsent in the user's composer. The re-check below still gates
+        everything that is persisted.
+        */
+        crate::session_chat_send::enqueue_session_write_sequence(
+            &latest_session,
+            &project_id,
+            &session_id,
+            "auto-title",
+            vec![
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "auto-title-command".to_string(),
+                    payload: command_text.clone(),
+                },
+                crate::session_chat_send::SessionChatSendStep::SleepMs(
+                    GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
+                ),
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "auto-title-submit".to_string(),
+                    payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+                },
+            ],
         )
         .map_err(|_| ())?;
+        /*
+        CDXC:SessionChatAppCommands 2026-08-23:
+        Recorded beside the dispatch rather than inside the zmx path, because
+        the same path also carries the Ctrl+U draft kill and the bare `\r`
+        submit, and neither is something to tell the reader about. Codex writes
+        NOTHING to its rollout for a command it intercepts, so without this row
+        a session that renamed itself mid-conversation left no trace in chat.
+        */
+        crate::session_chat_app_command::record_session_chat_app_command(
+            &project_id,
+            &session_id,
+            &command_text,
+        );
     }
 
     /*
     CDXC:GxserverSessionTitle 2026-07-02-15:10:
-    Submit the staged command with a separate zmx `\r` write after a settle delay so agent prompt editors read it as a real Enter keypress rather than part of a pasted payload. The database handle is reopened around the sleep because rusqlite connections cannot be held across await points, and the running-status/prompt re-check keeps an Escape cancellation inside the delay from submitting the staged command.
+    The staged command is submitted by a separate zmx `\r` write after a settle
+    delay so agent prompt editors read it as a real Enter keypress rather than
+    as part of a pasted payload. Both writes and the delay between them are now
+    steps of the queued job above (CDXC:SessionChatSerializedWriters); this wait
+    mirrors that delay so the status/title below is persisted only once the
+    submit has had its window, and the database handle is reopened after it
+    because rusqlite connections cannot be held across await points.
     */
     tokio::time::sleep(Duration::from_millis(
         GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
@@ -518,16 +565,6 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     ) {
         return Ok(());
     }
-    let mut enter_params = Map::new();
-    enter_params.insert("projectId".to_string(), json!(project_id.clone()));
-    enter_params.insert("sessionId".to_string(), json!(session_id.clone()));
-    enter_params.insert(
-        "diagnosticInputSource".to_string(),
-        json!("auto-title-submit"),
-    );
-    dispatch_zmx_session_interaction_endpoint(&repository, "/api/sendSessionEnter", &enter_params)
-        .map_err(|_| ())?;
-
     let mut runtime_settings = latest_session
         .get("runtimeSettings")
         .and_then(Value::as_object)
@@ -949,35 +986,66 @@ pub(crate) async fn run_manual_session_title_generation_job(
         if !is_current_first_prompt_auto_title_attempt(&latest_session, &attempt_id) {
             return Ok(());
         }
-        // Kill any in-progress composer draft, then stage the rename command.
-        let mut kill_params = Map::new();
-        kill_params.insert("projectId".to_string(), json!(project_id.clone()));
-        kill_params.insert("sessionId".to_string(), json!(session_id.clone()));
-        kill_params.insert(
-            "diagnosticInputSource".to_string(),
-            json!("manual-title-draft-kill"),
-        );
-        kill_params.insert("text".to_string(), json!("\u{15}"));
-        dispatch_zmx_session_interaction_endpoint(
-            &repository,
-            "/api/sendSessionText",
-            &kill_params,
+        /*
+        CDXC:SessionChatSerializedWriters 2026-08-24:
+        Kill the in-progress composer draft, stage the rename command, submit
+        it, and yank the draft back — as ONE queued job. These were four
+        separate zmx dispatches spread across two `tokio::time::sleep`s, and the
+        first of them is a Ctrl+U: landing that between another sequence's paste
+        and its Enter deletes the user's message and submits an empty line. The
+        Ctrl+Y restore belongs to the same job for the same reason — nothing may
+        write to that input line while the user's draft is parked in the kill
+        ring.
+
+        Like the auto-title job, folding gives up the mid-delay attempt re-check
+        that used to gate the Enter; a staged `/rename …` left unsent would be
+        worse than submitting it. The re-check below still gates persistence.
+        */
+        crate::session_chat_send::enqueue_session_write_sequence(
+            &latest_session,
+            &project_id,
+            &session_id,
+            "manual-title",
+            vec![
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "manual-title-draft-kill".to_string(),
+                    payload: crate::session_chat_send::AGENT_TUI_CLEAR_INPUT_LINE.to_string(),
+                },
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "manual-title-command".to_string(),
+                    payload: command_text.clone(),
+                },
+                crate::session_chat_send::SessionChatSendStep::SleepMs(
+                    GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
+                ),
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "manual-title-submit".to_string(),
+                    payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+                },
+                // Restore the killed draft once the submit has settled.
+                crate::session_chat_send::SessionChatSendStep::SleepMs(
+                    MANUAL_TITLE_DRAFT_RESTORE_DELAY_MS,
+                ),
+                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                    source: "manual-title-draft-restore".to_string(),
+                    payload: crate::session_chat_send::AGENT_TUI_RESTORE_INPUT_LINE.to_string(),
+                },
+            ],
         )
         .map_err(|_| ())?;
-        let mut send_params = Map::new();
-        send_params.insert("projectId".to_string(), json!(project_id.clone()));
-        send_params.insert("sessionId".to_string(), json!(session_id.clone()));
-        send_params.insert(
-            "diagnosticInputSource".to_string(),
-            json!("manual-title-command"),
+        /*
+        CDXC:SessionChatAppCommands 2026-08-23:
+        Recorded beside the dispatch rather than inside the zmx path, because
+        the same path also carries the Ctrl+U draft kill and the bare `\r`
+        submit, and neither is something to tell the reader about. Codex writes
+        NOTHING to its rollout for a command it intercepts, so without this row
+        a session that renamed itself mid-conversation left no trace in chat.
+        */
+        crate::session_chat_app_command::record_session_chat_app_command(
+            &project_id,
+            &session_id,
+            &command_text,
         );
-        send_params.insert("text".to_string(), json!(command_text));
-        dispatch_zmx_session_interaction_endpoint(
-            &repository,
-            "/api/sendSessionText",
-            &send_params,
-        )
-        .map_err(|_| ())?;
     }
     tokio::time::sleep(Duration::from_millis(
         GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS,
@@ -995,19 +1063,6 @@ pub(crate) async fn run_manual_session_title_generation_job(
         if !is_current_first_prompt_auto_title_attempt(&latest_session, &attempt_id) {
             return Ok(());
         }
-        let mut enter_params = Map::new();
-        enter_params.insert("projectId".to_string(), json!(project_id.clone()));
-        enter_params.insert("sessionId".to_string(), json!(session_id.clone()));
-        enter_params.insert(
-            "diagnosticInputSource".to_string(),
-            json!("manual-title-submit"),
-        );
-        dispatch_zmx_session_interaction_endpoint(
-            &repository,
-            "/api/sendSessionEnter",
-            &enter_params,
-        )
-        .map_err(|_| ())?;
         let mut runtime_settings = latest_session
             .get("runtimeSettings")
             .and_then(Value::as_object)
@@ -1038,23 +1093,6 @@ pub(crate) async fn run_manual_session_title_generation_job(
         repository.update_session(&update).map_err(|_| ())?;
     }
     schedule_delta_for_ids(&state, &project_id, &session_id);
-    // Restore the killed draft once the submit has settled in the CLI.
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let mut yank_params = Map::new();
-    yank_params.insert("projectId".to_string(), json!(project_id.clone()));
-    yank_params.insert("sessionId".to_string(), json!(session_id.clone()));
-    yank_params.insert(
-        "diagnosticInputSource".to_string(),
-        json!("manual-title-draft-restore"),
-    );
-    yank_params.insert("text".to_string(), json!("\u{19}"));
-    let _ = dispatch_zmx_session_interaction_endpoint(
-        &repository,
-        "/api/sendSessionText",
-        &yank_params,
-    );
     Ok(())
 }
 

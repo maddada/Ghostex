@@ -459,7 +459,6 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     } else {
         crate::session_chat::SessionChatStatus::Ready
     };
-    let (epoch, _) = stream.current();
     let agent_session_id = read_runtime_text(session, "agentSessionId");
     /*
     CDXC:SessionChatTerminalNotices 2026-08-19:
@@ -484,9 +483,17 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     hook-ingest thread while the follower task publishes into the SAME counter,
     and a frame that reaches the hub out of seq order makes every client treat
     it as a gap and force a resync.
+
+    CDXC:SessionChatFollowerLiveness 2026-08-24: the EPOCH is read in here for
+    the same reason. Sampled before the call, the follower could start a new
+    generation in between — the frame then carried a new-generation seq stamped
+    with the retired epoch, which clients read as a gap and answered with a
+    spurious resync. `begin_generation` takes this same lock, so reading epoch
+    and seq under it makes the pair coherent.
     */
     stream.emit_sequenced(
         |seq| {
+            let (epoch, _) = stream.current();
             crate::session_chat::build_session_chat_prompt_state_frame(
                 &project_id,
                 &session_id,
