@@ -47,9 +47,12 @@ export const PAGE_SCOPED_CSS = `
   .pb-redesign * {
     font-family: Inter Variable, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   }
-  .pb-redesign [data-slot="switch"],
-  .pb-redesign [data-slot="switch"] * {
-    border-radius: 999px;
+  /* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+  .pb-redesign [data-slot="switch"] {
+    border-radius: 6px;
+  }
+  .pb-redesign [data-slot="switch"] [data-slot="switch-thumb"] {
+    border-radius: 4px;
   }
   /* The app's square theme zeroes radii and borders bare buttons from
      unlayered sheets that beat Tailwind's utilities layer. Re-assert the
