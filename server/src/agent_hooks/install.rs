@@ -8,9 +8,9 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 
 use super::config::{
-    all_hook_events, command_agent, hook_format, hook_marker, nested_timeout, HookDefinition,
-    HookFormat, HookPaths, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER,
-    OPENCODE_PLUGIN_SPEC,
+    all_hook_events, command_agent, hook_format, hook_marker, nested_timeout,
+    pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths, NOTIFY_HOOK_MARKER,
+    NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER, OPENCODE_PLUGIN_SPEC,
 };
 use super::plugin_sources::{
     build_notify_hook_script, build_opencode_plugin_source, build_plugin_file_source,
@@ -310,7 +310,18 @@ pub(crate) fn inspect_agent_hook_installation(
                 .iter()
                 .map(|path| {
                     let text = read_file_text(path);
-                    let current = !marker.is_empty()
+                    // A pi extension outside the loader-visible agent
+                    // directory exists but never runs, so however fresh its
+                    // marker is it cannot count as a current install — only
+                    // as a present (stale) one for the repair pass to migrate.
+                    let loader_visible = definition.agent_id != "pi"
+                        || pi_extension_path_is_loader_visible(
+                            &hook_paths.home_dir,
+                            hook_paths.respect_config_environment,
+                            path,
+                        );
+                    let current = loader_visible
+                        && !marker.is_empty()
                         && text.contains(&current_plugin_marker(marker))
                         && text.contains(&path_string(&hook_paths.notify_hook_path));
                     HookInspection {
@@ -540,15 +551,33 @@ pub(crate) fn repair_agent_hook_paths(
     match hook_format(definition.agent_id) {
         HookFormat::Opencode => install_opencode_hook(hook_paths),
         HookFormat::PluginFile => {
+            // The stale copies handed in may sit in locations the agent no
+            // longer loads from (pi's pre-2026-08 root extensions directory),
+            // so refreshing them in place would repair a file the agent never
+            // reads. Reinstall at the canonical loader-visible path instead,
+            // and remove the Ghostex-owned copies left elsewhere.
             let source =
                 build_plugin_file_source(definition.agent_id, &hook_paths.notify_hook_path);
-            let mut repaired_paths = Vec::new();
+            let Some(canonical) = provider_hook_paths(definition.agent_id, hook_paths)
+                .into_iter()
+                .next()
+            else {
+                return Ok(Vec::new());
+            };
+            if let Some(parent) = canonical.parent() {
+                fs::create_dir_all(parent).map_err(io_error)?;
+            }
+            fs::write(&canonical, &source).map_err(io_error)?;
+            let mut repaired_paths = vec![path_string(&canonical)];
             for config_path in config_paths {
-                if let Some(parent) = config_path.parent() {
-                    fs::create_dir_all(parent).map_err(io_error)?;
+                if config_path == canonical {
+                    continue;
                 }
-                fs::write(&config_path, &source).map_err(io_error)?;
-                repaired_paths.push(path_string(&config_path));
+                match fs::remove_file(&config_path) {
+                    Ok(()) => repaired_paths.push(path_string(&config_path)),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(io_error(error)),
+                }
             }
             Ok(repaired_paths)
         }

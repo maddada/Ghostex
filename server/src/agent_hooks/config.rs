@@ -306,12 +306,17 @@ pub(crate) fn resolve_omp_agent_directory(home_dir: &Path, respect_environment: 
 
 pub(crate) fn pi_extension_paths(home_dir: &Path, respect_environment: bool) -> Vec<PathBuf> {
     /*
-    CDXC:AgentHooks 2026-06-23-05:09:
-    Pi's active extension loader uses the Pi root extensions directory, while
-    older Ghostex installs and local customization experiments can leave hooks
-    under the agent directory. Treat the root extension file as canonical for
-    new installs, but keep inspecting the previous agent-scoped locations so
-    existing current hooks do not warn and stale hooks report updateRequired.
+    CDXC:AgentHooks 2026-08-24:
+    Pi's extension loader reads ONLY the agent config directory
+    (`getAgentDir()/extensions`, i.e. `~/.pi/agent/extensions/`) plus the
+    project-local `.pi/extensions` — verified against pi 0.80.2
+    (`dist/core/resource-loader.js`). Ghostex used to install to the Pi ROOT
+    extensions directory (`~/.pi/extensions/`), which pi's loader once read and
+    no longer does, so the extension silently never loaded, session ids were
+    never reported, and pi sessions could not enter chat. The agent-dir file is
+    canonical (installs write the FIRST path); the root path stays listed so an
+    existing install there is still detected — as present but stale, never
+    current — and migrated by the repair pass.
     */
     let agent_dir = resolve_config_directory(
         home_dir,
@@ -325,11 +330,30 @@ pub(crate) fn pi_extension_paths(home_dir: &Path, respect_environment: bool) -> 
         .map(Path::to_path_buf)
         .unwrap_or_else(|| home_dir.join(".pi"));
     unique_path_bufs(vec![
-        root_dir.join("extensions").join("ghostex-session.ts"),
         agent_dir.join("extensions").join("ghostex-session.ts"),
+        root_dir.join("extensions").join("ghostex-session.ts"),
         agent_dir
             .join("extensions")
             .join("ghostex-session")
             .join("index.ts"),
     ])
+}
+
+/// True when pi's extension loader would actually load a file at `path`: pi
+/// reads user extensions only from `<agent_dir>/extensions/`. A Ghostex
+/// extension anywhere else (the pre-2026-08 root `~/.pi/extensions/` location)
+/// exists on disk but never runs, so it must never count as a current install.
+pub(crate) fn pi_extension_path_is_loader_visible(
+    home_dir: &Path,
+    respect_environment: bool,
+    path: &Path,
+) -> bool {
+    let agent_dir = resolve_config_directory(
+        home_dir,
+        respect_environment,
+        "PI_CODING_AGENT_DIR",
+        ".pi/agent",
+        None,
+    );
+    path.starts_with(agent_dir.join("extensions"))
 }
