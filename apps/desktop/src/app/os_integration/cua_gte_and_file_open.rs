@@ -30,35 +30,9 @@ impl GhostexGpuiApp {
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        #[cfg(target_os = "macos")]
-        {
-            self.start_gpui_cua_driver_install_or_update_terminal(window, cx);
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let result = gpui_open_url(GPUI_CUA_DRIVER_RELEASES_URL);
-            let (toast_level, toast_title, detail) = if result.is_ok() {
-                (
-                    "info",
-                    "Cua Driver downloads opened",
-                    "Cua Driver installation and updates are available from the Cua GitHub releases page on this platform.",
-                )
-            } else {
-                (
-                    "warning",
-                    "Unable to open Cua downloads",
-                    "Ghostex could not open the Cua GitHub releases page.",
-                )
-            };
-            self.run_gpui_app_modal_and_titlebar_status_task(
-                move || gpui_ghostex_cli_status_message(Some(detail)),
-                cx,
-            );
-            self.dispatch_gpui_app_modal_toast(toast_level, toast_title, detail, cx);
-        }
+        self.start_gpui_cua_driver_install_or_update_terminal(window, cx);
     }
 
-    #[cfg(target_os = "macos")]
     pub(crate) fn start_gpui_cua_driver_install_or_update_terminal(
         &mut self,
         window: &Window,
@@ -66,11 +40,16 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:GPUIDesktopControlSettings 2026-08-09:
-        Installing or updating Cua Driver can take minutes and prints useful
+        Installing or updating Trycua can take minutes and prints useful
         progress. Run it in a real command-pane terminal tab so the user can
         watch the official installer/updater instead of staring at a silent
         Settings spinner. The tab opens without stealing typing focus like
         every other command Action.
+
+        CDXC:TrycuaPrerequisite 2026-08-24:
+        Windows and Linux run the same command-pane installer instead of opening
+        a downloads page, so the Settings button matches the command Settings
+        shows on every desktop platform.
         */
         let GpuiCuaDriverCommandAction {
             command,

@@ -31,9 +31,9 @@ pub(crate) fn gpui_finish_desktop_control_setup(
     if !driver_installed {
         return Err(
             if was_update {
-                "The Cua Driver update did not finish successfully. Its terminal tab shows what happened; plugin status was refreshed."
+                "The Trycua update did not finish successfully. Its terminal tab shows what happened; plugin status was refreshed."
             } else {
-                "The Cua Driver installer did not finish successfully. Its terminal tab shows what happened; plugin status was refreshed."
+                "The Trycua installer did not finish successfully. Its terminal tab shows what happened; plugin status was refreshed."
             }
             .to_string(),
         );
@@ -44,13 +44,13 @@ pub(crate) fn gpui_finish_desktop_control_setup(
         "Ghostex Computer Use",
     ) {
         Ok(_) => Ok(if was_update {
-            "Cua Driver is up to date. Ghostex Computer Use is ready.".to_string()
+            "Trycua is up to date. Ghostex Computer Use is ready.".to_string()
         } else {
-            "Cua Driver installed. Grant macOS Accessibility and Screen Recording permissions if needed."
+            "Trycua installed. Grant macOS Accessibility and Screen Recording permissions if needed."
                 .to_string()
         }),
         Err(message) => Err(format!(
-            "Cua Driver {}, but Ghostex Computer Use skill could not be installed. {message}",
+            "Trycua {}, but Ghostex Computer Use skill could not be installed. {message}",
             if was_update { "updated" } else { "installed" }
         )),
     }
@@ -121,13 +121,21 @@ pub(crate) fn gpui_bundled_ghostex_cli_resource_dir() -> Result<PathBuf, String>
         "Packaged Ghostex CLI resources are unavailable in this GPUI build. Current integration status was refreshed without changing files."
             .to_string()
     })?;
-    let Some(bundle_root) = find_app_bundle_root(&executable) else {
+    #[cfg(target_os = "macos")]
+    let cli_dir = find_app_bundle_root(&executable)
+        .map(|bundle_root| bundle_root.join("Contents/Resources/CLI"));
+    #[cfg(target_os = "linux")]
+    let cli_dir = executable
+        .parent()
+        .map(|executable_dir| executable_dir.join("gxserver/bin"));
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let cli_dir: Option<PathBuf> = None;
+    let Some(cli_dir) = cli_dir else {
         return Err(
             "Packaged Ghostex CLI resources are unavailable in this GPUI build. Current integration status was refreshed without changing files."
                 .to_string(),
         );
     };
-    let cli_dir = bundle_root.join("Contents/Resources/CLI");
     if gpui_is_file(&cli_dir.join("ghostex")) {
         Ok(cli_dir)
     } else {
@@ -324,7 +332,14 @@ pub(crate) fn gpui_is_ghostex_owned_command_path(
 
 pub(crate) fn gpui_is_ghostex_app_owned_command_realpath(command: &str, realpath: &Path) -> bool {
     let normalized = gpui_path_string(realpath).to_lowercase();
-    normalized.contains(&format!("/ghostex.app/contents/resources/cli/{command}"))
+    let managed_gxserver_dir = crate::shared_settings::ghostex_storage_paths().gxserver_data_dir();
+    let is_managed_ghostex_cli = realpath
+        .file_name()
+        .map(|file_name| file_name.eq_ignore_ascii_case("ghostex"))
+        .unwrap_or(false)
+        && gpui_path_is_relative_to(realpath, &managed_gxserver_dir);
+    is_managed_ghostex_cli
+        || normalized.contains(&format!("/ghostex.app/contents/resources/cli/{command}"))
         || normalized.contains(&format!(
             "/ghostex.app/contents/resources/web/cli/{command}"
         ))

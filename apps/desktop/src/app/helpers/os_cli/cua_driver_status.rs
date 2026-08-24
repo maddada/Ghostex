@@ -132,10 +132,10 @@ pub(crate) fn gpui_cua_driver_permission_status(
         return GpuiCuaDriverPermissionStatus {
             accessibility_granted: None,
             detail: if cua_app_installed {
-                "Cua Driver app is installed, but the cua-driver CLI was not found on PATH, so GPUI cannot run the read-only permission check."
+                "Trycua is installed, but the cua-driver CLI was not found on PATH, so GPUI cannot run the read-only permission check."
                     .to_string()
             } else {
-                "Cua Driver is not installed.".to_string()
+                "Trycua is not installed.".to_string()
             },
             screen_recording_granted: None,
         };
@@ -157,7 +157,7 @@ pub(crate) fn gpui_cua_driver_permission_status(
         }
         Err(_) => GpuiCuaDriverPermissionStatus {
             accessibility_granted: None,
-            detail: "Unable to check Cua Driver permissions without prompting.".to_string(),
+            detail: "Unable to check Trycua permissions without prompting.".to_string(),
             screen_recording_granted: None,
         },
     }
@@ -214,16 +214,15 @@ pub(crate) fn gpui_cua_driver_permission_detail(
 ) -> String {
     match (accessibility_granted, screen_recording_granted) {
         (Some(true), Some(true)) => {
-            "Cua Driver reports Accessibility and Screen Recording permissions are granted."
-                .to_string()
+            "Trycua reports Accessibility and Screen Recording permissions are granted.".to_string()
         }
-        (Some(false), Some(false)) => "Cua Driver permissions need attention.".to_string(),
-        (Some(false), _) => "Cua Driver Accessibility permission needs attention.".to_string(),
-        (_, Some(false)) => "Cua Driver Screen Recording permission needs attention.".to_string(),
+        (Some(false), Some(false)) => "Trycua permissions need attention.".to_string(),
+        (Some(false), _) => "Trycua Accessibility permission needs attention.".to_string(),
+        (_, Some(false)) => "Trycua Screen Recording permission needs attention.".to_string(),
         _ if command_success => {
-            "Cua Driver permission check completed, but GPUI could not recognize the permission state."
+            "Trycua permission check completed, but GPUI could not recognize the permission state."
                 .to_string()
         }
-        _ => "Unable to check Cua Driver permissions without prompting.".to_string(),
+        _ => "Unable to check Trycua permissions without prompting.".to_string(),
     }
 }

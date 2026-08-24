@@ -1,5 +1,5 @@
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -274,10 +274,7 @@ pub(crate) fn gpui_file_contains_ghostex_cli_wrapper_marker(path: &Path) -> bool
 }
 
 pub(crate) fn gpui_current_bundle_cli_dir_for_ownership_probe() -> Option<PathBuf> {
-    let executable = env::current_exe().ok()?;
-    let bundle_root = find_app_bundle_root(&executable)?;
-    let cli_dir = bundle_root.join("Contents/Resources/CLI");
-    gpui_is_dir(&cli_dir).then_some(cli_dir)
+    gpui_bundled_ghostex_cli_resource_dir().ok()
 }
 
 pub(crate) fn gpui_marked_ghostex_wrapper_content(content: &str) -> bool {
@@ -288,7 +285,9 @@ pub(crate) fn gpui_marked_ghostex_wrapper_content(content: &str) -> bool {
     wrappers written by pre-cutover app builds.
     */
     content.contains(GPUI_GHOSTEX_CLI_WRAPPER_MARKER)
-        && (content.contains("ghostex-cli.mjs") || content.contains("/Resources/CLI/ghostex"))
+        && (content.contains("ghostex-cli.mjs")
+            || content.contains("/Resources/CLI/ghostex")
+            || content.contains("/gxserver/bin/ghostex"))
 }
 
 pub(crate) fn gpui_is_file(path: &Path) -> bool {

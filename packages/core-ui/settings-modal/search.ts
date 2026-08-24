@@ -378,7 +378,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
               value: skill.skillName,
             })),
             subtitle:
-              'Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.',
+              'Install the Ghostex skills you want agents to discover. Ghostex Computer Use and Ghostex Browser Use need Trycua installed first. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.',
             title: 'Bundled Agent Skills',
           },
           {
@@ -391,8 +391,8 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           {
             key: 'cuaPermissions',
             subtitle:
-              'Cua Driver needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.',
-            title: 'Cua Permissions',
+              'Trycua needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.',
+            title: 'Trycua Permissions',
           },
         ],
         title: 'Integrations',
@@ -418,8 +418,8 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         settings: [
           {
             key: 'cuaDriver',
-            subtitle: 'Install or upgrade Cua Driver for Ghostex Browser Use and native Desktop Control.',
-            title: 'Cua Driver',
+            subtitle: 'Install or upgrade Trycua for Ghostex Browser Use and native Desktop Control.',
+            title: 'Trycua',
           },
           {
             key: 'cef',

@@ -1,7 +1,6 @@
 import { type ReactNode } from 'react';
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
-import { ButtonGroup } from '@/packages/components/ui/button-group';
 import { Field, FieldContent, FieldDescription, FieldTitle } from '@/packages/components/ui/field';
 import { Switch } from '@/packages/components/ui/switch';
 import { AppTooltip } from '../../app-tooltip';
@@ -79,25 +78,33 @@ export function PluginsSettingsTab({
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
   const cuaDriverManagedUpdatesSupported = ghostexCliStatus?.cuaDriverManagedUpdatesSupported !== false;
   const cuaDriverUpdateAvailable = ghostexCliStatus?.cuaDriverUpdateAvailable;
-  const cuaDriverStatus =
-    ghostexCliStatusLoading || !ghostexCliStatus
-      ? 'Checking'
-      : !cuaDriverInstalled
-        ? 'Not installed'
-        : cuaDriverUpdateAvailable === true
-          ? 'Update available'
-          : cuaDriverUpdateAvailable === false
-            ? 'Up to date'
-            : 'Installed';
-  const cuaDriverActionLabel = !cuaDriverManagedUpdatesSupported
-    ? cuaDriverInstalled
-      ? 'View downloads'
-      : 'Download'
+  const cuaDriverStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
+  const cuaDriverStatus = cuaDriverStatusChecking
+    ? 'Checking'
     : !cuaDriverInstalled
-      ? 'Install'
+      ? 'Not installed'
       : cuaDriverUpdateAvailable === true
-        ? 'Upgrade'
-        : 'Check for updates';
+        ? 'Update available'
+        : cuaDriverUpdateAvailable === false
+          ? 'Up to date'
+          : 'Installed';
+  /*
+   * CDXC:TrycuaPrerequisite 2026-08-24:
+   * Every desktop platform now runs the official Trycua installer in a command
+   * pane, so hosts without managed updates offer Reinstall instead of sending
+   * the user to a downloads page.
+   */
+  const cuaDriverActionLabel = cuaDriverStatusChecking
+    ? 'Checking'
+    : !cuaDriverManagedUpdatesSupported
+      ? cuaDriverInstalled
+        ? 'Reinstall'
+        : 'Install'
+      : !cuaDriverInstalled
+        ? 'Install'
+        : cuaDriverUpdateAvailable === true
+          ? 'Upgrade'
+          : 'Check for updates';
   const showViewTab = (key: string) => shouldShowSetting(search.sections.viewTabs, key);
   const showQuickAccessButton = (key: string) => shouldShowSetting(search.sections.quickAccessButtons, key);
 
@@ -200,26 +207,42 @@ export function PluginsSettingsTab({
           >
             {shouldShowSetting(search.sections.components, 'cuaDriver') ? (
               <IntegrationSettingsRow
-                description='Cua Driver powers /ghostex-browser-use and /ghostex-computer-use. Install both skills from the Integrations page.'
+                description='Trycua lets agents control your machine. It powers /ghostex-browser-use and /ghostex-computer-use — install Trycua and both skills from the Integrations page.'
                 icon={IconDeviceDesktop}
                 status={cuaDriverStatus}
-                title='Cua Driver'
-                tone={cuaDriverUpdateAvailable === true ? 'warning' : cuaDriverInstalled ? 'success' : 'warning'}
+                title='Trycua'
+                tone={
+                  cuaDriverStatusChecking
+                    ? 'neutral'
+                    : cuaDriverUpdateAvailable === true
+                      ? 'warning'
+                      : cuaDriverInstalled
+                        ? 'success'
+                        : 'warning'
+                }
                 version={ghostexCliStatus?.cuaDriverVersion}
               >
                 <SettingButton
-                  disabled={ghostexCliStatusLoading || !onInstallCuaDriver}
+                  disabled={cuaDriverStatusChecking || !onInstallCuaDriver}
                   disabledReason={
-                    ghostexCliStatusLoading
-                      ? 'Cua Driver status is being checked.'
-                      : 'Cua Driver installation isn’t available here.'
+                    cuaDriverStatusChecking
+                      ? 'Trycua status is being checked.'
+                      : 'Trycua installation isn’t available here.'
                   }
                   onClick={onInstallCuaDriver}
                   type='button'
-                  variant={cuaDriverInstalled && cuaDriverUpdateAvailable !== true ? 'outline' : 'default'}
+                  variant={
+                    cuaDriverStatusChecking || (cuaDriverInstalled && cuaDriverUpdateAvailable !== true)
+                      ? 'outline'
+                      : 'default'
+                  }
                 >
-                  {cuaDriverManagedUpdatesSupported && cuaDriverInstalled ? (
-                    <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                  {cuaDriverStatusChecking || (cuaDriverManagedUpdatesSupported && cuaDriverInstalled) ? (
+                    <IconRefresh
+                      aria-hidden='true'
+                      className={cn(cuaDriverStatusChecking && 'animate-spin')}
+                      data-icon='inline-start'
+                    />
                   ) : (
                     <IconDownload aria-hidden='true' data-icon='inline-start' />
                   )}
@@ -253,9 +276,10 @@ export function PluginsSettingsTab({
                     Bright buttons are enabled and shown. Outlined buttons are hidden.
                   </FieldDescription>
                 </FieldContent>
-                <ButtonGroup
+                <div
                   aria-label='Quick access button visibility'
-                  className='shrink-0 gap-[2px] [&>[data-slot]~[data-slot]]:border-l!'
+                  className='flex w-fit shrink-0 items-stretch gap-[2px]'
+                  role='group'
                 >
                   {showQuickAccessButton('tips') ? (
                     <QuickAccessTitlebarButton
@@ -310,7 +334,7 @@ export function PluginsSettingsTab({
                       visible={!settings.openInTitlebarButtonHidden}
                     />
                   ) : null}
-                </ButtonGroup>
+                </div>
               </div>
             </Field>
           </SettingsSection>
