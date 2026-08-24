@@ -56,11 +56,13 @@ const storyProjects: SidebarProjectSettingsItem[] = [
 ];
 
 function SettingsModalStory({
+  cuaDriverInstalled,
   cuaPermissionsGranted,
   initialSettings = modalSettings,
   initialTab = 'settings',
   projects,
 }: {
+  cuaDriverInstalled?: boolean;
   cuaPermissionsGranted?: boolean;
   initialSettings?: ghostexSettings;
   initialTab?: 'settings' | 'integrations' | 'projects' | 'agents' | 'actions' | 'openTargets' | 'hotkeys';
@@ -83,13 +85,14 @@ function SettingsModalStory({
     type: 'agentHookStatus',
   });
   const [ghostexCliStatus, setGhostexCliStatus] = useState<SidebarGhostexCliStatusMessage>({
-    agentOrchestrationSkillInstalled: false,
+    cliSkillInstalled: false,
     browserSkillInstalled: false,
     computerUseSkillInstalled: false,
     embeddedBrowserSkillInstalled: false,
     cuaAppInstalled: false,
     cuaDriverAccessibilityPermissionGranted: cuaPermissionsGranted,
-    cuaDriverInstalled: cuaPermissionsGranted !== undefined,
+    cuaDriverInstallCommand: '/bin/bash -c "$(curl -fsSL https://cua.ai/driver/install.sh)"',
+    cuaDriverInstalled: cuaDriverInstalled ?? cuaPermissionsGranted !== undefined,
     cuaDriverScreenRecordingPermissionGranted: cuaPermissionsGranted,
     detail:
       'Ghostex CLI is installed automatically with the app. Use ghostex for the full command. Ghostex Browser Use and Ghostex Computer Use are not installed yet.',
@@ -149,11 +152,11 @@ function SettingsModalStory({
             computerUseSkillPath: '/Users/madda/agents/skills/ghostex-computer-use/SKILL.md',
           })
         }
-        onInstallAgentOrchestrationSkill={() =>
+        onInstallCliSkill={() =>
           setGhostexCliStatus({
             ...ghostexCliStatus,
-            agentOrchestrationSkillInstalled: true,
-            agentOrchestrationSkillPath: '/Users/madda/agents/skills/ghostex-agent-orchestration/SKILL.md',
+            cliSkillInstalled: true,
+            cliSkillPath: '/Users/madda/agents/skills/ghostex-cli/SKILL.md',
           })
         }
         onInstallGenerateTitleSkill={() =>
@@ -257,6 +260,15 @@ export const AccessibilityOff: Story = {
 
 export const Integrations: Story = {
   render: () => <SettingsModalStory cuaPermissionsGranted={false} initialTab='integrations' />,
+};
+
+/*
+ * CDXC:TrycuaPrerequisite 2026-08-24:
+ * The pre-install state is the one the layout has to teach: one Trycua step
+ * with the exact command it runs, then the skills that depend on it.
+ */
+export const IntegrationsTrycuaMissing: Story = {
+  render: () => <SettingsModalStory cuaDriverInstalled={false} initialTab='integrations' />,
 };
 
 export const Projects: Story = {

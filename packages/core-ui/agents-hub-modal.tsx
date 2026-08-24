@@ -1,6 +1,8 @@
 import {
+  IconCheck,
   IconChevronDown,
   IconChevronRight,
+  IconCopy,
   IconDeviceFloppy,
   IconEdit,
   IconFile,
@@ -21,6 +23,8 @@ import { cn } from '@/packages/components/utils';
 import { getBrandAgentLogoStyle } from './agent-logos';
 import type { WebviewApi } from './webview-api';
 import { applySavedAgentsHubContents } from '../shared/agents-hub-catalog';
+import { ghostexHotkeyTextFromKeyboardEvent } from '../shared/ghostex-hotkeys';
+import { formatSidebarHotkeyLabel } from './hotkey-label';
 import type {
   AgentsHubCatalogMessage,
   AgentsHubFile,
@@ -57,11 +61,29 @@ declare global {
   }
 }
 
+/*
+ * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+ * Tab order is Skills first, then MDs, Hooks, Configs & MCPs — most-edited
+ * first. Object key order IS the rendered order, and the Cmd+N hints below
+ * follow it.
+ */
 const tabLabels: Record<AgentsHubTab, string> = {
-  configs: 'Configs & MCPs',
-  hooks: 'Hooks',
-  mds: 'MDs',
   skills: 'Skills',
+  mds: 'MDs',
+  hooks: 'Hooks',
+  configs: 'Configs & MCPs',
+};
+
+/*
+ * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * The tab rail carries the same Cmd+1..Cmd+4 hint chips as Ghostex Quick
+ * Access, and the shortcuts switch tabs from anywhere in the Hub window.
+ */
+const tabHotkeys: Record<AgentsHubTab, string> = {
+  skills: 'cmd+1',
+  mds: 'cmd+2',
+  hooks: 'cmd+3',
+  configs: 'cmd+4',
 };
 
 const emptyGroupsByTab: Record<AgentsHubTab, AgentsHubGroup[]> = {
@@ -100,15 +122,15 @@ export function AgentsHubModal({
     <TooltipProvider>
       <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
         <DialogContent className='agents-hub-dialog ghostex-settings-shadcn' showCloseButton={false}>
-          <DialogHeader className='ghostex-modal-heading-bar agents-hub-header'>
-            <DialogTitle className='ghostex-modal-heading-title agents-hub-title'>
-              {/*
-               * CDXC:ExperimentalFeatures 2026-06-28-07:41:
-               * Agents Hub is no longer gated by Enable Experimental Features,
-               * so the modal title should not carry beta status after open.
-               */}
-              Agents Hub
-            </DialogTitle>
+          <DialogHeader className='sr-only'>
+            {/*
+             * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+             * The native window already names the Hub in its own title bar, so
+             * the in-surface heading was duplicate chrome and is hidden. The
+             * dialog still needs an accessible name, so the title stays in the
+             * tree for screen readers only.
+             */}
+            <DialogTitle>Agents Hub</DialogTitle>
           </DialogHeader>
           <AgentsHubSurface
             catalog={catalog}
@@ -152,6 +174,30 @@ function AgentsHubSurface({
   );
   const [activeTab, setActiveTab] = useState<AgentsHubTab>(initialTab);
   const [query, setQuery] = useState('');
+
+  /*
+   * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+   * Cmd+1..Cmd+4 select a tab while the Hub window is open, matching Quick
+   * Access. The listener runs in the capture phase so the Monaco editor pane
+   * cannot swallow the shortcut once it has focus.
+   */
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const hotkey = ghostexHotkeyTextFromKeyboardEvent(event);
+      const tab = (Object.keys(tabHotkeys) as AgentsHubTab[]).find((candidate) => tabHotkeys[candidate] === hotkey);
+      if (!tab) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveTab(tab);
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen]);
   const [selectedFileIds, setSelectedFileIds] = useState<Record<AgentsHubTab, string>>({
     configs: firstFileId(emptyGroupsByTab, 'configs'),
     hooks: firstFileId(emptyGroupsByTab, 'hooks'),
@@ -159,7 +205,7 @@ function AgentsHubSurface({
     skills: firstFileId(emptyGroupsByTab, 'skills'),
   });
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
-  const didResetSkillExpansionForOpenRef = useRef(false);
+  const didResetExpansionForOpenRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -174,26 +220,22 @@ function AgentsHubSurface({
   }, [isOpen, vscode]);
 
   useEffect(() => {
+    /*
+     * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+     * Every tab opens collapsed: the catalog lists are long enough that
+     * pre-expanded groups bury the rest of the list. Only an explicit click
+     * expands a group, and reopening the Hub collapses everything again.
+     */
     if (!isOpen) {
-      didResetSkillExpansionForOpenRef.current = false;
+      didResetExpansionForOpenRef.current = false;
       return;
     }
-    if (didResetSkillExpansionForOpenRef.current || !catalog) {
+    if (didResetExpansionForOpenRef.current || !catalog) {
       return;
     }
 
-    didResetSkillExpansionForOpenRef.current = true;
-    setExpandedIds((current) => {
-      const skillGroupIds = new Set(catalog.groupsByTab.skills.map((group) => group.id));
-      if (![...skillGroupIds].some((groupId) => current.has(groupId))) {
-        return current;
-      }
-      const next = new Set(current);
-      for (const groupId of skillGroupIds) {
-        next.delete(groupId);
-      }
-      return next;
-    });
+    didResetExpansionForOpenRef.current = true;
+    setExpandedIds((current) => (current.size === 0 ? current : new Set()));
   }, [catalog, isOpen]);
 
   useEffect(() => {
@@ -218,13 +260,6 @@ function AgentsHubSurface({
       mds: findFile(groupsByTab, 'mds', current.mds) ? current.mds : firstFileId(groupsByTab, 'mds'),
       skills: findFile(groupsByTab, 'skills', current.skills) ? current.skills : firstFileId(groupsByTab, 'skills'),
     }));
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      for (const group of [...groupsByTab.configs, ...groupsByTab.hooks]) {
-        next.add(group.id);
-      }
-      return next;
-    });
   }, [groupsByTab]);
 
   const activeFile = findFile(groupsByTab, activeTab, selectedFileIds[activeTab]);
@@ -305,7 +340,8 @@ function AgentsHubSurface({
       <TabsList className='agents-hub-tabs-list app-modal-tab-rail'>
         {(Object.keys(tabLabels) as AgentsHubTab[]).map((tab) => (
           <TabsTrigger key={tab} value={tab}>
-            {tabLabels[tab]}
+            <span className='agents-hub-tab-label'>{tabLabels[tab]}</span>
+            <kbd className='agents-hub-tab-hotkey'>{formatSidebarHotkeyLabel(tabHotkeys[tab])}</kbd>
           </TabsTrigger>
         ))}
       </TabsList>
@@ -442,7 +478,14 @@ function GroupList({
       {groups.map((group) => {
         const isExpanded = expandedIds.has(group.id);
         const isActiveGroup = group.files.some((file) => file.id === activeFileId);
-        const isCollapsedSkill = activeTab === 'skills' && !isExpanded;
+        /*
+         * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+         * A collapsed group is one compact row in every expandable tab, not
+         * just Skills — otherwise "collapsed" Configs and Hooks rows still
+         * carry their path, description, and profile icons and the list stays
+         * as tall as an expanded one.
+         */
+        const isCollapsed = expandable && !isExpanded;
         const primaryFile = group.files[0]!;
 
         return (
@@ -468,20 +511,20 @@ function GroupList({
                   <IconFile data-icon='inline-start' />
                 )}
                 <span className='agents-hub-group-title'>{group.name}</span>
-                {!isCollapsedSkill ? (
+                {!isCollapsed ? (
                   <span className='agents-hub-count'>
                     {group.files.length} {group.files.length === 1 ? 'file' : 'files'}
                   </span>
                 ) : null}
               </span>
-              {!isCollapsedSkill ? (
+              {!isCollapsed ? (
                 <>
                   <span className='agents-hub-path'>{group.path}</span>
                   <span className='agents-hub-description'>{group.description}</span>
                 </>
               ) : null}
             </button>
-            {!isCollapsedSkill ? <ProfileRow profiles={group.profiles} vscode={vscode} /> : null}
+            {!isCollapsed ? <ProfileRow profiles={group.profiles} vscode={vscode} /> : null}
             {expandable && isExpanded ? (
               <div className='agents-hub-file-list'>
                 {group.files.map((file) => (
@@ -742,6 +785,7 @@ function EditorPane({
            * CDXC:AgentsHub 2026-06-04-20:08:
            * Editor toolbar actions should be compact icon-only controls with descriptive hover tooltips, and Refresh should sit immediately before Save so disk changes can be reloaded without closing Agents Hub.
            */}
+          <CopyFilePathButton path={file.path} />
           <EditorToolbarButton
             label='Open containing folder'
             onClick={() =>
@@ -791,6 +835,38 @@ function EditorPane({
         )}
       </div>
     </div>
+  );
+}
+
+/*
+ * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+ * The open file's full path is the thing users most often want out of the Hub
+ * (to paste into a prompt or a terminal), so the toolbar copies it directly and
+ * confirms with a check for a moment instead of only showing the path as text.
+ */
+function CopyFilePathButton({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  return (
+    <EditorToolbarButton
+      label={copied ? 'Path copied' : 'Copy file path'}
+      onClick={() => {
+        void navigator.clipboard.writeText(path).then(
+          () => setCopied(true),
+          () => setCopied(false)
+        );
+      }}
+    >
+      {copied ? <IconCheck aria-hidden='true' /> : <IconCopy aria-hidden='true' />}
+    </EditorToolbarButton>
   );
 }
 
@@ -854,6 +930,15 @@ function useFilteredGroups(
   }, [groupsByTab, query, tab]);
 }
 
+/*
+ * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * This is a plain lookup. It used to fall back to the tab's first file when the
+ * id was unknown, which made the selection-sync effect below a no-op (its
+ * `findFile(...) ? keep : firstFileId(...)` guard could never take the second
+ * branch), so the selected id stayed empty: the editor rendered the fallback
+ * file while the catalog list highlighted nothing. Callers resolve the default
+ * themselves through firstFileId.
+ */
 function findFile(
   groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>,
   tab: AgentsHubTab,
@@ -865,7 +950,7 @@ function findFile(
       return file;
     }
   }
-  return groupsByTab[tab][0]?.files[0];
+  return undefined;
 }
 
 function firstFileId(groupsByTab: Record<AgentsHubTab, AgentsHubGroup[]>, tab: AgentsHubTab): string {

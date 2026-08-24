@@ -1,7 +1,0 @@
-interface:
-  display_name: 'Ghostex Manage Automations'
-  short_description: 'Manage scheduled Ghostex agent automations'
-  default_prompt: 'Use $ghostex-manage-automations to inspect, create, run, pause, or archive a Ghostex automation through the CLI.'
-
-policy:
-  allow_implicit_invocation: true

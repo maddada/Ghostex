@@ -1,10 +1,10 @@
 export type BundledGhostexAgentSkillId =
+  | 'cli'
   | 'browserUse'
   | 'embeddedBrowserUse'
   | 'computerUse'
-  | 'agentOrchestration'
   | 'fable56Orchestration'
-  | 'findPrevSession'
+  | 'manageBeads'
   | 'generateTitle'
   | 'moveCodexSession';
 
@@ -16,17 +16,31 @@ export type BundledGhostexAgentSkill = {
   id: BundledGhostexAgentSkillId;
   name: string;
   /**
-   * Skills that drive the real machine or a real browser go through Cua Driver
-   * (https://github.com/trycua/cua), so the install surfaces offer that
-   * one-time setup next to the skill instead of letting agents discover the
-   * missing driver at the moment they try to use it.
+   * Skills that drive the real machine or a real browser go through Trycua, so
+   * the install surfaces group them under one shared Trycua install step
+   * instead of letting agents discover the missing driver at the moment they
+   * try to use it.
    */
   requiresCuaDriver?: boolean;
+  /**
+   * CDXC:AgentSkills 2026-08-24:
+   * Some bundled skills stay installable through the CLI (and keep working when
+   * already installed) but are deliberately absent from every app surface:
+   * onboarding, Settings > Integrations, and settings search. Only Fable 5.6
+   * Orchestration and Manage Beads remain as the visible optional skills.
+   */
+  hiddenFromUi?: boolean;
   skillName: string;
   tier: BundledGhostexAgentSkillTier;
 };
 
-export const GHOSTEX_CUA_PROJECT_URL = 'https://github.com/trycua/cua';
+/**
+ * CDXC:TrycuaPrerequisite 2026-08-24:
+ * User-facing surfaces say "Trycua", never the `trycua/cua` repository slug or
+ * an internal component name, so the prerequisite reads as one product the user
+ * installs once.
+ */
+export const GHOSTEX_TRYCUA_PRODUCT_NAME = 'Trycua';
 
 /**
  * CDXC:AgentSkills 2026-05-31-09:18:
@@ -41,9 +55,18 @@ export const GHOSTEX_CUA_PROJECT_URL = 'https://github.com/trycua/cua';
  */
 export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] = [
   {
+    command: 'ghostex cli install-skill',
+    description:
+      'The entry point for everything Ghostex: teaches agents help-first `ghostex` CLI discovery for sessions, orchestration, automations, projects, quick actions, chat queues, prompt history, and diagnostics.',
+    id: 'cli',
+    name: 'Ghostex CLI',
+    skillName: 'ghostex-cli',
+    tier: 'recommended',
+  },
+  {
     command: 'ghostex computer-use install-skill',
     description:
-      'Teaches agents the Ghostex-named workflow for native macOS app automation through Cua Driver, including Accessibility and Screen Recording requirements.',
+      'Let agents control your machine: click, type, and see the screen in native apps. Runs through Trycua, and macOS asks for Accessibility and Screen Recording permissions.',
     id: 'computerUse',
     name: 'Ghostex Computer Use',
     requiresCuaDriver: true,
@@ -53,7 +76,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
   {
     command: 'ghostex browser-use install-skill',
     description:
-      "Teaches agents to inspect and operate supported external browser pages through Cua Driver's typed browser tools.",
+      'Let agents control your browser: open pages, click, fill forms, and read what is on screen in supported external browsers.',
     id: 'browserUse',
     name: 'Ghostex Browser Use',
     requiresCuaDriver: true,
@@ -63,43 +86,35 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
   {
     command: 'ghostex browser install-skill',
     description:
-      'Teaches agents to inspect Ghostex embedded browser panes, read console logs, capture screenshots, and interact with pages through the embedded browser MCP server.',
+      'Let agents control the browser panes built into Ghostex: read console logs, capture screenshots, and interact with pages.',
     id: 'embeddedBrowserUse',
     name: 'Ghostex Embedded Browser Use',
     skillName: 'ghostex-embedded-browser-use',
     tier: 'recommended',
   },
   {
-    command: 'ghostex agent-orchestration install-skill',
-    description:
-      'Teaches agents to coordinate Ghostex sessions through supported CLI commands for creating panes, sending messages, reading output, and checking status.',
-    id: 'agentOrchestration',
-    name: 'Ghostex Agent Orchestration',
-    skillName: 'ghostex-agent-orchestration',
-    tier: 'optional',
-  },
-  {
     command: 'ghostex fable-5.6-orchestration install-skill',
     description:
-      'Teaches agents a plan-implement-verify pipeline over Ghostex panes: plan inline with Fable, launch a Codex gpt-5.6 worker pane per phase, then verify with a Fable pane and spawn fixers until verification passes.',
+      'Use Claude Code Fable to orchestrate GPT 5.6 Sol sub-agents, then verify with Fable. A mix of the smartest model out there with the best implementer out there, for the best cost to performance.',
     id: 'fable56Orchestration',
     name: 'Ghostex Fable 5.6 Orchestration',
     skillName: 'ghostex-fable-5.6-orchestration',
     tier: 'optional',
   },
   {
-    command: 'ghostex find-prev-session install-skill',
+    command: 'ghostex manage-beads install-skill',
     description:
-      "Teaches agents to find, inspect, resume, or fork previous Claude Code, Codex, Pi, OpenCode, Cursor Agent, and Grok sessions with Ghostex's bundled Zehn search.",
-    id: 'findPrevSession',
-    name: 'Ghostex Find Previous Session',
-    skillName: 'ghostex-find-prev-session',
+      'Teaches agents the Ghostex project board workflow through the machine-installed `bd` Beads CLI: create, update, comment on, review, and close beads and link them to sessions.',
+    id: 'manageBeads',
+    name: 'Ghostex Manage Beads',
+    skillName: 'ghostex-manage-beads',
     tier: 'optional',
   },
   {
     command: 'ghostex generate-title install-skill',
     description:
       'Teaches agents how to generate concise Ghostex session titles and submit the rename command in the current session.',
+    hiddenFromUi: true,
     id: 'generateTitle',
     name: 'Ghostex Auto Rename Session',
     skillName: 'ghostex-auto-rename-session',
@@ -109,9 +124,14 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     command: 'ghostex move-codex-session install-skill',
     description:
       'Teaches agents how to fork a Codex conversation into another folder with the correct session id, target root, and optional full-access mode.',
+    hiddenFromUi: true,
     id: 'moveCodexSession',
     name: 'Ghostex Move Codex Session',
     skillName: 'ghostex-move-codex-session',
     tier: 'optional',
   },
 ];
+
+/** The bundled skills that app surfaces (onboarding, Settings, search) may show. */
+export const VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
+  BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.hiddenFromUi !== true);

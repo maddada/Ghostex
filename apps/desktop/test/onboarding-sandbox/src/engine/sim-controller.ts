@@ -103,9 +103,9 @@ const SKILL_INSTALL_COMMANDS: Record<string, BundledSkillId> = {
   installBrowserControl: 'embeddedBrowser',
   installBrowserUseSkill: 'browser',
   installComputerUseSkill: 'computerUse',
-  installAgentOrchestrationSkill: 'agentOrchestration',
+  installCliSkill: 'cli',
   installFable56OrchestrationSkill: 'fable56Orchestration',
-  installFindPrevSessionSkill: 'findPrevSession',
+  installManageBeadsSkill: 'manageBeads',
   installGenerateTitleSkill: 'generateTitle',
   installMoveCodexSessionSkill: 'moveCodexSession',
 };
@@ -115,9 +115,9 @@ const BUNDLED_SKILL_ID_BY_CONTRACT_ID: Record<string, BundledSkillId> = {
   browserUse: 'browser',
   embeddedBrowserUse: 'embeddedBrowser',
   computerUse: 'computerUse',
-  agentOrchestration: 'agentOrchestration',
+  cli: 'cli',
   fable56Orchestration: 'fable56Orchestration',
-  findPrevSession: 'findPrevSession',
+  manageBeads: 'manageBeads',
   generateTitle: 'generateTitle',
   moveCodexSession: 'moveCodexSession',
 };
@@ -870,9 +870,9 @@ export function createEngineActions(
       case 'installBrowserControl':
       case 'installBrowserUseSkill':
       case 'installComputerUseSkill':
-      case 'installAgentOrchestrationSkill':
+      case 'installCliSkill':
       case 'installFable56OrchestrationSkill':
-      case 'installFindPrevSessionSkill':
+      case 'installManageBeadsSkill':
       case 'installGenerateTitleSkill':
       case 'installMoveCodexSessionSkill':
       case 'installCuaDriver':

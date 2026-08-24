@@ -2,9 +2,10 @@
 name: ghostex-computer-use
 description: >-
   Use this skill when the user asks for Ghostex Computer Use, Desktop Control,
-  or native macOS app automation. It wraps the CLI-first Cua Driver workflow so
+  or native macOS app automation. It wraps the CLI-first Trycua workflow so
   agents can drive the computer and desktop apps without the user needing to
   remember `$cua-driver`.
+disable-model-invocation: true
 ---
 
 # ghostex-computer-use
@@ -14,24 +15,25 @@ Desktop Control. This skill is intentionally a wrapper around `$cua-driver`: if
 the `$cua-driver` skill is available, load it for current schemas and safety
 rules, but issue operations through the `cua-driver` CLI.
 
-Use the CLI, not MCP. Do not configure, register, or invoke a Cua Driver MCP
+Use the CLI, not MCP. Do not configure, register, or invoke a Trycua MCP
 server for this workflow.
 
 Route browser work by surface:
 
 - Use `$ghostex-browser-use` for web content in external Chrome, Chromium,
-  Edge, or supported Electron apps through Cua Driver's typed browser tools.
+  Edge, or supported Electron apps through Trycua's typed browser tools.
 - Use `$ghostex-embedded-browser-use` for browser panes built into Ghostex.
 - Continue with this skill for native apps, browser chrome, native browser
   dialogs, or browser engines that do not expose an exact typed page route.
 
 ## Requirements
 
-- Desktop Control must be installed from Ghostex first-launch setup or Settings
-  > Integrations.
-- Cua Driver must be available as `cua-driver`.
-- macOS Accessibility and Screen Recording permissions must be granted for Cua
-  Driver.
+- Trycua must be installed. Ghostex installs it from first-launch setup or
+  Settings > Integrations, where the Trycua card runs the official installer in
+  a command pane.
+- Trycua must be available as `cua-driver` (see Windows and WSL below).
+- macOS Accessibility and Screen Recording permissions must be granted for
+  Trycua.
 
 Check the machine state before acting:
 
@@ -43,13 +45,46 @@ cua-driver check_permissions '{"prompt":false}'
 
 <!--
 CDXC:CuaPermissions 2026-05-29-12:21:
-State checks must be read-only. The default Cua Driver permission check can ask macOS to show missing-grant prompts, so the Ghostex wrapper uses prompt:false and only sends users to System Settings when grants are actually missing.
+State checks must be read-only. The default Trycua permission check can ask macOS to show missing-grant prompts, so the Ghostex wrapper uses prompt:false and only sends users to System Settings when grants are actually missing.
 -->
 
 If the daemon is not running, start it with:
 
 ```bash
 open -n -g -a CuaDriver --args serve
+```
+
+## Windows and WSL
+
+On Windows, Trycua installs on the Windows side. A Ghostex agent session runs
+inside the WSL distribution, where there is no Linux `cua-driver` binary, so
+`which cua-driver` failing there does not mean Trycua is missing. Call it across
+the interop boundary through `powershell.exe` instead:
+
+```bash
+powershell.exe -NoProfile -Command "cua-driver status"
+powershell.exe -NoProfile -Command "cua-driver check_permissions '{\"prompt\":false}'"
+powershell.exe -NoProfile -Command "cua-driver list_windows '{\"pid\":1234}'"
+```
+
+The general form is `powershell.exe -NoProfile -Command "cua-driver <tool>
+'<JSON>'"`. Inside a bash double-quoted string, escape the JSON's own double
+quotes as `\"`; PowerShell then hands the single-quoted JSON to Trycua as one
+argument.
+
+Trycua is a Windows process, so every path it reads or writes is a Windows path.
+Translate at the boundary:
+
+```bash
+powershell.exe -NoProfile -Command "cua-driver start_recording '{\"path\":\"$(wslpath -w /tmp/run.mp4)\"}'"
+wslpath -u 'C:\Users\me\Downloads\report.pdf'
+```
+
+If Trycua is not installed on the Windows side, install it from Windows
+PowerShell, or from WSL through the same interop boundary:
+
+```bash
+powershell.exe -NoProfile -Command "irm https://cua.ai/driver/install.ps1 | iex"
 ```
 
 ## Operating Rules
@@ -66,7 +101,7 @@ open -n -g -a CuaDriver --args serve
 
 ## Canonical Loop
 
-1. Launch or find the app with Cua Driver, for example:
+1. Launch or find the app with Trycua, for example:
 
    ```bash
    cua-driver launch_app '{"bundle_id":"com.apple.TextEdit"}'
@@ -84,7 +119,7 @@ open -n -g -a CuaDriver --args serve
 
 ## Notes
 
-- Keep the user's current foreground app alone. Cua Driver can launch and drive
+- Keep the user's current foreground app alone. Trycua can launch and drive
   apps in the background when you identify the right app, pid, window id, and
   element indexes.
 - Prefer one small verified action at a time. Re-snapshot after every stateful

@@ -55,9 +55,9 @@ const SKILL_LABELS: Record<BundledSkillId, string> = {
   browser: 'browser',
   embeddedBrowser: 'embedded browser',
   computerUse: 'computer use',
-  agentOrchestration: 'agent orchestration',
+  cli: 'agent orchestration',
   fable56Orchestration: 'fable 5.6 orchestration',
-  findPrevSession: 'find prev session',
+  manageBeads: 'find prev session',
   generateTitle: 'generate title',
   moveCodexSession: 'move codex session',
 };

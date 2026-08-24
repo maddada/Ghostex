@@ -2,3 +2,6 @@ interface:
   display_name: 'Ghostex Move Codex Session'
   short_description: 'Move Codex sessions between folders'
   default_prompt: 'Use $ghostex-move-codex-session to explain how to fork this Codex session into another folder.'
+
+policy:
+  allow_implicit_invocation: false

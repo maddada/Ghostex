@@ -2,16 +2,17 @@
 name: ghostex-browser-use
 description: >-
   Use this skill when an agent needs to inspect or automate web content in
-  Chrome, Chromium, Edge, or a supported Electron app through Cua Driver's
+  Chrome, Chromium, Edge, or a supported Electron app through Trycua's
   CLI-first typed browser tools. It covers exact native-window binding,
   explicit browser preparation, semantic page snapshots, navigation, clicks,
   typing, pointer actions, dialogs, uploads, downloads, and verification. Use
   ghostex-embedded-browser-use instead for browser panes built into Ghostex.
+disable-model-invocation: true
 ---
 
 # ghostex-browser-use
 
-Use Cua Driver's typed browser workflow for supported browser page content.
+Use Trycua's typed browser workflow for supported browser page content.
 Keep the browser bound to an exact native window and verify every mutation from
 a fresh semantic snapshot.
 
@@ -19,8 +20,8 @@ If `$cua-driver` is available, load it and read its `BROWSER.md` before acting;
 that versioned skill is the source of truth for the installed driver's schemas,
 authorization rules, and platform support.
 
-Use the `cua-driver` CLI, not MCP. Do not configure, register, or invoke a Cua
-Driver MCP server for this workflow.
+Use the `cua-driver` CLI, not MCP. Do not configure, register, or invoke a
+Trycua MCP server for this workflow.
 
 ## Route the task
 
@@ -28,7 +29,7 @@ Driver MCP server for this workflow.
   exactly correlated Electron surfaces.
 - Use `$ghostex-embedded-browser-use` for Ghostex's built-in CEF browser panes.
 - Use `$ghostex-computer-use` for browser chrome, native prompts and dialogs,
-  Safari, Firefox, or a surface that Cua Driver cannot bind exactly.
+  Safari, Firefox, or a surface that Trycua cannot bind exactly.
 - Prefer an application API, connector, or CLI when the requested result does
   not require browser UI interaction.
 
@@ -51,6 +52,40 @@ open -n -g -a CuaDriver --args serve
 
 Use CLI calls in the form `cua-driver <tool> '<JSON>'`.
 
+## Windows and WSL
+
+On Windows, Trycua installs on the Windows side. A Ghostex agent session runs
+inside the WSL distribution, where there is no Linux `cua-driver` binary, so
+`which cua-driver` failing there does not mean Trycua is missing. Call it across
+the interop boundary through `powershell.exe` instead:
+
+```bash
+powershell.exe -NoProfile -Command "cua-driver status"
+powershell.exe -NoProfile -Command "cua-driver list-tools"
+powershell.exe -NoProfile -Command "cua-driver start_session '{\"session\":\"browser-run-1\",\"capture_scope\":\"window\"}'"
+```
+
+The general form is `powershell.exe -NoProfile -Command "cua-driver <tool>
+'<JSON>'"`. Inside a bash double-quoted string, escape the JSON's own double
+quotes as `\"`; PowerShell then hands the single-quoted JSON to Trycua as one
+argument.
+
+Trycua drives the Windows browser, so every path it reads or writes is a Windows
+path. Translate at the boundary — `browser_set_input_files` needs a Windows
+upload path, and `browser_download` reports a Windows destination:
+
+```bash
+powershell.exe -NoProfile -Command "cua-driver browser_set_input_files '{\"ref\":\"<ref>\",\"paths\":[\"$(wslpath -w /tmp/upload.png)\"]}'"
+wslpath -u 'C:\Users\me\Downloads\report.pdf'
+```
+
+If Trycua is not installed on the Windows side, install it from Windows
+PowerShell, or from WSL through the same interop boundary:
+
+```bash
+powershell.exe -NoProfile -Command "irm https://cua.ai/driver/install.ps1 | iex"
+```
+
 ## Canonical browser loop
 
 1. Start one declared window-scoped session and keep its name for the complete
@@ -60,7 +95,7 @@ Use CLI calls in the form `cua-driver <tool> '<JSON>'`.
    cua-driver start_session '{"session":"browser-run-1","capture_scope":"window"}'
    ```
 
-2. Launch or discover the browser with Cua Driver, then select an exact
+2. Launch or discover the browser with Trycua, then select an exact
    `(pid, window_id)` returned by `launch_app` or `list_windows`.
 3. Bind that native window with `get_browser_state`:
 

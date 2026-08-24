@@ -123,6 +123,305 @@ const mockCatalog: AgentsHubCatalogMessage = {
           },
         ],
       },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: agent-reviews\n---\n\nSkill instructions.',
+            id: 'agent-reviews-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/agent-reviews/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-agent-reviews',
+        name: 'agent-reviews',
+        path: '/Users/madda/.agents/skills/agent-reviews',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: apple\n---\n\nSkill instructions.',
+            id: 'apple-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/apple/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-apple',
+        name: 'apple',
+        path: '/Users/madda/.agents/skills/apple',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-app-create-ui\n---\n\nSkill instructions.',
+            id: 'asc-app-create-ui-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-app-create-ui/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-app-create-ui',
+        name: 'asc-app-create-ui',
+        path: '/Users/madda/.agents/skills/asc-app-create-ui',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-apple-ads\n---\n\nSkill instructions.',
+            id: 'asc-apple-ads-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-apple-ads/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-apple-ads',
+        name: 'asc-apple-ads',
+        path: '/Users/madda/.agents/skills/asc-apple-ads',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-aso-audit\n---\n\nSkill instructions.',
+            id: 'asc-aso-audit-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-aso-audit/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-aso-audit',
+        name: 'asc-aso-audit',
+        path: '/Users/madda/.agents/skills/asc-aso-audit',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-build-lifecycle\n---\n\nSkill instructions.',
+            id: 'asc-build-lifecycle-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-build-lifecycle/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-build-lifecycle',
+        name: 'asc-build-lifecycle',
+        path: '/Users/madda/.agents/skills/asc-build-lifecycle',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-cli-usage\n---\n\nSkill instructions.',
+            id: 'asc-cli-usage-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-cli-usage/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-cli-usage',
+        name: 'asc-cli-usage',
+        path: '/Users/madda/.agents/skills/asc-cli-usage',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-crash-triage\n---\n\nSkill instructions.',
+            id: 'asc-crash-triage-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-crash-triage/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-crash-triage',
+        name: 'asc-crash-triage',
+        path: '/Users/madda/.agents/skills/asc-crash-triage',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-id-resolver\n---\n\nSkill instructions.',
+            id: 'asc-id-resolver-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-id-resolver/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-id-resolver',
+        name: 'asc-id-resolver',
+        path: '/Users/madda/.agents/skills/asc-id-resolver',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-localize-metadata\n---\n\nSkill instructions.',
+            id: 'asc-localize-metadata-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-localize-metadata/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-localize-metadata',
+        name: 'asc-localize-metadata',
+        path: '/Users/madda/.agents/skills/asc-localize-metadata',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-metadata-sync\n---\n\nSkill instructions.',
+            id: 'asc-metadata-sync-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-metadata-sync/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-metadata-sync',
+        name: 'asc-metadata-sync',
+        path: '/Users/madda/.agents/skills/asc-metadata-sync',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-notarization\n---\n\nSkill instructions.',
+            id: 'asc-notarization-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-notarization/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-notarization',
+        name: 'asc-notarization',
+        path: '/Users/madda/.agents/skills/asc-notarization',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
+      {
+        description: 'Shared skill installed under ~/.agents/skills.',
+        files: [
+          {
+            content: '---\nname: asc-ppp-pricing\n---\n\nSkill instructions.',
+            id: 'asc-ppp-pricing-skill',
+            language: 'markdown',
+            name: 'SKILL.md',
+            path: '/Users/madda/.agents/skills/asc-ppp-pricing/SKILL.md',
+          },
+        ],
+        id: 'skill-shared-asc-ppp-pricing',
+        name: 'asc-ppp-pricing',
+        path: '/Users/madda/.agents/skills/asc-ppp-pricing',
+        profiles: [
+          {
+            agentIcon: 'claude',
+            filePath: '/Users/madda/.claude/CLAUDE.md',
+            label: 'Claude Code',
+            profilePath: '/Users/madda/.claude',
+          },
+        ],
+      },
     ],
   },
   type: 'agentsHubCatalog',

@@ -130,7 +130,7 @@ const DISCOVER_GHOSTEX_FEATURES: readonly DiscoverGhostexFeature[] = [
     id: 'beads-kanban-board',
     title: 'Manage Your Project on a Kanban board',
     description:
-      'Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)',
+      'Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-cli skill)',
     imageAlt: 'Ghostex Kanban Board and Beads',
     imageSrc: kanbanBeadsBoardImage,
   },

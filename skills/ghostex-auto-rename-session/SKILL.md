@@ -5,6 +5,7 @@ description: >-
   conversation. Use when the user asks for a thread name, chat title, session
   title, resume title, or any concise label summarizing what was worked on; then
   submit the rename command in the current Ghostex session.
+disable-model-invocation: true
 ---
 
 # ghostex-auto-rename-session

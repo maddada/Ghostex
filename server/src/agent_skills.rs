@@ -26,10 +26,8 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-embedded-browser-use",
     "ghostex-computer-use",
     "ghostex-cli",
-    "ghostex-manage-automations",
-    "ghostex-agent-orchestration",
+    "ghostex-manage-beads",
     "ghostex-fable-5.6-orchestration",
-    "ghostex-find-prev-session",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
 ];
@@ -976,6 +974,129 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 
+/*
+CDXC:SkillConsolidation 2026-08-24:
+`ghostex-manage-automations`, `ghostex-agent-orchestration`, and
+`ghostex-find-prev-session` were folded into the CLI help (`$ghostex-cli` is
+the entry-point skill), so newer Ghostex must clean up copies that older
+builds installed on user machines. The startup migration removes a retired
+skill directory only when every file in it byte-matches a version Ghostex
+actually shipped; a directory with extra files or edited content is user work
+and is left alone.
+*/
+pub const RETIRED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
+    "ghostex-manage-automations",
+    "ghostex-agent-orchestration",
+    "ghostex-find-prev-session",
+];
+
+/// sha256 of every SKILL.md / agents/openai.yaml revision the retired skills
+/// ever shipped with (collected from the repository history at removal time).
+const RETIRED_GHOSTEX_AGENT_SKILL_SHIPPED_SHA256: &[&str] = &[
+    // ghostex-manage-automations SKILL.md
+    "0cb5fc530b28afa0ad5f43cfa47eed2b5bd92a0cb73165f021d909503299b78b",
+    "e14f5eccba6cffbcf3d44313f12a23502ba7a409c3533823f34646b10d290f64",
+    // ghostex-manage-automations agents/openai.yaml
+    "31af0a385211af151897b2ddd75fc2773831b79ed02cf4c792ce759e566a0501",
+    "4da015e2ea7b953e5dab5bed60bae1818bed8ce5d441c88b5d41f6515f2b3f63",
+    // ghostex-agent-orchestration SKILL.md
+    "044bcecf7c4d1ee120771efd8fc6309844ebf02c55f7fce314b84b141ebeb390",
+    "8e2018b07cf1fe7c809ed7715312402e107389a6929a2526b7b7eb6932fd36d1",
+    "da1dcd51ca2e6d958d326aa60f81db63077510d6d5a6e2293395024f730fb59a",
+    // ghostex-agent-orchestration agents/openai.yaml
+    "0a36e596d15d13b9ad06c8310c223a35def185d903efdae4681c6a7c5fb26daa",
+    "a815a68a82e73e6b93b31248e1c641bed587a6bbf5bbd46e56fcc144641f49a0",
+    // ghostex-find-prev-session SKILL.md
+    "5ba3a354363d4fc86bf23a9f9807115d167697d159c11d4752260db45dfa9caf",
+    "e2c8fae822dcfb1159c28d5f02015b26b777aa48469fcf1ff0f545b6d21a4b90",
+    "e68fadf8f96ceabb339e2af36972cf92ecedb07d8b6c5cd9a4c0e4231349e765",
+    // ghostex-find-prev-session agents/openai.yaml
+    "20901c1230ebec7200694cdcdb2c2cdad7a0b500adc10be7123f318b23f3b73a",
+    "fe50e56c5216d964637c993c27e7c539ee0bfdfb7f22b4cf5bcff0ad783eea61",
+];
+
+fn file_matches_shipped_retired_skill_content(path: &Path) -> bool {
+    use sha2::{Digest, Sha256};
+    let Ok(bytes) = fs::read(path) else {
+        return false;
+    };
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    RETIRED_GHOSTEX_AGENT_SKILL_SHIPPED_SHA256.contains(&digest.as_str())
+}
+
+/// True when the directory holds exactly the files Ghostex shipped for a
+/// retired skill (SKILL.md plus an optional agents/openai.yaml), all
+/// byte-identical to a shipped revision.
+fn retired_skill_dir_is_unmodified_shipped_copy(skill_dir: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(skill_dir) else {
+        return false;
+    };
+    let mut saw_skill_md = false;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name == "SKILL.md" {
+            if !file_matches_shipped_retired_skill_content(&entry.path()) {
+                return false;
+            }
+            saw_skill_md = true;
+        } else if name == "agents" {
+            let Ok(agent_entries) = fs::read_dir(entry.path()) else {
+                return false;
+            };
+            for agent_entry in agent_entries.flatten() {
+                if agent_entry.file_name() != "openai.yaml"
+                    || !file_matches_shipped_retired_skill_content(&agent_entry.path())
+                {
+                    return false;
+                }
+            }
+        } else if name == ".DS_Store" {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    saw_skill_md
+}
+
+/// Startup migration: delete unmodified shipped copies of the retired skills
+/// from the global agent skill roots. Returns the removed directory paths.
+pub fn remove_retired_ghostex_agent_skills(paths: &GxserverPaths) -> Vec<String> {
+    let roots = [
+        paths.home_dir.join(".agents").join("skills"),
+        paths.home_dir.join(".codex").join("skills"),
+        paths.home_dir.join(".claude").join("skills"),
+    ];
+    let mut removed = Vec::new();
+    let mut seen_canonical: HashSet<PathBuf> = HashSet::new();
+    for root in roots {
+        let canonical_root = fs::canonicalize(&root).unwrap_or(root);
+        if !seen_canonical.insert(canonical_root.clone()) {
+            continue;
+        }
+        for skill_name in RETIRED_GHOSTEX_AGENT_SKILL_NAMES {
+            let skill_dir = canonical_root.join(skill_name);
+            let Ok(metadata) = fs::symlink_metadata(&skill_dir) else {
+                continue;
+            };
+            let remove_result = if metadata.file_type().is_symlink() {
+                // A symlinked skill points at user-managed content; remove
+                // only the link itself.
+                fs::remove_file(&skill_dir)
+            } else if metadata.is_dir() && retired_skill_dir_is_unmodified_shipped_copy(&skill_dir)
+            {
+                fs::remove_dir_all(&skill_dir)
+            } else {
+                continue;
+            };
+            if remove_result.is_ok() {
+                removed.push(path_string(&skill_dir));
+            }
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1199,8 +1320,8 @@ mod tests {
                 .path()
                 .join(".agents")
                 .join("skills")
-                .join("ghostex-agent-orchestration"),
-            "ghostex-agent-orchestration",
+                .join("ghostex-manage-beads"),
+            "ghostex-manage-beads",
         );
         let status = read_agent_skill_status(
             &paths,
@@ -1219,19 +1340,12 @@ mod tests {
             Some(true)
         );
         assert_eq!(skill_installed(skills, "ghostex-computer-use"), Some(true));
-        assert_eq!(
-            skill_installed(skills, "ghostex-agent-orchestration"),
-            Some(true)
-        );
+        assert_eq!(skill_installed(skills, "ghostex-manage-beads"), Some(true));
         assert_eq!(
             skill_installed(skills, "ghostex-auto-rename-session"),
             Some(true)
         );
         assert_eq!(skill_installed(skills, "ghostex-cli"), Some(false));
-        assert_eq!(
-            skill_installed(skills, "ghostex-manage-automations"),
-            Some(false)
-        );
         let roots = status
             .get("roots")
             .and_then(Value::as_array)

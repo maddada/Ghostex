@@ -55,9 +55,9 @@ export const BUNDLED_SKILL_IDS = [
   'browser',
   'embeddedBrowser',
   'computerUse',
-  'agentOrchestration',
+  'cli',
   'fable56Orchestration',
-  'findPrevSession',
+  'manageBeads',
   'generateTitle',
   'moveCodexSession',
 ] as const;

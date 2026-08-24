@@ -219,7 +219,7 @@ pub fn usage() -> String {
         let mut lines = vec![
             format_help_command(
                 "automations --help",
-                "Show the complete scheduled automation workflow and install its skill",
+                "Show the complete scheduled automation workflow",
             ),
             format_help_command(
                 "save-agent --agent-id id --name name --command command",
@@ -264,6 +264,8 @@ pub fn usage() -> String {
         format_help_command("rename-session <sessionId> <title> [--json]", "Rename a session"),
         format_help_command("rename-session --session-id <id> --title <title> [--json]", "Flag form used by Android SSH actions"),
         format_help_command("rename-command <selector> <title>", "Send the agent rename command"),
+        format_help_command("session-note read --session-id <id> [--project-id id] [--json]", "Read the note attached to the session's agent conversation"),
+        format_help_command("session-note save --session-id <id> [--project-id id] --note '<text>' [--json]", "Attach a note to the session's agent conversation; an empty note clears it"),
     ]
     .join("\n");
 
@@ -322,16 +324,12 @@ pub fn usage() -> String {
             "Show general Ghostex CLI discovery and agent skill setup",
         ),
         format_help_command(
-            "agent-orchestration --help",
-            "Show Ghostex Agent Orchestration skill setup",
-        ),
-        format_help_command(
             "fable-5.6-orchestration --help",
             "Show Ghostex Fable 5.6 Orchestration skill setup",
         ),
         format_help_command(
-            "find-prev-session --help",
-            "Show Ghostex Find Previous Session skill setup",
+            "manage-beads --help",
+            "Show Ghostex Manage Beads project-board skill setup",
         ),
         format_help_command(
             "generate-title --help",
@@ -471,9 +469,12 @@ What the skill teaches:
   resulting state.
 
 Specialized workflows:
-  Use $ghostex-manage-automations, $ghostex-agent-orchestration,
-  $ghostex-embedded-browser-use,
-  $ghostex-browser-use, or $ghostex-computer-use when their domain applies.
+  Everyday Ghostex work (sessions, orchestration, automations, quick actions,
+  chat queues, prompt history, server, diagnostics) is covered by ghostex --help
+  and the focused help pages. Use $ghostex-embedded-browser-use,
+  $ghostex-browser-use, $ghostex-computer-use, $ghostex-manage-beads,
+  $ghostex-fable-5.6-orchestration, $ghostex-auto-rename-session, or
+  $ghostex-move-codex-session when their domain applies.
 "
     .to_string()
 }
@@ -485,7 +486,6 @@ pub fn automations_usage() -> String {
 
 Usage:
   gx automations --help
-  gx automations install-skill [--json]
   gx automation-state --path <project-path>
   gx automation-save --path <project-path> --definition-json '<json>'
 
@@ -843,25 +843,25 @@ Fallback:
     .to_string()
 }
 
-pub fn agent_orchestration_usage() -> String {
-    "Ghostex Agent Orchestration - install the agent skill for Ghostex CLI coordination
+pub fn manage_beads_usage() -> String {
+    "Ghostex Manage Beads - install the agent skill for the project board workflow
 
 Usage:
-  gx agent-orchestration --help
-  gx agent-orchestration install-skill [--json]
+  gx manage-beads --help
+  gx manage-beads install-skill [--json]
 
 Agent skill:
-  Use $ghostex-agent-orchestration when a task needs Ghostex session or agent
-  coordination from the CLI.
+  Use $ghostex-manage-beads when managing Ghostex project board beads with the
+  machine-installed `bd` Beads CLI.
 
 What the skill teaches:
-  Read ghostex --help first, then use commands such as sessions --json,
-  create-session, create-agent, send-message, read-text --lines, focus, sleep,
-  wake, kill, wait-for, and assert-card.
+  The project swimlane workflow (backlog, in_progress, test, review, close),
+  progress comments humans can follow, session-link comments, external refs,
+  and safe examples for review beads.
 
 Boundary:
-  Use Ghostex CLI commands instead of raw zmx/tmux control when coordinating
-  panes inside Ghostex.
+  Use the machine-installed `bd` CLI directly; do not depend on a bundled
+  Ghostex copy of Beads.
 "
     .to_string()
 }
@@ -887,28 +887,6 @@ What the skill teaches:
 Boundary:
   Use Ghostex CLI commands instead of raw zmx/tmux control when coordinating
   panes inside Ghostex.
-"
-    .to_string()
-}
-
-pub fn find_prev_session_usage() -> String {
-    "Ghostex Find Previous Session - install the agent skill for Zehn history search
-
-Usage:
-  gx find-prev-session --help
-  gx find-prev-session install-skill [--json]
-
-Agent skill:
-  Use $ghostex-find-prev-session when a user wants to find, inspect, resume, or
-  fork a previous agent session with Ghostex's bundled Zehn search.
-
-Supported agents:
-  Claude Code, Codex, Pi, OpenCode, Cursor Agent, and Grok.
-
-What the skill teaches:
-  Read ghostex find --help, narrow by a distinctive prompt phrase and optional
-  --agent filter, then use Zehn's interactive picker to inspect, resume, copy,
-  or fork the selected session without guessing session ids.
 "
     .to_string()
 }
@@ -1013,7 +991,7 @@ mod tests {
     #[test]
     fn focused_automation_help_documents_skill_and_definition_contract() {
         let text = automations_usage();
-        assert!(text.contains("gx automations install-skill [--json]"));
+        assert!(!text.contains("install-skill"));
         assert!(text.contains("automation-save --path path --definition-json json"));
         assert!(text.contains("Repeating definition JSON:"));
         assert!(text.contains(r#"{"kind":"timer","delayMs":1800000}"#));
@@ -1026,8 +1004,10 @@ mod tests {
     fn cli_skill_help_routes_to_specialized_workflows() {
         let text = cli_usage();
         assert!(text.contains("gx cli install-skill [--json]"));
-        assert!(text.contains("$ghostex-manage-automations"));
-        assert!(text.contains("$ghostex-agent-orchestration"));
+        assert!(!text.contains("$ghostex-manage-automations"));
+        assert!(!text.contains("$ghostex-agent-orchestration"));
+        assert!(text.contains("$ghostex-manage-beads"));
+        assert!(text.contains("$ghostex-embedded-browser-use"));
     }
 
     #[test]

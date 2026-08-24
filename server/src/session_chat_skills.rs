@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use serde_json::{json, Value};
@@ -31,11 +32,12 @@ struct SessionChatSkill {
 
 /*
 CDXC:SessionChatSkills 2026-08-15:
-Chat skill mentions are discovered by gxserver on the session's machine. The
-root ownership mirrors Agents Hub: shared ~/.agents skills belong to Claude
-and Codex, while provider-owned roots are visible only to that provider. A
-project contributes its own .agents/.claude roots without letting a client
-submit arbitrary scan paths.
+Chat skill mentions are discovered by gxserver on the session's machine. Grok
+Build owns a resolved catalog that includes bundled skills and collision-safe
+invocation names, so its own `inspect` output is authoritative. Other agents
+use their provider-owned roots plus the shared Claude/Codex roots. A project
+contributes its own .agents/.claude roots without letting a client submit
+arbitrary scan paths.
 */
 pub fn read_session_chat_skills(
     paths: &GxserverPaths,
@@ -43,6 +45,9 @@ pub fn read_session_chat_skills(
     project_path: Option<&Path>,
 ) -> Value {
     let agent_id = normalize_agent_id(agent_id);
+    if agent_id == "grok" {
+        return read_grok_session_chat_skills(paths, project_path);
+    }
     let mut roots = Vec::<(PathBuf, SkillRootSpec)>::new();
 
     if let Some(project_path) = project_path.filter(|path| path.is_absolute()) {
@@ -117,6 +122,95 @@ pub fn read_session_chat_skills(
 
     json!({
         "agentId": agent_id,
+        "generatedAt": chrono::Utc::now().to_rfc3339(),
+        "skills": skills.into_iter().map(skill_to_value).collect::<Vec<_>>(),
+    })
+}
+
+fn read_grok_session_chat_skills(paths: &GxserverPaths, project_path: Option<&Path>) -> Value {
+    let working_directory = project_path
+        .filter(|path| path.is_absolute())
+        .unwrap_or(&paths.home_dir);
+    let installed_grok = paths
+        .home_dir
+        .join(".grok")
+        .join("bin")
+        .join(format!("grok{}", std::env::consts::EXE_SUFFIX));
+    let grok_command = installed_grok
+        .is_file()
+        .then_some(installed_grok)
+        .unwrap_or_else(|| PathBuf::from("grok"));
+    let inspected = Command::new(grok_command)
+        .args(["inspect", "--json"])
+        .current_dir(working_directory)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| serde_json::from_slice::<Value>(&output.stdout).ok());
+
+    let mut seen_skill_paths = HashSet::new();
+    let mut skills = inspected
+        .as_ref()
+        .and_then(|value| value.get("skills"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|skill| skill.get("userInvocable").and_then(Value::as_bool) != Some(false))
+        .filter_map(|skill| {
+            let skill_file_path = skill
+                .get("source")
+                .and_then(Value::as_object)
+                .and_then(|source| source.get("path"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)?;
+            let directory_path = skill_file_path.parent()?.to_path_buf();
+            let identity =
+                fs::canonicalize(&skill_file_path).unwrap_or_else(|_| skill_file_path.clone());
+            if !seen_skill_paths.insert(identity) {
+                return None;
+            }
+            let name = skill
+                .get("invocableAs")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .or_else(|| {
+                    skill
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                })?
+                .to_string();
+            let source_kind = match skill
+                .get("source")
+                .and_then(Value::as_object)
+                .and_then(|source| source.get("type"))
+                .and_then(Value::as_str)
+            {
+                Some("project") => "repository",
+                Some("plugin") => "pluginCache",
+                _ => "global",
+            };
+            Some(SessionChatSkill {
+                directory_path,
+                skill_file_path,
+                name,
+                source_kind,
+            })
+        })
+        .collect::<Vec<_>>();
+    skills.sort_by(|left, right| {
+        left.name
+            .to_ascii_lowercase()
+            .cmp(&right.name.to_ascii_lowercase())
+            .then_with(|| left.directory_path.cmp(&right.directory_path))
+    });
+
+    json!({
+        "agentId": "grok",
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "skills": skills.into_iter().map(skill_to_value).collect::<Vec<_>>(),
     })

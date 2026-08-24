@@ -4,4 +4,4 @@ interface:
   default_prompt: 'Use $ghostex-embedded-browser-use to control a Ghostex embedded browser pane through the Ghostex CLI entrypoint.'
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

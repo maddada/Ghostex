@@ -52,7 +52,7 @@ function ghostexCliNotice(env: SimEnvState): SimTipsNotice | undefined {
     id: 'ghostex-cli-not-accessible',
     severity: 'warning',
     title: 'Ghostex CLI is not accessible',
-    body: 'Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install Browser/Computer/Orchestration agent skills.',
+    body: 'Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install the Ghostex CLI/Browser/Computer agent skills.',
   };
 }
 

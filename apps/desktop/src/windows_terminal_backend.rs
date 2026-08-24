@@ -49,12 +49,12 @@ pub(crate) enum WindowsWslSetupPhase {
 #[cfg(target_os = "windows")]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WindowsWslGhostexCliStatus {
-    pub(crate) agent_orchestration_skill_path: Option<String>,
+    pub(crate) cli_skill_path: Option<String>,
     pub(crate) browser_skill_path: Option<String>,
     pub(crate) computer_use_skill_path: Option<String>,
     pub(crate) embedded_browser_skill_path: Option<String>,
     pub(crate) fable56_orchestration_skill_path: Option<String>,
-    pub(crate) find_prev_session_skill_path: Option<String>,
+    pub(crate) manage_beads_skill_path: Option<String>,
     pub(crate) generate_title_skill_path: Option<String>,
     pub(crate) ghostex_path: Option<String>,
     pub(crate) gx_blocked_by_existing_command: bool,
@@ -219,9 +219,9 @@ printf '%s\n' \
   "$(test -f "$skills_root/ghostex-browser-use/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-embedded-browser-use/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-computer-use/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-agent-orchestration/SKILL.md" && printf 1 || printf 0)" \
+  "$(test -f "$skills_root/ghostex-cli/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-fable-5.6-orchestration/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-find-prev-session/SKILL.md" && printf 1 || printf 0)" \
+  "$(test -f "$skills_root/ghostex-manage-beads/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-auto-rename-session/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-move-codex-session/SKILL.md" && printf 1 || printf 0)"
 "#,
@@ -244,9 +244,9 @@ printf '%s\n' \
             "ghostex-browser-use",
             "ghostex-embedded-browser-use",
             "ghostex-computer-use",
-            "ghostex-agent-orchestration",
+            "ghostex-cli",
             "ghostex-fable-5.6-orchestration",
-            "ghostex-find-prev-session",
+            "ghostex-manage-beads",
             "ghostex-auto-rename-session",
             "ghostex-move-codex-session",
         ];
@@ -264,9 +264,9 @@ printf '%s\n' \
             browser_skill_path: skill_paths.next().flatten(),
             embedded_browser_skill_path: skill_paths.next().flatten(),
             computer_use_skill_path: skill_paths.next().flatten(),
-            agent_orchestration_skill_path: skill_paths.next().flatten(),
+            cli_skill_path: skill_paths.next().flatten(),
             fable56_orchestration_skill_path: skill_paths.next().flatten(),
-            find_prev_session_skill_path: skill_paths.next().flatten(),
+            manage_beads_skill_path: skill_paths.next().flatten(),
             generate_title_skill_path: skill_paths.next().flatten(),
             move_codex_session_skill_path: skill_paths.next().flatten(),
             ghostex_path,
@@ -1563,8 +1563,8 @@ pub(crate) fn resolve_current() -> Result<ResolvedWindowsTerminalBackend, String
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn prepare_gxserver_for_current_settings()
--> Result<ResolvedWindowsTerminalBackend, String> {
+pub(crate) fn prepare_gxserver_for_current_settings(
+) -> Result<ResolvedWindowsTerminalBackend, String> {
     platform::prepare_gxserver(current_preference(), &mut |_| {})
 }
 

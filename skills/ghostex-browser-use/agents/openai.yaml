@@ -4,4 +4,4 @@ interface:
   default_prompt: 'Use $ghostex-browser-use to inspect and operate a supported browser page through the Cua Driver CLI, not MCP.'
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

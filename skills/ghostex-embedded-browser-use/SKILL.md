@@ -7,6 +7,7 @@ description: >-
   console logs, DOM snapshots, clicks, fills, key presses, evaluation, and
   screenshots. Use ghostex-browser-use instead for external browsers through
   Cua Driver's CLI.
+disable-model-invocation: true
 ---
 
 # ghostex-embedded-browser-use

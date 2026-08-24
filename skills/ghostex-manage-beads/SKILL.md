@@ -7,6 +7,7 @@ description: >-
   with the current Ghostex or Codex session. It covers the project swimlane
   workflow, session-link comments, external refs, and safe examples for making
   review beads like the current session association workflow.
+disable-model-invocation: true
 ---
 
 # ghostex-manage-beads

@@ -10,9 +10,9 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallBrowserControl,
     InstallBrowserUseSkill,
     InstallComputerUseSkill,
-    InstallAgentOrchestrationSkill,
+    InstallCliSkill,
     InstallFable56OrchestrationSkill,
-    InstallFindPrevSessionSkill,
+    InstallManageBeadsSkill,
     InstallGenerateTitleSkill,
     InstallMoveCodexSessionSkill,
     FinishDesktopControlSetup {
@@ -30,9 +30,9 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallBrowserControl => "installBrowserControl",
             Self::InstallBrowserUseSkill => "installBrowserUseSkill",
             Self::InstallComputerUseSkill => "installComputerUseSkill",
-            Self::InstallAgentOrchestrationSkill => "installAgentOrchestrationSkill",
+            Self::InstallCliSkill => "installCliSkill",
             Self::InstallFable56OrchestrationSkill => "installFable56OrchestrationSkill",
-            Self::InstallFindPrevSessionSkill => "installFindPrevSessionSkill",
+            Self::InstallManageBeadsSkill => "installManageBeadsSkill",
             Self::InstallGenerateTitleSkill => "installGenerateTitleSkill",
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
@@ -47,14 +47,14 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallBrowserControl => "Ghostex Embedded Browser Use installed",
             Self::InstallBrowserUseSkill => "Ghostex Browser Use installed",
             Self::InstallComputerUseSkill => "Ghostex Computer Use installed",
-            Self::InstallAgentOrchestrationSkill => "Ghostex Agent Orchestration installed",
+            Self::InstallCliSkill => "Ghostex CLI skill installed",
             Self::InstallFable56OrchestrationSkill => "Ghostex Fable 5.6 Orchestration installed",
-            Self::InstallFindPrevSessionSkill => "Ghostex Find Previous Session installed",
+            Self::InstallManageBeadsSkill => "Ghostex Manage Beads installed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session installed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
-            } => "Cua Driver updated",
+            } => "Trycua updated",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control installed",
             Self::UninstallBundledAgentSkill(_) => "Agent skill uninstalled",
             Self::UninstallBundledAgentSkills => "Bundled agent skills uninstalled",
@@ -67,16 +67,16 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallBrowserControl => "Ghostex Embedded Browser Use install failed",
             Self::InstallBrowserUseSkill => "Ghostex Browser Use install failed",
             Self::InstallComputerUseSkill => "Ghostex Computer Use install failed",
-            Self::InstallAgentOrchestrationSkill => "Ghostex Agent Orchestration install failed",
+            Self::InstallCliSkill => "Ghostex CLI skill install failed",
             Self::InstallFable56OrchestrationSkill => {
                 "Ghostex Fable 5.6 Orchestration install failed"
             }
-            Self::InstallFindPrevSessionSkill => "Ghostex Find Previous Session install failed",
+            Self::InstallManageBeadsSkill => "Ghostex Manage Beads install failed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session install failed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
-            } => "Cua Driver update failed",
+            } => "Trycua update failed",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control setup incomplete",
             Self::UninstallBundledAgentSkill(_) => "Bundled agent skill uninstall failed",
             Self::UninstallBundledAgentSkills => "Bundled agent skill uninstall failed",
@@ -146,11 +146,11 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 "Ghostex Computer Use",
             )
         }
-        GpuiGhostexCliSettingsAction::InstallAgentOrchestrationSkill => {
+        GpuiGhostexCliSettingsAction::InstallCliSkill => {
             gpui_install_bundled_ghostex_skill_action(
                 action,
-                &["agent-orchestration", "install-skill"],
-                "Ghostex Agent Orchestration",
+                &["cli", "install-skill"],
+                "Ghostex CLI",
             )
         }
         GpuiGhostexCliSettingsAction::InstallFable56OrchestrationSkill => {
@@ -160,11 +160,11 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 "Ghostex Fable 5.6 Orchestration",
             )
         }
-        GpuiGhostexCliSettingsAction::InstallFindPrevSessionSkill => {
+        GpuiGhostexCliSettingsAction::InstallManageBeadsSkill => {
             gpui_install_bundled_ghostex_skill_action(
                 action,
-                &["find-prev-session", "install-skill"],
-                "Ghostex Find Previous Session",
+                &["manage-beads", "install-skill"],
+                "Ghostex Manage Beads",
             )
         }
         GpuiGhostexCliSettingsAction::InstallGenerateTitleSkill => {
@@ -259,35 +259,39 @@ pub(crate) fn gpui_gte_install_result_from_command_result(
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub(crate) const GPUI_CUA_DRIVER_RELEASES_URL: &str =
-    "https://github.com/trycua/cua/releases?q=cua-driver-rs&expanded=true";
 pub(crate) const GPUI_CUA_DRIVER_INSTALL_COMMAND_ID: &str = "ghostex.gpui.installCuaDriver";
 pub(crate) const GPUI_CUA_DRIVER_UPDATE_COMMAND_ID: &str = "ghostex.gpui.updateCuaDriver";
+pub(crate) const GPUI_CUA_DRIVER_INSTALL_TAB_TITLE: &str = "Install Trycua";
 #[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_INSTALL_TAB_TITLE: &str = "Install Cua Driver";
+pub(crate) const GPUI_CUA_DRIVER_UPDATE_TAB_TITLE: &str = "Update Trycua";
+pub(crate) const GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE: &str = "The official Trycua installer is running in a command terminal tab. Plugin status updates when it finishes.";
 #[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_UPDATE_TAB_TITLE: &str = "Update Cua Driver";
-#[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE: &str = "The official Cua Driver installer is running in a command terminal tab. Plugin status updates when it finishes.";
-#[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE: &str = "Cua Driver is checking for and applying the latest official update in a command terminal tab. Plugin status updates when it finishes.";
+pub(crate) const GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE: &str = "Trycua is checking for and applying the latest official update in a command terminal tab. Plugin status updates when it finishes.";
 
 /*
 CDXC:GPUIDesktopControlSettings 2026-08-09:
-macOS owns the in-app Cua Driver lifecycle. A missing driver runs trycua's
+macOS owns the in-app Trycua lifecycle. A missing driver runs trycua's
 official installer; an existing driver performs a fresh update check and then
-uses its canonical self-updater. Windows and Linux intentionally do not run an
-installer from Ghostex yet and open the Cua GitHub releases page instead.
+uses its canonical self-updater.
+
+CDXC:TrycuaPrerequisite 2026-08-24:
+Every desktop platform now runs the official Trycua installer in a command-pane
+tab instead of sending Windows and Linux to a downloads page, so Settings can
+show one exact command and one button that runs it. Windows Ghostex terminals
+are WSL shells, so the Windows command must cross the interop boundary through
+`powershell.exe`; Trycua installs on the Windows side and is not reachable as a
+Linux binary inside the distribution.
 */
-#[cfg(target_os = "macos")]
-pub(crate) const GPUI_CUA_DRIVER_POSIX_INSTALL_COMMAND: &str =
+#[cfg(not(target_os = "windows"))]
+pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
     "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
+#[cfg(target_os = "windows")]
+pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
+    "powershell.exe -NoProfile -Command \"irm https://cua.ai/driver/install.ps1 | iex\"";
 #[cfg(target_os = "macos")]
 pub(crate) const GPUI_CUA_DRIVER_START_COMMAND: &str =
     "/usr/bin/open -n -g -a CuaDriver --args serve";
 
-#[cfg(target_os = "macos")]
 pub(crate) struct GpuiCuaDriverCommandAction {
     pub(crate) command: String,
     pub(crate) command_id: &'static str,
@@ -296,28 +300,31 @@ pub(crate) struct GpuiCuaDriverCommandAction {
     pub(crate) toast_title: &'static str,
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_cua_driver_command_action() -> GpuiCuaDriverCommandAction {
+    #[cfg(target_os = "macos")]
     if let Some(cua_driver_path) = gpui_cua_driver_executable_path() {
         let executable = gpui_shell_single_quote_path(&cua_driver_path);
-        GpuiCuaDriverCommandAction {
+        return GpuiCuaDriverCommandAction {
             command: format!(
                 "{executable} check-update --no-cache && {executable} update --apply && {GPUI_CUA_DRIVER_START_COMMAND}"
             ),
             command_id: GPUI_CUA_DRIVER_UPDATE_COMMAND_ID,
             running_message: GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE,
             tab_title: GPUI_CUA_DRIVER_UPDATE_TAB_TITLE,
-            toast_title: "Updating Cua Driver",
-        }
-    } else {
-        GpuiCuaDriverCommandAction {
-            command: format!(
-                "{GPUI_CUA_DRIVER_POSIX_INSTALL_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}"
-            ),
-            command_id: GPUI_CUA_DRIVER_INSTALL_COMMAND_ID,
-            running_message: GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE,
-            tab_title: GPUI_CUA_DRIVER_INSTALL_TAB_TITLE,
-            toast_title: "Installing Cua Driver",
-        }
+            toast_title: "Updating Trycua",
+        };
+    }
+
+    #[cfg(target_os = "macos")]
+    let command = format!("{GPUI_TRYCUA_INSTALL_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}");
+    #[cfg(not(target_os = "macos"))]
+    let command = GPUI_TRYCUA_INSTALL_COMMAND.to_string();
+
+    GpuiCuaDriverCommandAction {
+        command,
+        command_id: GPUI_CUA_DRIVER_INSTALL_COMMAND_ID,
+        running_message: GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE,
+        tab_title: GPUI_CUA_DRIVER_INSTALL_TAB_TITLE,
+        toast_title: "Installing Trycua",
     }
 }

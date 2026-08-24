@@ -1,6 +1,7 @@
 ---
 name: ghostex-move-codex-session
 description: Explain how to fork an existing Codex CLI session into another folder by using `/status` to get the session id and `codex fork --yolo -C TARGET_FOLDER SESSION_ID`. Use when a user asks to move the current Codex session, change the Codex working directory, fork a Codex conversation into a different project folder, or continue a Codex thread under another workspace root as a separate session.
+disable-model-invocation: true
 ---
 
 # ghostex-move-codex-session

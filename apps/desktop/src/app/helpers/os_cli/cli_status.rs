@@ -42,12 +42,12 @@ pub(crate) fn gpui_civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiGhostexCliProbe {
-    pub(crate) agent_orchestration_skill_path: Option<String>,
+    pub(crate) cli_skill_path: Option<String>,
     pub(crate) browser_skill_path: Option<String>,
     pub(crate) computer_use_skill_path: Option<String>,
     pub(crate) embedded_browser_skill_path: Option<String>,
     pub(crate) fable56_orchestration_skill_path: Option<String>,
-    pub(crate) find_prev_session_skill_path: Option<String>,
+    pub(crate) manage_beads_skill_path: Option<String>,
     pub(crate) generate_title_skill_path: Option<String>,
     pub(crate) ghostex_path: Option<String>,
     pub(crate) ghostex_usable: bool,
@@ -61,12 +61,12 @@ pub(crate) struct GpuiGhostexCliProbe {
 pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
     let status = windows_terminal_backend::ghostex_cli_status()?;
     Ok(GpuiGhostexCliProbe {
-        agent_orchestration_skill_path: status.agent_orchestration_skill_path,
+        cli_skill_path: status.cli_skill_path,
         browser_skill_path: status.browser_skill_path,
         computer_use_skill_path: status.computer_use_skill_path,
         embedded_browser_skill_path: status.embedded_browser_skill_path,
         fable56_orchestration_skill_path: status.fable56_orchestration_skill_path,
-        find_prev_session_skill_path: status.find_prev_session_skill_path,
+        manage_beads_skill_path: status.manage_beads_skill_path,
         generate_title_skill_path: status.generate_title_skill_path,
         ghostex_usable: status.ghostex_path.is_some(),
         ghostex_path: status.ghostex_path,
@@ -95,12 +95,12 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gpui_is_file(&path).then(|| gpui_path_string(&path))
     };
     Ok(GpuiGhostexCliProbe {
-        agent_orchestration_skill_path: skill_path("ghostex-agent-orchestration"),
+        cli_skill_path: skill_path("ghostex-cli"),
         browser_skill_path: skill_path("ghostex-browser-use"),
         computer_use_skill_path: skill_path("ghostex-computer-use"),
         embedded_browser_skill_path: skill_path("ghostex-embedded-browser-use"),
         fable56_orchestration_skill_path: skill_path("ghostex-fable-5.6-orchestration"),
-        find_prev_session_skill_path: skill_path("ghostex-find-prev-session"),
+        manage_beads_skill_path: skill_path("ghostex-manage-beads"),
         generate_title_skill_path: skill_path("ghostex-auto-rename-session"),
         ghostex_path: ghostex_path.as_ref().map(|path| gpui_path_string(path)),
         ghostex_usable,
@@ -126,9 +126,9 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
     let browser_skill_installed = probe.browser_skill_path.is_some();
     let embedded_browser_skill_installed = probe.embedded_browser_skill_path.is_some();
     let computer_use_skill_installed = probe.computer_use_skill_path.is_some();
-    let agent_orchestration_skill_installed = probe.agent_orchestration_skill_path.is_some();
+    let cli_skill_installed = probe.cli_skill_path.is_some();
     let fable56_orchestration_skill_installed = probe.fable56_orchestration_skill_path.is_some();
-    let find_prev_session_skill_installed = probe.find_prev_session_skill_path.is_some();
+    let manage_beads_skill_installed = probe.manage_beads_skill_path.is_some();
     let generate_title_skill_installed = probe.generate_title_skill_path.is_some();
     let move_codex_session_skill_installed = probe.move_codex_session_skill_path.is_some();
     let cua_driver_path = gpui_cua_driver_executable_path();
@@ -187,20 +187,20 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
             } else {
                 "Ghostex Embedded Browser Use skill is not installed.".to_string()
             });
-            parts.push(if agent_orchestration_skill_installed {
-                "Ghostex Agent Orchestration skill is installed.".to_string()
+            parts.push(if cli_skill_installed {
+                "Ghostex CLI skill is installed.".to_string()
             } else {
-                "Ghostex Agent Orchestration skill is not installed.".to_string()
+                "Ghostex CLI skill is not installed.".to_string()
             });
             parts.push(if fable56_orchestration_skill_installed {
                 "Ghostex Fable 5.6 Orchestration skill is installed.".to_string()
             } else {
                 "Ghostex Fable 5.6 Orchestration skill is not installed.".to_string()
             });
-            parts.push(if find_prev_session_skill_installed {
-                "Ghostex Find Previous Session skill is installed.".to_string()
+            parts.push(if manage_beads_skill_installed {
+                "Ghostex Manage Beads skill is installed.".to_string()
             } else {
-                "Ghostex Find Previous Session skill is not installed.".to_string()
+                "Ghostex Manage Beads skill is not installed.".to_string()
             });
             parts.push(if generate_title_skill_installed {
                 "Ghostex Auto Rename Session skill is installed.".to_string()
@@ -226,8 +226,8 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         });
 
     serde_json::json!({
-        "agentOrchestrationSkillInstalled": agent_orchestration_skill_installed,
-        "agentOrchestrationSkillPath": probe.agent_orchestration_skill_path,
+        "cliSkillInstalled": cli_skill_installed,
+        "cliSkillPath": probe.cli_skill_path,
         "browserSkillInstalled": browser_skill_installed,
         "browserSkillPath": probe.browser_skill_path,
         "computerUseSkillInstalled": computer_use_skill_installed,
@@ -237,6 +237,13 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "cuaAppInstalled": cua_app_installed,
         "cuaDriverAccessibilityPermissionGranted": cua_permission_status.accessibility_granted,
         "cuaDriverInstalled": cua_driver_installed,
+        /*
+        CDXC:TrycuaPrerequisite 2026-08-24:
+        Settings shows the exact command its Install Trycua button runs, so the
+        command string is published by the host that owns it instead of being
+        guessed per platform in React.
+        */
+        "cuaDriverInstallCommand": GPUI_TRYCUA_INSTALL_COMMAND,
         "cuaDriverLatestVersion": cua_driver_update_status.latest_version,
         "cuaDriverManagedUpdatesSupported": cfg!(target_os = "macos"),
         "cuaDriverPermissionDetail": cua_permission_status.detail,
@@ -247,8 +254,8 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "detail": detail,
         "fable56OrchestrationSkillInstalled": fable56_orchestration_skill_installed,
         "fable56OrchestrationSkillPath": probe.fable56_orchestration_skill_path,
-        "findPrevSessionSkillInstalled": find_prev_session_skill_installed,
-        "findPrevSessionSkillPath": probe.find_prev_session_skill_path,
+        "manageBeadsSkillInstalled": manage_beads_skill_installed,
+        "manageBeadsSkillPath": probe.manage_beads_skill_path,
         "generatedAt": gpui_status_generated_at(),
         "generateTitleSkillInstalled": generate_title_skill_installed,
         "generateTitleSkillPath": probe.generate_title_skill_path,

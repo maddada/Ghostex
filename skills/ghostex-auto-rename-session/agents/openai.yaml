@@ -4,4 +4,4 @@ interface:
   default_prompt: 'Use $ghostex-auto-rename-session to create a title under 60 characters and submit `/rename <title>` in the current Ghostex session.'
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

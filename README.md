@@ -139,7 +139,7 @@ Supported hosts: macOS and linux (tested on ubuntu x64 and arm64)<br />
 
 Agents can launch other agent session using the "ghostex" cli command.
 You can ask Claude Code to launch Codex sub-agents and send prompts there/read their output.
-Write your own skills that use the /ghostex-agent-orchestration skill.
+Write your own skills that use the /ghostex-cli skill.
 
 <img width="3454" height="2068" alt="image" src="https://github.com/user-attachments/assets/9332bb11-1e99-4be5-9016-e4cc14638cea" />
 

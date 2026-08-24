@@ -8,6 +8,7 @@ description: >-
   Fable verifier pane that checks every acceptance criterion, and spawns
   targeted Codex fixer panes for any findings until verification passes or
   the fix loop cap is reached.
+disable-model-invocation: true
 ---
 
 # ghostex-fable-5.6-orchestration
@@ -19,7 +20,7 @@ Plan → implement → verify → fix pipeline over Ghostex panes:
 - **Verifier:** one Fable (`claude-fable-5`) pane, reused across re-verification rounds.
 - **Fixers:** additional Codex panes, one per independent verifier finding.
 
-Use `$ghostex-agent-orchestration` conventions for all CLI interaction; run
+Use `$ghostex-cli` conventions for all CLI interaction; run
 `ghostex --help` when unsure about command shapes.
 
 ## Step 0: Efforts and context

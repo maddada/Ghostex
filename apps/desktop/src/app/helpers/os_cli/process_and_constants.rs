@@ -361,9 +361,9 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-browser-use",
     "ghostex-embedded-browser-use",
     "ghostex-computer-use",
-    "ghostex-agent-orchestration",
+    "ghostex-cli",
     "ghostex-fable-5.6-orchestration",
-    "ghostex-find-prev-session",
+    "ghostex-manage-beads",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
 ];

@@ -1,11 +1,15 @@
 ---
 name: ghostex-cli
 description: >-
-  Use this skill when operating Ghostex through the `ghostex` or `gx` CLI for
-  workspace, project, session, quick-action, automation, server, UI, or
-  diagnostic tasks. It teaches help-first command discovery, stable target
-  selection, JSON inspection, safe execution, verification, and routing to
-  Ghostex's more specialized skills.
+  Use this skill for anything involving Ghostex or the `ghostex`/`gx` CLI:
+  projects and workspaces, terminal panes and sessions, agent orchestration
+  (creating agent sessions, messaging agents, reading their output, queueing
+  prompts, sleeping/waking/killing sessions), scheduled automations, the
+  Kanban/Beads project board, quick actions, session chat and prompt queues,
+  prompt history and previous-session search/resume/fork, server management,
+  UI controls, logs, screenshots, and diagnostics. It teaches help-first
+  command discovery, stable target selection, JSON inspection, safe execution,
+  verification, and routing to Ghostex's more specialized skills.
 ---
 
 # ghostex-cli
@@ -28,7 +32,6 @@ command names or flags.
    ghostex quick-actions --help
    ghostex browser --help
    ghostex server --help
-   ghostex agent-orchestration --help
    ```
 
 3. Inspect current state before choosing a target. Prefer JSON where offered:
@@ -45,12 +48,20 @@ command names or flags.
 
 ## Routing
 
-- Use `$ghostex-manage-automations` for scheduled project automations.
-- Use `$ghostex-agent-orchestration` for coordinating panes or agent sessions.
-- Use the latest machine-installed `bd` CLI directly for Project Board bead workflows.
+Everyday Ghostex work — sessions, orchestration, automations, quick actions,
+chat queues, prompt history, server, diagnostics — is covered by the CLI help
+above. Route to a specialized skill only when its domain applies:
+
 - Use `$ghostex-embedded-browser-use` for browser panes inside Ghostex.
 - Use `$ghostex-browser-use` for supported external browser page content.
 - Use `$ghostex-computer-use` for native desktop application control.
+- Use `$ghostex-manage-beads` for Project Board bead workflows through the
+  machine-installed `bd` CLI.
+- Use `$ghostex-fable-5.6-orchestration` for the Fable-planned,
+  Codex-implemented, Fable-verified multi-pane pipeline.
+- Use `$ghostex-auto-rename-session` when asked to generate a session title.
+- Use `$ghostex-move-codex-session` to fork a Codex session into another
+  folder.
 
 Keep using this skill's inspect, act, and verify loop alongside the specialized
 workflow.

@@ -40,7 +40,7 @@ export function getCuaPermissionStatus(
     return { status: 'Checking', tone: 'neutral' };
   }
   if (ghostexCliStatus?.cuaDriverInstalled !== true) {
-    return { status: 'Driver Not Installed', tone: 'warning' };
+    return { status: 'Trycua Not Installed', tone: 'warning' };
   }
 
   const accessibilityGranted = ghostexCliStatus.cuaDriverAccessibilityPermissionGranted;
@@ -100,17 +100,16 @@ export function IntegrationsSettingsTab({
   onAppShotsEnabledChange,
   onAppShotsHotkeyChange,
   onAppShotsMetadataEnabledChange,
-  onInstallAgentOrchestrationSkill,
+  onInstallCliSkill,
   onInstallBrowserControl,
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
   onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
-  onInstallFindPrevSessionSkill,
+  onInstallManageBeadsSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
-  onOpenExternalUrl,
   onUninstallBundledAgentSkill,
   onUninstallBundledAgentSkills,
   onOpenAccessibilityPreferences,
@@ -127,17 +126,16 @@ export function IntegrationsSettingsTab({
   onAppShotsEnabledChange: (checked: boolean) => void;
   onAppShotsHotkeyChange: (hotkey: AppShotsHotkey) => void;
   onAppShotsMetadataEnabledChange: (checked: boolean) => void;
-  onInstallAgentOrchestrationSkill?: () => void;
+  onInstallCliSkill?: () => void;
   onInstallBrowserControl?: () => void;
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
-  onInstallFindPrevSessionSkill?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
-  onOpenExternalUrl?: (url: string) => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
   onOpenAccessibilityPreferences?: () => void;
@@ -150,8 +148,8 @@ export function IntegrationsSettingsTab({
   const cliReady = ghostexCliStatus?.installed === true;
   /**
    * CDXC:CuaPermissions 2026-05-29-06:00:
-   * Cua Permissions status must be based on Cua Driver's own permission check,
-   * because granting Cua Driver in macOS can still leave Ghostex's separate
+   * Trycua Permissions status must be based on Trycua's own permission check,
+   * because granting Trycua in macOS can still leave Ghostex's separate
    * Accessibility trust bit false. The row represents desktop automation
    * readiness for agents, not Ghostex's ability to synthesize input.
    */
@@ -163,7 +161,7 @@ export function IntegrationsSettingsTab({
         {/*
          * CDXC:IntegrationsSetup 2026-05-27-04:17:
          * Settings owns one Integrations tab for post-onboarding CLI, bundled
-         * Ghostex skills, and macOS privacy permissions. The Cua Driver runtime
+         * Ghostex skills, and macOS privacy permissions. The Trycua runtime
          * lifecycle itself belongs to Plugins.
          *
          * CDXC:AgentHookSettings 2026-06-29-01:26:
@@ -229,14 +227,13 @@ export function IntegrationsSettingsTab({
                 ghostexCliStatus={ghostexCliStatus}
                 ghostexCliStatusLoading={ghostexCliStatusLoading}
                 onInstallCuaDriver={onInstallCuaDriver}
-                onOpenExternalUrl={onOpenExternalUrl}
                 onInstallSkill={{
-                  agentOrchestration: onInstallAgentOrchestrationSkill,
+                  cli: onInstallCliSkill,
                   browserUse: onInstallBrowserUseSkill,
                   computerUse: onInstallComputerUseSkill,
                   embeddedBrowserUse: onInstallBrowserControl,
                   fable56Orchestration: onInstallFable56OrchestrationSkill,
-                  findPrevSession: onInstallFindPrevSessionSkill,
+                  manageBeads: onInstallManageBeadsSkill,
                   generateTitle: onInstallGenerateTitleSkill,
                   moveCodexSession: onInstallMoveCodexSessionSkill,
                 }}
@@ -309,11 +306,11 @@ export function IntegrationsSettingsTab({
 
             {showIntegrationRow('cuaPermissions') ? (
               <IntegrationSettingsRow
-                description='Cua Driver needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.'
+                description='Trycua needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.'
                 icon={IconSettings}
                 status={cuaPermissionStatus.status}
                 tone={cuaPermissionStatus.tone}
-                title='Cua Permissions'
+                title='Trycua Permissions'
               >
                 <SettingButton
                   disabled={!onOpenAccessibilityPreferences}

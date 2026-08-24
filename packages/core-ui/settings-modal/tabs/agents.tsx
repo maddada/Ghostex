@@ -101,12 +101,12 @@ export function hasRemovableAgentHooks(agentHookStatus: SidebarAgentHookStatusMe
 
 export function hasInstalledBundledAgentSkills(ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined): boolean {
   return (
-    ghostexCliStatus?.agentOrchestrationSkillInstalled === true ||
+    ghostexCliStatus?.cliSkillInstalled === true ||
     ghostexCliStatus?.browserSkillInstalled === true ||
     ghostexCliStatus?.embeddedBrowserSkillInstalled === true ||
     ghostexCliStatus?.computerUseSkillInstalled === true ||
     ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
-    ghostexCliStatus?.findPrevSessionSkillInstalled === true ||
+    ghostexCliStatus?.manageBeadsSkillInstalled === true ||
     ghostexCliStatus?.generateTitleSkillInstalled === true ||
     ghostexCliStatus?.moveCodexSessionSkillInstalled === true
   );

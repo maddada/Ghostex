@@ -160,7 +160,7 @@ export function createTitlebarGhostexCliNotice(
     return undefined;
   }
   return {
-    body: 'Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install Browser/Computer/Orchestration agent skills.',
+    body: 'Install or repair the CLI to use ghostex/gx in any terminal, attach mobile clients, and install the Ghostex CLI/Browser/Computer agent skills.',
     icon: 'warning',
     id: 'ghostex-cli-not-accessible',
     settingsTarget: 'ghostexCli',

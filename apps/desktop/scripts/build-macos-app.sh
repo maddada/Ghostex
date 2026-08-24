@@ -137,12 +137,11 @@ completion_sound_assets=(
 
 bundled_cli_skill_assets=(
 	ghostex-browser-use
+	ghostex-embedded-browser-use
 	ghostex-computer-use
 	ghostex-cli
-	ghostex-manage-automations
-	ghostex-agent-orchestration
 	ghostex-fable-5.6-orchestration
-	ghostex-find-prev-session
+	ghostex-manage-beads
 	ghostex-auto-rename-session
 	ghostex-move-codex-session
 )

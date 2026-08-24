@@ -93,16 +93,16 @@ describe('settings modal source', () => {
      */
     const tabRailStyles = sourceBetween(
       sidebarStylesSource,
-      '.app-modal-tab-rail[data-slot="tabs-list"] {',
-      '.app-modal-tab-rail [data-slot="tabs-trigger"]:hover'
+      ".app-modal-tab-rail[data-slot='tabs-list'] {",
+      ".app-modal-tab-rail [data-slot='tabs-trigger']:hover"
     );
     expect(tabRailStyles).toContain('border: 1px solid #252525 !important;');
     expect(tabRailStyles).toContain('border: 0 !important;');
-    expect(tabRailStyles).toContain('.app-modal-tab-rail [data-slot="tabs-trigger"] + [data-slot="tabs-trigger"]');
+    expect(tabRailStyles).toContain(".app-modal-tab-rail [data-slot='tabs-trigger'] + [data-slot='tabs-trigger']");
     expect(tabRailStyles).toContain('border-left: 1px solid #252525 !important;');
-    expect(settingsModalSource).not.toContain('<TabsList className="app-modal-tab-rail">');
+    expect(settingsModalSource).not.toContain("<TabsList className='app-modal-tab-rail'>");
     expect(settingsModalSource).not.toContain('settings-modal-tabs-scroll');
-    expect(agentsHubModalSource).toContain('<TabsList className="agents-hub-tabs-list app-modal-tab-rail">');
+    expect(agentsHubModalSource).toContain("<TabsList className='agents-hub-tabs-list app-modal-tab-rail'>");
   });
 
   test('keeps Settings page navigation and Show Advanced inside the sidebar', () => {
@@ -138,7 +138,7 @@ describe('settings modal source', () => {
      */
     const settingsSidebar = sourceBetween(
       settingsModalSource,
-      '<aside aria-label="Settings pages and sections" className="settings-section-sidebar">',
+      "<aside aria-label='Settings pages and sections' className='settings-section-sidebar'>",
       '</aside>'
     );
     expect(settingsSidebar).toContain('settings-sidebar-tabs-list');
@@ -149,8 +149,8 @@ describe('settings modal source', () => {
     expect(settingsModalSource).toContain('const showAdvancedSettings = draft.showAdvancedSettings;');
     expect(settingsModalSource).not.toContain('const [showAdvancedSettings, setShowAdvancedSettings]');
     expect(settingsModalPersistenceSource).toContain('showAdvancedSettings: checked');
-    expect(settingsSidebar).toContain('<PageIcon aria-hidden="true" data-icon="inline-start" />');
-    expect(settingsSidebar).toContain('className="settings-sidebar-page-title truncate"');
+    expect(settingsSidebar).toContain("<PageIcon aria-hidden='true' data-icon='inline-start' />");
+    expect(settingsSidebar).toContain("className='settings-sidebar-page-title truncate'");
     expect(settingsModalSource).not.toContain('settings-show-advanced-anchor');
     for (const categoryIcon of [
       'icon: IconSettings',
@@ -167,7 +167,7 @@ describe('settings modal source', () => {
     }
     const subsectionButton = sourceBetween(
       settingsSidebar,
-      'className="settings-section-sidebar-button settings-sidebar-subsection-button"',
+      "className='settings-section-sidebar-button settings-sidebar-subsection-button'",
       '</Button>'
     );
     expect(subsectionButton).toContain('{section.title}');
@@ -176,13 +176,13 @@ describe('settings modal source', () => {
     const sidebarContainerStyles = sourceBetween(
       sidebarStylesSource,
       '.ghostex-settings-shadcn .settings-section-sidebar {',
-      '.ghostex-settings-shadcn .settings-sidebar-tabs-list[data-slot="tabs-list"] {'
+      ".ghostex-settings-shadcn .settings-sidebar-tabs-list[data-slot='tabs-list'] {"
     );
     expect(sidebarContainerStyles).toContain('top: -1px;');
     const sidebarPageRowStyles = sourceBetween(
       sidebarStylesSource,
       '.ghostex-settings-shadcn .settings-sidebar-page-row {',
-      '.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"] {'
+      ".ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger'] {"
     );
     expect(sidebarPageRowStyles).toContain(
       '.settings-sidebar-page-row:has(.settings-sidebar-tab-trigger[data-active])'
@@ -191,8 +191,8 @@ describe('settings modal source', () => {
     expect(sidebarPageRowStyles).toContain('including the disclosure chevron');
     const sidebarTriggerStyles = sourceBetween(
       sidebarStylesSource,
-      '.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"] {',
-      '.ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot="tabs-trigger"]:hover'
+      ".ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger'] {",
+      ".ghostex-settings-shadcn .settings-sidebar-tab-trigger[data-slot='tabs-trigger']:hover"
     );
     expect(sidebarTriggerStyles).toContain('gap: 0.5rem;');
     expect(sidebarTriggerStyles).toContain('.settings-sidebar-page-title');
@@ -205,7 +205,7 @@ describe('settings modal source', () => {
       'color: color-mix(in srgb, var(--muted-foreground) 72%, var(--background));'
     );
     expect(sidebarSubsectionStyles).toContain('padding-left: calc(0.625rem + 14px) !important;');
-    expect(sidebarSubsectionStyles).toContain('.settings-sidebar-subsection-button[data-active="true"]');
+    expect(sidebarSubsectionStyles).toContain(".settings-sidebar-subsection-button[data-active='true']");
     expect(sidebarSubsectionStyles).toContain('background: transparent !important;');
     expect(sidebarSubsectionStyles).toContain('color: var(--foreground);');
     expect(sidebarSubsectionStyles).not.toContain('background: var(--accent);');
@@ -253,12 +253,12 @@ describe('settings modal source', () => {
      */
     const dialogHeader = sourceBetween(
       settingsModalSource,
-      '<DialogHeader className="ghostex-modal-heading-bar">',
+      "<DialogHeader className='ghostex-modal-heading-bar'>",
       '</DialogHeader>'
     );
     expect(dialogHeader).toContain('Ghostex Settings');
-    expect(dialogHeader).toContain('!isFirstLaunchSetup && "sr-only"');
-    expect(settingsModalSource).not.toContain('aria-label="Close Settings"');
+    expect(dialogHeader).toContain("!isFirstLaunchSetup && 'sr-only'");
+    expect(settingsModalSource).not.toContain("aria-label='Close Settings'");
     expect(settingsModalSource).not.toContain('ghostex-modal-icon-close');
   });
 
@@ -274,11 +274,11 @@ describe('settings modal source', () => {
      */
     const headerSearch = sourceBetween(
       settingsModalSource,
-      '<div className="settings-modal-search-row">',
-      'toolbarClassName="settings-modal-search-toolbar"'
+      "<div className='settings-modal-search-row'>",
+      "toolbarClassName='settings-modal-search-toolbar'"
     );
     expect(headerSearch).toContain('<SidebarSessionSearchField');
-    expect(headerSearch).toContain('placeholder="Search settings"');
+    expect(headerSearch).toContain("placeholder='Search settings'");
   });
 
   test('keeps focused text fields from being redirected into settings search', () => {
@@ -310,8 +310,8 @@ describe('settings modal source', () => {
     );
     const headerSearch = sourceBetween(
       settingsModalSource,
-      '<div className="settings-modal-search-row">',
-      'toolbarClassName="settings-modal-search-toolbar"'
+      "<div className='settings-modal-search-row'>",
+      "toolbarClassName='settings-modal-search-toolbar'"
     );
     const textField = sourceBetween(
       settingsModalFieldsSource,
@@ -361,14 +361,14 @@ describe('settings modal source', () => {
       'function AgentHookStatusIcon'
     );
 
-    expect(navigation).not.toContain('title: "Hooks & Skills"');
+    expect(navigation).not.toContain("title: 'Hooks & Skills'");
     expect(settingsModalSource).not.toContain('hooksSkills');
-    expect(settingsModalSource).not.toContain('title="Hooks & Skills"');
+    expect(settingsModalSource).not.toContain("title='Hooks & Skills'");
     expect(settingsModalSource).not.toContain('search.sections.recovery');
-    expect(integrationsTab).not.toContain('title="Agent Hooks"');
+    expect(integrationsTab).not.toContain("title='Agent Hooks'");
     expect(integrationsTab).not.toContain('Install Hooks');
     expect(integrationsTab).not.toContain('Uninstall Hooks');
-    expect(agentsTab).toContain('<SettingsSection title="Agent Hooks">');
+    expect(agentsTab).toContain("<SettingsSection title='Agent Hooks'>");
     expect(agentsTab).toContain('agentHooksAvailableForUninstall');
     expect(agentsTab).toContain('Uninstall All');
     expect(agentsTab).toContain('onClick={() => onUninstallAgentHooks?.()}');
@@ -390,13 +390,13 @@ describe('settings modal source', () => {
      */
     const betaSearch = sourceBetween(
       settingsModalSearchCatalogSource,
-      'beta: getSettingsSectionSearch(settingsSearchQuery, "Experimental", [',
-      'debugging: getSettingsSectionSearch(settingsSearchQuery, "Debugging", ['
+      "beta: getSettingsSectionSearch(settingsSearchQuery, 'Experimental', [",
+      "debugging: getSettingsSectionSearch(settingsSearchQuery, 'Debugging', ["
     );
     const betaSection = sourceBetween(
       settingsModalSource,
-      '<SettingsSection sectionRef={betaSectionRef} title="Experimental">',
-      '{mainSubsectionVisible("debugging", settingsSearch.debugging) ? ('
+      "<SettingsSection sectionRef={betaSectionRef} title='Experimental'>",
+      "{mainSubsectionVisible('debugging', settingsSearch.debugging) ? ("
     );
     const mainVisibility = sourceBetween(
       settingsModalVisibilitySource,
@@ -409,7 +409,7 @@ describe('settings modal source', () => {
     expect(settingsModalSource).toContain('Keep awake for working sessions');
     expect(betaSection).toContain('Title bar and Power settings: Keep Awake');
     expect(betaSection).toContain('Keep Awake title-bar button');
-    expect(mainVisibility).toContain('sectionId === "power" && !keepAwakeSettingsVisible');
+    expect(mainVisibility).toContain("sectionId === 'power' && !keepAwakeSettingsVisible");
     expect(settingsModalSource).toContain('system: powerSectionRef');
     expect(mainVisibility).toContain('first-launch lid-close preference');
   });
@@ -432,24 +432,24 @@ describe('settings modal source', () => {
     );
     const debuggingSection = sourceBetween(
       settingsModalSource,
-      '<SettingsSection sectionRef={debuggingSectionRef} title="Debugging">',
+      "<SettingsSection sectionRef={debuggingSectionRef} title='Debugging'>",
       '{!isFirstLaunchSetup && !hasVisibleMainSettings ? ('
     );
 
-    expect(dependentKeys).toContain('"diagnosticLogging"');
-    expect(dependentKeys).toContain('"showSessionCommandCopyActions"');
-    expect(dependentKeys).toContain('"showSessionDetailsCopyAction"');
+    expect(dependentKeys).toContain("'diagnosticLogging'");
+    expect(dependentKeys).toContain("'showSessionCommandCopyActions'");
+    expect(dependentKeys).toContain("'showSessionDetailsCopyAction'");
     expect(debuggingVisibility).toContain('DEBUGGING_MODE_DEPENDENT_SETTING_KEY_SET.has(settingKey)');
-    expect(debuggingVisibility).toContain('sectionId === "debugging"');
+    expect(debuggingVisibility).toContain("sectionId === 'debugging'");
     expect(debuggingVisibility).toContain('subsectionMatchesGroupedSectionTitle(sectionId)');
-    expect(debuggingVisibility).toContain('shouldShowSetting(sectionResult, "debuggingMode", showAdvancedSettings)');
+    expect(debuggingVisibility).toContain("shouldShowSetting(sectionResult, 'debuggingMode', showAdvancedSettings)");
     expect(debuggingVisibility).toContain(
       'const hasVisibleMainSettings = visibleMainSettingsSectionNavigation.length > 0;'
     );
-    expect(debuggingSection).toContain('debuggingSettingVisible("debuggingMode")');
-    expect(debuggingSection).toContain('debuggingSettingVisible("diagnosticLogging")');
-    expect(debuggingSection).toContain('debuggingSettingVisible("showSessionCommandCopyActions")');
-    expect(debuggingSection).toContain('debuggingSettingVisible("showSessionDetailsCopyAction")');
+    expect(debuggingSection).toContain("debuggingSettingVisible('debuggingMode')");
+    expect(debuggingSection).toContain("debuggingSettingVisible('diagnosticLogging')");
+    expect(debuggingSection).toContain("debuggingSettingVisible('showSessionCommandCopyActions')");
+    expect(debuggingSection).toContain("debuggingSettingVisible('showSessionDetailsCopyAction')");
     expect(debuggingSection).toContain('Turn on to reveal debug-only controls and allow routine diagnostic logging.');
   });
 
@@ -487,7 +487,7 @@ describe('settings modal source', () => {
     const selectField = sourceBetween(settingsModalFieldsSource, 'function SelectField', 'function StaticNoteField');
     const fieldsSourceWithoutSettingsSelect = settingsModalFieldsSource.replace(settingsSelect, '');
 
-    expect(settingsModalFieldsSource).toContain('import { flushSync } from "react-dom";');
+    expect(settingsModalFieldsSource).toContain("import { flushSync } from 'react-dom';");
     expect(settingsSelect).toContain('const [selectOpen, setSelectOpen] = useState(false);');
     expect(settingsSelect).toContain('flushSync(() => {');
     expect(settingsSelect).toContain('onOpenChange={(nextOpen, eventDetails) => {');
@@ -509,16 +509,16 @@ describe('settings modal source', () => {
     const settingsNavigation = sourceFrom(settingsModalSearchCatalogSource, 'const mainSettingsSectionNavigation');
     const devServersSection = sourceBetween(
       settingsModalSource,
-      'title="Dev Servers"',
-      '{mainSubsectionVisible("editor", settingsSearch.editor) ? ('
+      "title='Dev Servers'",
+      "{mainSubsectionVisible('editor', settingsSearch.editor) ? ("
     );
 
     expect(sectionKeys).toContain('terminalDevServerDetectionEnabled');
     expect(sectionKeys).not.toContain('terminalDevServerOpenTarget');
     expect(sectionKeys).toContain('terminalDevServerIgnoredPortRules');
-    expect(settingsNavigation).toContain('id: "tools"');
+    expect(settingsNavigation).toContain("id: 'tools'");
     expect(settingsNavigation).toContain('mainSettingsGroupSearch.tools');
-    expect(settingsModalSource).toContain('"terminalDevServers"');
+    expect(settingsModalSource).toContain("'terminalDevServers'");
     expect(devServersSection).not.toContain('WEB_LINK_OPEN_TARGET_OPTIONS');
     expect(devServersSection).not.toContain('TerminalDevServerBrowserTargetsField');
     expect(devServersSection).toContain('TerminalDevServerIgnoredPortsField');
@@ -535,13 +535,13 @@ describe('settings modal source', () => {
     const terminalSectionKeys = sourceBetween(settingsModalTypesSource, 'terminal: [', 'tools: [');
     const terminalSearch = sourceBetween(
       settingsModalSearchCatalogSource,
-      'terminal: getSettingsSectionSearch(settingsSearchQuery, "Terminal", [',
-      'terminalBehavior: getSettingsSectionSearch(settingsSearchQuery, "Terminal Behavior", ['
+      "terminal: getSettingsSectionSearch(settingsSearchQuery, 'Terminal', [",
+      "terminalBehavior: getSettingsSectionSearch(settingsSearchQuery, 'Terminal Behavior', ["
     );
     const terminalSection = sourceBetween(
       settingsModalSource,
-      'title="Terminal"',
-      '{mainSubsectionVisible("terminalBehavior", settingsSearch.terminalBehavior) ? ('
+      "title='Terminal'",
+      "{mainSubsectionVisible('terminalBehavior', settingsSearch.terminalBehavior) ? ("
     );
 
     expect(terminalSectionKeys).toContain('terminalPaneHorizontalPaddingPx');
@@ -550,8 +550,8 @@ describe('settings modal source', () => {
     expect(terminalSearch).toContain('Vertical Padding');
     expect(terminalSection).toContain('MAX_TERMINAL_PANE_PADDING_PX');
     expect(terminalSection).toContain('MIN_TERMINAL_PANE_PADDING_PX');
-    expect(terminalSection).toContain('updateDraft("terminalPaneHorizontalPaddingPx"');
-    expect(terminalSection).toContain('updateDraft("terminalPaneVerticalPaddingPx"');
+    expect(terminalSection).toContain("updateDraft('terminalPaneHorizontalPaddingPx'");
+    expect(terminalSection).toContain("updateDraft('terminalPaneVerticalPaddingPx'");
   });
 
   test('closes the custom tint picker dialog before final setting commits', () => {
@@ -582,10 +582,10 @@ describe('settings modal source', () => {
     const projectsPanel = sourceFrom(settingsModalProjectsTabSource, 'function ProjectsSettingsPanel');
     const selectedProjectEditor = sourceFrom(
       settingsModalProjectsTabSource,
-      '<Card className="settings-project-command-card">'
+      "<Card className='settings-project-command-card'>"
     );
 
-    expect(projectsPanel).not.toContain('type: "removeProject"');
+    expect(projectsPanel).not.toContain("type: 'removeProject'");
     expect(projectsPanel).not.toContain('removeSelectedProject');
     expect(projectsPanel).not.toContain('Remove project');
     expect(selectedProjectEditor).not.toContain('<IconTrash');
@@ -600,13 +600,13 @@ describe('settings modal source', () => {
     const projectsPanel = sourceFrom(settingsModalProjectsTabSource, 'function ProjectsSettingsPanel');
     const settingsModalProjectsTab = sourceBetween(
       settingsModalSource,
-      '<TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="projects">',
+      "<TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='projects'>",
       '</TabsContent>'
     );
 
     expect(projectsPanel.indexOf('<PortlessGlobalSettingsPanel')).toBeGreaterThanOrEqual(0);
     expect(projectsPanel.indexOf('<PortlessGlobalSettingsPanel')).toBeLessThan(
-      projectsPanel.indexOf('className="projects-settings-selector"')
+      projectsPanel.indexOf("className='projects-settings-selector'")
     );
     expect(settingsModalProjectsTab).toContain('portless={portless}');
     expect(settingsModalStylesSource).toContain('.settings-projects-global-settings');
@@ -621,7 +621,7 @@ describe('settings modal source', () => {
      */
     const settingsModalProjectsTab = sourceBetween(
       settingsModalSource,
-      '<TabsContent className="mt-0 min-h-0 flex-1 overflow-hidden" value="projects">',
+      "<TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='projects'>",
       '</TabsContent>'
     );
     const globalPanel = sourceBetween(
@@ -631,15 +631,15 @@ describe('settings modal source', () => {
     );
 
     expect(settingsModalProjectsTab).toContain(
-      'onPortlessEnabledChange={(checked) => updateDraft("portlessEnabled", checked)}'
+      "onPortlessEnabledChange={(checked) => updateDraft('portlessEnabled', checked)}"
     );
     expect(settingsModalProjectsTab).toContain(
-      'onPortlessProtocolChange={(protocol) => updateDraft("portlessProtocol", protocol)}'
+      "onPortlessProtocolChange={(protocol) => updateDraft('portlessProtocol', protocol)}"
     );
     expect(globalPanel).toContain('checked={settings.portlessEnabled}');
-    expect(globalPanel).toContain('value={[settings.portlessProtocol]}');
-    expect(settingsModalPortlessTabSource).toContain('{ label: "HTTPS", value: "https" }');
-    expect(settingsModalPortlessTabSource).toContain('{ label: "HTTP", value: "http" }');
+    expect(globalPanel).toContain('value={settings.portlessProtocol}');
+    expect(settingsModalPortlessTabSource).toContain("{ label: 'HTTPS', value: 'https' }");
+    expect(settingsModalPortlessTabSource).toContain("{ label: 'HTTP', value: 'http' }");
   });
 
   test('keeps Portless settings actions explicit and sanitized', () => {
@@ -653,17 +653,17 @@ describe('settings modal source', () => {
     const sharedSettingsCommand = sourceBetween(
       sharedSidebarContractSource,
       'Settings -> Projects exposes explicit Portless setup actions',
-      'type: "postponePortlessSetupPrompt"'
+      "type: 'postponePortlessSetupPrompt'"
     );
 
-    expect(projectsPanel).toContain('type: "runPortlessSettingsAdminAction"');
-    expect(projectsPanel).toContain('action === "remove"');
+    expect(projectsPanel).toContain("type: 'runPortlessSettingsAdminAction'");
+    expect(projectsPanel).toContain("action === 'remove'");
     expect(projectsPanel).toContain('protocol: settings.portlessProtocol');
     expect(settingsModalPortlessTabSource).toContain('onClick={() => onEnabledChange(false)}');
-    expect(settingsModalPortlessTabSource).toContain('remove: "Remove background proxy"');
+    expect(settingsModalPortlessTabSource).toContain("remove: 'Remove background proxy'");
     expect(sharedSettingsCommand).toContain('action: NativePortlessAdminInstallAction;');
     expect(sharedSettingsCommand).toContain('protocol: NativePortlessProtocol;');
-    expect(sharedSettingsCommand).toContain('action: "remove";');
+    expect(sharedSettingsCommand).toContain("action: 'remove';");
   });
 
   test('shows assigned Portless domains as read-only project and worktree summaries', () => {
@@ -683,7 +683,7 @@ describe('settings modal source', () => {
       'function getPortlessAssignedDomainsEmptyMessage'
     );
 
-    expect(domainsSummary).toContain('aria-label="Assigned Portless domains"');
+    expect(domainsSummary).toContain("aria-label='Assigned Portless domains'");
     expect(domainsSummary).toContain('settings-portless-domain-hostname');
     expect(domainsSummary).toContain('Generated project and worktree domains are read-only.');
     expect(domainsSummary).not.toContain('SettingsInput');
@@ -718,23 +718,23 @@ describe('settings modal source', () => {
     );
     const appIconSearch = sourceBetween(
       settingsModalSearchCatalogSource,
-      'appIcon: getSettingsSectionSearch(settingsSearchQuery, "App Icon", [',
-      'browser: getSettingsSectionSearch(settingsSearchQuery, "Browser", ['
+      "appIcon: getSettingsSectionSearch(settingsSearchQuery, 'App Icon', [",
+      "browser: getSettingsSectionSearch(settingsSearchQuery, 'Browser', ["
     );
     const appIconField = sourceBetween(settingsModalFieldsSource, 'function AppIconPickerField', 'function SoundField');
 
     // Section is registered as advanced and grouped under Appearance.
-    expect(settingsNavigation).toContain('id: "appearance"');
-    expect(settingsNavigation).not.toContain('id: "appIcon"');
+    expect(settingsNavigation).toContain("id: 'appearance'");
+    expect(settingsNavigation).not.toContain("id: 'appIcon'");
     expect(settingsNavigation).toContain('mainSettingsGroupSearch.appearance');
     expect(settingsModalSource).toContain('appIcon: appIconSectionRef');
-    expect(advancedMainSettings).toContain('"appIconSourceId"');
+    expect(advancedMainSettings).toContain("'appIconSourceId'");
     expect(appIconSearch).toContain('appIconSourceId');
 
     // Exact outbound wire-contract messages used by the simplified UI.
-    expect(settingsModalEffectsSource).toContain('vscode.postMessage({ type: "listAppIcons" });');
-    expect(settingsModalAppIconSource).toContain('vscode.postMessage({ type: "setAppIcon", sourceId });');
-    expect(settingsModalAppIconSource).toContain('vscode.postMessage({ type: "pickAppIconFile" });');
+    expect(settingsModalEffectsSource).toContain("vscode.postMessage({ type: 'listAppIcons' });");
+    expect(settingsModalAppIconSource).toContain("vscode.postMessage({ type: 'setAppIcon', sourceId });");
+    expect(settingsModalAppIconSource).toContain("vscode.postMessage({ type: 'pickAppIconFile' });");
     expect(settingsModalAppIconSource).not.toContain('revealAppIconsFolder');
 
     // Inbound appIconState is prop-driven (relayed via the modal host like
@@ -747,22 +747,22 @@ describe('settings modal source', () => {
     // Confirm-before-persist: only an ok prop state writes appIconSourceId.
     expect(settingsModalAppIconSource).toContain('if (appIconState.ok) {');
     expect(settingsModalAppIconSource).toContain('handledAppIconStateRef.current === appIconState');
-    expect(settingsModalAppIconSource).toContain('updateDraft("appIconSourceId", confirmedSourceId);');
-    expect(settingsModalActionsSource).toContain('vscode?.postMessage({ type: "setAppIcon", sourceId: "" });');
+    expect(settingsModalAppIconSource).toContain("updateDraft('appIconSourceId', confirmedSourceId);");
+    expect(settingsModalActionsSource).toContain("vscode?.postMessage({ type: 'setAppIcon', sourceId: '' });");
 
     // The field is one preview plus Select Image; no gallery, reveal action, or
     // separate reset button. The preview X selects the empty/default source id.
-    expect(appIconField).toContain('const defaultIcon = allIcons.find((icon) => icon.id === "");');
-    expect(appIconField).toContain('const icons = allIcons.filter((icon) => icon.id !== "");');
+    expect(appIconField).toContain("const defaultIcon = allIcons.find((icon) => icon.id === '');");
+    expect(appIconField).toContain("const icons = allIcons.filter((icon) => icon.id !== '');");
     expect(appIconField).toContain('Select Image');
     expect(appIconField).toContain('Use default icon');
-    expect(appIconField).toContain('onClick={() => onSelect("")}');
+    expect(appIconField).toContain("onClick={() => onSelect('')}");
     expect(appIconField).not.toContain('Choose File');
     expect(appIconField).not.toContain('Reveal in Finder');
     expect(appIconField).not.toContain('Reset to default');
     expect(settingsModalSource).not.toContain('function AppIconPickerTile');
     expect(settingsModalSource).toContain(
-      'description="Changes the Dock and app-switcher icon. The app file icon may also change when macOS allows it."'
+      "description='Changes the Dock and app-switcher icon. The app file icon may also change when macOS allows it.'"
     );
   });
 

@@ -249,13 +249,13 @@ export type SettingsModalProps = {
   onOpenScreenRecordingPreferences?: () => void;
   onOpenGhostexFolder?: () => void;
   onGhosttySettingsAction?: (action: GhosttySettingsAction) => void;
-  onInstallAgentOrchestrationSkill?: () => void;
+  onInstallCliSkill?: () => void;
   onInstallBrowserControl?: () => void;
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
   onInstallFable56OrchestrationSkill?: () => void;
-  onInstallFindPrevSessionSkill?: () => void;
+  onInstallManageBeadsSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
@@ -311,13 +311,13 @@ export function SettingsModal({
   onOpenScreenRecordingPreferences,
   onOpenGhostexFolder,
   onGhosttySettingsAction,
-  onInstallAgentOrchestrationSkill,
+  onInstallCliSkill,
   onInstallBrowserControl,
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
   onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
-  onInstallFindPrevSessionSkill,
+  onInstallManageBeadsSkill,
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
@@ -1058,6 +1058,14 @@ export function SettingsModal({
                             ) : null}
                           </SettingsSection>
                         ) : null}
+                        {/*
+                         * CDXC:SettingsNavigation 2026-08-24:
+                         * Keep every General sidebar group's child sections
+                         * contiguous and in MAIN_SETTINGS_SUBSECTION_NAVIGATION
+                         * order. Interleaving groups makes adjacent rail links
+                         * jump across unrelated content and breaks the visible
+                         * hierarchy promised by the navigation.
+                         */}
                         {mainSubsectionVisible('sidebar', settingsSearch.sidebar) ? (
                           <SettingsSection sectionRef={sidebarSectionRef} title='Sidebar'>
                             {/*
@@ -1069,7 +1077,6 @@ export function SettingsModal({
                              */}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarVersion') ? (
                               <SidebarVersionField
-                                badge='New'
                                 description="Classic keeps today's project-grouped sidebar. Inbox (V2) is a flat, position-stable list of sessions across all projects."
                                 label='Sidebar version'
                                 {...getSettingModificationProps('sidebarVersion')}
@@ -1117,10 +1124,10 @@ export function SettingsModal({
                               <SidebarPresetField
                                 activePresetId={activeSidebarSettingsPresetId}
                                 description='Apply a sidebar UI preset.'
-                                isModified={activeSidebarSettingsPresetId !== 'codex'}
+                                isModified={activeSidebarSettingsPresetId !== 'recommended'}
                                 label='Preset'
                                 onChange={updateSidebarSettingsPreset}
-                                onResetToDefault={() => updateSidebarSettingsPreset('codex')}
+                                onResetToDefault={() => updateSidebarSettingsPreset('recommended')}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarProjectGroupStyle') ? (
@@ -1325,6 +1332,15 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('createSessionOnSidebarDoubleClick', checked)}
                               />
                             ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'enableSessionParking') ? (
+                              <ToggleField
+                                checked={draft.enableSessionParking}
+                                description='Add Park to session menus and move parked sessions into a collapsible section at the bottom of the sidebar.'
+                                label='Enable session parking'
+                                {...getSettingModificationProps('enableSessionParking')}
+                                onChange={(checked) => updateDraft('enableSessionParking', checked)}
+                              />
+                            ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'renameSessionOnDoubleClick') ? (
                               <ToggleField
                                 checked={draft.renameSessionOnDoubleClick}
@@ -1338,11 +1354,64 @@ export function SettingsModal({
                           </SettingsSection>
                         ) : null}
 
+                        {mainSubsectionVisible('sessionCards', settingsSearch.sessionCards) ? (
+                          <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
+                            {/* CDXC:SidebarSessionAgentIcons 2026-06-29-23:58: Users need a Session Cards toggle for colored agent brand artwork while the default sidebar remains monochrome and favorite rows no longer gold-tint agent logos. CDXC:SidebarSessionAgentIcons 2026-06-30-22:40: The colored agent icon setting must also color the selected-agent launcher icon so the Mac sidebar picker and session cards use the same agent identity mode. */}
+                            {mainSettingVisible(settingsSearch.sessionCards, 'useColoredSessionAgentIcons') ? (
+                              <ToggleField
+                                checked={draft.useColoredSessionAgentIcons}
+                                description='Render session and selected-agent logos with colored brand artwork instead of monochrome masks.'
+                                label='Use colored agent icons'
+                                {...getSettingModificationProps('useColoredSessionAgentIcons')}
+                                onChange={(checked) => updateDraft('useColoredSessionAgentIcons', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sessionCards, 'showSessionCloseContextMenuAction') ? (
+                              <>
+                                {/*
+                                 * CDXC:SidebarContextMenu 2026-06-10-13:58:
+                                 * Session context menus should hide the destructive Close item by default. Place this opt-in directly above the command-copy opt-in because both settings reveal advanced context-menu actions.
+                                 */}
+                                <ToggleField
+                                  checked={draft.showSessionCloseContextMenuAction}
+                                  description='Show the Close item in session context menus.'
+                                  label='Show Close option in context menu'
+                                  {...getSettingModificationProps('showSessionCloseContextMenuAction')}
+                                  onChange={(checked) => updateDraft('showSessionCloseContextMenuAction', checked)}
+                                />
+                              </>
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
+                        {mainSubsectionVisible('sidebarTags', settingsSearch.sidebarTags) ? (
+                          <SettingsSection sectionRef={sidebarTagsSectionRef} title='Sidebar Tags'>
+                            {mainSettingVisible(settingsSearch.sidebarTags, 'sidebarSessionTagListItems') ? (
+                              <SidebarTagListSettingsField
+                                isModified={
+                                  !areSidebarSessionTagListItemsEqual(
+                                    draft.sidebarSessionTagListItems,
+                                    DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems
+                                  )
+                                }
+                                items={draft.sidebarSessionTagListItems}
+                                onChange={(items) => updateDraft('sidebarSessionTagListItems', items)}
+                                onResetToDefault={() =>
+                                  updateDraft(
+                                    'sidebarSessionTagListItems',
+                                    DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems
+                                  )
+                                }
+                              />
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
                         {mainSubsectionVisible('theming', settingsSearch.theming) ? (
                           <SettingsSection sectionRef={themingSectionRef} title='Theming'>
                             {/*
                   CDXC:SettingsTheming 2026-06-15-21:35:
-                  General settings needs Theming as the second section, separate
+                  General settings needs Theming in the second group, separate
                   from Sidebar layout controls.
 
                   CDXC:SettingsTheming 2026-06-16-01:35:
@@ -1438,6 +1507,28 @@ export function SettingsModal({
                                 {...getSettingModificationProps('workspaceActivePaneBorderColor')}
                                 onChange={(value) => updateDraft('workspaceActivePaneBorderColor', value)}
                                 value={draft.workspaceActivePaneBorderColor}
+                              />
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
+                        {/*
+                         * CDXC:AppIconPicker 2026-06-28-06:05:
+                         * The advanced App Icon section is a custom-image control, not a bundled preset picker. Show one preview, one Select Image action, and an inline X on the custom preview to restore the default icon; omit separate reset and folder-reveal actions so the flow stays direct.
+                         */}
+                        {mainSubsectionVisible('appIcon', settingsSearch.appIcon) ? (
+                          <SettingsSection
+                            description='Changes the Dock and app-switcher icon. The app file icon may also change when macOS allows it.'
+                            sectionRef={appIconSectionRef}
+                            title='App Icon'
+                          >
+                            {mainSettingVisible(settingsSearch.appIcon, 'appIconSourceId') ? (
+                              <AppIconPickerField
+                                advanced={isAdvancedMainSetting('appIconSourceId')}
+                                error={appIconError}
+                                onChooseFile={chooseAppIconFile}
+                                onSelect={selectAppIcon}
+                                state={appIconState}
                               />
                             ) : null}
                           </SettingsSection>
@@ -1555,32 +1646,83 @@ export function SettingsModal({
                           </SettingsSection>
                         ) : null}
 
-                        {mainSubsectionVisible('sessionCards', settingsSearch.sessionCards) ? (
-                          <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
-                            {/* CDXC:SidebarSessionAgentIcons 2026-06-29-23:58: Users need a Session Cards toggle for colored agent brand artwork while the default sidebar remains monochrome and favorite rows no longer gold-tint agent logos. CDXC:SidebarSessionAgentIcons 2026-06-30-22:40: The colored agent icon setting must also color the selected-agent launcher icon so the Mac sidebar picker and session cards use the same agent identity mode. */}
-                            {mainSettingVisible(settingsSearch.sessionCards, 'useColoredSessionAgentIcons') ? (
+                        {mainSubsectionVisible('terminalDevServers', settingsSearch.terminalDevServers) ? (
+                          <SettingsSection
+                            description='Choose how Ghostex discovers running dev servers and which ports stay hidden. Detected URLs follow Browser → Open links in.'
+                            sectionRef={terminalDevServersSectionRef}
+                            title='Dev Servers'
+                          >
+                            {/*
+                             * CDXC:TerminalDevServers 2026-06-23-19:22:
+                             * Dev-server settings are terminal-adjacent app behavior. Keep detection, one launch destination, and ignored port rules together so users can tune server discovery without editing terminal emulator config or managing individual browser targets.
+                             */}
+                            {mainSettingVisible(
+                              settingsSearch.terminalDevServers,
+                              'terminalDevServerDetectionEnabled'
+                            ) ? (
                               <ToggleField
-                                checked={draft.useColoredSessionAgentIcons}
-                                description='Render session and selected-agent logos with colored brand artwork instead of monochrome masks.'
-                                label='Use colored agent icons'
-                                {...getSettingModificationProps('useColoredSessionAgentIcons')}
-                                onChange={(checked) => updateDraft('useColoredSessionAgentIcons', checked)}
+                                checked={draft.terminalDevServerDetectionEnabled}
+                                description='Detect localhost dev server URLs from terminal output.'
+                                label='Detect running servers in terminals'
+                                {...getSettingModificationProps('terminalDevServerDetectionEnabled')}
+                                onChange={(checked) => updateDraft('terminalDevServerDetectionEnabled', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sessionCards, 'showSessionCloseContextMenuAction') ? (
-                              <>
-                                {/*
-                                 * CDXC:SidebarContextMenu 2026-06-10-13:58:
-                                 * Session context menus should hide the destructive Close item by default. Place this opt-in directly above the command-copy opt-in because both settings reveal advanced context-menu actions.
-                                 */}
-                                <ToggleField
-                                  checked={draft.showSessionCloseContextMenuAction}
-                                  description='Show the Close item in session context menus.'
-                                  label='Show Close option in context menu'
-                                  {...getSettingModificationProps('showSessionCloseContextMenuAction')}
-                                  onChange={(checked) => updateDraft('showSessionCloseContextMenuAction', checked)}
-                                />
-                              </>
+                            {mainSettingVisible(
+                              settingsSearch.terminalDevServers,
+                              'terminalDevServerIgnoredPortRules'
+                            ) ? (
+                              <TerminalDevServerIgnoredPortsField
+                                ignoredPortRules={draft.terminalDevServerIgnoredPortRules}
+                                {...getSettingModificationProps('terminalDevServerIgnoredPortRules')}
+                                onChange={(ignoredPortRules) =>
+                                  updateDraft('terminalDevServerIgnoredPortRules', ignoredPortRules)
+                                }
+                              />
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
+                        {mainSubsectionVisible('editor', settingsSearch.editor) ? (
+                          <SettingsSection sectionRef={editorSectionRef} title='Editor'>
+                            {/* CDXC:EditorPanes 2026-06-08-20:12: Embedded code-server panes
+                  use Ghostex-owned bundled editor settings by default so the
+                  macOS VS Code surface starts on Dark 2026. This toggle opts
+                  into linking local VS Code settings, while the Insiders
+                  checkbox only changes the linked config directory. */}
+                            {mainSettingVisible(settingsSearch.editor, 'codeServerLinkVscodeUserConfig') ? (
+                              <ToggleField
+                                advanced={isAdvancedMainSetting('codeServerLinkVscodeUserConfig')}
+                                checked={draft.codeServerLinkVscodeUserConfig}
+                                description='Use local VS Code settings instead of the bundled editor defaults.'
+                                label='Use VS Code settings'
+                                onChange={(checked) => updateDraft('codeServerLinkVscodeUserConfig', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.editor, 'codeServerUseVscodeInsidersUserConfig') ? (
+                              <ToggleField
+                                advanced={isAdvancedMainSetting('codeServerUseVscodeInsidersUserConfig')}
+                                checked={draft.codeServerUseVscodeInsidersUserConfig}
+                                description='Use the VS Code Insiders user settings directory.'
+                                disabled={!draft.codeServerLinkVscodeUserConfig}
+                                disabledReason='Turn on “Link VS Code user settings” first.'
+                                label='Use VS Code Insiders settings'
+                                onChange={(checked) => updateDraft('codeServerUseVscodeInsidersUserConfig', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(
+                              settingsSearch.editor,
+                              'showUntrackedProjectDiffWhenNoTrackedChanges'
+                            ) ? (
+                              <ToggleField
+                                checked={draft.showUntrackedProjectDiffWhenNoTrackedChanges}
+                                description='When tracked git diff is +0 -0, show untracked line counts in project headers.'
+                                label='Show untracked lines without tracked changes'
+                                {...getSettingModificationProps('showUntrackedProjectDiffWhenNoTrackedChanges')}
+                                onChange={(checked) =>
+                                  updateDraft('showUntrackedProjectDiffWhenNoTrackedChanges', checked)
+                                }
+                              />
                             ) : null}
                           </SettingsSection>
                         ) : null}
@@ -2101,109 +2243,6 @@ export function SettingsModal({
                           </SettingsSection>
                         ) : null}
 
-                        {mainSubsectionVisible('terminalDevServers', settingsSearch.terminalDevServers) ? (
-                          <SettingsSection
-                            description='Choose how Ghostex discovers running dev servers and which ports stay hidden. Detected URLs follow Browser → Open links in.'
-                            sectionRef={terminalDevServersSectionRef}
-                            title='Dev Servers'
-                          >
-                            {/*
-                             * CDXC:TerminalDevServers 2026-06-23-19:22:
-                             * Dev-server settings are terminal-adjacent app behavior. Keep detection, one launch destination, and ignored port rules together so users can tune server discovery without editing terminal emulator config or managing individual browser targets.
-                             */}
-                            {mainSettingVisible(
-                              settingsSearch.terminalDevServers,
-                              'terminalDevServerDetectionEnabled'
-                            ) ? (
-                              <ToggleField
-                                checked={draft.terminalDevServerDetectionEnabled}
-                                description='Detect localhost dev server URLs from terminal output.'
-                                label='Detect running servers in terminals'
-                                {...getSettingModificationProps('terminalDevServerDetectionEnabled')}
-                                onChange={(checked) => updateDraft('terminalDevServerDetectionEnabled', checked)}
-                              />
-                            ) : null}
-                            {mainSettingVisible(
-                              settingsSearch.terminalDevServers,
-                              'terminalDevServerIgnoredPortRules'
-                            ) ? (
-                              <TerminalDevServerIgnoredPortsField
-                                ignoredPortRules={draft.terminalDevServerIgnoredPortRules}
-                                {...getSettingModificationProps('terminalDevServerIgnoredPortRules')}
-                                onChange={(ignoredPortRules) =>
-                                  updateDraft('terminalDevServerIgnoredPortRules', ignoredPortRules)
-                                }
-                              />
-                            ) : null}
-                          </SettingsSection>
-                        ) : null}
-
-                        {mainSubsectionVisible('editor', settingsSearch.editor) ? (
-                          <SettingsSection sectionRef={editorSectionRef} title='Editor'>
-                            {/* CDXC:EditorPanes 2026-06-08-20:12: Embedded code-server panes
-                  use Ghostex-owned bundled editor settings by default so the
-                  macOS VS Code surface starts on Dark 2026. This toggle opts
-                  into linking local VS Code settings, while the Insiders
-                  checkbox only changes the linked config directory. */}
-                            {mainSettingVisible(settingsSearch.editor, 'codeServerLinkVscodeUserConfig') ? (
-                              <ToggleField
-                                advanced={isAdvancedMainSetting('codeServerLinkVscodeUserConfig')}
-                                checked={draft.codeServerLinkVscodeUserConfig}
-                                description='Use local VS Code settings instead of the bundled editor defaults.'
-                                label='Use VS Code settings'
-                                onChange={(checked) => updateDraft('codeServerLinkVscodeUserConfig', checked)}
-                              />
-                            ) : null}
-                            {mainSettingVisible(settingsSearch.editor, 'codeServerUseVscodeInsidersUserConfig') ? (
-                              <ToggleField
-                                advanced={isAdvancedMainSetting('codeServerUseVscodeInsidersUserConfig')}
-                                checked={draft.codeServerUseVscodeInsidersUserConfig}
-                                description='Use the VS Code Insiders user settings directory.'
-                                disabled={!draft.codeServerLinkVscodeUserConfig}
-                                disabledReason='Turn on “Link VS Code user settings” first.'
-                                label='Use VS Code Insiders settings'
-                                onChange={(checked) => updateDraft('codeServerUseVscodeInsidersUserConfig', checked)}
-                              />
-                            ) : null}
-                            {mainSettingVisible(
-                              settingsSearch.editor,
-                              'showUntrackedProjectDiffWhenNoTrackedChanges'
-                            ) ? (
-                              <ToggleField
-                                checked={draft.showUntrackedProjectDiffWhenNoTrackedChanges}
-                                description='When tracked git diff is +0 -0, show untracked line counts in project headers.'
-                                label='Show untracked lines without tracked changes'
-                                {...getSettingModificationProps('showUntrackedProjectDiffWhenNoTrackedChanges')}
-                                onChange={(checked) =>
-                                  updateDraft('showUntrackedProjectDiffWhenNoTrackedChanges', checked)
-                                }
-                              />
-                            ) : null}
-                          </SettingsSection>
-                        ) : null}
-
-                        {/*
-                         * CDXC:AppIconPicker 2026-06-28-06:05:
-                         * The advanced App Icon section is a custom-image control, not a bundled preset picker. Show one preview, one Select Image action, and an inline X on the custom preview to restore the default icon; omit separate reset and folder-reveal actions so the flow stays direct.
-                         */}
-                        {mainSubsectionVisible('appIcon', settingsSearch.appIcon) ? (
-                          <SettingsSection
-                            description='Changes the Dock and app-switcher icon. The app file icon may also change when macOS allows it.'
-                            sectionRef={appIconSectionRef}
-                            title='App Icon'
-                          >
-                            {mainSettingVisible(settingsSearch.appIcon, 'appIconSourceId') ? (
-                              <AppIconPickerField
-                                advanced={isAdvancedMainSetting('appIconSourceId')}
-                                error={appIconError}
-                                onChooseFile={chooseAppIconFile}
-                                onSelect={selectAppIcon}
-                                state={appIconState}
-                              />
-                            ) : null}
-                          </SettingsSection>
-                        ) : null}
-
                         {mainSubsectionVisible('autoSleep', settingsSearch.autoSleep) ? (
                           <SettingsSection sectionRef={autoSleepSectionRef} title='Auto Sleep'>
                             {/* CDXC:AutoSleep 2026-05-28-08:32: Auto Sleep controls belong in one Settings section so VS Code, Git, Project, Manage, browser, and agent sessions can be tuned independently without hiding the relationship between the policies. */}
@@ -2476,6 +2515,16 @@ export function SettingsModal({
                           </SettingsSection>
                         ) : null}
 
+                        {mainSubsectionVisible('storage', settingsSearch.storage) ? (
+                          <div ref={storageSectionRef}>
+                            <GhostexFolderStatsSection
+                              isLoading={ghostexFolderStatsLoading}
+                              onOpenGhostexFolder={onOpenGhostexFolder}
+                              stats={ghostexFolderStats}
+                            />
+                          </div>
+                        ) : null}
+
                         {mainSubsectionVisible('sounds', settingsSearch.sounds) ? (
                           <SettingsSection sectionRef={soundsSectionRef} title='Sounds'>
                             {mainSettingVisible(settingsSearch.sounds, 'completionBellEnabled') ? (
@@ -2546,39 +2595,6 @@ export function SettingsModal({
                               />
                             ) : null}
                           </SettingsSection>
-                        ) : null}
-
-                        {mainSubsectionVisible('sidebarTags', settingsSearch.sidebarTags) ? (
-                          <SettingsSection sectionRef={sidebarTagsSectionRef} title='Sidebar Tags'>
-                            {mainSettingVisible(settingsSearch.sidebarTags, 'sidebarSessionTagListItems') ? (
-                              <SidebarTagListSettingsField
-                                isModified={
-                                  !areSidebarSessionTagListItemsEqual(
-                                    draft.sidebarSessionTagListItems,
-                                    DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems
-                                  )
-                                }
-                                items={draft.sidebarSessionTagListItems}
-                                onChange={(items) => updateDraft('sidebarSessionTagListItems', items)}
-                                onResetToDefault={() =>
-                                  updateDraft(
-                                    'sidebarSessionTagListItems',
-                                    DEFAULT_ghostex_SETTINGS.sidebarSessionTagListItems
-                                  )
-                                }
-                              />
-                            ) : null}
-                          </SettingsSection>
-                        ) : null}
-
-                        {mainSubsectionVisible('storage', settingsSearch.storage) ? (
-                          <div ref={storageSectionRef}>
-                            <GhostexFolderStatsSection
-                              isLoading={ghostexFolderStatsLoading}
-                              onOpenGhostexFolder={onOpenGhostexFolder}
-                              stats={ghostexFolderStats}
-                            />
-                          </div>
                         ) : null}
 
                         {mainSubsectionVisible('beta', settingsSearch.beta) ? (
@@ -2757,17 +2773,16 @@ export function SettingsModal({
                       onAppShotsEnabledChange={(checked) => updateDraft('appShotsEnabled', checked)}
                       onAppShotsHotkeyChange={(hotkey) => updateDraft('appShotsHotkey', hotkey)}
                       onAppShotsMetadataEnabledChange={(checked) => updateDraft('appShotsMetadataEnabled', checked)}
-                      onInstallAgentOrchestrationSkill={onInstallAgentOrchestrationSkill}
+                      onInstallCliSkill={onInstallCliSkill}
                       onInstallBrowserControl={onInstallBrowserControl}
                       onInstallBrowserUseSkill={onInstallBrowserUseSkill}
                       onInstallComputerUseSkill={onInstallComputerUseSkill}
                       onInstallCuaDriver={onInstallCuaDriver}
                       onInstallFable56OrchestrationSkill={onInstallFable56OrchestrationSkill}
-                      onInstallFindPrevSessionSkill={onInstallFindPrevSessionSkill}
+                      onInstallManageBeadsSkill={onInstallManageBeadsSkill}
                       onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
                       onInstallGhostexCli={onInstallGhostexCli}
                       onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
-                      onOpenExternalUrl={(url) => vscode?.postMessage({ type: 'openExternalUrl', url })}
                       onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
                       onUninstallBundledAgentSkills={onUninstallBundledAgentSkills}
                       onOpenAccessibilityPreferences={onOpenAccessibilityPreferences}
@@ -2864,12 +2879,10 @@ export function SettingsModal({
                     <ActionsSettingsTab
                       getSettingModificationProps={getSettingModificationProps}
                       hideTabStripNewBrowserButton={draft.hideTabStripNewBrowserButton}
-                      hideTabStripNewChatButton={draft.hideTabStripNewChatButton}
                       hideTabStripNewTerminalButton={draft.hideTabStripNewTerminalButton}
                       onHideTabStripNewBrowserButtonChange={(checked) =>
                         updateDraft('hideTabStripNewBrowserButton', checked)
                       }
-                      onHideTabStripNewChatButtonChange={(checked) => updateDraft('hideTabStripNewChatButton', checked)}
                       onHideTabStripNewTerminalButtonChange={(checked) =>
                         updateDraft('hideTabStripNewTerminalButton', checked)
                       }
@@ -2988,6 +3001,20 @@ function SettingsSidebarNavigation({
   showAdvancedSettings: boolean;
   showAdvancedSettingsId: string;
 }) {
+  const [expandedSections, setExpandedSections] = useState<ReadonlySet<string>>(() => new Set());
+  const sectionDisclosureIdPrefix = useId();
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections((currentSections) => {
+      const nextSections = new Set(currentSections);
+      if (nextSections.has(sectionKey)) {
+        nextSections.delete(sectionKey);
+      } else {
+        nextSections.add(sectionKey);
+      }
+      return nextSections;
+    });
+  };
+
   return (
     <aside aria-label='Settings pages and sections' className='settings-section-sidebar'>
       <TabsList className='settings-sidebar-tabs-list vertical-scroll-fade-mask'>
@@ -3000,12 +3027,13 @@ function SettingsSidebarNavigation({
               className={cn('settings-sidebar-page-group', page.id === 'about' && 'settings-sidebar-page-group-about')}
               key={page.id}
             >
-              <div className='settings-sidebar-page-row'>
+              <div className='settings-sidebar-page-row' data-expanded={String(expanded)}>
                 {/*
                  * CDXC:SettingsNavigation 2026-06-29-21:45:
                  * Expandable Settings sidebar headers must expand and collapse from the full visible header, not only from the disclosure chevron, because the row highlight presents the icon, label, and chevron as one control.
                  */}
                 <TabsTrigger
+                  aria-expanded={hasSections ? expanded : undefined}
                   className='settings-sidebar-tab-trigger'
                   onClick={() => {
                     if (hasSections) {
@@ -3019,6 +3047,7 @@ function SettingsSidebarNavigation({
                 </TabsTrigger>
                 {hasSections ? (
                   <Button
+                    aria-expanded={expanded}
                     aria-label={`${expanded ? 'Collapse' : 'Expand'} ${page.title} sections`}
                     className='settings-sidebar-page-disclosure'
                     onClick={(event) => {
@@ -3036,42 +3065,77 @@ function SettingsSidebarNavigation({
               </div>
               {hasSections && expanded ? (
                 <div className='settings-sidebar-subsection-list'>
-                  {page.sections?.map((section) => (
-                    <Fragment key={section.id}>
-                      <Button
-                        className='settings-section-sidebar-button settings-sidebar-subsection-button'
-                        data-active={section.active ? 'true' : 'false'}
-                        onClick={section.onSelect}
-                        type='button'
-                        variant='ghost'
-                      >
-                        {section.title}
-                      </Button>
-                      {/*
-                       * CDXC:SettingsNavigation 2026-08-19:
-                       * Nested rows belong to the section being read, so they
-                       * appear under the active group only. Showing every
-                       * group's rows at once would turn a nine-row rail into a
-                       * twenty-row one and bury the categories.
-                       */}
-                      {section.active && section.subsections?.length ? (
-                        <div className='settings-sidebar-nested-subsection-list'>
-                          {section.subsections.map((subsection) => (
+                  {page.sections?.map((section) => {
+                    const hasSubsections = Boolean(section.subsections?.length);
+                    const sectionKey = `${page.id}:${section.id}`;
+                    const sectionExpanded = hasSubsections && expandedSections.has(sectionKey);
+                    const subsectionListId = `${sectionDisclosureIdPrefix}-${page.id}-${section.id}`;
+                    return (
+                      <Fragment key={section.id}>
+                        <div className='settings-sidebar-section-row'>
+                          <Button
+                            aria-controls={hasSubsections ? subsectionListId : undefined}
+                            aria-current={section.active ? 'location' : undefined}
+                            aria-expanded={hasSubsections ? sectionExpanded : undefined}
+                            className='settings-section-sidebar-button settings-sidebar-subsection-button'
+                            data-active={section.active ? 'true' : 'false'}
+                            onClick={() => {
+                              section.onSelect();
+                              if (hasSubsections) {
+                                toggleSection(sectionKey);
+                              }
+                            }}
+                            type='button'
+                            variant='ghost'
+                          >
+                            {section.title}
+                          </Button>
+                          {hasSubsections ? (
                             <Button
-                              className='settings-section-sidebar-button settings-sidebar-subsection-button settings-sidebar-nested-subsection-button'
-                              data-active={subsection.active ? 'true' : 'false'}
-                              key={subsection.id}
-                              onClick={subsection.onSelect}
+                              aria-controls={subsectionListId}
+                              aria-expanded={sectionExpanded}
+                              aria-label={`${sectionExpanded ? 'Collapse' : 'Expand'} ${section.title} subsections`}
+                              className='settings-sidebar-section-disclosure'
+                              onClick={() => toggleSection(sectionKey)}
+                              size='icon-xs'
                               type='button'
                               variant='ghost'
                             >
-                              {subsection.title}
+                              {sectionExpanded ? (
+                                <IconChevronDown aria-hidden='true' />
+                              ) : (
+                                <IconChevronRight aria-hidden='true' />
+                              )}
                             </Button>
-                          ))}
+                          ) : null}
                         </div>
-                      ) : null}
-                    </Fragment>
-                  ))}
+                        {/*
+                         * CDXC:SettingsNavigation 2026-08-24:
+                         * Expansion is explicit navigation state, independent
+                         * from the scroll-active section. This keeps an opened
+                         * third-level list stable while scroll tracking updates
+                         * both its parent and exact active subsection.
+                         */}
+                        {sectionExpanded ? (
+                          <div className='settings-sidebar-nested-subsection-list' id={subsectionListId}>
+                            {section.subsections?.map((subsection) => (
+                              <Button
+                                aria-current={subsection.active ? 'location' : undefined}
+                                className='settings-section-sidebar-button settings-sidebar-subsection-button settings-sidebar-nested-subsection-button'
+                                data-active={subsection.active ? 'true' : 'false'}
+                                key={subsection.id}
+                                onClick={subsection.onSelect}
+                                type='button'
+                                variant='ghost'
+                              >
+                                {subsection.title}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>

@@ -132,9 +132,9 @@ export function createGhostexCliStatusMessage(
           : 'Ghostex CLI is installed, but the gx alias is not usable yet.'
       : 'Ghostex CLI auto-install did not find a usable ghostex command on PATH.');
   return {
-    agentOrchestrationSkillInstalled: skills.agentOrchestration,
-    ...(skills.agentOrchestration
-      ? { agentOrchestrationSkillPath: '~/agents/skills/ghostex-agent-orchestration/SKILL.md' }
+    cliSkillInstalled: skills.cli,
+    ...(skills.cli
+      ? { cliSkillPath: '~/agents/skills/ghostex-cli/SKILL.md' }
       : {}),
     browserSkillInstalled: skills.browser,
     ...(skills.browser ? { browserSkillPath: '~/agents/skills/ghostex-browser-use/SKILL.md' } : {}),
@@ -157,9 +157,9 @@ export function createGhostexCliStatusMessage(
           fable56OrchestrationSkillPath: '~/agents/skills/ghostex-fable-5.6-orchestration/SKILL.md',
         }
       : {}),
-    findPrevSessionSkillInstalled: skills.findPrevSession,
-    ...(skills.findPrevSession
-      ? { findPrevSessionSkillPath: '~/agents/skills/ghostex-find-prev-session/SKILL.md' }
+    manageBeadsSkillInstalled: skills.manageBeads,
+    ...(skills.manageBeads
+      ? { manageBeadsSkillPath: '~/agents/skills/ghostex-manage-beads/SKILL.md' }
       : {}),
     generateTitleSkillInstalled: skills.generateTitle,
     ...(skills.generateTitle ? { generateTitleSkillPath: '~/agents/skills/ghostex-generate-title/SKILL.md' } : {}),

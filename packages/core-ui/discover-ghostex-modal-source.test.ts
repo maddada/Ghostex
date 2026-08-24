@@ -50,15 +50,15 @@ describe('discover ghostex modal source', () => {
       expect(discoverModalSource).toContain(screenshotPath);
     }
     expectSourceOrder(discoverModalSource, [
-      'title: "Rich Prompt Editor with Ctrl + G"',
+      "title: 'Rich Prompt Editor with Ctrl + G'",
       'Edit your agent prompts with full hotkeys support and even image previews!',
-      'title: "Chromium Browser with Design Mode"',
+      "title: 'Chromium Browser with Design Mode'",
       'Comes with Devtools, Agent Browser Control, and Profiles mgmt. Your agent can control it with the /ghostex-embedded-browser-use skill.',
-      'title: "Full VS Code Based Editor Built-in"',
+      "title: 'Full VS Code Based Editor Built-in'",
       'Great for working with markdown, reviewing code, and checking PRs (Github Extension is great!)',
-      'title: "Manage Your Project on a Kanban board"',
-      'Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-agent-orchestration skill)',
-      'title: "Full Layout Freedom"',
+      "title: 'Manage Your Project on a Kanban board'",
+      'Store your ideas here then let an orchestrator agent hand them off to other agents (use the /ghostex-cli skill)',
+      "title: 'Full Layout Freedom'",
       'Split your agent terminals anyway you like. Use the same hotkeys from ghostty to navigate the UI with keyboard only.',
     ]);
     expect(discoverModalSource).toContain('Highlighted Features');
@@ -122,8 +122,8 @@ describe('discover ghostex modal source', () => {
     expect(discoverModalSource).toContain('activateRelativeFeature(1)');
     expect(discoverModalSource).toContain('Math.min(');
     expect(discoverModalSource).toContain('Math.max(0, activeFeatureIndex + offset)');
-    expect(discoverModalSource).toContain('event.key === "ArrowLeft"');
-    expect(discoverModalSource).toContain('event.key === "ArrowRight"');
+    expect(discoverModalSource).toContain("event.key === 'ArrowLeft'");
+    expect(discoverModalSource).toContain("event.key === 'ArrowRight'");
     expect(discoverModalSource).toContain('disabled={!canActivatePreviousFeature}');
     expect(discoverModalSource).toContain('disabled={!canActivateNextFeature}');
     expect(discoverModalSource).not.toContain('%\n      DISCOVER_GHOSTEX_FEATURES.length');
@@ -131,7 +131,7 @@ describe('discover ghostex modal source', () => {
     expect(discoverModalSource).not.toContain('discover-ghostex-feature-icon');
     const featureHeadingMarkup = sourceBetween(
       discoverModalSource,
-      '<div className="discover-ghostex-feature-heading">',
+      "<div className='discover-ghostex-feature-heading'>",
       '</div>\n            </div>'
     );
     expect(featureHeadingMarkup).toContain('discover-ghostex-feature-title');
@@ -244,8 +244,8 @@ describe('discover ghostex modal source', () => {
     expect(discoverModalSource).not.toContain('thumbnailTitle');
     expect(discoverModalSource).not.toContain('discover-ghostex-feature-strip');
     expect(discoverModalSource).not.toContain('discover-ghostex-thumbnail');
-    expect(discoverModalSource).not.toContain('role="tablist"');
-    expect(discoverModalSource).not.toContain('role="tab"');
+    expect(discoverModalSource).not.toContain("role='tablist'");
+    expect(discoverModalSource).not.toContain("role='tab'");
     expect(sidebarStylesSource).not.toMatch(/\.ghostex-settings-shadcn \.discover-ghostex-feature-strip/);
     expect(sidebarStylesSource).not.toMatch(/\.ghostex-settings-shadcn \.discover-ghostex-thumbnail/);
   });

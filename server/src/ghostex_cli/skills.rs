@@ -20,10 +20,8 @@ const GHOSTEX_BROWSER_SKILL_NAME: &str = "ghostex-browser-use";
 const GHOSTEX_EMBEDDED_BROWSER_SKILL_NAME: &str = "ghostex-embedded-browser-use";
 const GHOSTEX_COMPUTER_USE_SKILL_NAME: &str = "ghostex-computer-use";
 const GHOSTEX_CLI_SKILL_NAME: &str = "ghostex-cli";
-const GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME: &str = "ghostex-manage-automations";
-const GHOSTEX_AGENT_ORCHESTRATION_SKILL_NAME: &str = "ghostex-agent-orchestration";
+const GHOSTEX_MANAGE_BEADS_SKILL_NAME: &str = "ghostex-manage-beads";
 const GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-5.6-orchestration";
-const GHOSTEX_FIND_PREV_SESSION_SKILL_NAME: &str = "ghostex-find-prev-session";
 const GHOSTEX_AUTO_RENAME_SESSION_SKILL_NAME: &str = "ghostex-auto-rename-session";
 const GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME: &str = "ghostex-move-codex-session";
 
@@ -338,45 +336,47 @@ pub fn install_cli_skill_command(args: &[String]) -> CliResult<()> {
     )
 }
 
+/*
+CDXC:SkillConsolidation 2026-08-24:
+The `ghostex-manage-automations`, `ghostex-agent-orchestration`, and
+`ghostex-find-prev-session` skills were folded into the CLI help; `$ghostex-cli`
+is the single entry-point skill. `gx automations --help` stays as a plain
+focused-help surface with no skill installer.
+*/
 pub fn automations_command(args: &[String]) -> CliResult<()> {
+    let usage_text = usage::automations_usage();
+    let subcommand = args.first().map(String::as_str).unwrap_or("help");
+    match subcommand {
+        "help" | "-h" | "--help" => {
+            println!("{usage_text}");
+            Ok(())
+        }
+        other => Err(CliError::Other(format!(
+            "Unknown automations command: {other}\n\n{usage_text}"
+        ))),
+    }
+}
+
+pub fn manage_beads_command(args: &[String]) -> CliResult<()> {
     skill_surface_command(
         args,
-        &usage::automations_usage(),
-        "automations",
-        &install_manage_automations_skill_command,
+        &usage::manage_beads_usage(),
+        "manage-beads",
+        &install_manage_beads_skill_command,
     )
 }
 
-pub fn install_manage_automations_skill_command(args: &[String]) -> CliResult<()> {
-    install_ghostex_agent_skill(
-        args,
-        "ghostex automations --help",
-        &["GHOSTEX_MANAGE_AUTOMATIONS_SKILL_SOURCE"],
-        GHOSTEX_MANAGE_AUTOMATIONS_SKILL_NAME,
-    )
-}
-
-pub fn agent_orchestration_command(args: &[String]) -> CliResult<()> {
-    skill_surface_command(
-        args,
-        &usage::agent_orchestration_usage(),
-        "agent-orchestration",
-        &install_agent_orchestration_skill_command,
-    )
-}
-
-pub fn install_agent_orchestration_skill_command(args: &[String]) -> CliResult<()> {
+pub fn install_manage_beads_skill_command(args: &[String]) -> CliResult<()> {
     /*
-    Agents need a Ghostex-native orchestration skill that teaches the CLI
-    workflow for creating panes, sending messages to other agent sessions,
-    checking status, and reading terminal output through `ghostex read-text`
-    instead of reaching for raw zmx commands directly.
+    The Project Board workflow runs through the machine-installed `bd` Beads
+    CLI; the skill teaches the swimlane statuses, session-link comments, and
+    safety rules around it.
     */
     install_ghostex_agent_skill(
         args,
-        "ghostex --help",
-        &["GHOSTEX_AGENT_ORCHESTRATION_SKILL_SOURCE"],
-        GHOSTEX_AGENT_ORCHESTRATION_SKILL_NAME,
+        "bd --help",
+        &["GHOSTEX_MANAGE_BEADS_SKILL_SOURCE"],
+        GHOSTEX_MANAGE_BEADS_SKILL_NAME,
     )
 }
 
@@ -391,7 +391,7 @@ pub fn fable56_orchestration_command(args: &[String]) -> CliResult<()> {
 
 pub fn install_fable56_orchestration_skill_command(args: &[String]) -> CliResult<()> {
     /*
-    Agents need a bundled pipeline skill on top of `$ghostex-agent-orchestration`:
+    Agents need a bundled pipeline skill on top of `$ghostex-cli`:
     plan a multi-phase task inline with Fable, launch one Codex gpt-5.6 worker
     pane per phase through supported Ghostex CLI commands, then verify with a
     Fable pane and spawn targeted fixers until verification passes.
@@ -401,24 +401,6 @@ pub fn install_fable56_orchestration_skill_command(args: &[String]) -> CliResult
         "ghostex --help",
         &["GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_SOURCE"],
         GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME,
-    )
-}
-
-pub fn find_prev_session_command(args: &[String]) -> CliResult<()> {
-    skill_surface_command(
-        args,
-        &usage::find_prev_session_usage(),
-        "find-prev-session",
-        &install_find_prev_session_skill_command,
-    )
-}
-
-pub fn install_find_prev_session_skill_command(args: &[String]) -> CliResult<()> {
-    install_ghostex_agent_skill(
-        args,
-        "ghostex find --help",
-        &["GHOSTEX_FIND_PREV_SESSION_SKILL_SOURCE"],
-        GHOSTEX_FIND_PREV_SESSION_SKILL_NAME,
     )
 }
 
