@@ -30,13 +30,9 @@ import {
   IconDeviceMobileMessage,
   IconFile,
   IconLoader2,
-  IconMaximize,
-  IconMinimize,
-  IconPaperclip,
   IconPlayerStopFilled,
   IconRobot,
   IconSelectAll,
-  IconStackPush,
   IconX,
 } from '@tabler/icons-react';
 import {
@@ -87,6 +83,7 @@ import { SessionChatMonacoInput } from './session-chat-monaco-input';
 import { sessionChatImageTargetForHref, useSessionChatImageViewer } from './session-chat-image-viewer';
 import { SessionChatAgentFleetStrip } from './session-chat-agent-fleet-strip';
 import { SessionChatQueueRows } from './session-chat-queue-rows';
+import { SessionChatComposerActions } from './session-chat-composer-actions';
 import {
   isNewerSessionChatDraftStamp,
   SESSION_CHAT_QUEUE_LONG_PRESS_MS,
@@ -102,6 +99,8 @@ import type {
 } from '../../shared/session-chat';
 
 export interface SessionChatComposerHandle {
+  /** Append text after the current draft, separated as its own Markdown block. */
+  appendText: (text: string) => boolean;
   /** Clear the draft only when it still matches the supplied snapshot. */
   clearDraft: (expected: string) => boolean;
   focus: () => void;
@@ -146,6 +145,23 @@ export interface SessionChatComposerInputApi {
 }
 
 export interface SessionChatComposerProps {
+  /**
+   * Host-provided diagnostic breadcrumb sink (desktop support logs). Called on
+   * composer mount/unmount and on focus entering/leaving the composer so a
+   * native log can time focus loss against server state frames. Hosts without
+   * disk logging omit it; the callback itself gates on the host's scenario.
+   */
+  diagnosticLog?: (event: string, details?: Record<string, unknown>) => void;
+  /**
+   * Host-provided notice of whether this composer currently holds anything
+   * unsent — draft text with any non-whitespace, or attached/pasted images.
+   * Called once when the composer mounts (drafts are restored from storage, so
+   * a fresh mount can already be non-empty) and then only when the answer
+   * flips, never per keystroke, and never with the draft itself. The desktop
+   * host uses it to refuse to destroy an idle hidden chat page that still holds
+   * typed text; hosts that never destroy their page omit it.
+   */
+  onDraftEmptyChange?: (empty: boolean) => void;
   disabled?: boolean;
   isWorking: boolean;
   /** Whether plain Enter sends instead of inserting a newline. */
@@ -177,8 +193,34 @@ export interface SessionChatComposerProps {
   filesLoading?: boolean;
   onSend: (text: string) => void | Promise<void>;
   onInterrupt: () => void;
+  /** Open the host's delayed actions for this session. */
+  onDelayedActions?: () => void;
   /** Save the current draft for later and clear it after the save succeeds. */
   onStash?: () => void;
+  /**
+   * Opens the host's Saved Prompts surface. With an empty draft there is
+   * nothing to stash, so the stash control switches to this instead of sitting
+   * disabled. Absent when the host cannot open that surface, which keeps the
+   * old disabled-on-empty behaviour.
+   */
+  onShowStashedPrompts?: () => void;
+  /**
+   * How many prompts are currently stashed from this conversation, painted as a
+   * corner badge on the stash control. Omitted or 0 renders no badge.
+   */
+  stashedPromptCount?: number;
+  /**
+   * Toggle this session's note panel. Unlike Stash this acts on the session,
+   * not on the draft, so it stays enabled with an empty input. Absent when the
+   * host cannot reach the note endpoints, which hides the control.
+   */
+  onSessionNote?: () => void;
+  /** True while the note panel is open, for the button's pressed styling. */
+  sessionNoteActive?: boolean;
+  /** Per-session Verbose mode value shown with the right-hand composer actions. */
+  verboseMode?: boolean;
+  /** Toggle the per-session Verbose mode override. Omitted hides the action. */
+  onToggleVerbose?: () => void;
   /**
    * Saves a pasted image onto the session's machine and resolves with the
    * absolute path there. When set, pasting an image inserts the terminal
@@ -424,6 +466,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   function SessionChatComposer(
     {
       agentFleet,
+      diagnosticLog,
       disabled = false,
       draftSync,
       fileHeading,
@@ -432,23 +475,31 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       isWorking,
       monacoVsBaseUrl,
       onAttachFile,
+      onDelayedActions,
+      onDraftEmptyChange,
       onInterrupt,
       onLoadImagePreview,
       onPasteImage,
       onPickPaths,
       onRequestFiles,
       onSend,
+      onSessionNote,
+      onShowStashedPrompts,
       onStash,
+      onToggleVerbose,
       optionPills,
       placeholder,
       queue,
       sendOnEnter = true,
       sessionKey,
+      sessionNoteActive = false,
       slashCommands,
       slashHeading,
       skills,
       skillHeading,
+      stashedPromptCount = 0,
       theme = 'dark',
+      verboseMode = false,
     },
     ref
   ) {
@@ -494,6 +545,35 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressFiredRef = useRef(false);
     const useMonaco = monacoVsBaseUrl !== undefined && !monacoFailed;
+    const diagnosticLogRef = useRef(diagnosticLog);
+    diagnosticLogRef.current = diagnosticLog;
+    useEffect(() => {
+      diagnosticLogRef.current?.('sessionChat.composerMounted');
+      return () => {
+        diagnosticLogRef.current?.('sessionChat.composerUnmounted');
+      };
+    }, []);
+    const onDraftEmptyChangeRef = useRef(onDraftEmptyChange);
+    onDraftEmptyChangeRef.current = onDraftEmptyChange;
+    // Anything unsent the page alone holds: typed text, finished image pastes,
+    // and pastes still being read. The effect depends on the boolean, not the
+    // draft, so a host hears about it on mount and on each flip only.
+    const draftEmpty = draft.trim().length === 0 && pastedImages.length === 0 && pendingImagePastes === 0;
+    const draftEmptyRef = useRef(draftEmpty);
+    draftEmptyRef.current = draftEmpty;
+    useEffect(() => {
+      onDraftEmptyChangeRef.current?.(draftEmpty);
+    }, [draftEmpty]);
+    useEffect(
+      () => () => {
+        // The composer can leave the page while the conversation stays (an
+        // active question replaces it), and its draft outlives it in storage.
+        // From here on the host cannot know what this page holds, and "unknown"
+        // must never read as "empty" to a host that destroys pages on it.
+        onDraftEmptyChangeRef.current?.(false);
+      },
+      []
+    );
 
     // Previews mirror the draft: deleting a reference (by any means, including
     // sending, which clears the draft) drops its thumbnail.
@@ -649,6 +729,25 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     }, [useMonaco]);
 
     useImperativeHandle(ref, () => ({
+      appendText: (text: string): boolean => {
+        if (disabled || text === '') {
+          return false;
+        }
+        const input = getInputApi();
+        const current = input?.getValue() ?? draftRef.current;
+        const separator = current === '' || current.endsWith('\n\n') ? '' : current.endsWith('\n') ? '\n' : '\n\n';
+        const next = `${current}${separator}${text}`;
+        draftRef.current = next;
+        updateDraft(next, next.length);
+        if (!input) {
+          pendingInsertTextRef.current += `${separator}${text}`;
+          pendingFocusRef.current = true;
+          return true;
+        }
+        input?.applyValue(next, next.length);
+        input?.focus();
+        return true;
+      },
       clearDraft: (expected: string): boolean => {
         const current = getInputApi()?.getValue() ?? draftRef.current;
         if (current !== expected) {
@@ -1429,7 +1528,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const hasSendableDraft = draft.trim() !== '';
     const showStopButton = isWorking && !hasSendableDraft;
     const sendDisabled = disabled || !hasSendableDraft;
-
     return (
       <>
         {maximized ? (
@@ -1604,7 +1702,25 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
               if (event.currentTarget.contains(event.relatedTarget)) {
                 return;
               }
+              // relatedTarget null = focus left the page (native first-responder
+              // move), an element = an in-page steal. Distinguishing the two is
+              // the point of this breadcrumb.
+              diagnosticLogRef.current?.('sessionChat.composerFocusLeft', {
+                relatedTag: event.relatedTarget instanceof Element ? event.relatedTarget.tagName : 'none',
+              });
               pushDraftIfChanged();
+              // Re-assert the composer content state at the moment focus leaves
+              // — hiding the surface blurs it, and no text can be typed while
+              // hidden, so this report is the authoritative one an eviction
+              // pass 20 minutes later relies on. A flip report lost earlier is
+              // repaired here rather than trusted forever.
+              onDraftEmptyChangeRef.current?.(draftEmptyRef.current);
+            }}
+            onFocus={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget)) {
+                return;
+              }
+              diagnosticLogRef.current?.('sessionChat.composerFocusEntered');
             }}
           >
             {pastedImages.length > 0 || pendingImagePastes > 0 ? (
@@ -1794,22 +1910,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                 {optionPills}
               </div>
               <div className='ghostex-chat-composer-footer-actions ml-auto flex items-center gap-1.5'>
-                {onStash ? (
-                  <AppTooltip content='Stash prompt'>
-                    <span className='ghostex-chat-stash-control inline-flex'>
-                      <Button
-                        aria-label='Stash prompt'
-                        className='ghostex-chat-footer-control rounded-full'
-                        disabled={disabled || draft.trim() === ''}
-                        onClick={onStash}
-                        size='icon-sm'
-                        variant='ghost'
-                      >
-                        <IconStackPush aria-hidden='true' stroke={2} />
-                      </Button>
-                    </span>
-                  </AppTooltip>
-                ) : null}
                 {onPasteImage || onAttachFile || onPickPaths ? (
                   <>
                     {onPickPaths ? null : (
@@ -1836,48 +1936,35 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                         {...(onAttachFile ? {} : { accept: 'image/*' })}
                       />
                     )}
-                    <AppTooltip content='Attach an Image, File, or Folder'>
-                      <span className='inline-flex'>
-                        <Button
-                          aria-label='Attach an Image, File, or Folder'
-                          className='ghostex-chat-footer-control rounded-full'
-                          disabled={disabled}
-                          onClick={() => {
-                            if (onPickPaths) {
-                              attachFromNativePicker();
-                            } else {
-                              fileInputRef.current?.click();
-                            }
-                          }}
-                          size='icon-sm'
-                          variant='ghost'
-                        >
-                          <IconPaperclip aria-hidden='true' stroke={2} />
-                        </Button>
-                      </span>
-                    </AppTooltip>
                   </>
                 ) : null}
-                <AppTooltip content={maximized ? 'Exit maximize' : 'Maximize'}>
-                  <span className='inline-flex'>
-                    <Button
-                      aria-label={maximized ? 'Exit maximize' : 'Maximize'}
-                      aria-pressed={maximized}
-                      className='ghostex-chat-footer-control rounded-full'
-                      onClick={() => {
-                        setMaximizedAndFocus(!maximized);
-                      }}
-                      size='icon-sm'
-                      variant='ghost'
-                    >
-                      {maximized ? (
-                        <IconMinimize aria-hidden='true' stroke={2} />
-                      ) : (
-                        <IconMaximize aria-hidden='true' stroke={2} />
-                      )}
-                    </Button>
-                  </span>
-                </AppTooltip>
+                <SessionChatComposerActions
+                  disabled={disabled}
+                  hasSendableDraft={hasSendableDraft}
+                  maximized={maximized}
+                  onToggleMaximized={() => {
+                    setMaximizedAndFocus(!maximized);
+                  }}
+                  sessionNoteActive={sessionNoteActive}
+                  stashedPromptCount={stashedPromptCount}
+                  verboseMode={verboseMode}
+                  {...(onDelayedActions ? { onDelayedActions } : {})}
+                  {...(onSessionNote ? { onSessionNote } : {})}
+                  {...(onShowStashedPrompts ? { onShowStashedPrompts } : {})}
+                  {...(onStash ? { onStash } : {})}
+                  {...(onToggleVerbose ? { onToggleVerbose } : {})}
+                  {...(onPasteImage || onAttachFile || onPickPaths
+                    ? {
+                        onAttach: () => {
+                          if (onPickPaths) {
+                            attachFromNativePicker();
+                          } else {
+                            fileInputRef.current?.click();
+                          }
+                        },
+                      }
+                    : {})}
+                />
                 {showStopButton ? (
                   <Button
                     aria-label='Stop the agent'

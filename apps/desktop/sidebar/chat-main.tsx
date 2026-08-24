@@ -3,7 +3,7 @@ import '@/packages/core-ui/styles.css';
 import {
   isSessionChatEventType,
   normalizeSessionChatTheme,
-  resolveSessionChatTranscriptAgent,
+  resolveSessionChatDisplayAgent,
   type GxserverQueueSessionChatPromptResult,
   type GxserverReadSessionChatFilesResult,
   type GxserverReadSessionChatImageResult,
@@ -17,7 +17,11 @@ import {
   type GxserverSessionChatRemoveQueuedPromptResult,
   type SessionChatTheme,
 } from '@/packages/shared/session-chat';
-import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
+import {
+  GXSERVER_PROTOCOL_VERSION,
+  type GxserverListStashedPromptsResult,
+  type GxserverReadSessionAgentNoteResult,
+} from '@/packages/shared/gxserver-protocol';
 import {
   clampSessionChatTranscriptWidthPercent,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
@@ -309,6 +313,26 @@ function createGpuiSessionChatTransport(
         sessionId,
       });
     },
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    The session note is a plain gxserver round trip on the same bootstrap as
+    every other chat call, so a remote session's note is stored by the daemon
+    that owns the conversation. gxserver resolves the provider conversation id
+    from (projectId, sessionId) itself — the page never handles that key.
+    */
+    readSessionNote() {
+      return rpc<GxserverReadSessionAgentNoteResult>(bootstrap, '/api/readSessionAgentNote', {
+        projectId,
+        sessionId,
+      });
+    },
+    async saveSessionNote(note) {
+      await rpc(bootstrap, '/api/saveSessionAgentNote', {
+        note,
+        projectId,
+        sessionId,
+      });
+    },
     // `clientId` is minted and persisted by the shared chat hook. Forward it
     // verbatim: a per-call or per-mount id would make this client's own draft
     // echo look like another device and pop the conflict bar for nothing.
@@ -437,6 +461,18 @@ interface AppModalHostMessageHandler {
   postMessage: (payload: string) => unknown;
 }
 
+/*
+CDXC:SessionChatFocusDiagnostics 2026-08-24:
+Typing-focus-loss repro breadcrumbs. The chat page has no disk writer of its
+own, so composer/prompt transitions ride the bridge into Rust, which appends
+them to gpui-terminal-focus-debug.log only while the native.terminal.focus
+scenario (plus Show debug UI controls) is enabled — same gate as the native
+first-responder log they are meant to be correlated with.
+*/
+function postSessionChatDiagnosticLog(event: string, details?: Record<string, unknown>): void {
+  postSessionChatHostAction('diagnosticLog', { details: details ?? {}, event });
+}
+
 function postSessionChatHostAction(action: string, fields?: Record<string, unknown>): void {
   const target = window as unknown as {
     webkit?: {
@@ -501,6 +537,17 @@ function createGpuiSessionChatComposerBridge(
       };
     },
     /*
+    CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+    The desktop shell destroys chat surfaces that have been hidden for a long
+    time to reclaim their Chromium RAM, and rebuilds them on the next pane that
+    shows them. This is how Rust learns the page is not holding an unsent draft
+    or attached image, so an eviction can never destroy typed text. The payload
+    is the boolean only.
+    */
+    reportDraftState({ empty }) {
+      postSessionChatHostAction('composerDraftState', { empty });
+    },
+    /*
     CDXC:SessionChatDraftHandoff 2026-08-24:
     A transient stash is the durable copy of a draft that is about to leave the
     composer for the terminal, so it must OUTLIVE the move. Deleting it here
@@ -523,6 +570,30 @@ function createGpuiSessionChatComposerBridge(
       // Only a row this save created may ever be deleted again: `created:
       // false` means the text matched a prompt the user saved by hand.
       return options?.transient && result.created === true && promptId ? { promptId } : {};
+    },
+    /*
+    CDXC:SessionChatStashBadge 2026-08-24:
+    "Stashed from this conversation" is two questions, because a stash outlives
+    the session it was written from. The provider conversation id is the
+    durable answer and survives a compaction-resume rewrite (gxserver re-keys
+    the column); the raw sessionId still matches legacy rows and rows stashed
+    before this session had a conversation id. Both ids compared here are RAW
+    gxserver ids — gxserver normalizes away the sidebar's `combined-session:`
+    keys as of migration 0026 — so no decoding is needed on this side.
+    */
+    async countSessionStashedPrompts(agentSessionId) {
+      const result = await rpc<GxserverListStashedPromptsResult>(bootstrap, '/api/listStashedPrompts', {
+        projectId,
+      });
+      return result.prompts.filter(
+        (prompt) =>
+          (agentSessionId !== null && prompt.agentSessionId === agentSessionId) || prompt.sessionId === sessionId
+      ).length;
+    },
+    showStashedPrompts() {
+      // The existing host action already opens Saved Prompts with this
+      // session's context attached, so the modal can default its own scope.
+      postSessionChatHostAction('stashedPrompts');
     },
   };
 }
@@ -697,7 +768,7 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
       },
       {
         id: 'stashedPrompts',
-        label: 'Prompts',
+        label: 'Saved Prompts',
         shortcut: shortcut('stashedPrompts'),
       },
       {
@@ -753,8 +824,9 @@ let renderReadyChat: ((theme: SessionChatTheme) => void) | null = null;
 
 function applyDocumentChatTheme(theme: SessionChatTheme): void {
   document.documentElement.style.colorScheme = theme;
-  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0a0a0a';
-  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0a0a0a';
+  /* Dark matches the app-wide #0e0e0e window tone (see chat.css dark theme). */
+  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0e0e0e';
+  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0e0e0e';
 }
 
 /*
@@ -812,18 +884,20 @@ if (!projectId || !sessionId) {
     .then((bootstrap) => {
       const transport = createGpuiSessionChatTransport(bootstrap, projectId, sessionId, remote);
       const composerBridge = createGpuiSessionChatComposerBridge(bootstrap, projectId, sessionId);
-      const agentLabel = agentId ? (resolveSessionChatTranscriptAgent(agentId) ?? agentId) : null;
+      const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
       renderReadyChat = (theme) => {
         root.render(
           <div className='native-sidebar-shell gpui-session-chat'>
             <SessionChatView
               agentLabel={agentLabel}
               className='gpui-session-chat-view'
+              diagnosticLog={postSessionChatDiagnosticLog}
               hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
               hostComposerBridge={composerBridge}
               hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
               // Staged next to chat.html by apps/desktop/vite.config.ts (stageMonacoVs).
               monacoVsBaseUrl='./monaco/vs'
+              onDelayedActions={() => postSessionChatHostAction('delayedActions')}
               sessionKey={`${projectId}:${sessionId}`}
               theme={theme}
               transport={transport}

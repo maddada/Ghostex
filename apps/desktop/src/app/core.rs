@@ -41,6 +41,8 @@ use gpui::WindowHandle;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
+#[cfg(target_os = "linux")]
+use gpui::{CursorStyle, Decorations, ResizeEdge};
 use gpui_component::h_flex;
 use gpui_component::input::InputState;
 use gpui_component::v_flex;
@@ -53,6 +55,150 @@ use crate::app::hotkeys::*;
 use crate::app::model::*;
 use crate::app::window::*;
 use crate::*;
+
+#[cfg(target_os = "linux")]
+const GPUI_LINUX_CLIENT_FRAME_WIDTH: Pixels = px(4.0);
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum GpuiLinuxResizeRegionShape {
+    Horizontal,
+    Vertical,
+    Corner,
+}
+
+#[cfg(target_os = "linux")]
+fn gpui_linux_resize_region(
+    edge: ResizeEdge,
+    shape: GpuiLinuxResizeRegionShape,
+) -> gpui::AnyElement {
+    let cursor = match edge {
+        ResizeEdge::Top | ResizeEdge::Bottom => CursorStyle::ResizeUpDown,
+        ResizeEdge::Left | ResizeEdge::Right => CursorStyle::ResizeLeftRight,
+        ResizeEdge::TopLeft | ResizeEdge::BottomRight => CursorStyle::ResizeUpLeftDownRight,
+        ResizeEdge::TopRight | ResizeEdge::BottomLeft => CursorStyle::ResizeUpRightDownLeft,
+    };
+    div()
+        .flex()
+        .flex_shrink_0()
+        .bg(titlebar_button_border_color())
+        .cursor(cursor)
+        .when(
+            matches!(shape, GpuiLinuxResizeRegionShape::Horizontal),
+            |this| this.h(GPUI_LINUX_CLIENT_FRAME_WIDTH).flex_1(),
+        )
+        .when(
+            matches!(shape, GpuiLinuxResizeRegionShape::Vertical),
+            |this| this.w(GPUI_LINUX_CLIENT_FRAME_WIDTH).h_full(),
+        )
+        .when(
+            matches!(shape, GpuiLinuxResizeRegionShape::Corner),
+            |this| this.size(GPUI_LINUX_CLIENT_FRAME_WIDTH),
+        )
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            window.prevent_default();
+            cx.stop_propagation();
+            window.start_window_resize(edge);
+        })
+        .into_any_element()
+}
+
+#[cfg(target_os = "linux")]
+fn gpui_linux_client_window_frame(
+    content: gpui::AnyElement,
+    window: &mut Window,
+) -> gpui::AnyElement {
+    let Decorations::Client { tiling } = window.window_decorations() else {
+        return content;
+    };
+
+    /*
+    Keep resize ownership in eight exact, non-overlapping layout regions. The
+    visible four-pixel frame is itself the grab target; no transparent view or
+    full-window hit-test layer extends across app or CEF content. Tiled edges
+    leave the layout entirely, matching the compositor's edge constraints.
+    */
+    window.set_client_inset(GPUI_LINUX_CLIENT_FRAME_WIDTH);
+    v_flex()
+        .size_full()
+        .min_w_0()
+        .min_h_0()
+        .when(!tiling.top, |this| {
+            this.child(
+                h_flex()
+                    .w_full()
+                    .h(GPUI_LINUX_CLIENT_FRAME_WIDTH)
+                    .when(!tiling.left, |this| {
+                        this.child(gpui_linux_resize_region(
+                            ResizeEdge::TopLeft,
+                            GpuiLinuxResizeRegionShape::Corner,
+                        ))
+                    })
+                    .child(gpui_linux_resize_region(
+                        ResizeEdge::Top,
+                        GpuiLinuxResizeRegionShape::Horizontal,
+                    ))
+                    .when(!tiling.right, |this| {
+                        this.child(gpui_linux_resize_region(
+                            ResizeEdge::TopRight,
+                            GpuiLinuxResizeRegionShape::Corner,
+                        ))
+                    }),
+            )
+        })
+        .child(
+            h_flex()
+                .w_full()
+                .flex_1()
+                .min_w_0()
+                .min_h_0()
+                .when(!tiling.left, |this| {
+                    this.child(gpui_linux_resize_region(
+                        ResizeEdge::Left,
+                        GpuiLinuxResizeRegionShape::Vertical,
+                    ))
+                })
+                .child(
+                    div()
+                        .h_full()
+                        .flex_1()
+                        .min_w_0()
+                        .min_h_0()
+                        .overflow_hidden()
+                        .child(content),
+                )
+                .when(!tiling.right, |this| {
+                    this.child(gpui_linux_resize_region(
+                        ResizeEdge::Right,
+                        GpuiLinuxResizeRegionShape::Vertical,
+                    ))
+                }),
+        )
+        .when(!tiling.bottom, |this| {
+            this.child(
+                h_flex()
+                    .w_full()
+                    .h(GPUI_LINUX_CLIENT_FRAME_WIDTH)
+                    .when(!tiling.left, |this| {
+                        this.child(gpui_linux_resize_region(
+                            ResizeEdge::BottomLeft,
+                            GpuiLinuxResizeRegionShape::Corner,
+                        ))
+                    })
+                    .child(gpui_linux_resize_region(
+                        ResizeEdge::Bottom,
+                        GpuiLinuxResizeRegionShape::Horizontal,
+                    ))
+                    .when(!tiling.right, |this| {
+                        this.child(gpui_linux_resize_region(
+                            ResizeEdge::BottomRight,
+                            GpuiLinuxResizeRegionShape::Corner,
+                        ))
+                    }),
+            )
+        })
+        .into_any_element()
+}
 
 pub struct GhostexGpuiApp {
     pub(crate) parent_ns_view: *mut std::ffi::c_void,
@@ -366,8 +512,21 @@ pub struct GhostexGpuiApp {
     /// mapped session enters Chat mode before any terminal focus handoff.
     pub(crate) pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
     pub(crate) agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
+    /// When each currently hidden chat surface last became hidden, the clock the
+    /// RAM eviction pass ages out. A surface that is visible has no entry, so a
+    /// transient hide (a tab drag hides every surface for its duration) neither
+    /// resets a running timer nor starts a spurious one.
+    pub(crate) agents_chat_surface_hidden_since: HashMap<TerminalSessionId, Instant>,
     /// Chat surfaces whose page-side composer bridge has registered.
     pub(crate) session_chat_composer_ready_sessions: HashSet<TerminalSessionId>,
+    /// Last composer-content report per chat page: `true` = the page said its
+    /// composer is empty, `false` = it holds draft text or attached images.
+    /// Reported by the page on composer mount, on every empty↔non-empty
+    /// transition, and re-asserted on composer blur (which fires when the
+    /// surface is hidden). RAM eviction requires an explicit `true`: a missing
+    /// entry means the state is unknown (report lost or page never loaded) and
+    /// unknown must never read as "empty" to a pass that destroys pages.
+    pub(crate) session_chat_composer_empty_reports: HashMap<TerminalSessionId, bool>,
     /// One-shot terminal-to-chat keyboard handoff, completed only after the
     /// target page reports that its composer bridge is mounted.
     pub(crate) pending_session_chat_composer_focus: Option<TerminalSessionId>,
@@ -1085,7 +1244,7 @@ impl Render for GhostexGpuiApp {
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
         let sidebar_on_left = self.sidebar_side == GpuiSidebarSide::Left;
 
-        v_flex()
+        let content = v_flex()
             .relative()
             .size_full()
             .bg(workspace_background_color())
@@ -1989,6 +2148,11 @@ impl Render for GhostexGpuiApp {
                     }),
             )
             .child(self.render_gpui_status_pet_presentation(cx))
-            .into_any_element()
+            .into_any_element();
+
+        #[cfg(target_os = "linux")]
+        let content = gpui_linux_client_window_frame(content, window);
+
+        content
     }
 }

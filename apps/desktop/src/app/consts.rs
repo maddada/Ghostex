@@ -29,6 +29,22 @@ pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_POLL_INTERVAL: Duration = Duratio
 
 pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/*
+CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+Every chat-mode session owns a full Chromium page, and those pages stay alive
+behind whatever pane is on screen. A workspace with many chat sessions therefore
+pays renderer RAM for surfaces nobody has looked at in a long time. A surface
+that has been continuously hidden this long is destroyed; the very next
+visibility reconcile rebuilds it through `ensure_agents_chat_surface`, and the
+page restores its transcript from gxserver and its draft from storage, so the
+eviction is invisible apart from a reload. The window is deliberately long
+because the rebuild costs a page load the user waits on.
+*/
+pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER: Duration =
+    Duration::from_secs(20 * 60);
+
+pub(crate) const GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL: Duration = Duration::from_secs(60);
+
 #[cfg(target_os = "linux")]
 pub(crate) static GPUI_LINUX_WINDOW_ICON: OnceLock<Arc<image::RgbaImage>> = OnceLock::new();
 
@@ -70,6 +86,14 @@ pub(crate) const SIDEBAR_DIVIDER_HOVER_LINE_WIDTH: f32 = 3.0;
 pub(crate) const PENDING_DOCS_FILE_OPEN_RETRY_INTERVAL: Duration = Duration::from_millis(120);
 
 pub(crate) const PENDING_DOCS_FILE_OPEN_MAX_ATTEMPTS: u32 = 100;
+
+/* A chat draft handed to the terminal waits this long for a paste-capable
+terminal surface. After the attempts run out the record stays parked, where
+the next focus handoff or a return to chat picks it up. */
+pub(crate) const PENDING_TERMINAL_COMPOSER_INSERT_RETRY_INTERVAL: Duration =
+    Duration::from_millis(120);
+
+pub(crate) const PENDING_TERMINAL_COMPOSER_INSERT_MAX_ATTEMPTS: u32 = 50;
 
 pub(crate) const SIDEBAR_DIVIDER_HOVER_DELAY: Duration = Duration::from_millis(50);
 
@@ -403,6 +427,11 @@ pub(crate) const GPUI_SIDEBAR_COMMAND_PALETTE_SESSION_FOCUS_MESSAGE_VERSION: u64
 
 pub(crate) const GPUI_SIDEBAR_COMMAND_PALETTE_SESSION_FOCUS_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.commandPaletteSessionFocus";
+
+pub(crate) const GPUI_SIDEBAR_STASHED_PROMPT_SESSION_JUMP_MESSAGE_VERSION: u64 = 1;
+
+pub(crate) const GPUI_SIDEBAR_STASHED_PROMPT_SESSION_JUMP_MESSAGE_TYPE: &str =
+    "ghostex.gpui.sidebar.stashedPromptSessionJump";
 
 pub(crate) const GPUI_SIDEBAR_COMMAND_PALETTE_RUN_COMMAND_MESSAGE_VERSION: u64 = 1;
 

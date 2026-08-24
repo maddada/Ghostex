@@ -184,6 +184,34 @@ impl GhostexGpuiApp {
         let Some(action) = message.get("action").and_then(serde_json::Value::as_str) else {
             return;
         };
+        /*
+        CDXC:SessionChatFocusDiagnostics 2026-08-24:
+        Typing-focus-loss repro breadcrumbs from the chat page (composer
+        mount/unmount, focus enter/leave, prompt-kind flips). The page cannot
+        write disk logs itself, so they land in the same terminal-focus log as
+        the native first-responder transitions they must be correlated with,
+        behind the same native.terminal.focus scenario gate.
+        */
+        if action == "diagnosticLog" {
+            let event = message
+                .get("event")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("sessionChat.unknown");
+            let details = message
+                .get("details")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            support_logs::append_for_scenario(
+                support_logs::GpuiSupportLog::TerminalFocus,
+                "native.terminal.focus",
+                event,
+                serde_json::json!({
+                    "sessionId": format!("{session_id:?}"),
+                    "details": details,
+                }),
+            );
+            return;
+        }
         if action == "composerReady" {
             if self.agents_chat_mode_sessions.contains(&session_id)
                 && self.agents_chat_surfaces.contains_key(&session_id)
@@ -206,6 +234,25 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        /*
+        CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+        Whether this page's composer currently holds anything unsent. Posted on
+        composer mount, on every empty↔non-empty transition, and re-asserted on
+        composer blur — never per keystroke, and never with the draft itself,
+        only the boolean. The RAM eviction pass requires an explicit `true`
+        before destroying a page, so a lost report can only make eviction more
+        conservative, never destroy text the user typed. A malformed message
+        parses as non-empty for the same reason.
+        */
+        if action == "composerDraftState" {
+            let empty = message
+                .get("empty")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            self.session_chat_composer_empty_reports
+                .insert(session_id, empty);
+            return;
+        }
         if action == "draftHandoffToTerminalComplete" {
             if !self.pending_session_chat_draft_handoffs.remove(&session_id) {
                 return;
@@ -221,12 +268,18 @@ impl GhostexGpuiApp {
                 .filter(|prompt_id| !prompt_id.is_empty())
                 .map(str::to_string);
             if !content.is_empty() {
-                // The terminal view already owns the pane while this
-                // asynchronous copy finishes. Keep the cleared composer
-                // snapshot until the exact terminal owner has remounted and
-                // completed its focus handoff; inserting synchronously here
-                // still races that remount. The Saved Prompts row named above
-                // holds the same text for the whole of that wait.
+                /*
+                CDXC:SessionChatDraftHandoff 2026-08-24:
+                This answer always arrives AFTER the terminal's remount focus
+                drain: the page does a gxserver round trip (save to Saved
+                Prompts, clear the composer) before posting it, while the
+                drain runs on the very next frame of the view switch. So the
+                record cannot wait for the drain that already ran — deliver it
+                now, and retry briefly while the terminal surface finishes
+                coming up. A record the retries never place stays parked, with
+                the Saved Prompts row named above holding the same text, until
+                the next focus handoff or a return to chat picks it up.
+                */
                 self.pending_session_terminal_composer_insert.insert(
                     session_id,
                     GpuiSessionChatDraftHandoff {
@@ -234,6 +287,9 @@ impl GhostexGpuiApp {
                         stashed_prompt_id,
                     },
                 );
+                if !self.deliver_pending_session_terminal_composer_insert(session_id, cx) {
+                    self.schedule_pending_session_terminal_composer_insert_delivery(session_id, cx);
+                }
             }
             self.reconcile_agents_chat_surfaces(cx);
             return;
@@ -677,6 +733,115 @@ impl GhostexGpuiApp {
                 );
             })
             .detach();
+    }
+
+    /*
+    CDXC:SessionChatDraftHandoff 2026-08-24:
+    Delivery of a handed-off draft, decoupled from the focus-handoff drains:
+    those run once per remount and always before the chat page's async
+    save-then-clear answers, so a record parked after the drain used to wait,
+    invisible, for a second view switch. This follows the pane's CURRENT
+    owner: a session already back in chat mode gets the draft returned to the
+    composer instead of a paste into a terminal the user is no longer looking
+    at. Returns true when nothing is pending any more (delivered, or moved
+    back to chat); false means the record stayed parked and a retry may help.
+    The remove-after-success shape is load-bearing — the record points at the
+    draft's durable Saved Prompts row, and only a confirmed terminal paste may
+    delete that row.
+    */
+    pub(crate) fn deliver_pending_session_terminal_composer_insert(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(handoff) = self
+            .pending_session_terminal_composer_insert
+            .get(&session_id)
+            .cloned()
+        else {
+            return true;
+        };
+        if self.agents_chat_mode_sessions.contains(&session_id) {
+            // The draft goes back where the user is. The Saved Prompts row
+            // stays: reaching the composer is not a confirmed terminal paste.
+            self.pending_session_terminal_composer_insert
+                .remove(&session_id);
+            self.deliver_session_chat_composer_insert(session_id, handoff.content, cx);
+            return true;
+        }
+        if let Some(view) = self
+            .agents_gpui_engine_terminals
+            .get(&session_id)
+            .map(|record| record.view.clone())
+        {
+            if view.update(cx, |view, cx| view.paste_text(&handoff.content, cx)) {
+                self.pending_session_terminal_composer_insert
+                    .remove(&session_id);
+                self.release_session_chat_draft_handoff_stash(handoff, cx);
+                return true;
+            }
+            return false;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let slot_ids = self
+                .agents_terminal_ghostty_surfaces
+                .keys()
+                .copied()
+                .filter(|slot_id| slot_id.session_id == session_id)
+                .collect::<Vec<_>>();
+            for slot_id in slot_ids {
+                if self.send_text_bytes_to_mounted_agents_terminal_surface(
+                    slot_id,
+                    handoff.content.as_bytes(),
+                ) {
+                    self.pending_session_terminal_composer_insert
+                        .remove(&session_id);
+                    self.release_session_chat_draft_handoff_stash(handoff, cx);
+                    return true;
+                }
+            }
+            if self.project_editor_companion_focused_terminal_session_id() == Some(session_id)
+                && self.send_text_bytes_to_focused_project_editor_companion_terminal_surface(
+                    handoff.content.as_bytes(),
+                )
+            {
+                self.pending_session_terminal_composer_insert
+                    .remove(&session_id);
+                self.release_session_chat_draft_handoff_stash(handoff, cx);
+                return true;
+            }
+        }
+        false
+    }
+
+    /*
+    A terminal surface can still be remounting when the draft handoff answer
+    arrives; surface reconciliation is event-driven, so poll briefly instead
+    of waiting for the next unrelated event. Running out of attempts leaves
+    the record parked (and the draft in Saved Prompts) for the next focus
+    handoff or return to chat — never dropped.
+    */
+    pub(crate) fn schedule_pending_session_terminal_composer_insert_delivery(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            for _ in 0..PENDING_TERMINAL_COMPOSER_INSERT_MAX_ATTEMPTS {
+                cx.background_executor()
+                    .timer(PENDING_TERMINAL_COMPOSER_INSERT_RETRY_INTERVAL)
+                    .await;
+                match this.update(cx, |this, cx| {
+                    this.deliver_pending_session_terminal_composer_insert(session_id, cx)
+                }) {
+                    Ok(false) => {}
+                    // Delivered, moved back to chat, or the app is gone.
+                    _ => return,
+                }
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn insert_prompt_into_session_chat(

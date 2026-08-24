@@ -209,7 +209,9 @@ impl GhostexGpuiApp {
                 ),
                 pending_agents_chat_launch_intents: HashSet::new(),
                 agents_chat_surfaces: HashMap::new(),
+                agents_chat_surface_hidden_since: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),
+                session_chat_composer_empty_reports: HashMap::new(),
                 pending_session_chat_composer_focus: None,
                 pending_session_chat_composer_insert: HashMap::new(),
                 pending_session_terminal_composer_insert: HashMap::new(),
@@ -525,6 +527,7 @@ impl GhostexGpuiApp {
             this.start_project_editor_auto_sleep_policy_polling(cx);
             this.start_command_action_status_polling(cx);
             this.start_session_chat_queued_count_polling(cx);
+            this.start_agents_chat_surface_eviction_polling(cx);
             this.start_prompt_editor_daemon_polling(cx);
             this.start_gpui_remote_gxserver_watchdog(cx);
             this.refresh_titlebar_actions_in_background(cx);
