@@ -51,15 +51,30 @@ export type FindPromptsAction =
   | { type: "toggleWrap" }
   | { type: "viewPrompt" };
 
-/** The hint strip above the results, mirroring the terminal picker's own line. */
-export const FIND_PROMPTS_HINTS: readonly { key: string; label: string }[] = [
-  { key: "^d", label: "days" },
-  { key: "^g", label: "agents" },
-  { key: "^j", label: "projects" },
-  { key: "^f", label: "fav" },
-  { key: "^e", label: "view" },
-  { key: "^y", label: "copy" },
-  { key: "^o", label: "fork" },
+export type FindPromptsHintAction = Extract<
+  FindPromptsAction["type"],
+  | "copyPrompt"
+  | "forkPicker"
+  | "openAgentPicker"
+  | "openProjectPicker"
+  | "toggleDayGrouping"
+  | "toggleFavorite"
+  | "viewPrompt"
+>;
+
+/** The interactive shortcut strip above the results. */
+export const FIND_PROMPTS_HINTS: readonly {
+  action: FindPromptsHintAction;
+  key: string;
+  label: string;
+}[] = [
+  { action: "toggleDayGrouping", key: "^d", label: "days" },
+  { action: "openAgentPicker", key: "^g", label: "agents" },
+  { action: "openProjectPicker", key: "^j", label: "projects" },
+  { action: "toggleFavorite", key: "^f", label: "fav" },
+  { action: "viewPrompt", key: "^e", label: "view" },
+  { action: "copyPrompt", key: "^y", label: "copy" },
+  { action: "forkPicker", key: "^o", label: "fork" },
 ];
 
 /** Digits 1-6 select an agent in the fork and agent-filter overlays. */

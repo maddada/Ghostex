@@ -28,6 +28,8 @@ import {
 import {
   FIND_PROMPTS_HINTS,
   resolveFindPromptsAction,
+  type FindPromptsAction,
+  type FindPromptsHintAction,
   type FindPromptsMode,
 } from "./find-prompts-hotkeys";
 import {
@@ -146,21 +148,8 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
     [find],
   );
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (find.expandedPrompt) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          find.closeExpandedPrompt();
-        }
-        return;
-      }
-      const action = resolveFindPromptsAction(event, mode);
-      if (!action) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
+  const runAction = useCallback(
+    (action: FindPromptsAction) => {
       switch (action.type) {
         case "move":
           if (mode === "agentPicker") {
@@ -189,22 +178,36 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
           find.setGroupByDay(!find.groupByDay);
           break;
         case "openAgentPicker":
-          find.openOverlay("agent");
+          if (find.overlay === "agent") {
+            find.cancelOverlay();
+          } else {
+            find.openOverlay("agent");
+          }
           break;
         case "openProjectPicker":
-          find.openOverlay("project");
+          if (find.overlay === "project") {
+            find.cancelOverlay();
+          } else {
+            find.openOverlay("project");
+          }
           break;
         case "toggleFavorite":
           void find.toggleFavorite();
           break;
         case "viewPrompt":
-          find.openExpandedPrompt();
+          if (find.expandedPrompt) {
+            find.closeExpandedPrompt();
+          } else {
+            find.openExpandedPrompt();
+          }
           break;
         case "copyPrompt":
           void find.copySelected();
           break;
         case "forkPicker":
-          if (find.selectedRow) {
+          if (find.overlay === "fork") {
+            find.cancelOverlay();
+          } else if (find.selectedRow) {
             find.openOverlay("fork");
           }
           break;
@@ -262,6 +265,26 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
     [agentCursor, editQuery, find, mode, projectCursor, transport, visibleProjects],
   );
 
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (find.expandedPrompt) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          find.closeExpandedPrompt();
+        }
+        return;
+      }
+      const action = resolveFindPromptsAction(event, mode);
+      if (!action) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      runAction(action);
+    },
+    [find, mode, runAction],
+  );
+
   const viewRows = useMemo(
     () => buildViewRows(find.rows, find.windowOffset, find.groupByDay),
     [find.groupByDay, find.rows, find.windowOffset],
@@ -270,6 +293,28 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
   const selectedRow = find.selectedRow;
   const previewText = find.selectedText ?? selectedRow?.text ?? "";
   const metaLine = selectedRow ? formatPromptMetaLine(selectedRow.meta) : "";
+
+  const hintState = useCallback(
+    (action: FindPromptsHintAction) => {
+      switch (action) {
+        case "toggleDayGrouping":
+          return { active: find.groupByDay, disabled: false };
+        case "openAgentPicker":
+          return { active: find.overlay === "agent" || find.agents.size > 0, disabled: false };
+        case "openProjectPicker":
+          return { active: find.overlay === "project" || find.project !== null, disabled: false };
+        case "toggleFavorite":
+          return { active: selectedRow?.favorite === true, disabled: !selectedRow };
+        case "viewPrompt":
+          return { active: find.expandedPrompt, disabled: !selectedRow };
+        case "forkPicker":
+          return { active: find.overlay === "fork", disabled: !selectedRow };
+        case "copyPrompt":
+          return { active: false, disabled: !selectedRow };
+      }
+    },
+    [find, selectedRow],
+  );
 
   return (
     <div
@@ -298,13 +343,31 @@ export function FindPromptsView({ acceptAll, hostActions, transport }: FindPromp
         <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">
           {find.matched}/{find.total}
         </span>
-        <span className="hidden shrink-0 items-center gap-2 text-[11px] text-muted-foreground md:flex">
-          {FIND_PROMPTS_HINTS.map((hint) => (
-            <span key={hint.key}>
-              <span className="font-medium text-foreground/70">{hint.key}</span> {hint.label}
-            </span>
-          ))}
-        </span>
+        <div className="hidden shrink-0 items-center gap-0.5 text-[11px] md:flex">
+          {FIND_PROMPTS_HINTS.map((hint) => {
+            const state = hintState(hint.action);
+            return (
+              <button
+                aria-pressed={state.active}
+                className={cn(
+                  "rounded-md px-1.5 py-1 text-muted-foreground transition-colors",
+                  "hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  state.active && "bg-accent text-foreground",
+                  state.disabled && "pointer-events-none opacity-40",
+                )}
+                disabled={state.disabled}
+                key={hint.key}
+                onClick={() => runAction({ type: hint.action })}
+                onKeyDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.preventDefault()}
+                title={`${hint.label} (${hint.key})`}
+                type="button"
+              >
+                <span className="font-medium text-foreground/70">{hint.key}</span> {hint.label}
+              </button>
+            );
+          })}
+        </div>
         {hostActions}
       </div>
 
