@@ -241,7 +241,7 @@ Status derivation rules (mirror `server/src/agent_hooks/api.rs read_hook_status`
   `hookState === "installed"`; `updateRequired` if `"outdated"`; else `missing`.
 - firstLaunchSetup "hooks ready" gate (real fn `areFirstLaunchAgentHooksReady`): ANY of
   codex/claude/opencode/pi is `installed`/`notRequired`.
-- skills gate (`areFirstLaunchBundledSkillsInstalled`): ALL 8 skills installed:
+- skills gate (`isAnyFirstLaunchBundledSkillInstalled`): ANY of the 9 skills installed:
   browser, embeddedBrowser, computerUse, agentOrchestration, fable56Orchestration,
   findPrevSession, generateTitle, manageBeads, moveCodexSession.
 - missing-hooks tips notice: agents with `cliInstalled && status ∉ {installed,
