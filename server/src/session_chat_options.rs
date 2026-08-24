@@ -1,8 +1,9 @@
 /*
 CDXC:SessionChatDetectedOptions 2026-08-01:
 Reads the CURRENT model / reasoning effort from agent-owned structured
-transcript metadata and the session's terminal scrollback, so the composer's
-option pills show evidence instead of a catalog guess.
+transcript metadata and the session's terminal scrollback, plus Claude's
+current permission mode from its footer, so the composer's option pills show
+evidence instead of a catalog guess.
 
 The agent TUIs render their state into a statusline (Claude Code) or a footer
 (Codex). `zmx history` already returns that text (the live screen is part of
@@ -120,6 +121,8 @@ impl SessionChatOptionEvidence {
 pub struct SessionChatDetectedSelection {
     pub model: Option<SessionChatDetectedChoice>,
     pub effort: Option<SessionChatDetectedChoice>,
+    /// Claude's Shift+Tab permission/input mode, available only on screen.
+    pub mode: Option<SessionChatDetectedChoice>,
     /// Codex's trailing `fast` modifier. Informational only.
     pub fast: Option<bool>,
 }
@@ -164,6 +167,16 @@ impl SessionChatDetectedOptions {
                     "value": effort.value,
                     "label": effort.label,
                     "source": effort.source.as_str(),
+                }),
+            );
+        }
+        if let Some(mode) = self.selection.mode.as_ref() {
+            map.insert(
+                "mode".to_string(),
+                json!({
+                    "value": mode.value,
+                    "label": mode.label,
+                    "source": mode.source.as_str(),
                 }),
             );
         }
@@ -447,6 +460,38 @@ fn match_claude_effort(segment: &str) -> Option<SessionChatDetectedChoice> {
         })
 }
 
+/*
+Claude's bottom row is outside the custom statusline:
+
+    ⏵⏵ bypass permissions on (shift+tab to cycle)
+    ⏸ plan mode on (shift+tab to cycle)
+
+The leading glyph pair and the complete trailing grammar are required. This
+keeps ordinary prose containing "plan mode" or "manual mode" from becoming
+agent-owned state merely because it appears near the bottom of the terminal.
+*/
+fn match_claude_mode(segment: &str) -> Option<SessionChatDetectedChoice> {
+    let status = segment
+        .strip_prefix("⏵⏵ ")
+        .or_else(|| segment.strip_prefix("⏸ "))?;
+    let status = status
+        .strip_suffix(" (shift+tab to cycle)")
+        .unwrap_or(status);
+    let (value, label) = match status {
+        "auto mode on" => ("auto", "Auto"),
+        "bypass permissions on" => ("bypass", "Bypass permissions"),
+        "plan mode on" => ("plan", "Plan"),
+        "accept edits on" => ("accept-edits", "Accept edits"),
+        "manual mode on" => ("manual", "Manual"),
+        _ => return None,
+    };
+    Some(SessionChatDetectedChoice {
+        value: value.to_string(),
+        label: label.to_string(),
+        source: SessionChatOptionEvidence::Terminal,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Codex grammar
 //   <Title> · gpt-5.6-sol high fast · 225K used · … · Context 26% used · …
@@ -558,6 +603,7 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
             source: SessionChatOptionEvidence::Terminal,
         }),
         effort,
+        mode: None,
         fast: None,
     })
 }
@@ -596,6 +642,9 @@ pub fn detect_session_chat_selection(
                     if found.effort.is_none() {
                         found.effort = match_claude_effort(segment);
                     }
+                    if found.mode.is_none() {
+                        found.mode = match_claude_mode(segment);
+                    }
                 }
                 SessionChatOptionAgent::Codex => {
                     if found.model.is_none() && found.effort.is_none() {
@@ -617,7 +666,7 @@ pub fn detect_session_chat_selection(
             break;
         }
     }
-    (found.model.is_some() || found.effort.is_some()).then_some(found)
+    (found.model.is_some() || found.effort.is_some() || found.mode.is_some()).then_some(found)
 }
 
 fn transcript_tail_text(path: &Path) -> std::io::Result<String> {
@@ -734,6 +783,7 @@ fn detect_session_chat_transcript_selection(
                         .and_then(claude_transcript_model_choice),
                     effort: transcript_text(record.get("effort"))
                         .and_then(transcript_effort_choice),
+                    mode: None,
                     fast: None,
                 }
             }
@@ -755,12 +805,13 @@ fn detect_session_chat_transcript_selection(
                                 .or_else(|| transcript_text(payload.get("reasoning_effort")))
                         })
                         .and_then(transcript_effort_choice),
+                    mode: None,
                     fast: None,
                 }
             }
             _ => continue,
         };
-        if selection.model.is_some() || selection.effort.is_some() {
+        if selection.model.is_some() || selection.effort.is_some() || selection.mode.is_some() {
             return Some(selection);
         }
     }
@@ -811,11 +862,14 @@ fn merge_session_chat_option_selections(
         if terminal.effort.is_some() {
             merged.effort = terminal.effort;
         }
+        if terminal.mode.is_some() {
+            merged.mode = terminal.mode;
+        }
         if terminal.fast.is_some() {
             merged.fast = terminal.fast;
         }
     }
-    (merged.model.is_some() || merged.effort.is_some()).then_some(merged)
+    (merged.model.is_some() || merged.effort.is_some() || merged.mode.is_some()).then_some(merged)
 }
 
 /// Full detection for one session: resolve structured transcript metadata,
@@ -1227,6 +1281,7 @@ mod tests {
                 label: "high".to_string(),
                 source: SessionChatOptionEvidence::Transcript,
             }),
+            mode: None,
             fast: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
@@ -1274,6 +1329,7 @@ mod tests {
                     label: "high".to_string(),
                     source: SessionChatOptionEvidence::Terminal,
                 }),
+                mode: None,
                 fast: Some(true),
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),

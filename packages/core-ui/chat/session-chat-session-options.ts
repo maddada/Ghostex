@@ -94,6 +94,14 @@ const CLAUDE_EFFORTS: readonly SessionChatOptionChoice[] = [
   { value: 'auto', label: 'Auto' },
 ];
 
+const CLAUDE_MODES: readonly SessionChatOptionChoice[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'bypass', label: 'Bypass permissions' },
+  { value: 'plan', label: 'Plan' },
+  { value: 'accept-edits', label: 'Accept edits' },
+  { value: 'manual', label: 'Manual' },
+];
+
 const CLAUDE_MODEL: SessionChatOptionDescriptor = {
   id: 'model',
   label: 'Model',
@@ -122,13 +130,14 @@ const CLAUDE_FAST_MODE: SessionChatOptionDescriptor = {
 /*
 Permission mode is Shift+Tab in Claude Code's TUI — it has no slash command,
 so it is delivered as a raw keystroke through sendSessionChatMessage's `key`
-param. Cycling is blind (the TUI owns the order), which is exactly the
-"toggle-command" shape: an action row, no tracked value.
+param. The terminal footer now supplies the current value for the pill; cycling
+remains one raw-key action because Claude owns the order.
 */
 const CLAUDE_MODE: SessionChatOptionDescriptor = {
   id: 'mode',
   label: 'Mode',
   category: 'mode',
+  choices: CLAUDE_MODES,
   actionLabel: 'Cycle mode (Shift+Tab)',
   description: "Steps through Claude Code's permission modes.",
   dispatch: { kind: 'key', key: 'shift-tab', marker: 'Sent Shift+Tab (mode cycle)' },
@@ -492,6 +501,7 @@ Nothing detected ⇒ nothing here runs and no current value is claimed.
 export interface SessionChatDetectedOptionInput {
   model?: { value: string; label: string; source?: 'terminal' | 'transcript' };
   effort?: { value: string; label: string; source?: 'terminal' | 'transcript' };
+  mode?: { value: string; label: string; source?: 'terminal' | 'transcript' };
   detectedAt: string;
 }
 
@@ -560,6 +570,13 @@ export function applySessionChatDetectedOptions(
     const hasEffort = catalog.optionsForModel(modelValue).some((descriptor) => descriptor.id === 'effort');
     if (hasEffort) {
       next = applyDetectedChoice(next, 'effort', detected.effort, detected.detectedAt);
+    }
+  }
+  if (detected.mode) {
+    const modelValue = next[catalog.model.id]?.value ?? catalog.model.defaultValue ?? '';
+    const hasMode = catalog.optionsForModel(modelValue).some((descriptor) => descriptor.id === 'mode');
+    if (hasMode) {
+      next = applyDetectedChoice(next, 'mode', detected.mode, detected.detectedAt);
     }
   }
   return next;

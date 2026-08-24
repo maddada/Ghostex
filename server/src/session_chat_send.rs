@@ -1792,6 +1792,19 @@ pub(crate) async fn handle_send_session_chat_message_http(
             "session-chat-key",
             steps,
         );
+        /*
+        Raw option keys repaint the footer just like `/model` and `/effort`:
+        Shift+Tab changes Claude's permission mode, while shifted arrows change
+        Codex effort. Re-read at the established +2s/+6s cadence so the pill
+        confirms the value promptly instead of waiting for the idle probe.
+        */
+        let agent = session_chat_agent_for_session(&target.session);
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
         return routed_json(
             Some(endpoint_path),
             StatusCode::OK,
