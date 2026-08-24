@@ -336,6 +336,17 @@ fn main() {
             )),
             app_id: gpui_platform_window_app_id(),
             icon: gpui_platform_window_icon(),
+            /*
+            Linux draws the same integrated Ghostex titlebar and caption
+            controls as Windows, so the X11 host must ask KWin (or another
+            window manager) to remove its server-side frame. GPUI translates
+            this request into the standard _MOTIF_WM_HINTS decoration hint.
+            The rendered decoration mode remains authoritative: if the X11
+            session cannot provide client decorations, Ghostex keeps the
+            server frame and omits its own caption buttons.
+            */
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
             titlebar: Some(gpui::TitlebarOptions {
                 title: Some("Ghostex".into()),
                 appears_transparent: true,
@@ -477,7 +488,18 @@ fn main() {
                     })
                     .detach();
                 });
-                cx.new(|cx| Root::new(view, window, cx).bg(workspace_background_color()))
+                cx.new(|cx| {
+                    let root = Root::new(view, window, cx).bg(workspace_background_color());
+                    /*
+                    Ghostex owns an exact, non-overlapping Linux resize frame
+                    inside its main view. Disable gpui-component's generic
+                    shadow overlay there so resize input never extends across
+                    the workspace or embedded CEF children.
+                    */
+                    #[cfg(target_os = "linux")]
+                    let root = root.bordered(false);
+                    root
+                })
             })
             .expect("failed to open GPUI window");
         let main_window_id = main_window.window_id();

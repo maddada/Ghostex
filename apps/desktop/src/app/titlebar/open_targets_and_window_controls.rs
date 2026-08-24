@@ -240,7 +240,7 @@ impl GhostexGpuiApp {
                 !button_hidden(OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| this.child(self.render_titlebar_open_targets_button(window, cx)),
             );
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(target_os = "windows")]
         let controls = controls
             .child(
                 div()
@@ -250,6 +250,23 @@ impl GhostexGpuiApp {
                     .window_control_area(WindowControlArea::Drag),
             )
             .child(self.render_titlebar_window_controls(window, cx));
+        #[cfg(target_os = "linux")]
+        let controls = controls.when(
+            matches!(
+                window.window_decorations(),
+                gpui::Decorations::Client { .. }
+            ),
+            |this| {
+                this.child(
+                    div()
+                        .id("ghostex-gpui-titlebar-window-controls-gap")
+                        .h_full()
+                        .w(px(TITLEBAR_BUTTON_WIDTH))
+                        .window_control_area(WindowControlArea::Drag),
+                )
+                .child(self.render_titlebar_window_controls(window, cx))
+            },
+        );
         controls
     }
 

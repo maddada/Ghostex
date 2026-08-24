@@ -50,6 +50,11 @@ fn gpui_titlebar_double_click_window_action(window: &Window) {
 #[cfg(target_os = "windows")]
 fn gpui_titlebar_double_click_window_action(_window: &Window) {}
 
+#[cfg(target_os = "linux")]
+struct GpuiLinuxTitlebarDragState {
+    should_move: bool,
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn render_titlebar(
         &self,
@@ -69,7 +74,7 @@ impl GhostexGpuiApp {
         let show_mode_switcher = !self.titlebar_mode_switcher_items().is_empty();
         let use_compact_mode_dropdown = show_mode_switcher
             && window.bounds().size.width.as_f32() < TITLEBAR_COMPACT_MODE_WIDTH_THRESHOLD;
-        div()
+        let titlebar = div()
             .id("ghostex-gpui-titlebar")
             .relative()
             .flex_shrink_0()
@@ -79,7 +84,46 @@ impl GhostexGpuiApp {
             .text_color(titlebar_text_color())
             .font_family("Inter Variable")
             .line_height(px(TITLEBAR_CONTROL_HEIGHT))
-            .window_control_area(WindowControlArea::Drag)
+            .window_control_area(WindowControlArea::Drag);
+
+        /*
+        X11 does not consume GPUI's WindowControlArea hit boxes, so a
+        client-decorated Linux window must hand movement to the window manager
+        from the real titlebar element. Wait for pointer movement so ordinary
+        clicks and double-click maximize keep their existing behavior.
+        */
+        #[cfg(target_os = "linux")]
+        let titlebar = {
+            let drag_state =
+                window.use_state(cx, |_, _| GpuiLinuxTitlebarDragState { should_move: false });
+            titlebar
+                .on_mouse_down_out(
+                    window.listener_for(&drag_state, |state, _, _, _| state.should_move = false),
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    window.listener_for(&drag_state, |state, _, window, _| {
+                        state.should_move = matches!(
+                            window.window_decorations(),
+                            gpui::Decorations::Client { .. }
+                        );
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    window.listener_for(&drag_state, |state, _, _, _| {
+                        state.should_move = false;
+                    }),
+                )
+                .on_mouse_move(window.listener_for(&drag_state, |state, _, window, _| {
+                    if state.should_move {
+                        state.should_move = false;
+                        window.start_window_move();
+                    }
+                }))
+        };
+
+        titlebar
             .on_click(|event, window, _cx| {
                 if event.click_count() != 2 {
                     return;
