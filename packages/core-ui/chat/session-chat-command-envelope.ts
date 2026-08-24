@@ -1,10 +1,10 @@
 // Slash-command envelope re-surfacing (upstream chat spec §9.2 port).
 // Claude-family harnesses record a slash input's user turn as
 // <command-name>/x</command-name><command-args>…</command-args> — hidden by
-// the noise filter (correctly, for CATALOG commands, since a local "Ran /x"
+// the noise filter (correctly, for most CATALOG commands, since a local command
 // marker is shown instead). But a skill invocation IS the user's chat turn,
-// so dropping its envelope would make the assistant appear to answer an
-// empty conversation.
+// and `/compact`'s marker retires when compaction finishes, so those durable
+// transcript records must be converted back into readable user turns.
 
 import type { SessionChatMessage } from '../../shared/session-chat';
 
@@ -43,7 +43,8 @@ export function surfaceSkillInvocationUserTurns(
     const envelope = parseSessionChatCommandEnvelope(
       message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n')
     );
-    if (!envelope || catalogCommandNames.has(envelope.name.replace(/^\//, ''))) {
+    const catalogName = envelope?.name.replace(/^\//, '').toLowerCase();
+    if (!envelope || (catalogName !== 'compact' && catalogCommandNames.has(catalogName ?? ''))) {
       out.push(message);
       continue;
     }

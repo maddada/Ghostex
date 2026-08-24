@@ -265,10 +265,6 @@ export function classifySessionChatSuppressedTurn(message: SessionChatMessage): 
     return null;
   }
   const text = sessionChatMessageText(message);
-  if (text.trim().toLowerCase() === '/compact') {
-    // The authoritative completion row below is the one visible record.
-    return { kind: 'hidden' };
-  }
   if (isContextCompactionRecord(message, text)) {
     // Same completed-action pill Claude's compaction gets, so the seam reads
     // identically whichever CLI drew it.

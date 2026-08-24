@@ -106,6 +106,21 @@ pub(crate) fn activity_for_hook_event(
         if matches!(lower.as_str(), "stop" | "idle" | "sessionend") {
             return Some("idle".to_string());
         }
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-24:
+        SessionStart is the ONLY hook Claude Code fires when /compact or /clear
+        finishes — the UserPromptSubmit that submitted the command marked the
+        session "working" and no Stop ever follows, which left sessions (and the
+        prompt-queue scheduler gating on them) stuck working forever after a
+        manual compaction. Every SessionStart source (startup, resume, clear,
+        compact) means the CLI is sitting at its input prompt, so map it to
+        idle. An AUTO-compact mid-turn also fires this and blips the session
+        idle; the next PreToolUse or working-spinner title restores it, and the
+        queue stays safe behind its transcript-lifecycle gate.
+        */
+        if matches!(lower.as_str(), "sessionstart" | "session-start") {
+            return Some("idle".to_string());
+        }
         if matches!(
             lower.as_str(),
             "notification" | "notify" | "permissionrequest"
@@ -209,6 +224,28 @@ pub(crate) fn activity_for_hook_event(
         return Some("idle".to_string());
     }
     None
+}
+
+/*
+CDXC:SessionChatPromptQueue 2026-08-24:
+Claude Code sends two very different things through the same Notification hook:
+permission requests ("Claude needs your permission to use …"), which are real
+attention — a prompt delivered now would be swallowed as the ANSWER — and the
+60-second idle reminder ("Claude is waiting for your input"), which means the
+input line is empty and waiting. Treating the reminder as attention permanently
+blockaded the prompt-queue scheduler whenever a session was stuck "working"
+(e.g. after a local command that never fires Stop). This predicate identifies
+the reminder so both mapping layers can refuse to escalate a stuck session on
+it; genuine permission notifications keep their attention transition.
+*/
+pub(crate) fn claude_notification_is_idle_input(payload: &Value) -> bool {
+    first_string([payload.get("message")])
+        .map(|message| {
+            message
+                .to_ascii_lowercase()
+                .contains("waiting for your input")
+        })
+        .unwrap_or(false)
 }
 
 fn payload_boolean(payload: &Value, keys: &[&str]) -> Option<bool> {

@@ -15,8 +15,8 @@ use crate::{
 };
 
 use super::event_mapping::{
-    activity_for_hook_event, env_string, first_path, first_string, is_prompt_event, nested_get,
-    normalized_hook_agent_key, update_hook_status,
+    activity_for_hook_event, claude_notification_is_idle_input, env_string, first_path,
+    first_string, is_prompt_event, nested_get, normalized_hook_agent_key, update_hook_status,
 };
 use super::install::{parent_process_id, read_json_object};
 use super::probing::{
@@ -114,7 +114,28 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         state.insert("agentSessionPath".to_string(), json!(transcript_path));
     }
 
+    let notification_is_idle_input = agent_key == "claude"
+        && event_name.to_ascii_lowercase().contains("notification")
+        && claude_notification_is_idle_input(&payload);
     if let Some(next_activity) = activity_for_hook_event(&agent_key, &event_name, &payload) {
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-24:
+        Claude's 60s "waiting for your input" reminder must not convert a stuck
+        "working" session into permanent attention — after a local command
+        (/compact before its SessionStart mapping, an unknown command) no Stop
+        ever fires, and attention would blockade the prompt-queue scheduler
+        forever. From working the reminder is proof the CLI is idle at its
+        prompt, so settle to idle; from idle it stays the attention ping that
+        drives the sidebar badge.
+        */
+        let next_activity = if notification_is_idle_input
+            && next_activity == "attention"
+            && read_state_string(&state, "status").as_deref() == Some("working")
+        {
+            "idle".to_string()
+        } else {
+            next_activity
+        };
         update_hook_status(&mut state, &next_activity);
     }
 
@@ -394,6 +415,19 @@ fn post_gxserver_hook_event(
     */
     if let Some(tool_name) = first_string([payload.get("tool_name"), payload.get("toolName")]) {
         params.insert("toolName".to_string(), json!(tool_name));
+    }
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-24:
+    gxserver's own event mapping outranks the posted sidecar status, so the
+    idle-input distinction must travel with the event: without it the server
+    re-derives Notification → attention and re-creates the stuck-attention
+    state this hook just avoided.
+    */
+    if agent_key == "claude"
+        && event_name.to_ascii_lowercase().contains("notification")
+        && claude_notification_is_idle_input(payload)
+    {
+        params.insert("notificationKind".to_string(), json!("idleInput"));
     }
     if let Some(tool_input) = payload
         .get("tool_input")

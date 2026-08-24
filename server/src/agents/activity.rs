@@ -118,13 +118,35 @@ pub(crate) fn ingest_agent_hook_event(
     home_dir: &Path,
 ) -> Result<Value, DomainStateError> {
     let current = require_session(repository, lifecycle)?;
-    let hook_activity = normalize_agent_hook_activity(
+    let mut hook_activity = normalize_agent_hook_activity(
         params.get("status"),
         params
             .get("eventName")
             .or_else(|| params.get("rawEventName")),
         params.get("agentName"),
     );
+    /*
+    CDXC:SessionChatPromptQueue 2026-08-24:
+    The notify hook tags Claude's 60s "waiting for your input" reminder with
+    notificationKind=idleInput. From a stored "working" state that reminder is
+    proof the CLI is idle at its prompt — no Stop ever fires after a local
+    command — and escalating it to attention would blockade the prompt-queue
+    scheduler forever. From idle it stays the attention ping behind the
+    sidebar badge. Older notify binaries omit the tag and keep today's
+    behavior.
+    */
+    if hook_activity.as_deref() == Some("attention")
+        && params.get("notificationKind").and_then(Value::as_str) == Some("idleInput")
+        && normalize_agent_activity_value(
+            object_field(&current, "runtimeSettings").get("agentActivity"),
+            "idle",
+        )
+        .get("activity")
+        .and_then(Value::as_str)
+            == Some("working")
+    {
+        hook_activity = Some("idle".to_string());
+    }
     let observed_identity = resolve_session_identity(&IdentityInput {
         agent_id: None,
         agent_name: read_text(params, "agentName"),
@@ -846,6 +868,18 @@ pub(crate) fn normalize_agent_hook_activity(
     }
     if normalized_agent.as_deref() == Some("claude") {
         if matches!(lower.as_str(), "stop" | "idle") {
+            return Some("idle".to_string());
+        }
+        /*
+        CDXC:SessionChatPromptQueue 2026-08-24:
+        SessionStart is the only hook Claude Code fires when /compact or /clear
+        finishes; the UserPromptSubmit that submitted the command set "working"
+        and no Stop follows, which left the session — and the prompt-queue
+        scheduler gating on it — stuck working after every manual compaction.
+        Every SessionStart source means the CLI is at its input prompt, so it
+        settles to idle (mirrors the notify hook's mapping).
+        */
+        if matches!(lower.as_str(), "sessionstart" | "session-start") {
             return Some("idle".to_string());
         }
         if matches!(
