@@ -1369,6 +1369,93 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 22;
     "#,
     },
+    Migration {
+        id: "0023_session_parking",
+        sql: r#"
+      ALTER TABLE sessions ADD COLUMN isParked INTEGER NOT NULL DEFAULT 0 CHECK (isParked IN (0, 1));
+
+      PRAGMA user_version = 23;
+    "#,
+    },
+    Migration {
+        id: "0024_stashed_prompt_tag",
+        /*
+        CDXC:StashedPromptTags 2026-08-24:
+        Stash actions file prompts under a durable builtin Stashed tag. Seed
+        the catalogue and backfill existing stash rows so old and new Saved
+        Prompts have the same filing behavior.
+        */
+        sql: r#"
+      INSERT OR IGNORE INTO stashed_prompt_tags (
+        tagId, name, color, isBuiltin, sortOrder, createdAt, updatedAt
+      ) VALUES (
+        'stashed',
+        'Stashed',
+        '#3b82f6',
+        1,
+        1,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      );
+
+      INSERT OR IGNORE INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
+      SELECT promptId, 'stashed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      FROM stashed_prompts;
+
+      PRAGMA user_version = 24;
+    "#,
+    },
+    Migration {
+        id: "0025_session_agent_notes",
+        /*
+        CDXC:SessionAgentNotes 2026-08-24:
+        A session note is keyed by the AGENT session id (the provider resume
+        id), not by the ghostex session id, so closing a session and resuming
+        the same conversation later brings the note back with it. That is also
+        why there is no FK onto `sessions`: the note must outlive the ghostex
+        row it was written from, exactly like `stashed_prompts` above.
+        agent/projectId/sessionId are soft debug references to the LAST writer
+        and are never used as lookup keys.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS session_agent_notes (
+        agentSessionId TEXT PRIMARY KEY CHECK (agentSessionId <> ''),
+        note TEXT NOT NULL CHECK (note <> ''),
+        agent TEXT,
+        projectId TEXT,
+        sessionId TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      PRAGMA user_version = 25;
+    "#,
+    },
+    Migration {
+        id: "0026_stashed_prompt_agent_session",
+        /*
+        CDXC:StashedPromptAgentSession 2026-08-24:
+        A stashed prompt belongs to the agent CONVERSATION it was stashed from,
+        not merely to the ghostex session row that happened to be open: Claude
+        and Codex mint a new conversation id on compaction/resume, and the
+        successor re-key in `apply_session_state_update` moves this column with
+        it, exactly like `session_agent_notes`. Nullable and no FK, because a
+        stash must outlive both the conversation and the session row.
+        Deliberately no backfill: filling this from the sessions registry would
+        need JSON1 to read `runtimeSettingsJson`, which a migration cannot
+        assume is compiled in, so legacy rows stay NULL and
+        `list_stashed_prompts` resolves them from the live registry at read
+        time.
+        */
+        sql: r#"
+      ALTER TABLE stashed_prompts ADD COLUMN agentSessionId TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_stashed_prompts_agent_session
+        ON stashed_prompts(agentSessionId);
+
+      PRAGMA user_version = 26;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1417,10 +1504,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 22);
+        assert_eq!(user_version, 26);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 22);
+        assert_eq!(schema_migration_count(&db), 26);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1442,6 +1529,7 @@ mod tests {
                 "idx_sessions_project_sidebar_order".to_string(),
                 "idx_sessions_project_updated".to_string(),
                 "idx_stashed_prompt_tag_links_tag".to_string(),
+                "idx_stashed_prompts_agent_session".to_string(),
                 "idx_stashed_prompts_updated".to_string(),
             ]
         );
@@ -1510,6 +1598,7 @@ mod tests {
                 "settledOverrideAt",
                 "snoozedAt",
                 "snoozedUntil",
+                "isParked",
             ]
         );
         assert_eq!(
@@ -1584,6 +1673,19 @@ mod tests {
                 "createdAt",
                 "completedAt",
                 "updatedAt",
+            ]
+        );
+        assert_eq!(
+            table_columns(&db, "stashed_prompts"),
+            vec![
+                "promptId",
+                "content",
+                "projectId",
+                "sessionId",
+                "cwd",
+                "createdAt",
+                "updatedAt",
+                "agentSessionId",
             ]
         );
         let foreign_key: (String, String, String, String) = db
