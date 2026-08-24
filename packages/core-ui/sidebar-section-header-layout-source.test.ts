@@ -23,15 +23,15 @@ describe('reference sidebar section header layout source', () => {
      */
     const nativeInsetRule = sourceBetween(
       groupPanelsSource,
-      'body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar="true"] {',
-      '.sidebar-reference-layout[data-reference-sidebar="true"],'
+      "body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'] {",
+      ".sidebar-reference-layout[data-reference-sidebar='true'],"
     );
     expect(nativeInsetRule).toContain('--reference-sidebar-primary-nav-edge-bleed-left: 9px;');
     expect(nativeInsetRule).toContain('padding-left: 13px;');
 
     const primaryNavBleedRule = sourceBetween(
       groupPanelsSource,
-      '.sidebar-reference-layout[data-reference-sidebar="true"]\n  .reference-sidebar-primary-nav\n  > .reference-sidebar-nav-item,',
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-primary-nav > .reference-sidebar-nav-item,",
       '.reference-sidebar-nav-item {'
     );
     expect(primaryNavBleedRule).toContain(
@@ -40,8 +40,8 @@ describe('reference sidebar section header layout source', () => {
 
     const primaryNavButtonPaddingRule = sourceBetween(
       groupPanelsSource,
-      '.sidebar-reference-layout[data-reference-sidebar="true"]\n  .reference-sidebar-primary-nav\n  > :is(',
-      '.sidebar-reference-layout[data-reference-sidebar="true"] .reference-sidebar-actions-button {'
+      ".sidebar-reference-layout[data-reference-sidebar='true']\n  .reference-sidebar-primary-nav\n  > :is(",
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-actions-button {"
     );
     expect(primaryNavButtonPaddingRule).toContain(
       'padding-left: calc(10px + var(--reference-sidebar-primary-nav-edge-bleed-left));'
@@ -56,13 +56,13 @@ describe('reference sidebar section header layout source', () => {
      * sidebar.
      */
     expect(referenceChromeSource).toMatch(
-      /<span\s+className="reference-sidebar-section-title">\s*\{title\}\s*<\/span>/u
+      /<span\s+className='reference-sidebar-section-title'>\s*\{title\}\s*<\/span>/u
     );
 
     const sectionRowRule = sourceBetween(
       groupPanelsSource,
       '.reference-sidebar-section-row {',
-      '.reference-sidebar-section-row[data-reference-section="projects"]'
+      ".reference-sidebar-section-row[data-reference-section='projects']"
     );
     expect(sectionRowRule).toContain('--reference-sidebar-section-actions-max-width: 132px;');
     expect(sectionRowRule).toContain('CDXC:SidebarHeaderActions 2026-06-17-23:21');
@@ -80,7 +80,7 @@ describe('reference sidebar section header layout source', () => {
     const hiddenActionsRule = sourceBetween(
       groupPanelsSource,
       '.reference-sidebar-section-actions {',
-      '.sidebar-reference-layout[data-reference-sidebar="true"]'
+      ".sidebar-reference-layout[data-reference-sidebar='true']"
     );
     expect(hiddenActionsRule).toContain('max-width: 0;');
     expect(hiddenActionsRule).toContain('overflow: hidden;');

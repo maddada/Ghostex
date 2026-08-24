@@ -28,8 +28,8 @@ describe('watch ghostex video modal source', () => {
     expect(watchModalSource).toContain('https://www.youtube.com/embed/APdP-j5n4Mw?playsinline=1&rel=0');
     expect(watchModalSource).toContain('https://www.youtube.com/watch?v=APdP-j5n4Mw');
     expect(watchModalSource).toContain('<iframe');
-    expect(watchModalSource).toContain('frameBorder="0"');
-    expect(watchModalSource).toContain('referrerPolicy="strict-origin-when-cross-origin"');
+    expect(watchModalSource).toContain("frameBorder='0'");
+    expect(watchModalSource).toContain("referrerPolicy='strict-origin-when-cross-origin'");
     expect(watchModalSource).toContain('allowFullScreen');
     expect(watchModalSource).not.toContain('<video');
     expect(watchModalSource).not.toContain('ghostex-features-walkthrough.webm');

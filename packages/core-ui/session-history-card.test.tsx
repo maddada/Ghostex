@@ -104,7 +104,7 @@ describe('SessionHistoryCard', () => {
   test('keeps reference-sidebar history title padding aligned with project rows', () => {
     const css = readFileSync(new URL('./styles/session-cards.css', import.meta.url), 'utf8');
     const referenceHistoryRule = css.match(
-      /\.sidebar-reference-layout\[data-reference-sidebar="true"\] \.session\.session-history-card\s*\{[^}]+padding-left:[^}]+\}/u
+      /\.sidebar-reference-layout\[data-reference-sidebar='true'\] \.session\.session-history-card\s*\{[^}]+padding-left:[^}]+\}/u
     )?.[0];
 
     expect(referenceHistoryRule).toContain('var(--reference-session-title-inset)');
@@ -115,7 +115,7 @@ describe('SessionHistoryCard', () => {
   test('hides the underlying history agent decoration at rest for tagged rows', () => {
     const css = readFileSync(new URL('./styles/session-cards.css', import.meta.url), 'utf8');
 
-    expect(css).toContain('.session-history-frame:is([data-tagged="true"], [data-pinned="true"])');
+    expect(css).toContain(".session-history-frame:is([data-tagged='true'], [data-pinned='true'])");
     expect(css).toContain('.session-floating-agent-tabler-icon[data-agent-icon]');
     expect(css).toContain('CDXC:PreviousSessions 2026-06-09-09:41');
   });

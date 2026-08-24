@@ -24,7 +24,7 @@ describe('session card icon source', () => {
     expect(sessionCardsCssSource).not.toContain('right: anchor(left);');
     expect(sessionCardsCssSource).not.toContain('anchor-size(');
     expect(sessionCardsCssSource).toContain(
-      '.session-pinned-floating-button[data-pinned="false"]:not(:hover):not(:focus-visible)'
+      ".session-pinned-floating-button[data-pinned='false']:not(:hover):not(:focus-visible)"
     );
     expect(sessionCardsCssSource).toContain('row hover alone must not show it');
     expect(sessionCardsCssSource).not.toContain('session-pinned-agent-icon');
@@ -38,16 +38,16 @@ describe('session card icon source', () => {
      * and hide the underlying agent at rest, then hide the tag on pointer hover.
      */
     expect(sessionCardsCssSource).toContain(
-      '.session-tag-colored-icon[data-session-tag="favorite"],\n.session-tag-agent-icon[data-session-tag="favorite"]'
+      ".session-tag-colored-icon[data-session-tag='favorite'],\n.session-tag-agent-icon[data-session-tag='favorite']"
     );
-    expect(sessionCardsCssSource).toContain('.session-frame[data-tagged="true"]:not(:hover):not(:has(.session:hover))');
+    expect(sessionCardsCssSource).toContain(".session-frame[data-tagged='true']:not(:hover):not(:has(.session:hover))");
     expect(sessionCardsCssSource).toContain('.session-floating-agent-icon,');
     expect(sessionCardsCssSource).toContain('.session-floating-agent-tabler-icon[data-agent-icon],');
-    expect(sessionCardsCssSource).toContain('.session-persistence-provider-badge[data-slot="floating"]');
+    expect(sessionCardsCssSource).toContain(".session-persistence-provider-badge[data-slot='floating']");
     expect(sessionCardsCssSource).toContain(
       'Tagged session rows have one leading slot. At rest, including when the row'
     );
-    expect(sessionCardsCssSource).toContain('.session-frame[data-tagged="true"]:is(:hover, :has(.session:hover))');
+    expect(sessionCardsCssSource).toContain(".session-frame[data-tagged='true']:is(:hover, :has(.session:hover))");
     expect(sessionCardsCssSource).toContain('.session-tag-agent-icon');
     expect(sessionCardsCssSource).toContain('opacity: 0 !important;');
   });

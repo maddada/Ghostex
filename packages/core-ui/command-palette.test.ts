@@ -382,11 +382,11 @@ describe('command palette source contracts', () => {
      * the command input, without inherited square button chrome.
      */
     expect(commandInputSource).toContain('clearOnEscape = true');
-    expect(commandInputSource).toContain('clearOnEscape && event.key === "Escape" && currentValue.length > 0');
-    expect(commandInputSource).toContain('data-slot="command-input-clear"');
+    expect(commandInputSource).toContain("clearOnEscape && event.key === 'Escape' && currentValue.length > 0");
+    expect(commandInputSource).toContain("data-slot='command-input-clear'");
     expect(commandPaletteSource).toContain('clearOnEscape={false}');
     expect(commandPaletteSource).toContain('onOpenChange(false);');
-    expect(sidebarStylesSource).toContain('[data-slot="command-input-clear"]');
+    expect(sidebarStylesSource).toContain("[data-slot='command-input-clear']");
     expect(sidebarStylesSource).toContain('border: 0 !important;');
   });
 
@@ -522,7 +522,7 @@ describe('command palette source contracts', () => {
 
     const handleWindowMessageStart = sidebarAppSource.indexOf('const handleWindowMessage = useEffectEvent');
     const handleWindowMessageEnd = sidebarAppSource.indexOf(
-      '    if (event.data.type === "playCompletionSound")',
+      "    if (event.data.type === 'playCompletionSound')",
       handleWindowMessageStart
     );
     expect(handleWindowMessageStart).toBeGreaterThanOrEqual(0);
@@ -549,18 +549,18 @@ describe('command palette source contracts', () => {
       gpuiProjectSlotResolverEnd
     );
 
-    const gpuiProjectMessageStart = handleWindowMessageSource.indexOf('event.data.type === "gpuiProjectSlotHotkey"');
-    const nativeHotkeyMessageStart = handleWindowMessageSource.indexOf('event.data.type === "nativeHotkey"');
+    const gpuiProjectMessageStart = handleWindowMessageSource.indexOf("event.data.type === 'gpuiProjectSlotHotkey'");
+    const nativeHotkeyMessageStart = handleWindowMessageSource.indexOf("event.data.type === 'nativeHotkey'");
     expect(gpuiProjectMessageStart).toBeGreaterThanOrEqual(0);
     expect(nativeHotkeyMessageStart).toBeGreaterThan(gpuiProjectMessageStart);
-    const forwardingBranchStart = runHotkeySource.indexOf('action.kind === "focusAdjacentGroup"');
-    const localSessionSlotBranchStart = runHotkeySource.indexOf('action.kind === "focusSessionSlot"');
+    const forwardingBranchStart = runHotkeySource.indexOf("action.kind === 'focusAdjacentGroup'");
+    const localSessionSlotBranchStart = runHotkeySource.indexOf("action.kind === 'focusSessionSlot'");
     const createSessionBranchStart = runHotkeySource.indexOf(
-      'action.kind === "createSession"',
+      "action.kind === 'createSession'",
       localSessionSlotBranchStart
     );
     const hotkeyMessageStart = runHotkeySource.indexOf(
-      'vscode.postMessage({ actionId: action.id, type: "runGhostexHotkeyAction" });',
+      "vscode.postMessage({ actionId: action.id, type: 'runGhostexHotkeyAction' });",
       forwardingBranchStart
     );
     expect(localSessionSlotBranchStart).toBeGreaterThanOrEqual(0);
@@ -575,21 +575,21 @@ describe('command palette source contracts', () => {
     expect(hotkeyMessageEnd).toBeGreaterThan(hotkeyMessageStart);
     const hotkeyMessageSource = runHotkeySource.slice(hotkeyMessageStart, hotkeyMessageEnd);
 
-    expect(contractMessageSource).toContain('type: "gpuiProjectSlotHotkey";');
+    expect(contractMessageSource).toContain("type: 'gpuiProjectSlotHotkey';");
     expect(contractMessageSource).toContain('slotNumber: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;');
     expect(extensionMessageSource).toContain('| SidebarNativeHotkeyMessage');
     expect(extensionMessageSource).toContain('| SidebarGpuiProjectSlotHotkeyMessage');
-    expect(handleWindowMessageSource).toContain(`if (event.data.type === "gpuiProjectSlotHotkey") {
+    expect(handleWindowMessageSource).toContain(`if (event.data.type === 'gpuiProjectSlotHotkey') {
       resolveGpuiProjectSlotHotkey(event.data.slotNumber);
       return;
     }`);
-    expect(handleWindowMessageSource).toContain(`if (event.data.type === "nativeHotkey") {
+    expect(handleWindowMessageSource).toContain(`if (event.data.type === 'nativeHotkey') {
       runGhostexHotkeyAction(event.data.actionId);
       return;
     }`);
     expect(gpuiProjectSlotResolverSource).toContain('Number.isInteger(slotNumber)');
-    expect(gpuiProjectSlotResolverSource).toContain('displayedReferenceProjectGroupIds[ slotNumber - 1 ]');
-    expect(gpuiProjectSlotResolverSource).toContain('groupsById[ groupId ]?.projectContext?.editor.projectId');
+    expect(gpuiProjectSlotResolverSource).toContain('displayedReferenceProjectGroupIds[slotNumber - 1]');
+    expect(gpuiProjectSlotResolverSource).toContain('groupsById[groupId]?.projectContext?.editor.projectId');
     expect(gpuiProjectSlotResolverSource).toContain('handleSidebarProjectJump({');
     expect(gpuiProjectSlotResolverSource).toContain(
       'expandCollapsedProject: effectiveSettings.expandCollapsedProjectsOnJump'
@@ -598,36 +598,36 @@ describe('command palette source contracts', () => {
       'showLessAfterExpand: effectiveSettings.showLessForExpandedProjectJumps'
     );
     expect(gpuiProjectSlotResolverSource).toContain('revealFocusedSession: true');
-    expect(gpuiProjectSlotResolverSource).toContain('displayedWorkspaceSessionIdsByGroup[ groupId ] ?? []');
-    expect(gpuiProjectSlotResolverSource).toContain('sessionsById[ sessionId ]?.isFocused === true');
+    expect(gpuiProjectSlotResolverSource).toContain('displayedWorkspaceSessionIdsByGroup[groupId] ?? []');
+    expect(gpuiProjectSlotResolverSource).toContain('sessionsById[sessionId]?.isFocused === true');
     expect(gpuiProjectSlotResolverSource).toContain('focusSidebarSessionFromNavigation(groupId, targetSessionId);');
     expect(gpuiProjectSlotResolverSource).toContain(`vscode.postMessage({
       sessionId: targetSessionId,
-      type: "focusSession",
+      type: 'focusSession',
     });`);
-    expect(gpuiProjectSlotResolverSource).not.toContain('type: "focusGroup"');
+    expect(gpuiProjectSlotResolverSource).not.toContain("type: 'focusGroup'");
     expect(gpuiProjectSlotResolverSource).not.toContain('runGhostexHotkeyAction');
-    expect(localSessionSlotBranchSource).toContain('action.kind === "focusSessionSlot"');
+    expect(localSessionSlotBranchSource).toContain("action.kind === 'focusSessionSlot'");
     expect(localSessionSlotBranchSource).toContain(
-      'dismissAppModalForSidebarNavigation("SettingsDismissal:focusSessionHotkey");'
+      "dismissAppModalForSidebarNavigation('SettingsDismissal:focusSessionHotkey');"
     );
     expect(localSessionSlotBranchSource).toContain('focusSidebarSessionSlot(action.slotNumber);');
     expect(localSessionSlotBranchSource).toContain('return;');
     expect(localSessionSlotBranchSource).not.toContain('vscode.postMessage');
-    expect(forwardingBranchSource).toContain('action.kind === "focusAdjacentGroup"');
-    expect(forwardingBranchSource).toContain('action.kind === "focusDirection"');
-    expect(forwardingBranchSource).toContain('action.kind === "focusedPaneAction"');
-    expect(forwardingBranchSource).toContain('action.kind === "jumpToProject"');
-    expect(forwardingBranchSource).toContain('action.kind === "openCommandsPanel"');
-    expect(forwardingBranchSource).toContain('action.kind === "renameActiveSession"');
-    expect(forwardingBranchSource).toContain('action.kind === "runActionSlot"');
-    expect(forwardingBranchSource).toContain('action.kind === "setViewMode"');
-    expect(forwardingBranchSource).toContain('action.kind === "splitFocusedPane"');
-    expect(forwardingBranchSource).toContain('action.kind === "switchWorkareaView"');
-    expect(localHandledSource).not.toContain('action.kind === "setViewMode"');
-    expect(forwardingBranchSource).not.toContain('action.kind === "focusSessionSlot"');
+    expect(forwardingBranchSource).toContain("action.kind === 'focusAdjacentGroup'");
+    expect(forwardingBranchSource).toContain("action.kind === 'focusDirection'");
+    expect(forwardingBranchSource).toContain("action.kind === 'focusedPaneAction'");
+    expect(forwardingBranchSource).toContain("action.kind === 'jumpToProject'");
+    expect(forwardingBranchSource).toContain("action.kind === 'openCommandsPanel'");
+    expect(forwardingBranchSource).toContain("action.kind === 'renameActiveSession'");
+    expect(forwardingBranchSource).toContain("action.kind === 'runActionSlot'");
+    expect(forwardingBranchSource).toContain("action.kind === 'setViewMode'");
+    expect(forwardingBranchSource).toContain("action.kind === 'splitFocusedPane'");
+    expect(forwardingBranchSource).toContain("action.kind === 'switchWorkareaView'");
+    expect(localHandledSource).not.toContain("action.kind === 'setViewMode'");
+    expect(forwardingBranchSource).not.toContain("action.kind === 'focusSessionSlot'");
     expect(hotkeyMessageSource.trim()).toBe(
-      'vscode.postMessage({ actionId: action.id, type: "runGhostexHotkeyAction" });'
+      "vscode.postMessage({ actionId: action.id, type: 'runGhostexHotkeyAction' });"
     );
   });
 
@@ -716,9 +716,9 @@ describe('command palette source contracts', () => {
     expect(commandPaletteSource).toContain("type: 'openCurrentProjectInTarget'");
     expect(commandPaletteSource).toContain('function getBuiltInCommandKey');
     expect(modalHostSource).toContain('openTargetSettings={settings}');
-    expect(sessionGridContractSource).toContain('type: "openCurrentProjectInFinder"');
-    expect(sessionGridContractSource).toContain('type: "openGhostexTutorialVideo"');
-    expect(sessionGridContractSource).toContain('type: "openCurrentProjectInTarget"');
+    expect(sessionGridContractSource).toContain("type: 'openCurrentProjectInFinder'");
+    expect(sessionGridContractSource).toContain("type: 'openGhostexTutorialVideo'");
+    expect(sessionGridContractSource).toContain("type: 'openCurrentProjectInTarget'");
   });
 
   test('keeps command search scoped to the Quick Access command tab', () => {

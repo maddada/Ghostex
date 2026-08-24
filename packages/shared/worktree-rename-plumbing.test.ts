@@ -128,10 +128,10 @@ describe('gpui/src/main.rs rename bridge', () => {
 
 describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
   test('handles both rename messages', () => {
-    expect(gpuiRuntimeDispatchSource).toContain('case "promptRenameWorktreeForGroup":');
-    expect(gpuiRuntimeDispatchSource).toContain('case "confirmRenameWorktree":');
+    expect(gpuiRuntimeDispatchSource).toContain("case 'promptRenameWorktreeForGroup':");
+    expect(gpuiRuntimeDispatchSource).toContain("case 'confirmRenameWorktree':");
     expect(gpuiRuntimeWorktreeSource).toContain('async promptRenameWorktreeForGroup(this: GpuiSidebarRuntime,');
-    expect(gpuiRuntimeWorktreeSource).toContain('async confirmRenameWorktree(this: GpuiSidebarRuntime,');
+    expect(gpuiRuntimeWorktreeSource).toContain('async confirmRenameWorktree(\n    this: GpuiSidebarRuntime,');
   });
 
   test('calls the single rename endpoint rather than orchestrating git itself', () => {
@@ -142,13 +142,13 @@ describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
      */
     const confirm = sourceBetweenIn(
       gpuiRuntimeWorktreeSource,
-      'async confirmRenameWorktree(this: GpuiSidebarRuntime,',
+      'async confirmRenameWorktree(\n    this: GpuiSidebarRuntime,',
       'async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,'
     );
 
-    expect(confirm).toContain('"/api/renameWorktreeProject"');
-    expect(confirm).not.toContain('action: "move"');
-    expect(confirm).not.toContain('action: "renameBranch"');
+    expect(confirm).toContain("'/api/renameWorktreeProject'");
+    expect(confirm).not.toContain("action: 'move'");
+    expect(confirm).not.toContain("action: 'renameBranch'");
   });
 
   test('routes rename errors around the slash-stripping worktree error filter', () => {
@@ -156,12 +156,12 @@ describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
      * `gpuiWorktreeUserVisibleErrorMessage` drops any message containing "/",
      * which is every rename refusal that names a branch. The rename flow needs
      * its own reader or the user gets a generic failure instead of
-     * `Branch "feat/x" already exists.`
+     * `Branch 'feat/x' already exists.`
      */
     expect(gpuiRuntimeWorktreeHelperSource).toContain('function gpuiWorktreeRenameUserVisibleErrorMessage(');
     const confirm = sourceBetweenIn(
       gpuiRuntimeWorktreeSource,
-      'async confirmRenameWorktree(this: GpuiSidebarRuntime,',
+      'async confirmRenameWorktree(\n    this: GpuiSidebarRuntime,',
       'async promptDeleteRemoteWorktreeForGroup(this: GpuiSidebarRuntime,'
     );
     expect(confirm).toContain('gpuiWorktreeRenameUserVisibleErrorMessage(error)');
@@ -171,7 +171,7 @@ describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
   test('translates an out-of-date daemon into something the user can act on', () => {
     /*
      * Verified live against a stale daemon: it answers
-     * `notFound: "No gxserver endpoint for POST /api/renameWorktreeProject."`.
+     * `notFound: 'No gxserver endpoint for POST /api/renameWorktreeProject.'`.
      * gxserver has more than one phrasing for an unroutable path, so the match
      * is on the ENDPOINT PATH, not on a sentence — an earlier version of this
      * guard keyed off one phrasing and silently failed to fire against the real
@@ -184,16 +184,16 @@ describe('gpui/sidebar/gxserver-runtime rename handlers', () => {
       '\n}'
     );
 
-    expect(reader).toContain('message.includes("/api/renameWorktreeProject")');
+    expect(reader).toContain("message.includes('/api/renameWorktreeProject')");
     expect(reader).toContain('Quit Ghostex fully, reopen it, and try again.');
   });
 });
 
 describe('native/sidebar/modal-host.tsx rename modal', () => {
   test('registers the modal kind, its fit-height selector, and its open arm', () => {
-    expect(modalHostSource).toContain('renameWorktree: ".worktree-rename-modal-shadcn"');
-    expect(modalHostSource).toContain('message.modal === "renameWorktree"');
+    expect(modalHostSource).toContain("renameWorktree: '.worktree-rename-modal-shadcn'");
+    expect(modalHostSource).toContain("message.modal === 'renameWorktree'");
     expect(modalHostSource).toContain('worktreeRenameDraft?: WorktreeRenameModalDraft');
-    expect(modalHostSource).toContain('type: "confirmRenameWorktree"');
+    expect(modalHostSource).toContain("type: 'confirmRenameWorktree'");
   });
 });

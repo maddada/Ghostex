@@ -14,7 +14,7 @@ describe('native titlebar Git source', () => {
      * state, so Branch does not flash as detached before the branch probe
      * finishes.
      */
-    expect(constantsSource).toContain('const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = "ghostex.titlebar.gitState."');
+    expect(constantsSource).toContain("const TITLEBAR_GIT_STATE_CACHE_STORAGE_PREFIX = 'ghostex.titlebar.gitState.'");
     expect(projectStateSource).toContain('function resolveTitlebarGitStateForMerge(');
     expect(projectStateSource).toContain('shouldHydrateMissingTitlebarGitStateFromCache(current, cached)');
     expect(projectStateSource).toMatch(

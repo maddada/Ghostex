@@ -17,8 +17,8 @@ describe('session rename modal focus source', () => {
     expect(sessionRenameModalSource).toContain('input.setSelectionRange(0, input.value.length);');
     expect(sessionRenameModalSource).not.toContain('input.select();');
     expect(sessionRenameModalSource).toContain('const retryDelaysMs = [0, 16, 50, 100, 250, 500, 1000, 1600, 2400];');
-    expect(sessionRenameModalSource).toContain('window.addEventListener("focus", handleWindowFocus);');
-    expect(sessionRenameModalSource).toContain('window.removeEventListener("focus", handleWindowFocus);');
+    expect(sessionRenameModalSource).toContain("window.addEventListener('focus', handleWindowFocus);");
+    expect(sessionRenameModalSource).toContain("window.removeEventListener('focus', handleWindowFocus);");
     expect(sessionRenameModalSource).toContain('onKeyDownCapture={markUserInteractedAfterOpen}');
     expect(sessionRenameModalSource).toContain('onPointerDownCapture={markUserInteractedAfterOpen}');
   });

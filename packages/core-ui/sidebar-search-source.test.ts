@@ -25,10 +25,10 @@ describe('sidebar search source', () => {
       'function SidebarReferenceNavButton({'
     );
 
-    expect(searchItemSource).toContain('className="reference-sidebar-search-slot"');
-    expect(searchItemSource).toContain('className="reference-sidebar-nav-button"');
+    expect(searchItemSource).toContain("className='reference-sidebar-search-slot'");
+    expect(searchItemSource).toContain("className='reference-sidebar-nav-button'");
     expect(searchItemSource).toContain('onClick={onSearch}');
-    expect(searchItemSource).toContain('<span className="reference-sidebar-nav-label">Search</span>');
+    expect(searchItemSource).toContain("<span className='reference-sidebar-nav-label'>Search</span>");
     expect(searchItemSource).toContain('<IconSearch');
     expect(searchItemSource).toContain('reference-sidebar-search-icon');
     expect(searchItemSource).toContain('reference-sidebar-nav-shortcut');

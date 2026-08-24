@@ -59,10 +59,10 @@ describe('native titlebar Tips & Tricks source', () => {
     expect(menuSource).not.toContain('onMarkAllRead');
     expect(menuSource).not.toContain('Run Setup Flow');
     expect(menuSource).not.toContain('titlebar-tips-summary');
-    expect(appSource).toContain('type: "openBrowserPane", url: GHOSTEX_DOCS_URL');
-    expect(appSource).toContain('type: "openGhostexTutorialVideo"');
-    expect(appSource).toContain('type: "openWorkspaceWelcome"');
-    expect(appSource).toContain('type: "openBrowserPane", url: GHOSTEX_CHANGELOG_URL');
+    expect(appSource).toContain("type: 'openBrowserPane', url: GHOSTEX_DOCS_URL");
+    expect(appSource).toContain("type: 'openGhostexTutorialVideo'");
+    expect(appSource).toContain("type: 'openWorkspaceWelcome'");
+    expect(appSource).toContain("type: 'openBrowserPane', url: GHOSTEX_CHANGELOG_URL");
     expect(constantsSource).toContain('https://github.com/maddada/ghostex/releases');
   });
 
@@ -127,20 +127,20 @@ describe('native titlebar Tips & Tricks source', () => {
     );
     const rowSource = sourceBetween(tipsPanelSource, 'function TitlebarTipRow', 'function getTitlebarTipIcon');
 
-    expect(tipsSource).toContain('id: "use-ghostex-computer-use-skill"');
+    expect(tipsSource).toContain("id: 'use-ghostex-computer-use-skill'");
     expect(tipsSource).toContain('/ghostex-computer-use');
-    expect(tipsSource).toContain('settingsSearchQuery: "Ghostex Computer Use"');
-    expect(tipsSource).toContain('id: "use-ghostex-browser-use-skill"');
+    expect(tipsSource).toContain("settingsSearchQuery: 'Ghostex Computer Use'");
+    expect(tipsSource).toContain("id: 'use-ghostex-browser-use-skill'");
     expect(tipsSource).toContain('/ghostex-browser-use');
-    expect(tipsSource).toContain('settingsSearchQuery: "Ghostex Browser Use"');
-    expect(tipsSource).toContain('id: "recommend-faster-chrome-devtools-skill"');
+    expect(tipsSource).toContain("settingsSearchQuery: 'Ghostex Browser Use'");
+    expect(tipsSource).toContain("id: 'recommend-faster-chrome-devtools-skill'");
     expect(tipsSource).toContain('personal Chrome');
     expect(constantsSource).toContain(
-      'const FASTER_CHROME_DEVTOOLS_SKILL_URL = "https://github.com/zeke/faster-chrome-devtools-skill";'
+      "const FASTER_CHROME_DEVTOOLS_SKILL_URL = 'https://github.com/zeke/faster-chrome-devtools-skill';"
     );
     expect(appSource).toContain('initialSearchQuery: action.settingsSearchQuery');
-    expect(appSource).toContain('initialTab: "integrations"');
-    expect(appSource).toContain('postTitlebarSidebarCommand({ type: "openBrowserPane", url: action.url });');
+    expect(appSource).toContain("initialTab: 'integrations'");
+    expect(appSource).toContain("postTitlebarSidebarCommand({ type: 'openBrowserPane', url: action.url });");
     expect(rowSource).toContain('titlebar-tip-detail-button');
     expect(rowSource).toContain('onOpenTipAction(tip)');
     expect(rowSource).toContain('titlebar-tip-read-button');
@@ -187,11 +187,11 @@ describe('native titlebar Tips & Tricks source', () => {
     expect(noticeSource).toContain('Automatic session renaming');
     expect(noticeSource).toContain('In Progress/Needs Attention status');
     expect(noticeSource).toContain('sleeping or resuming agent sessions will not work correctly');
-    expect(noticeSource).toContain('action: "openSettings"');
-    expect(noticeSource).toContain('settingsTarget: "agentHooks"');
-    expect(appSource).toContain('initialSearchQuery: "Agent Hooks"');
-    expect(appSource).toContain('initialTab: "integrations"');
-    expect(tipsPanelSource).toContain('title="Notices"');
+    expect(noticeSource).toContain("action: 'openSettings'");
+    expect(noticeSource).toContain("settingsTarget: 'agentHooks'");
+    expect(appSource).toContain("initialSearchQuery: 'Agent Hooks'");
+    expect(appSource).toContain("initialTab: 'integrations'");
+    expect(tipsPanelSource).toContain("title='Notices'");
     expect(appSource).toContain('openAgentHooksSettings');
     expect(appSource).not.toContain('installAgentHooksFromTitlebarNotice');
   });

@@ -26,8 +26,8 @@ describe('agent hook status source', () => {
      * priority provider probes.
      */
     expect(contractSource).toContain('agentIds?: readonly string[];');
-    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "requestAgentHookStatus" });');
-    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "installAgentHooks" });');
+    expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: 'requestAgentHookStatus' });");
+    expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: 'installAgentHooks' });");
   });
 
   test('wires advanced Settings uninstall actions for hooks and bundled skills', () => {
@@ -42,13 +42,13 @@ describe('agent hook status source', () => {
      * Agent Hooks section, so the host must forward the selected agentIds
      * instead of always uninstalling every provider.
      */
-    expect(contractSource).toContain('"requestAgentHookStatus"');
-    expect(contractSource).toContain('"installAgentHooks"');
-    expect(contractSource).toContain('"uninstallAgentHooks"');
-    expect(contractSource).toContain('"uninstallBundledAgentSkills"');
-    expect(modalHostSource).toContain('vscode.postMessage({ agentIds, type: "uninstallAgentHooks" });');
-    expect(modalHostSource).toContain('vscode.postMessage({ type: "uninstallBundledAgentSkills" });');
-    expect(gxserverProtocolSource).toContain('"/api/uninstallAgentHooks"');
+    expect(contractSource).toContain("'requestAgentHookStatus'");
+    expect(contractSource).toContain("'installAgentHooks'");
+    expect(contractSource).toContain("'uninstallAgentHooks'");
+    expect(contractSource).toContain("'uninstallBundledAgentSkills'");
+    expect(modalHostSource).toContain("vscode.postMessage({ agentIds, type: 'uninstallAgentHooks' });");
+    expect(modalHostSource).toContain("vscode.postMessage({ type: 'uninstallBundledAgentSkills' });");
+    expect(gxserverProtocolSource).toContain("'/api/uninstallAgentHooks'");
   });
 
   test('does not keep a titlebar direct-install hook command', () => {
@@ -58,6 +58,6 @@ describe('agent hook status source', () => {
      * installation directly, so the shared native command contract should keep
      * hook writes behind Settings and first-launch setup only.
      */
-    expect(contractSource).not.toContain('"installAgentHooksFromTitlebarNotice"');
+    expect(contractSource).not.toContain("'installAgentHooksFromTitlebarNotice'");
   });
 });

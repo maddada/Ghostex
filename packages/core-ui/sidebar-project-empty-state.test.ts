@@ -79,7 +79,7 @@ describe('hasKnownSidebarProjectInventory', () => {
     expect(emptyStateSource).toContain('projectSettingsProjectCount: projectSettingsProjects?.length ?? 0');
     expect(emptyStateSource).toContain('recentProjectCount: recentProjects.length');
     expect(emptyStateSource).toContain(
-      'const shouldShowFirstProjectEmptyState =\n    !isSessionSearchOpen && !hasKnownProjectInventoryForEmptyState;'
+      'const shouldShowFirstProjectEmptyState = !isSessionSearchOpen && !hasKnownProjectInventoryForEmptyState;'
     );
   });
 });

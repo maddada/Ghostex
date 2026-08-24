@@ -68,7 +68,7 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
       'export type GxserverPortlessProtocol',
       'export interface GxserverRuntimeMetadata'
     );
-    expect(sharedStatusSource).toContain('export type GxserverPortlessProtocol = "https" | "http"');
+    expect(sharedStatusSource).toContain("export type GxserverPortlessProtocol = 'https' | 'http'");
     expect(sharedStatusSource).toContain('export interface GxserverPortlessStatus');
     expect(sharedStatusSource).toContain('export interface GxserverPortlessPresentation');
     expect(sharedStatusSource).toContain('export interface GxserverPortlessAssignedDomain');
@@ -173,7 +173,7 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
       'export type GxserverPortlessProtocol',
       'export interface GxserverPortlessAdminActionAvailability'
     );
-    expect(gxserverProtocolSource).toContain('| "/api/updatePortlessState"');
+    expect(gxserverProtocolSource).toContain("| '/api/updatePortlessState'");
     expect(protocolRustSource).toContain('| "/api/updatePortlessState"');
     expect(serverRustSource).toContain('"/api/updatePortlessState"');
     expect(serverRustSource).toContain('handle_portless_state_http');
@@ -182,9 +182,9 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
     expect(portlessRustSource).toContain('RecordAdminResult');
     expect(portlessRustSource).toContain('sync_portless_routes(paths, &[])');
     expect(sharedStatusSource).toContain('export type GxserverPortlessStateUpdateParams');
-    expect(sharedStatusSource).toContain('kind: "setProtocol"');
-    expect(sharedStatusSource).toContain('kind: "recordAdminResult"');
-    expect(sharedStatusSource).toContain('kind: "setEnabled"');
+    expect(sharedStatusSource).toContain("kind: 'setProtocol'");
+    expect(sharedStatusSource).toContain("kind: 'recordAdminResult'");
+    expect(sharedStatusSource).toContain("kind: 'setEnabled'");
     expect(sharedStatusSource).not.toContain('stdout');
     expect(sharedStatusSource).not.toContain('stderr');
     expect(sharedStatusSource).not.toContain('command');

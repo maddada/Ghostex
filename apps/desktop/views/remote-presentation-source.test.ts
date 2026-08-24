@@ -45,14 +45,14 @@ describe('remote presentation sidebar source', () => {
     expect(sortableSessionCardSource).toContain('data-remote-session={String(isRemoteSession)}');
     expect(sessionGroupSectionSource).toContain('data-remote-session={String(Boolean(group.remoteMachineContext))}');
     expect(sessionCardsCssSource).toContain(
-      '.session-frame[data-remote-session="true"][data-lifecycle-state="sleeping"]'
+      ".session-frame[data-remote-session='true'][data-lifecycle-state='sleeping']"
     );
     expect(sessionCardsCssSource).toContain(
-      '.session-status-dot-anchored[data-remote-session="true"][data-lifecycle-state="sleeping"]'
+      ".session-status-dot-anchored[data-remote-session='true'][data-lifecycle-state='sleeping']"
     );
-    expect(sessionCardsCssSource).not.toContain('[data-remote-session="true"][data-lifecycle-state="running"]');
-    expect(sessionCardsCssSource).toContain('[data-remote-session="true"][data-lifecycle-state="sleeping"]');
-    expect(sessionCardsCssSource).toContain('[data-remote-session="true"][data-lifecycle-state="done"]');
+    expect(sessionCardsCssSource).not.toContain("[data-remote-session='true'][data-lifecycle-state='running']");
+    expect(sessionCardsCssSource).toContain("[data-remote-session='true'][data-lifecycle-state='sleeping']");
+    expect(sessionCardsCssSource).toContain("[data-remote-session='true'][data-lifecycle-state='done']");
   });
 
   test('keeps remote rows on the shared context menu with explicit parity affordances', () => {
@@ -81,11 +81,11 @@ describe('remote presentation sidebar source', () => {
       'Sleep below',
       'Close below',
     ]) {
-      expect(menuActionsSource).toContain(`label: "${label}"`);
+      expect(menuActionsSource).toContain(`label: '${label}'`);
     }
-    expect(menuActionsSource).toContain('label: session.isPinned ? "Unpin" : "Pin"');
-    expect(menuActionsSource).toContain('label: session.isSleeping ? "Wake" : "Sleep"');
-    expect(menuActionsSource).toContain('label: session.isPoppedOut ? "Restore Pane" : "Pop Out Pane"');
+    expect(menuActionsSource).toContain("label: session.isPinned ? 'Unpin' : 'Pin'");
+    expect(menuActionsSource).toContain("label: session.isSleeping ? 'Wake' : 'Sleep'");
+    expect(menuActionsSource).toContain("label: session.isPoppedOut ? 'Restore Pane' : 'Pop Out Pane'");
     expect(sortableSessionCardSource).toContain('supportsFork(session)');
     expect(sortableSessionCardSource).toContain('supportsFullReloadMenuAction(session, isRemoteSession)');
   });

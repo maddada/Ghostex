@@ -46,7 +46,7 @@ describe('gxserver unavailable sidebar empty state source', () => {
     expect(timerSource).toContain('setShowGxserverUnavailableEmptyState(true);');
     expect(timerSource).toContain('SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS');
     expect(projectGroupFilterSource).toContain('groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID');
-    expect(emptyStateSource).toContain('className="reference-sidebar-empty-state"');
+    expect(emptyStateSource).toContain("className='reference-sidebar-empty-state'");
     expect(emptyStateSource).toContain('Unable to load sessions.');
     expect(emptyStateSource).toContain('<br />');
     expect(emptyStateSource).toContain('Restart Ghostex to try again.');

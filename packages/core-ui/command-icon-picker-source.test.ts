@@ -21,7 +21,7 @@ describe('command icon picker source', () => {
      */
     const optionSelect = sourceBetween(commandIconPickerSource, 'onSelect={() => {', 'value={option.label}');
 
-    expect(commandIconPickerSource).toContain('import { flushSync } from "react-dom";');
+    expect(commandIconPickerSource).toContain("import { flushSync } from 'react-dom';");
     expect(optionSelect).toContain('flushSync(() => {');
     expect(optionSelect).toContain('setIsOpen(false);');
     expect(optionSelect.indexOf('setIsOpen(false);')).toBeLessThan(optionSelect.indexOf('onIconChange(option.icon);'));

@@ -149,13 +149,13 @@ describe('empty project new-session row', () => {
      * keeps that row session-shaped, timestamp-free, and wired to create a new
      * terminal instead of restoring the closed session.
      */
-    const rowStart = sessionGroupSectionSource.indexOf('data-empty-project-new-session-row="true"');
+    const rowStart = sessionGroupSectionSource.indexOf("data-empty-project-new-session-row='true'");
     expect(rowStart).toBeGreaterThan(-1);
     const rowSource = sessionGroupSectionSource.slice(Math.max(0, rowStart - 600), rowStart + 1400);
 
     expect(rowSource).toContain('group-empty-project-session-button');
-    expect(rowSource).toContain('data-sleeping="true"');
-    expect(rowSource).toContain('data-title-full-width="true"');
+    expect(rowSource).toContain("data-sleeping='true'");
+    expect(rowSource).toContain("data-title-full-width='true'");
     expect(rowSource).toContain('getEmptyProjectNewSessionButtonLabel()');
     expect(rowSource).toContain('requestCreateProjectTerminal();');
     expect(rowSource).not.toContain('session-last-interaction-time');
@@ -295,10 +295,10 @@ describe('project row Actions', () => {
       'const globalCommands = useSidebarStore((state) => state.hud.globalCommands);'
     );
     expect(rowCommandsSource).toContain(
-      '...(globalCommands ?? []).map((command) => ({ command, scope: "global" }) as const)'
+      "...(globalCommands ?? []).map((command) => ({ command, scope: 'global' }) as const)"
     );
     expect(rowCommandsSource).toContain(
-      '...(projectCommands ?? []).map((command) => ({ command, scope: "project" }) as const)'
+      "...(projectCommands ?? []).map((command) => ({ command, scope: 'project' }) as const)"
     );
     expect(rowCommandsSource).toContain('.filter((entry) => entry.command.showOnProjectRow)');
     expect(rowCommandsSource.indexOf('globalCommands ?? []')).toBeLessThan(
@@ -320,7 +320,7 @@ describe('project row Actions', () => {
 
     expect(runStart).toBeGreaterThan(-1);
     expect(buttonStart).toBeGreaterThan(-1);
-    expect(runSource).toContain('scope: SidebarCommandScope,');
+    expect(runSource).toContain('(command: SidebarCommandButton, scope: SidebarCommandScope) =>');
     expect(runSource).toContain('groupId: group.groupId,');
     expect(runSource).toContain('scope,');
     expect(buttonSource).toContain('key={`${scope}:${command.commandId}`}');
@@ -336,13 +336,13 @@ describe('project diff stats refresh triggers', () => {
      * must not post refreshWorkspaceProjectDiffForGroup or otherwise tie Git
      * probes to pointer movement.
      */
-    const headerStart = sessionGroupSectionSource.indexOf('className="group-head"');
+    const headerStart = sessionGroupSectionSource.indexOf("className='group-head'");
     const headerSource = sessionGroupSectionSource.slice(headerStart, headerStart + 900);
 
     expect(headerStart).toBeGreaterThan(-1);
     expect(headerSource).not.toContain('onMouseEnter');
     expect(sessionGroupSectionSource).not.toContain('const refreshProjectDiffStats = () => {');
-    expect(sessionGroupSectionSource).not.toContain('type: "refreshWorkspaceProjectDiffForGroup"');
+    expect(sessionGroupSectionSource).not.toContain("type: 'refreshWorkspaceProjectDiffForGroup'");
   });
 });
 
@@ -388,7 +388,7 @@ describe('getGroupContextMenuItemCount', () => {
     expect(worktreeMenuSource).toContain('promptRenameWorktree');
     expect(worktreeMenuSource).not.toContain('IconPencil');
     expect(worktreeMenuSource).not.toContain('setIsEditing(true)');
-    expect(sessionGroupSectionSource).toContain('type: "promptRenameWorktreeForGroup"');
+    expect(sessionGroupSectionSource).toContain("type: 'promptRenameWorktreeForGroup'");
     // Ordinary project rows are untouched — they still rename their label.
     expect(sessionGroupSectionSource.slice(menuEnd)).toContain('IconPencil');
   });
@@ -496,10 +496,10 @@ describe('getSidebarSessionGapContextMenuTarget', () => {
      * The group body owns only session-gap retargeting, while the header owns
      * the project menu.
      */
-    const sectionStart = sessionGroupSectionSource.indexOf('<section\n        className="group"');
-    const groupHeadStart = sessionGroupSectionSource.indexOf('className="group-head"', sectionStart);
+    const sectionStart = sessionGroupSectionSource.indexOf("<section\n        className='group'");
+    const groupHeadStart = sessionGroupSectionSource.indexOf("className='group-head'", sectionStart);
     const groupSessionsStart = sessionGroupSectionSource.indexOf(
-      'className="group-sessions sidebar-collapse-content"',
+      "className='group-sessions sidebar-collapse-content'",
       groupHeadStart
     );
 
@@ -526,7 +526,7 @@ describe('reference sidebar group spacing styles', () => {
      * compositor-bound.
      */
     const projectHeaderStart = sessionGroupStylesSource.indexOf(
-      '.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] .group-head {'
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {"
     );
     const projectHeaderSource = sessionGroupStylesSource.slice(projectHeaderStart, projectHeaderStart + 5200);
 
@@ -600,7 +600,7 @@ describe('reference sidebar group spacing styles', () => {
      * on the drag-lock and ::-webkit-scrollbar rules below it.
      */
     const scrollableRuleStart = groupPanelStylesSource.indexOf(
-      '.group-sessions-shell[data-project-session-list-scrollable="true"][data-collapsed="false"] {'
+      ".group-sessions-shell[data-project-session-list-scrollable='true'][data-collapsed='false'] {"
     );
     const scrollableRuleEnd = groupPanelStylesSource.indexOf('\n}\n', scrollableRuleStart);
     const scrollableRuleSource = groupPanelStylesSource.slice(scrollableRuleStart, scrollableRuleEnd);
@@ -643,15 +643,15 @@ describe('reference sidebar group spacing styles', () => {
      * clickable row and leave session drag indicators row-owned.
      */
     const projectListStart = sessionGroupStylesSource.indexOf(
-      '.sidebar-reference-layout[data-reference-sidebar="true"] .reference-project-group-list {'
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .reference-project-group-list {"
     );
     const projectHeaderStart = sessionGroupStylesSource.indexOf(
-      '.sidebar-reference-layout[data-reference-sidebar="true"] .group[data-project-group="true"] .group-head {',
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {",
       projectListStart
     );
     const projectHeaderSource = sessionGroupStylesSource.slice(projectHeaderStart, projectHeaderStart + 5200);
     const groupSessionsStart = sessionGroupStylesSource.indexOf(
-      '.sidebar-reference-layout[data-reference-sidebar="true"] .group-sessions {',
+      ".sidebar-reference-layout[data-reference-sidebar='true'] .group-sessions {",
       projectHeaderStart
     );
     const groupSessionsSource = sessionGroupStylesSource.slice(groupSessionsStart, groupSessionsStart + 500);
@@ -673,12 +673,12 @@ describe('reference sidebar group spacing styles', () => {
      * only visible destination cue should be the insertion line.
      */
     const emptyTargetStart = sessionGroupStylesSource.indexOf(
-      '.group-empty-drop-target[data-drop-target="true"] .group-empty-state {'
+      ".group-empty-drop-target[data-drop-target='true'] .group-empty-state {"
     );
     const emptyTargetSource = sessionGroupStylesSource.slice(emptyTargetStart, emptyTargetStart + 700);
 
     expect(sessionGroupStylesSource).not.toContain('.group-sessions[data-drop-target="true"] {\n  background:');
-    expect(sessionGroupStylesSource).not.toContain('.group:has(.session[data-drop-target="true"]) .group-sessions');
+    expect(sessionGroupStylesSource).not.toContain(".group:has(.session[data-drop-target='true']) .group-sessions");
     expect(emptyTargetStart).toBeGreaterThan(-1);
     expect(emptyTargetSource).toContain('background: transparent;');
     expect(emptyTargetSource).toContain('box-shadow: none;');
