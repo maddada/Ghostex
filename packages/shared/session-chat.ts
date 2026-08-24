@@ -48,6 +48,26 @@ export function resolveSessionChatTranscriptAgent(
   return null;
 }
 
+export type SessionChatDisplayAgent = SessionChatTranscriptAgent | 'omp';
+
+/**
+ * Resolve the agent identity shown by chat UI without conflating it with the
+ * transcript parser family. OMP transcripts use Pi's format, but OMP remains
+ * its own product name and logo everywhere the session is presented.
+ */
+export function resolveSessionChatDisplayAgent(
+  agentId: string | null | undefined,
+  agentIcon?: string | null
+): SessionChatDisplayAgent | null {
+  const candidates = [agentId, agentIcon];
+  for (const candidate of candidates) {
+    if (candidate?.trim().toLowerCase() === 'omp') {
+      return 'omp';
+    }
+  }
+  return resolveSessionChatTranscriptAgent(agentId, agentIcon);
+}
+
 export type SessionChatSource = 'transcript' | 'hook' | 'client';
 
 /** Visual palette for the shared chat surface, independent of app chrome. */
@@ -181,6 +201,8 @@ export interface SessionChatDetectedChoice {
 export interface SessionChatDetectedOptions {
   model?: SessionChatDetectedChoice;
   effort?: SessionChatDetectedChoice;
+  /** Claude's current Shift+Tab permission/input mode, read from its footer. */
+  mode?: SessionChatDetectedChoice;
   /** Codex's trailing `fast` modifier. Informational: no pill tracks it. */
   fast?: boolean;
   /** ISO-8601 millis; compared against a pending dispatch's own timestamp. */
@@ -320,6 +342,8 @@ export interface SessionChatAppCommand {
   id: string;
   /** Verbatim command as written to the terminal, e.g. `/rename Fix parser`. */
   command: string;
+  /** Assigned session title; arrives after agent metadata resolves a bare `/rename`. */
+  title?: string;
   /** ISO-8601 millis. */
   sentAt: string;
 }
@@ -407,6 +431,8 @@ export interface GxserverReadSessionChatResult {
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;
+  /** Present on daemons whose `hasMore` is computed after transient rows are filtered. */
+  hasMoreExact?: boolean;
   beforeOffset: number;
   epoch: number;
   seq: number;
@@ -683,6 +709,8 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;
+  /** Present on daemons whose `hasMore` is computed after transient rows are filtered. */
+  hasMoreExact?: boolean;
   beforeOffset: number;
   status: SessionChatStatus;
   prompt?: SessionChatInteractivePrompt;
@@ -745,6 +773,8 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;
+  /** Present on daemons whose `hasMore` is computed after transient rows are filtered. */
+  hasMoreExact?: boolean;
   beforeOffset: number;
   status: SessionChatStatus;
   prompt?: SessionChatInteractivePrompt;
