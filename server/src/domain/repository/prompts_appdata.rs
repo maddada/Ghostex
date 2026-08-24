@@ -8,6 +8,7 @@ use crate::domain::{
     now_iso, optional_trimmed_string_param, required_string_param, sql_error, DomainRepository,
     DomainResult, DomainStateError,
 };
+use crate::presentation::read_runtime_text;
 
 impl<'a> DomainRepository<'a> {
     pub fn read_app_user_data(&self) -> DomainResult<Value> {
@@ -135,9 +136,11 @@ impl<'a> DomainRepository<'a> {
                 "content must be at most {MAX_STASHED_PROMPT_CONTENT_CHARS} characters."
             )));
         }
-        let project_id = optional_trimmed_string_param(params, "projectId")?;
         let requested_prompt_id = optional_trimmed_string_param(params, "promptId")?;
-        let session_id = optional_trimmed_string_param(params, "sessionId")?;
+        let (project_id, session_id) = normalize_stashed_prompt_session_ref(
+            optional_trimmed_string_param(params, "projectId")?,
+            optional_trimmed_string_param(params, "sessionId")?,
+        );
         let cwd = optional_trimmed_string_param(params, "cwd")?;
         let timestamp = now_iso();
         if let Some(prompt_id) = requested_prompt_id {
@@ -161,6 +164,23 @@ impl<'a> DomainRepository<'a> {
             })?;
             return Ok(json!({ "created": false, "prompt": prompt }));
         }
+        /*
+        CDXC:StashedPromptAgentSession 2026-08-24:
+        Stamp the agent CONVERSATION the prompt was stashed from, read from the
+        session row the caller named. The session row can be renamed, closed, or
+        replaced by a resume later; the conversation id survives all of that (and
+        the successor re-key in `apply_session_state_update` carries it forward),
+        so it is what "this prompt belongs to that thread" is stored as. A caller
+        with no session, or a session with no conversation yet, stores NULL and
+        is resolved from the live registry at list time instead.
+        */
+        let agent_session_id = match (project_id.as_deref(), session_id.as_deref()) {
+            (Some(project_id), Some(session_id)) => self
+                .get_session(project_id, session_id)?
+                .as_ref()
+                .and_then(|session| read_runtime_text(session, "agentSessionId")),
+            _ => None,
+        };
         let existing_prompt_id: Option<String> = self
             .db
             .query_row(
@@ -183,10 +203,22 @@ impl<'a> DomainRepository<'a> {
                         UPDATE stashed_prompts
                         SET sessionId = COALESCE(?2, sessionId),
                             cwd = COALESCE(?3, cwd),
+                            -- The conversation id travels WITH the session id:
+                            -- when this re-stash moves the row to a new
+                            -- session, the old thread's agentSessionId must
+                            -- not stay behind (it would misdirect the badge,
+                            -- the session scope, and the jump), so it is
+                            -- restamped — possibly to NULL — whenever a new
+                            -- sessionId is written, and kept only when no
+                            -- session was named.
+                            agentSessionId = CASE
+                              WHEN ?2 IS NULL THEN agentSessionId
+                              ELSE ?5
+                            END,
                             updatedAt = ?4
                         WHERE promptId = ?1
                         "#,
-                        params![prompt_id, session_id, cwd, timestamp],
+                        params![prompt_id, session_id, cwd, timestamp, agent_session_id],
                     )
                     .map_err(sql_error)?;
                 (prompt_id, false)
@@ -197,10 +229,19 @@ impl<'a> DomainRepository<'a> {
                     .execute(
                         r#"
                         INSERT INTO stashed_prompts (
-                          promptId, content, projectId, sessionId, cwd, createdAt, updatedAt
-                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+                          promptId, content, projectId, sessionId, cwd, agentSessionId,
+                          createdAt, updatedAt
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
                         "#,
-                        params![prompt_id, content, project_id, session_id, cwd, timestamp],
+                        params![
+                            prompt_id,
+                            content,
+                            project_id,
+                            session_id,
+                            cwd,
+                            agent_session_id,
+                            timestamp
+                        ],
                     )
                     .map_err(sql_error)?;
                 self.db
@@ -219,6 +260,16 @@ impl<'a> DomainRepository<'a> {
                 (prompt_id, true)
             }
         };
+        self.db
+            .execute(
+                r#"
+                INSERT INTO stashed_prompt_tag_links (promptId, tagId, createdAt)
+                VALUES (?1, ?2, ?3)
+                ON CONFLICT(promptId, tagId) DO NOTHING
+                "#,
+                params![prompt_id, STASHED_PROMPT_TAG_ID, timestamp],
+            )
+            .map_err(sql_error)?;
         let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
             DomainStateError::corrupt_state("Stashed prompt vanished during save.")
         })?;
@@ -246,7 +297,7 @@ impl<'a> DomainRepository<'a> {
                 r#"
                 SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
                        s.createdAt, s.updatedAt, p.name, p.identityIconJson,
-                       p.path, p.worktreeJson
+                       p.path, p.worktreeJson, s.agentSessionId
                 FROM stashed_prompts s
                 LEFT JOIN projects p ON p.projectId = s.projectId
                 ORDER BY s.updatedAt DESC, s.promptId DESC
@@ -295,6 +346,17 @@ impl<'a> DomainRepository<'a> {
                 prompt
             })
             .collect::<Vec<_>>();
+        /*
+        CDXC:StashedPromptAgentSession 2026-08-24:
+        The whole session registry is read ONCE here, not per row, and every
+        prompt is resolved against it: rows saved before 0026 have no stored
+        conversation id and inherit their origin session's, and a row whose
+        origin session is gone still finds its thread when another session is
+        tailing the same conversation (a resume or a fork). That owner's ids
+        replace the row's own, because the jump has to land on the session that
+        is actually live, not on a row that no longer exists.
+        */
+        let prompts = enrich_stashed_prompts_with_sessions(prompts, &self.list_sessions(None)?);
         Ok(json!({
             "prompts": prompts,
             "tags": read_stashed_prompt_tags(self.db)?,
@@ -384,8 +446,8 @@ impl<'a> DomainRepository<'a> {
     /*
     CDXC:StashedPromptTags 2026-08-23:
     Deleting a tag unfiles every prompt that carried it (the link rows cascade)
-    and never deletes a prompt. Favorites is builtin and stays, because the star
-    control on every row has nowhere to write once it is gone.
+    and never deletes a prompt. Builtin tags stay because app-owned filing
+    behavior and controls rely on their stable identities.
     */
     pub fn delete_stashed_prompt_tag(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let tag_id = required_string_param(params, "tagId")?;
@@ -400,7 +462,7 @@ impl<'a> DomainRepository<'a> {
             .map_err(sql_error)?;
         if is_builtin == Some(true) {
             return Err(DomainStateError::bad_request(
-                "Favorites is a built-in tag and cannot be deleted.",
+                "Built-in tags cannot be deleted.",
             ));
         }
         let deleted = self
@@ -505,6 +567,42 @@ impl<'a> DomainRepository<'a> {
             DomainStateError::corrupt_state("Saved prompt vanished while tagging.")
         })?;
         Ok(json!({ "prompt": prompt }))
+    }
+
+    /*
+    CDXC:StashedPromptAgentSession 2026-08-24 (successor re-key):
+    Same durability contract as `rekey_session_agent_note`: when the daemon
+    adopts a successor conversation id, every stash filed against the dead id
+    moves with it, or the prompts silently drop out of their thread's scope.
+    Unlike a note there is no primary-key conflict to protect against — many
+    prompts share one conversation — so this is a plain UPDATE and rows already
+    filed against the successor simply stay where they are. `updatedAt` is
+    deliberately left alone: a compaction is not the user saving a prompt, and
+    bumping it would silently reshuffle the Saved Prompts list.
+    */
+    pub(crate) fn rekey_stashed_prompt_agent_sessions(
+        &self,
+        previous_agent_session_id: &str,
+        agent_session_id: &str,
+    ) -> DomainResult<usize> {
+        if previous_agent_session_id.is_empty()
+            || agent_session_id.is_empty()
+            || previous_agent_session_id == agent_session_id
+        {
+            return Ok(0);
+        }
+        let updated = self
+            .db
+            .execute(
+                r#"
+                UPDATE stashed_prompts
+                SET agentSessionId = ?2
+                WHERE agentSessionId = ?1
+                "#,
+                params![previous_agent_session_id, agent_session_id],
+            )
+            .map_err(sql_error)?;
+        Ok(updated)
     }
 
     pub fn delete_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -769,6 +867,7 @@ fn normalize_app_pinned_prompt_title(title_candidate: &str, content: &str) -> St
 }
 
 const MAX_STASHED_PROMPTS: i64 = 200;
+const STASHED_PROMPT_TAG_ID: &str = "stashed";
 
 const MAX_STASHED_PROMPT_CONTENT_CHARS: usize = 200_000;
 
@@ -796,6 +895,164 @@ fn create_unique_stashed_prompt_id(db: &Connection) -> DomainResult<String> {
     ))
 }
 
+const COMBINED_SESSION_ID_PREFIX: &str = "combined-session:";
+
+/*
+CDXC:StashedPromptAgentSession 2026-08-24:
+Two writers reach this table with two different id vocabularies: chat and the
+CLI send RAW gxserver ids, while the Saved Prompts modal historically sent the
+presentation's COMBINED id (`combined-session:<enc projectId>:<enc sessionId>`),
+which is the sidebar's display key and means nothing to the daemon. Raw ids are
+the only vocabulary the sessions table can be looked up with, so every stored
+and every emitted reference is normalized to raw here — at the one door both
+writers pass through — instead of teaching each reader to recognize both
+shapes. The decoded projectId is only a fallback: a caller that named a project
+explicitly is trusted over the copy baked into the display key.
+*/
+fn normalize_stashed_prompt_session_ref(
+    project_id: Option<String>,
+    session_id: Option<String>,
+) -> (Option<String>, Option<String>) {
+    let Some(combined) = session_id
+        .as_deref()
+        .and_then(|value| value.strip_prefix(COMBINED_SESSION_ID_PREFIX))
+    else {
+        return (project_id, session_id);
+    };
+    let Some((encoded_project_id, encoded_session_id)) = combined.split_once(':') else {
+        return (project_id, session_id);
+    };
+    let decoded_project_id = percent_decoded_id_part(encoded_project_id);
+    let decoded_session_id = percent_decoded_id_part(encoded_session_id);
+    let project_id = project_id
+        .filter(|project_id| !project_id.is_empty())
+        .or(decoded_project_id);
+    (project_id, decoded_session_id.or(session_id))
+}
+
+fn percent_decoded_id_part(value: &str) -> Option<String> {
+    if !value.contains('%') {
+        return (!value.is_empty()).then(|| value.to_string());
+    }
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        /*
+        Decode over BYTES, never by slicing the &str: '%' followed by one hex
+        digit and a multibyte UTF-8 char would make a `&value[i+1..i+3]` slice
+        end inside a char and panic — and this input arrives from untrusted
+        RPC params.
+        */
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) = (
+                hex_digit_value(bytes[index + 1]),
+                hex_digit_value(bytes[index + 2]),
+            ) {
+                decoded.push(high * 16 + low);
+                index += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    let decoded = String::from_utf8_lossy(&decoded).into_owned();
+    (!decoded.is_empty()).then_some(decoded)
+}
+
+fn hex_digit_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+/*
+CDXC:StashedPromptAgentSession 2026-08-24:
+Resolution order per row, against one snapshot of the sessions registry:
+1. the stored conversation id, else the origin session's current one (that is
+   how rows written before 0026 get an association at all);
+2. the origin session's title when that row still exists;
+3. otherwise the title AND the ids of whichever live session is tailing the
+   same conversation — `is_active_identity_owner` semantics, so a stopped
+   history row never claims the thread. The most recently updated owner wins,
+   which is the order `list_sessions` already returns.
+*/
+fn enrich_stashed_prompts_with_sessions(prompts: Vec<Value>, sessions: &[Value]) -> Vec<Value> {
+    let mut session_by_key: HashMap<(&str, &str), &Value> = HashMap::new();
+    let mut owner_by_agent_session: HashMap<String, &Value> = HashMap::new();
+    for session in sessions {
+        let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(session_id) = session.get("sessionId").and_then(Value::as_str) else {
+            continue;
+        };
+        session_by_key.insert((project_id, session_id), session);
+        if let Some(agent_session_id) = read_runtime_text(session, "agentSessionId") {
+            if crate::agents::is_active_identity_owner(session) {
+                owner_by_agent_session
+                    .entry(agent_session_id)
+                    .or_insert(session);
+            }
+        }
+    }
+    prompts
+        .into_iter()
+        .map(|mut prompt| {
+            let origin = prompt
+                .get("projectId")
+                .and_then(Value::as_str)
+                .zip(prompt.get("sessionId").and_then(Value::as_str))
+                .and_then(|key| session_by_key.get(&key).copied());
+            let agent_session_id = prompt
+                .get("agentSessionId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    origin.and_then(|session| read_runtime_text(session, "agentSessionId"))
+                });
+            let owner = origin.or_else(|| {
+                agent_session_id
+                    .as_deref()
+                    .and_then(|agent_session_id| owner_by_agent_session.get(agent_session_id))
+                    .copied()
+            });
+            let Some(object) = prompt.as_object_mut() else {
+                return prompt;
+            };
+            if let Some(agent_session_id) = agent_session_id {
+                object.insert("agentSessionId".to_string(), json!(agent_session_id));
+            }
+            if let Some(owner) = owner {
+                if let Some(title) = read_session_title(owner) {
+                    object.insert("sessionTitle".to_string(), json!(title));
+                }
+                if let (Some(project_id), Some(session_id)) = (
+                    owner.get("projectId").and_then(Value::as_str),
+                    owner.get("sessionId").and_then(Value::as_str),
+                ) {
+                    object.insert("projectId".to_string(), json!(project_id));
+                    object.insert("sessionId".to_string(), json!(session_id));
+                }
+            }
+            prompt
+        })
+        .collect()
+}
+
+fn read_session_title(session: &Value) -> Option<String> {
+    session
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
+}
+
 fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     let prompt_id: String = row.get(0)?;
     let content: String = row.get(1)?;
@@ -808,6 +1065,21 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
     let identity_icon_json: Option<String> = row.get(8)?;
     let project_path: Option<String> = row.get(9)?;
     let worktree_json: Option<String> = row.get(10)?;
+    let agent_session_id: Option<String> = row.get(11)?;
+    let agent_session_id = agent_session_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    /*
+    CDXC:StashedPromptAgentSession 2026-08-24:
+    Every emitted row carries RAW gxserver ids, whatever shape the writer
+    stored (see `normalize_stashed_prompt_session_ref`), so a client can key a
+    stash against the sessions it already knows without re-parsing combined
+    ids. `sessionTitle`, and the owner-resolved ids that come with it, are
+    added by `list_stashed_prompts`, which is where the whole session registry
+    is read once; a single-row save result carries the association it stored
+    and nothing more.
+    */
+    let (project_id, session_id) = normalize_stashed_prompt_session_ref(project_id, session_id);
     /*
     CDXC:StashedPrompts 2026-07-29:
     Stash rows label their origin project with the same icon priority as the
@@ -834,7 +1106,7 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
     let project_discovered_icon_data_url = crate::project_icon::project_icon_key(&project)
         .as_deref()
         .and_then(crate::project_icon::published_project_icon_data_url);
-    Ok(json!({
+    let mut prompt = json!({
         "content": content,
         "createdAt": created_at,
         "cwd": cwd,
@@ -846,7 +1118,11 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
         "promptId": prompt_id,
         "sessionId": session_id,
         "updatedAt": updated_at,
-    }))
+    });
+    if let (Some(object), Some(agent_session_id)) = (prompt.as_object_mut(), agent_session_id) {
+        object.insert("agentSessionId".to_string(), json!(agent_session_id));
+    }
+    Ok(prompt)
 }
 
 fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Option<Value>> {
@@ -855,7 +1131,7 @@ fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Opt
             r#"
         SELECT s.promptId, s.content, s.projectId, s.sessionId, s.cwd,
                s.createdAt, s.updatedAt, p.name, p.identityIconJson,
-               p.path, p.worktreeJson
+               p.path, p.worktreeJson, s.agentSessionId
         FROM stashed_prompts s
         LEFT JOIN projects p ON p.projectId = s.projectId
         WHERE s.promptId = ?1

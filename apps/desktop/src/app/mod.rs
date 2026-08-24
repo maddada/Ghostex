@@ -33,6 +33,7 @@ pub(crate) mod remote_conn;
 pub(crate) mod render;
 pub(crate) mod session_chat;
 pub(crate) mod sidebar_dispatch;
+pub(crate) mod stashed_prompt_jump;
 pub(crate) mod status_pet;
 pub(crate) mod tab_actions;
 pub(crate) mod terminal_input;

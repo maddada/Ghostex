@@ -1,4 +1,5 @@
 import {
+  IconArrowUpRight,
   IconCheck,
   IconCopy,
   IconFolder,
@@ -21,6 +22,8 @@ import {
   CommandList,
 } from '../components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { SegmentedControl, SegmentedControlItem } from '../components/ui/segmented-control';
+import { parseGxserverPresentationProjectSessionId } from '../shared/gxserver-presentation-sidebar-projection';
 import type { GxserverStashedPrompt, GxserverStashedPromptTag } from '../shared/gxserver-protocol';
 import { GXSERVER_FAVORITE_PROMPT_TAG_ID } from '../shared/gxserver-protocol';
 import { trimPromptEditorTrailingSpaces } from '../shared/prompt-editor-text';
@@ -34,13 +37,33 @@ import { AppTooltip, TooltipProvider } from './app-tooltip';
 import { SidebarCommandIconGlyph } from './sidebar-command-icon';
 import { formatRelativeTime } from './relative-time';
 import { QuickAccessHeader } from './quick-access-tabs';
+import { useSidebarStore } from './sidebar-store';
 import { TOOLTIP_DELAY_MS } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
 
+/*
+ * CDXC:StashedPromptSessionAssociation 2026-08-24:
+ * Saved prompts are durably tied to the agent conversation they were stashed
+ * from, so the library can be narrowed to the project or the conversation the
+ * modal was opened for instead of only ever listing everything.
+ */
+export type StashedPromptsScope = 'all' | 'project' | 'session';
+
 export type StashedPromptsModalProps = {
+  /**
+   * Scope the modal opens on. Optional: without it the modal picks its own
+   * default — the session scope when it has session context and that scope is
+   * not empty, otherwise all prompts.
+   */
+  initialScope?: StashedPromptsScope;
   isOpen: boolean;
   onClose: () => void;
   projectId?: string;
+  /**
+   * The launching session, as the sidebar's combined `combined-session:` key.
+   * Insertion routes back through this id, while gxserver writes and stash-row
+   * comparisons use the raw ids decoded out of it.
+   */
   sessionId?: string;
   stashHintTooltipDefaultOpen?: boolean;
   vscode: WebviewApi;
@@ -102,6 +125,34 @@ function promptTagIds(prompt: GxserverStashedPrompt): readonly string[] {
   return prompt.tagIds ?? [];
 }
 
+type StashedPromptSessionContext = {
+  agentSessionId: string | undefined;
+  projectId: string | undefined;
+  sessionId: string | undefined;
+};
+
+/*
+ * CDXC:StashedPromptSessionAssociation 2026-08-24:
+ * A prompt belongs to the conversation this modal was opened for when gxserver
+ * stamped it with the same `agentSessionId` — that association is re-keyed
+ * through provider compaction/resume rewrites, so it outlives the session row
+ * the prompt was stashed from. Rows stashed before that column existed are
+ * matched on the raw gxserver session ids instead.
+ */
+function promptBelongsToSession(prompt: GxserverStashedPrompt, context: StashedPromptSessionContext): boolean {
+  if (context.agentSessionId && prompt.agentSessionId === context.agentSessionId) {
+    return true;
+  }
+  if (!context.sessionId || prompt.sessionId !== context.sessionId) {
+    return false;
+  }
+  return context.projectId === undefined || prompt.projectId === context.projectId;
+}
+
+function promptBelongsToProject(prompt: GxserverStashedPrompt, projectId: string | undefined): boolean {
+  return projectId !== undefined && prompt.projectId === projectId;
+}
+
 function relativeTimeLabel(isoDate: string): string {
   const { suffix, value } = formatRelativeTime(isoDate, { allowJustNow: true });
   return suffix ? `${value} ${suffix}` : value;
@@ -142,6 +193,7 @@ function groupStashedPromptsByDay(prompts: readonly GxserverStashedPrompt[]): St
 }
 
 export function StashedPromptsModal({
+  initialScope,
   isOpen,
   onClose,
   projectId,
@@ -151,6 +203,7 @@ export function StashedPromptsModal({
 }: StashedPromptsModalProps) {
   const [prompts, setPrompts] = useState<GxserverStashedPrompt[]>();
   const [tags, setTags] = useState<GxserverStashedPromptTag[]>([]);
+  const [scope, setScope] = useState<StashedPromptsScope>(initialScope ?? 'all');
   const [tagFilter, setTagFilter] = useState<StashedPromptTagFilter>(ALL_PROMPTS_FILTER);
   const [tagMenuPromptId, setTagMenuPromptId] = useState<string>();
   const [isCreatingTag, setIsCreatingTag] = useState(false);
@@ -182,6 +235,41 @@ export function StashedPromptsModal({
    * catalogue comes back naming it.
    */
   const pendingTagApplicationRef = useRef<{ name: string; promptId: string | undefined }>(undefined);
+  /*
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * The "default to this session" decision needs the loaded rows, so it runs
+   * once per open, on the first list result, and never again — otherwise a
+   * later refresh would yank the scope back from under the user.
+   */
+  const hasResolvedDefaultScopeRef = useRef(false);
+
+  /*
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * The `sessionId` prop is the sidebar's combined presentation key, while
+   * stash rows carry gxserver's raw ids. Decode once here so scope matching and
+   * the save form both speak the daemon's id vocabulary.
+   */
+  const combinedSessionReference = useMemo(
+    () => (sessionId ? parseGxserverPresentationProjectSessionId(sessionId) : undefined),
+    [sessionId]
+  );
+  const rawSessionId = combinedSessionReference?.sessionId ?? sessionId;
+  const rawProjectId = projectId ?? combinedSessionReference?.projectId;
+  const currentAgentSessionId = useSidebarStore((state) =>
+    sessionId ? state.sessionsById[sessionId]?.agentSessionId : undefined
+  );
+  const sessionContext = useMemo<StashedPromptSessionContext>(
+    () => ({ agentSessionId: currentAgentSessionId, projectId: rawProjectId, sessionId: rawSessionId }),
+    [currentAgentSessionId, rawProjectId, rawSessionId]
+  );
+  const hasSessionScope = Boolean(rawSessionId || currentAgentSessionId);
+  const hasProjectScope = rawProjectId !== undefined;
+  /*
+   * A scope whose segment is not on screen must not silently filter the list,
+   * so an unavailable scope reads as "all" without rewriting the user's choice.
+   */
+  const effectiveScope: StashedPromptsScope =
+    (scope === 'session' && !hasSessionScope) || (scope === 'project' && !hasProjectScope) ? 'all' : scope;
 
   useEffect(() => {
     if (!isOpen) {
@@ -331,11 +419,38 @@ export function StashedPromptsModal({
     const requestId = `stashed-prompts-${Date.now()}-${requestCounterRef.current}`;
     latestRequestIdRef.current = requestId;
     setPrompts(undefined);
+    /*
+     * CDXC:StashedPromptSessionAssociation 2026-08-24:
+     * The whole library is loaded on every open and narrowed client-side, so
+     * switching to the All scope never costs a round trip and the scope counts
+     * describe the same set the list is drawn from.
+     */
+    hasResolvedDefaultScopeRef.current = false;
+    setScope(initialScope ?? 'all');
     vscode.postMessage({
       requestId,
       type: 'requestStashedPrompts',
     });
-  }, [isOpen, vscode]);
+  }, [initialScope, isOpen, vscode]);
+
+  /*
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * Without a launcher-pinned scope the modal opens on this session when it has
+   * session context and that scope actually has prompts in it. It never opens
+   * on an empty filtered list.
+   */
+  useEffect(() => {
+    if (!isOpen || prompts === undefined || hasResolvedDefaultScopeRef.current) {
+      return;
+    }
+    hasResolvedDefaultScopeRef.current = true;
+    if (initialScope !== undefined || !hasSessionScope) {
+      return;
+    }
+    if (prompts.some((prompt) => promptBelongsToSession(prompt, sessionContext))) {
+      setScope('session');
+    }
+  }, [hasSessionScope, initialScope, isOpen, prompts, sessionContext]);
 
   /*
    * CDXC:StashedPromptTags 2026-08-23:
@@ -354,19 +469,35 @@ export function StashedPromptsModal({
     return prompts.filter((prompt) => stashedPromptSearchText(prompt).includes(query));
   }, [prompts, searchQuery]);
 
-  const visiblePrompts = useMemo(() => {
-    if (tagFilter.kind === 'all') {
+  /*
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * Scope narrows the searched set before the tag rail sees it, so the pill
+   * counts keep describing what is actually on screen: search AND scope AND
+   * tag, in that order.
+   */
+  const scopedPrompts = useMemo(() => {
+    if (effectiveScope === 'all') {
       return searchedPrompts;
     }
-    if (tagFilter.kind === 'untagged') {
-      return searchedPrompts.filter((prompt) => promptTagIds(prompt).length === 0);
+    if (effectiveScope === 'project') {
+      return searchedPrompts.filter((prompt) => promptBelongsToProject(prompt, rawProjectId));
     }
-    return searchedPrompts.filter((prompt) => promptTagIds(prompt).includes(tagFilter.tagId));
-  }, [searchedPrompts, tagFilter]);
+    return searchedPrompts.filter((prompt) => promptBelongsToSession(prompt, sessionContext));
+  }, [effectiveScope, rawProjectId, searchedPrompts, sessionContext]);
+
+  const visiblePrompts = useMemo(() => {
+    if (tagFilter.kind === 'all') {
+      return scopedPrompts;
+    }
+    if (tagFilter.kind === 'untagged') {
+      return scopedPrompts.filter((prompt) => promptTagIds(prompt).length === 0);
+    }
+    return scopedPrompts.filter((prompt) => promptTagIds(prompt).includes(tagFilter.tagId));
+  }, [scopedPrompts, tagFilter]);
 
   const untaggedPromptCount = useMemo(
-    () => searchedPrompts.filter((prompt) => promptTagIds(prompt).length === 0).length,
-    [searchedPrompts]
+    () => scopedPrompts.filter((prompt) => promptTagIds(prompt).length === 0).length,
+    [scopedPrompts]
   );
 
   /*
@@ -379,13 +510,13 @@ export function StashedPromptsModal({
 
   const promptCountByTagId = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const prompt of searchedPrompts) {
+    for (const prompt of scopedPrompts) {
       for (const tagId of promptTagIds(prompt)) {
         counts.set(tagId, (counts.get(tagId) ?? 0) + 1);
       }
     }
     return counts;
-  }, [searchedPrompts]);
+  }, [scopedPrompts]);
 
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.tagId, tag])), [tags]);
 
@@ -531,14 +662,31 @@ export function StashedPromptsModal({
     latestSaveRequestIdRef.current = requestId;
     setIsSavingPrompt(true);
     setSaveError(undefined);
+    /*
+     * CDXC:StashedPromptSessionAssociation 2026-08-24:
+     * Post the raw gxserver ids decoded out of the combined presentation key.
+     * This form used to store the combined key verbatim, which made its rows
+     * name a session gxserver has never heard of; the daemon normalizes stored
+     * ids as of migration 0026, and writing them raw keeps the two in step.
+     */
     vscode.postMessage({
       content,
       ...(editingPromptId ? { promptId: editingPromptId } : {}),
-      ...(projectId ? { projectId } : {}),
+      ...(rawProjectId ? { projectId: rawProjectId } : {}),
       requestId,
-      ...(sessionId ? { sessionId } : {}),
+      ...(rawSessionId ? { sessionId: rawSessionId } : {}),
       type: 'saveStashedPrompt',
     });
+  };
+
+  const jumpToPromptSession = (prompt: GxserverStashedPrompt) => {
+    vscode.postMessage({
+      ...(prompt.agentSessionId ? { agentSessionId: prompt.agentSessionId } : {}),
+      ...(prompt.projectId ? { projectId: prompt.projectId } : {}),
+      ...(prompt.sessionId ? { sessionId: prompt.sessionId } : {}),
+      type: 'jumpToStashedPromptSession',
+    });
+    onClose();
   };
 
   return (
@@ -640,6 +788,28 @@ export function StashedPromptsModal({
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
+              {/*
+                CDXC:StashedPromptSessionAssociation 2026-08-24:
+                Scope sits above the tag rail because it answers a different
+                question than a tag does: tags say what a prompt is about, scope
+                says where it came from. A segment is only offered when the
+                modal actually has that context, so no segment can select a set
+                that is empty by construction.
+              */}
+              {hasProjectScope || hasSessionScope ? (
+                <div className='ghostex-stashed-prompt-scope-row'>
+                  <SegmentedControl
+                    aria-label='Filter saved prompts by origin'
+                    onValueChange={(nextScope) => setScope(nextScope as StashedPromptsScope)}
+                    size='sm'
+                    value={effectiveScope}
+                  >
+                    <SegmentedControlItem value='all'>All</SegmentedControlItem>
+                    {hasProjectScope ? <SegmentedControlItem value='project'>This project</SegmentedControlItem> : null}
+                    {hasSessionScope ? <SegmentedControlItem value='session'>This session</SegmentedControlItem> : null}
+                  </SegmentedControl>
+                </div>
+              ) : null}
               <StashedPromptTagRail
                 onSelectFilter={setTagFilter}
                 tagFilter={tagFilter}
@@ -657,7 +827,7 @@ export function StashedPromptsModal({
                   }
                 }}
                 onDeleteTag={deleteTag}
-                promptCount={searchedPrompts.length}
+                promptCount={scopedPrompts.length}
                 showUntaggedFilter={hasTaggedPrompt}
                 untaggedPromptCount={untaggedPromptCount}
                 promptCountByTagId={promptCountByTagId}
@@ -675,7 +845,11 @@ export function StashedPromptsModal({
                       ? 'No saved prompts carry this tag yet.'
                       : tagFilter.kind === 'untagged'
                         ? 'Every saved prompt here already carries a tag.'
-                        : 'No saved prompts match this search.'}
+                        : effectiveScope === 'session'
+                          ? 'No saved prompts came from this session.'
+                          : effectiveScope === 'project'
+                            ? 'No saved prompts came from this project.'
+                            : 'No saved prompts match this search.'}
                   </CommandEmpty>
                 ) : null}
                 {showAddPrompt || visiblePrompts.length > 0 ? (
@@ -729,6 +903,9 @@ export function StashedPromptsModal({
                                   setDraftContent(prompt.content);
                                   setSaveError(undefined);
                                   setIsAddingPrompt(true);
+                                }}
+                                onJumpToSession={() => {
+                                  jumpToPromptSession(prompt);
                                 }}
                                 onSelect={() => {
                                   insertPrompt(prompt);
@@ -844,7 +1021,7 @@ function StashedPromptTagRail({
             /*
              * Removing a tag lives on its own pill rather than in a settings
              * screen, so the place you file prompts is the place you unfile a
-             * mistake. Builtin Favorites has no delete affordance at all.
+             * mistake. Builtin tags have no delete affordance at all.
              */
             onContextMenu={(event) => {
               if (tag.isBuiltin) {
@@ -857,7 +1034,7 @@ function StashedPromptTagRail({
             title={tag.isBuiltin ? tag.name : `${tag.name} — right-click to delete this tag`}
             type='button'
           >
-            {tag.isBuiltin ? (
+            {tag.tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID ? (
               <IconStarFilled aria-hidden='true' className='ghostex-stashed-prompt-tag-star' size={11} />
             ) : (
               <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
@@ -1000,6 +1177,7 @@ type StashedPromptRowProps = {
   onCreateTagOpenChange: (nextOpen: boolean) => void;
   onDelete: () => void;
   onEdit: () => void;
+  onJumpToSession: () => void;
   onSelect: () => void;
   onTagMenuOpenChange: (nextOpen: boolean) => void;
   onToggleTag: (tagId: string) => void;
@@ -1046,6 +1224,7 @@ function StashedPromptRow({
   onCreateTagOpenChange,
   onDelete,
   onEdit,
+  onJumpToSession,
   onSelect,
   onTagMenuOpenChange,
   onToggleTag,
@@ -1070,6 +1249,13 @@ function StashedPromptRow({
    * hairline that competes with the hover and selection fills.
    */
   const stripeColor = rowTags[0]?.color;
+  /*
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * A prompt is jumpable while gxserver can still name where it came from: the
+   * conversation id survives the session row, so either id is enough to open
+   * something — waking, restoring, or resuming as needed.
+   */
+  const canJumpToSession = Boolean(prompt.agentSessionId || prompt.sessionId);
 
   return (
     <CommandItem
@@ -1119,6 +1305,22 @@ function StashedPromptRow({
             </span>
           ) : null}
           <span className='ghostex-stashed-prompt-actions'>
+            {canJumpToSession ? (
+              <AppTooltip content='Go to session' side='top' sideOffset={6}>
+                <button
+                  aria-label='Go to session'
+                  className='ghostex-stashed-prompt-action'
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onJumpToSession();
+                  }}
+                  type='button'
+                >
+                  <IconArrowUpRight aria-hidden='true' size={14} stroke={1.9} />
+                </button>
+              </AppTooltip>
+            ) : null}
             <button
               aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               aria-pressed={isFavorite}
@@ -1174,7 +1376,7 @@ function StashedPromptRow({
                       style={{ '--ghostex-tag-color': tag.color } as React.CSSProperties}
                       type='button'
                     >
-                      {tag.isBuiltin ? (
+                      {tag.tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID ? (
                         <IconStarFilled aria-hidden='true' className='ghostex-stashed-prompt-tag-star' size={11} />
                       ) : (
                         <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
@@ -1253,6 +1455,21 @@ function StashedPromptRow({
               <StashedPromptProjectIcon prompt={prompt} />
             </span>
             <span className='ghostex-stashed-prompt-project-name'>{prompt.projectName ?? 'No project'}</span>
+            {/*
+              CDXC:StashedPromptSessionAssociation 2026-08-24:
+              The origin conversation's current title, not the one it had when
+              the prompt was stashed: gxserver resolves it through the
+              conversation id, so a renamed or resumed session still reads as
+              the place this prompt came from.
+            */}
+            {prompt.sessionTitle ? (
+              <span
+                className='ghostex-stashed-prompt-chip ghostex-stashed-prompt-session-chip'
+                title={prompt.sessionTitle}
+              >
+                <span className='ghostex-stashed-prompt-session-chip-label'>{prompt.sessionTitle}</span>
+              </span>
+            ) : null}
             {rowTags.length > 0 ? (
               <span className='ghostex-stashed-prompt-chips'>
                 {rowTags.map((tag) => (

@@ -1978,6 +1978,19 @@ pub(crate) fn gpui_titlebar_resource_session_from_presentation(
     });
     let value_object = value.as_object_mut()?;
     /*
+    CDXC:StashedPromptSessionAssociation 2026-08-24:
+    Carry gxserver's provider conversation id onto the projected row. App-modal
+    surfaces that hydrate from this Quick Access projection (Saved Prompts, for
+    one) need it to tell which rows belong to the conversation they were opened
+    for, because the visible `sessionId` above is the combined presentation id
+    and a conversation outlives the gxserver session row that hosts it.
+    */
+    gpui_insert_optional_string(
+        value_object,
+        "agentSessionId",
+        json_string_field(session, "agentSessionId"),
+    );
+    /*
     Quick Access reuses this bounded live-session projection. Preserve the
     gxserver-owned visible title and its comparison metadata so the shared
     session card does not reinterpret a confirmed title as an unsynced local

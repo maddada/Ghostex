@@ -2484,7 +2484,7 @@ fn terminal_agent_action_button(
         ),
         TerminalAgentAction::StashedPrompts => (
             "ghostex-terminal-stashed-prompts",
-            "Prompts",
+            "Saved Prompts",
             "stashedPrompts",
         ),
         TerminalAgentAction::AttachPath => (
