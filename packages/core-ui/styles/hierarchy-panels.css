@@ -591,6 +591,15 @@ section.project-collection[data-collapsed="true"][data-contains-active-session="
 }
 
 /*
+ * The title-generation surface fills the same row bounds as ::after, so it
+ * must use the same inner radius or the active surface peeks through at the
+ * four corners while a title is being generated.
+ */
+.sidebar-reference-layout[data-reference-sidebar="true"] .session-title-generation-overlay {
+  border-radius: 4px;
+}
+
+/*
  * CDXC:ProjectUngroupDrop 2026-07-23:
  * This normal-flow zone supplies the missing "outside all collections" target
  * when a section has no ungrouped projects. It occupies the existing bottom
