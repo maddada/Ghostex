@@ -289,22 +289,27 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
-    /// "Start new conversation" in the Export Transcript result dialog. The
-    /// dialog only knows which configured agent the user picked; the sidebar
-    /// runtime owns the exported path, the source project, and the gxserver
-    /// create-session path, so forward the chosen agent id and nothing else.
+    /// The Export Transcript dialog's two sidebar-bound commands. The dialog
+    /// only knows the user's choices — the include-toggles for
+    /// `runExportSessionTranscript`, the configured agent for
+    /// `startExportedTranscriptConversation`; the sidebar runtime owns the
+    /// session context, the exported path, and the gxserver calls, so only
+    /// those whitelisted fields are forwarded and nothing else.
     pub(crate) fn forward_gpui_export_transcript_modal_command_to_sidebar(
         &mut self,
+        command_type: &str,
         command: &serde_json::Map<String, serde_json::Value>,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let mut message = serde_json::Map::new();
-        message.insert(
-            "type".to_string(),
-            serde_json::json!("startExportedTranscriptConversation"),
-        );
+        message.insert("type".to_string(), serde_json::json!(command_type));
         if let Some(agent_id) = command.get("agentId").and_then(serde_json::Value::as_str) {
             message.insert("agentId".to_string(), serde_json::json!(agent_id));
+        }
+        for toggle in ["includeCommands", "includePatches", "includeReasoning"] {
+            if let Some(value) = command.get(toggle).and_then(serde_json::Value::as_bool) {
+                message.insert(toggle.to_string(), serde_json::json!(value));
+            }
         }
         let Some(sidebar) = self.sidebar.clone() else {
             return false;
@@ -855,6 +860,90 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    /*
+    CDXC:FirstLaunchSetup 2026-08-24:
+    The onboarding Get Started page's Browse button. Same round trip as the
+    terminal background image picker: native dialog host-side, picked absolute
+    path posted back to the open app-modal window, where the first-launch page
+    drops it into the project-folder input like a typed path.
+    */
+    pub(crate) fn handle_gpui_pick_first_launch_project_folder_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Choose Project Folder".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = receiver.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.dispatch_open_gpui_app_modal_message(
+                    serde_json::json!({
+                        "path": path.to_string_lossy(),
+                        "type": "firstLaunchProjectFolderPicked",
+                    }),
+                    cx,
+                );
+            });
+        })
+        .detach();
+    }
+
+    /*
+    CDXC:FirstLaunchSetup 2026-08-24:
+    Onboarding Finish crosses from the app-modal window into the sidebar
+    runtime over the existing workspaceFolderPicked chain, which already owns
+    project registration and focus. `firstLaunchAgentId` additionally asks the
+    runtime to start the first session ('terminal' means a plain shell). Only
+    the two bounded strings cross the boundary.
+    */
+    pub(crate) fn handle_gpui_first_launch_create_project_session_message(
+        &mut self,
+        command: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(path) = command
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(str::to_string)
+        else {
+            return;
+        };
+        let Some(agent_id) = command
+            .get("agentId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|agent_id| {
+                !agent_id.is_empty()
+                    && agent_id.len() <= 64
+                    && agent_id.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || character == '-' || character == '_'
+                    })
+            })
+            .map(str::to_string)
+        else {
+            return;
+        };
+        self.dispatch_gpui_workspace_folder_picked_message(
+            serde_json::json!({
+                "firstLaunchAgentId": agent_id,
+                "path": path,
+                "type": "workspaceFolderPicked",
+            }),
+            cx,
+        );
     }
 
     pub(crate) fn handle_gpui_pick_worktree_images_message(

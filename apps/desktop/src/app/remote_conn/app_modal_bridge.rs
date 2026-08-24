@@ -183,6 +183,14 @@ impl GhostexGpuiApp {
             "pickTerminalBackgroundImageFile" => {
                 self.handle_gpui_pick_terminal_background_image_message(cx);
             }
+            "pickFirstLaunchProjectFolder" => {
+                self.handle_gpui_pick_first_launch_project_folder_message(cx);
+            }
+            "firstLaunchCreateProjectSession" => {
+                if let Some(command) = message.as_object() {
+                    self.handle_gpui_first_launch_create_project_session_message(command, cx);
+                }
+            }
             "revealAppIconsFolder" => {
                 app_icon::reveal_icons_directory();
             }
@@ -300,6 +308,44 @@ impl GhostexGpuiApp {
                 }
                 if let Some(worktrees) = message.get("worktrees").filter(|value| value.is_array()) {
                     result["worktrees"] = worktrees.clone();
+                }
+                self.dispatch_open_gpui_app_modal_message(result, cx);
+            }
+            "exportSessionTranscriptResult" => {
+                /*
+                CDXC:ExportTranscriptOptions 2026-08-24:
+                The sidebar runtime's answer to the Export Transcript dialog's
+                `runExportSessionTranscript` request. Forward only the shared
+                result fields into the open modal window, and capture the
+                exported path for Reveal in Finder here — the same Rust-held
+                state the dialog's old done-stage open message used to seed —
+                so Reveal never trusts a path posted back by the modal page.
+                */
+                let ok = message.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
+                let can_reveal = message
+                    .get("canReveal")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true);
+                let path = message
+                    .get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|path| !path.trim().is_empty());
+                self.pending_export_transcript_reveal_path = (ok && can_reveal)
+                    .then(|| path.map(str::to_string))
+                    .flatten();
+                let mut result = serde_json::json!({
+                    "canReveal": can_reveal,
+                    "ok": ok,
+                    "type": "exportSessionTranscriptResult",
+                });
+                if let Some(path) = path {
+                    result["path"] = serde_json::json!(path);
+                }
+                if let Some(agent_id) = message.get("agentId").and_then(serde_json::Value::as_str) {
+                    result["agentId"] = serde_json::json!(agent_id);
+                }
+                if let Some(error) = message.get("error").and_then(serde_json::Value::as_str) {
+                    result["error"] = serde_json::json!(error);
                 }
                 self.dispatch_open_gpui_app_modal_message(result, cx);
             }

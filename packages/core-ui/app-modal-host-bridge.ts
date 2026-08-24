@@ -30,6 +30,7 @@ export type AppModalKind =
   | 'remoteProjectPicker'
   | 'delayedSend'
   | 'renameSession'
+  | 'sessionNote'
   | 'scratchPad'
   | 'settings'
   | 'stashedPrompts'
@@ -57,6 +58,7 @@ export type OpenAppModalMessage =
         | 'remoteGxserverInstall'
         | 'renameSession'
         | 'remoteProjectPicker'
+        | 'sessionNote'
         | 'stashedPrompts'
         | 'worktree'
       >;
@@ -70,7 +72,13 @@ export type OpenAppModalMessage =
        * sessionId names the terminal session the selected prompt is inserted
        * back into. Both are optional so the modal can still open (in
        * all-projects browse mode) when the launcher has no session mapping.
+       *
+       * CDXC:StashedPromptSessionAssociation 2026-08-24:
+       * `initialScope` lets a launcher pin the scope filter the modal opens on.
+       * It is optional; when absent the modal picks its own default (session
+       * scope when it has session context with matching prompts, else all).
        */
+      initialScope?: 'all' | 'project' | 'session';
       modal: 'stashedPrompts';
       projectId?: string;
       sessionId?: string;
@@ -78,16 +86,19 @@ export type OpenAppModalMessage =
     }
   | {
       /**
-       * CDXC:ExportTranscript 2026-08-20:
-       * Shown after Export Transcript wrote the markdown file. `path` is
-       * absolute on the machine that owns the transcript, so `canReveal` is
-       * false for a remote session's export: the host running this dialog has
-       * no such file and must not offer to reveal one.
+       * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+       * The Export Transcript dialog. Opened without `path` it starts on its
+       * include-toggle options stage and the sidebar runtime later answers the
+       * dialog's export request with an `exportSessionTranscriptResult`
+       * message; opened with `path` it shows that already-written file
+       * directly. `path` is absolute on the machine that owns the transcript,
+       * so `canReveal` is false for a remote session's export: the host
+       * running this dialog has no such file and must not offer to reveal one.
        */
       agentId?: string;
       canReveal: boolean;
       modal: 'exportTranscriptResult';
-      path: string;
+      path?: string;
       type: 'open';
     }
   | {
@@ -211,6 +222,23 @@ export type OpenAppModalMessage =
        */
       sessionAgentIcon?: string;
       sessionId: string;
+      type: 'open';
+    }
+  | {
+      /**
+       * CDXC:SessionAgentNotes 2026-08-24:
+       * The session-note editor. `initialNote` is the row's current note text
+       * so the dialog opens on it without a round trip; `projectId` is an
+       * optional scope hint for hosts that route the write per project, and
+       * `sessionTitle` is heading copy only. The submit posts `setSessionNote`
+       * — the host, not this dialog, resolves which agent conversation the
+       * note is filed under.
+       */
+      initialNote: string;
+      modal: 'sessionNote';
+      projectId?: string;
+      sessionId: string;
+      sessionTitle?: string;
       type: 'open';
     }
   | {

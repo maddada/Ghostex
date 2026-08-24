@@ -137,6 +137,8 @@ export type GxserverEndpointPath =
   | '/api/saveStashedPromptTag'
   | '/api/deleteStashedPromptTag'
   | '/api/setStashedPromptTags'
+  | '/api/saveSessionAgentNote'
+  | '/api/readSessionAgentNote'
   | '/api/readAgentSkillStatus'
   | '/api/installAgentSkills'
   | '/api/readAgentHookStatus'
@@ -688,10 +690,26 @@ export interface GxserverStashedPrompt {
   projectIconDataUrl?: string | null;
   /** Repository icon discovered by gxserver, matching the active sidebar project icon. */
   projectDiscoveredIconDataUrl?: string | null;
+  /**
+   * RAW gxserver ids, never the sidebar's combined `combined-session:` key:
+   * gxserver normalizes whatever a writer stored as of migration 0026. On a
+   * list result these name the session that currently owns the prompt's
+   * conversation, which can differ from the session it was stashed from once
+   * that one has been resumed or forked.
+   */
   projectId: string | null;
   projectName: string | null;
   promptId: string;
   sessionId: string | null;
+  /**
+   * The agent conversation this prompt was stashed from (migration 0026),
+   * absent when there is none to resolve. It follows Claude/Codex
+   * compaction-resume rewrites, so it stays valid after the provider mints a
+   * successor conversation id.
+   */
+  agentSessionId?: string;
+  /** Current title of the session that owns `agentSessionId`, when resolvable. */
+  sessionTitle?: string;
   updatedAt: string;
 }
 
@@ -731,7 +749,7 @@ interpolates them into CSS.
 export interface GxserverStashedPromptTag {
   color: string;
   createdAt: string;
-  /** True only for Favorites, which cannot be deleted. */
+  /** Builtin tags have stable app-owned behavior and cannot be deleted. */
   isBuiltin: boolean;
   name: string;
   tagId: string;
@@ -740,6 +758,8 @@ export interface GxserverStashedPromptTag {
 
 /** The tagId of the seeded builtin Favorites tag. */
 export const GXSERVER_FAVORITE_PROMPT_TAG_ID = 'favorite';
+/** The tagId automatically assigned whenever a prompt is stashed. */
+export const GXSERVER_STASHED_PROMPT_TAG_ID = 'stashed';
 
 export interface GxserverListStashedPromptTagsResult {
   tags: readonly GxserverStashedPromptTag[];
@@ -781,6 +801,46 @@ export interface GxserverDeleteStashedPromptParams {
 
 export interface GxserverDeleteStashedPromptResult {
   deleted: boolean;
+}
+
+/*
+CDXC:SessionAgentNotes 2026-08-24:
+A session note is keyed by the PROVIDER conversation id (`agentSessionId`), not
+by the ghostex session id, so "what to do next here" survives closing the
+ghostex session and resuming the same agent conversation later. Clients address
+the note by (projectId, sessionId) and gxserver resolves the agent session id
+itself; a session that has no provider conversation yet cannot hold a note.
+These payloads carry user-authored note bodies, so clients must not log request
+params or daemon response bodies.
+*/
+export interface GxserverSaveSessionAgentNoteParams {
+  /** Trimmed server-side; an empty note deletes the stored note. */
+  note: string;
+  projectId: string;
+  sessionId: string;
+}
+
+export interface GxserverSaveSessionAgentNoteResult {
+  /** The provider conversation id the note was filed under. */
+  agentSessionId: string;
+  /** The stored note after trimming; empty string when the note was cleared. */
+  note: string;
+  /** Canonical session-row project id the note was saved through. */
+  projectId?: string;
+  /** Canonical session-row session id the note was saved through. */
+  sessionId?: string;
+}
+
+export interface GxserverReadSessionAgentNoteParams {
+  projectId: string;
+  sessionId: string;
+}
+
+export interface GxserverReadSessionAgentNoteResult {
+  /** Absent when the session has no provider conversation id yet. */
+  agentSessionId?: string;
+  /** Absent when no note is stored; never an empty string. */
+  note?: string;
 }
 
 export interface GxserverRendererCommand {
@@ -1677,6 +1737,7 @@ export interface GxserverSessionDomainState {
   globalRef: GxserverGlobalSessionRef;
   hiddenMetadata: GxserverSessionHiddenMetadata;
   isFavorite: boolean;
+  isParked?: boolean;
   isPinned: boolean;
   kind: GxserverSessionKind;
   lastActiveAt?: string;
@@ -1745,6 +1806,7 @@ export interface GxserverCreateSessionParams {
   completionRules?: Record<string, unknown>;
   cwd?: string;
   isFavorite?: boolean;
+  isParked?: boolean;
   isPinned?: boolean;
   kind?: GxserverSessionKind;
   lastActiveAt?: string;
@@ -1903,6 +1965,16 @@ session has not reported an agent session id yet), `transcriptNotFound`,
 export interface GxserverExportSessionTranscriptParams {
   projectId: GxserverProjectId;
   sessionId: GxserverSessionId;
+  /**
+   * CDXC:ExportTranscriptOptions 2026-08-24:
+   * The export dialog's include-toggles. User and agent messages are never
+   * optional; these govern the optional record families. Absent values keep
+   * the daemon's historical defaults (commands and patches in, reasoning
+   * out), which is also what daemons predating the toggles export.
+   */
+  includeCommands?: boolean;
+  includePatches?: boolean;
+  includeReasoning?: boolean;
 }
 
 export interface GxserverExportSessionTranscriptResult {
@@ -2283,6 +2355,7 @@ export interface GxserverPresentationSession {
   hasEverBeenActive?: boolean;
   isFavorite: boolean;
   isGeneratingFirstPromptTitle: boolean;
+  isParked?: boolean;
   isPinned: boolean;
   kind: GxserverSessionKind;
   lastActiveAt?: string;
@@ -2321,6 +2394,15 @@ export interface GxserverPresentationSession {
    */
   queuedPromptFailedCount?: number;
   sessionId: GxserverSessionId;
+  /**
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * The full note text the user filed against this session's provider
+   * conversation (`agentSessionId`), so sidebar rows can show the note in their
+   * tooltip and mark the row without a per-session read. The key is ABSENT when
+   * there is no note — never an empty string — which is also what a daemon that
+   * predates session notes publishes.
+   */
+  sessionNote?: string;
   sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   sessionTag?: GxserverSessionTag;
   sendWhenAllProjectSessionsStopActive?: boolean;
@@ -2501,6 +2583,7 @@ export interface GxserverPresentationSearchResult {
   displayTitle?: string;
   displayTitleTooltip?: string;
   isFavorite: boolean;
+  isParked?: boolean;
   isPinned: boolean;
   isPrimaryTitleTerminalTitle: boolean;
   isTemporaryTitle: boolean;

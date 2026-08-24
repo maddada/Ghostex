@@ -168,8 +168,17 @@ export type SidebarGhostexCliStatusMessage = {
   embeddedBrowserSkillPath?: string;
   computerUseSkillInstalled: boolean;
   computerUseSkillPath?: string;
-  agentOrchestrationSkillInstalled: boolean;
-  agentOrchestrationSkillPath?: string;
+  /**
+   * CDXC:SkillConsolidation 2026-08-24:
+   * `$ghostex-cli` is the entry-point skill after the agent-orchestration,
+   * manage-automations, and find-prev-session skills were folded into the CLI
+   * help, so its status fields (and Manage Beads') stay optional for older
+   * host builds that never report them.
+   */
+  cliSkillInstalled?: boolean;
+  cliSkillPath?: string;
+  manageBeadsSkillInstalled?: boolean;
+  manageBeadsSkillPath?: string;
   /**
    * CDXC:Fable56Orchestration 2026-07-04-00:00:
    * `$ghostex-fable-5.6-orchestration` shipped after existing hosts, so its
@@ -178,8 +187,6 @@ export type SidebarGhostexCliStatusMessage = {
    */
   fable56OrchestrationSkillInstalled?: boolean;
   fable56OrchestrationSkillPath?: string;
-  findPrevSessionSkillInstalled?: boolean;
-  findPrevSessionSkillPath?: string;
   generateTitleSkillInstalled: boolean;
   generateTitleSkillPath?: string;
   moveCodexSessionSkillInstalled: boolean;
@@ -187,6 +194,14 @@ export type SidebarGhostexCliStatusMessage = {
   cuaDriverAccessibilityPermissionGranted?: boolean;
   cuaAppInstalled: boolean;
   cuaDriverInstalled: boolean;
+  /**
+   * CDXC:TrycuaPrerequisite 2026-08-24:
+   * The exact shell command the host's Install Trycua button runs, published by
+   * the host that owns it so Settings can show the command it will execute
+   * instead of picking one per platform in React. Hosts that cannot install
+   * Trycua omit it, and those surfaces show no command block.
+   */
+  cuaDriverInstallCommand?: string;
   /** True only when this host can install and update Cua Driver in-app. */
   cuaDriverManagedUpdatesSupported?: boolean;
   cuaDriverLatestVersion?: string;
@@ -330,12 +345,23 @@ export type SidebarSessionItem = {
    */
   sessionTag?: SidebarSessionTag;
   /**
+   * CDXC:SessionAgentNotes 2026-08-24:
+   * Free-text "what to do next here" note the user filed against this session's
+   * provider conversation (`agentSessionId`), projected straight from gxserver.
+   * Rows use it for the hover tooltip line and the note dot beside the leading
+   * agent icon. Absent when the session has no note — never an empty string —
+   * which is also what a daemon that predates session notes reports.
+   */
+  sessionNote?: string;
+  /**
    * CDXC:PinnedSessions 2026-05-28-12:04:
    * Sidebar rows carry project-local pin state so the React display sorter can
    * keep pinned sessions at the top of their project and render pin chrome
    * without overloading Favorite.
    */
   isPinned?: boolean;
+  /** Parked rows render in a collapsible section at the bottom of the sidebar. */
+  isParked?: boolean;
   /**
    * CDXC:SidebarV2 2026-07-29:
    * Session creation stamp, projected straight from gxserver's presentation
@@ -1522,9 +1548,9 @@ export type SidebarToExtensionMessage =
         | 'installBrowserControl'
         | 'installBrowserUseSkill'
         | 'installComputerUseSkill'
-        | 'installAgentOrchestrationSkill'
+        | 'installCliSkill'
+        | 'installManageBeadsSkill'
         | 'installFable56OrchestrationSkill'
-        | 'installFindPrevSessionSkill'
         | 'installGenerateTitleSkill'
         | 'installMoveCodexSessionSkill'
         | 'uninstallBundledAgentSkills'
@@ -1653,6 +1679,19 @@ export type SidebarToExtensionMessage =
        */
       agentId?: string;
       type: 'revealExportedTranscript' | 'startExportedTranscriptConversation';
+    }
+  | {
+      /**
+       * CDXC:ExportTranscriptOptions 2026-08-24:
+       * The Export Transcript dialog's Export button: run the export with the
+       * chosen include-toggles. The dialog never names the session — the
+       * sidebar runtime holds the pending export context from opening the
+       * dialog, so this carries only the toggles.
+       */
+      includeCommands?: boolean;
+      includePatches?: boolean;
+      includeReasoning?: boolean;
+      type: 'runExportSessionTranscript';
     }
   | {
       /**
@@ -2051,6 +2090,24 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
+       * CDXC:StashedPromptSessionAssociation 2026-08-24:
+       * A Saved Prompts row asks to be taken back to the session it was stashed
+       * from. The ids are RAW gxserver ids (never the combined
+       * `combined-session:<project>:<session>` form) because the stash rows
+       * carry the daemon's own ids, and `agentSessionId` is the durable
+       * provider conversation id that survives the session being closed,
+       * restored, or resumed under a new gxserver session row. All three are
+       * optional: the handler resolves the best available target (live session
+       * → recorded-but-closed session → resumable conversation) and shows a
+       * notice when none of them can be opened.
+       */
+      type: 'jumpToStashedPromptSession';
+      projectId?: string;
+      sessionId?: string;
+      agentSessionId?: string;
+    }
+  | {
+      /**
        * CDXC:SessionFocusMode 2026-05-23-09:28:
        * Session-card and pane-tab Focus is a reversible zoom for the clicked
        * session's pane tab group. The native/sidebar controller owns this
@@ -2247,8 +2304,28 @@ export type SidebarToExtensionMessage =
       type: 'setSessionTag';
     }
   | {
+      /**
+       * CDXC:SessionAgentNotes 2026-08-24:
+       * Writes the session's free-text note. The host resolves the provider
+       * conversation id the note is filed under, so the renderer only names the
+       * session; `projectId` is an optional hint for hosts that need the scope
+       * to route the write. An empty (or whitespace-only) note clears it. The UI
+       * is NOT optimistic: the presentation delta that follows the write is what
+       * updates the row.
+       */
+      note: string;
+      projectId?: string;
+      sessionId: string;
+      type: 'setSessionNote';
+    }
+  | {
       pinned: boolean;
       type: 'setSessionPinned';
+      sessionId: string;
+    }
+  | {
+      parked: boolean;
+      type: 'setSessionParked';
       sessionId: string;
     }
   | {
@@ -2918,6 +2995,22 @@ export type SidebarToExtensionMessage =
    */
   | {
       type: 'pickTerminalBackgroundImageFile';
+    }
+  /**
+   * CDXC:FirstLaunchSetup 2026-08-24:
+   * Onboarding Get Started page. Browse opens a native folder dialog host-side
+   * and the picked absolute path returns to the modal as a
+   * firstLaunchProjectFolderPicked host message. Finish registers `path` as a
+   * project and starts its first session with `agentId` (a sidebar agent id,
+   * or 'terminal' for a plain shell).
+   */
+  | {
+      type: 'pickFirstLaunchProjectFolder';
+    }
+  | {
+      agentId: string;
+      path: string;
+      type: 'firstLaunchCreateProjectSession';
     };
 
 export type SidebarHudSnapshot = Pick<

@@ -70,18 +70,23 @@ import type { GpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-
 import { gpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
 import type { GpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
 import { gpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
+import type { GpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
+import { gpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
 import type { GpuiSidebarRuntimeSessionCreateMethods } from './session-create';
 import { gpuiSidebarRuntimeSessionCreateMethods } from './session-create';
 import type { GpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
 import { gpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
 import type { GpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
 import { gpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
+import type { GpuiSidebarRuntimeStashedPromptJumpMethods } from './stashed-prompt-jump';
+import { gpuiSidebarRuntimeStashedPromptJumpMethods } from './stashed-prompt-jump';
 import type { GpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
 import { gpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
 import type {
   GpuiBrowserTabSummary,
   GpuiCloseAfterDoneTimer,
   GpuiCommandPaneSessionSummary,
+  GpuiExportTranscriptRequestContext,
   GpuiExportedTranscriptResult,
   GpuiPendingGitCommitRequest,
   GpuiPendingNativeAppShotPromptInsertion,
@@ -379,6 +384,13 @@ export class GpuiSidebarRuntime {
   same project without trusting a path posted back by a page.
   */
   pendingExportedTranscript: GpuiExportedTranscriptResult | undefined;
+  /*
+  CDXC:ExportTranscriptOptions 2026-08-24:
+  Which session the open Export Transcript dialog is about while the user is
+  still on the include-toggle stage; the dialog's export request carries only
+  the toggles back.
+  */
+  pendingExportTranscriptRequest: GpuiExportTranscriptRequestContext | undefined;
   presentation: GxserverPresentationSnapshot | undefined;
   previousSessionsByHistoryId = new Map<string, SidebarPreviousSessionItem>();
   projectBoardRestorableLinkChecks = new Map<
@@ -491,6 +503,7 @@ export class GpuiSidebarRuntime {
         message.type === 'scheduleDelayedSend' ||
         message.type === 'cancelDelayedSend' ||
         message.type === 'removeProject' ||
+        message.type === 'setSessionNote' ||
         message.type === 'toggleCloseAfterDone'
       ) {
         void this.handleSidebarMessage(message);
@@ -601,6 +614,9 @@ export class GpuiSidebarRuntime {
     gpuiBridge.onCommandPaletteRunSidebarCommand = (payload) => {
       this.handleGpuiCommandPaletteRunSidebarCommand(payload);
     };
+    gpuiBridge.onStashedPromptSessionJump = (payload) => {
+      void this.handleGpuiStashedPromptSessionJump(payload);
+    };
     gpuiBridge.onProjectBoardConversationRequest = (payload) => {
       void this.handleGpuiProjectBoardConversationRequest(payload);
     };
@@ -701,6 +717,12 @@ export class GpuiSidebarRuntime {
       : [];
     for (const payload of pendingCommandPaletteRunSidebarCommands) {
       this.handleGpuiCommandPaletteRunSidebarCommand(payload);
+    }
+    const pendingStashedPromptSessionJumps = Array.isArray(gpuiBridge.pendingStashedPromptSessionJumps)
+      ? gpuiBridge.pendingStashedPromptSessionJumps.splice(0)
+      : [];
+    for (const payload of pendingStashedPromptSessionJumps) {
+      void this.handleGpuiStashedPromptSessionJump(payload);
     }
     const pendingProjectBoardConversationRequests = Array.isArray(gpuiBridge.pendingProjectBoardConversationRequests)
       ? gpuiBridge.pendingProjectBoardConversationRequests.splice(0)
@@ -934,6 +956,9 @@ export class GpuiSidebarRuntime {
         await this.focusSession(message.sessionId, message);
         this.postSidebarSessionFocusConfirmation(message.sessionId);
         return;
+      case 'jumpToStashedPromptSession':
+        await this.jumpToStashedPromptSession(message);
+        return;
       case 'focusSessionMode':
         if (parseGpuiRemotePresentationSessionId(message.sessionId)) {
           await this.focusSession(message.sessionId, message);
@@ -1088,6 +1113,14 @@ export class GpuiSidebarRuntime {
         await this.updateSessionFlags(message.sessionId, {
           isPinned: message.pinned,
         });
+        return;
+      case 'setSessionParked':
+        await this.updateSessionFlags(message.sessionId, {
+          isParked: message.parked,
+        });
+        return;
+      case 'setSessionNote':
+        await this.saveSessionNote(message.sessionId, message.note);
         return;
       /*
       CDXC:SidebarV2Lifecycle 2026-07-29:
@@ -1412,6 +1445,8 @@ export interface GpuiSidebarRuntime
     GpuiSidebarRuntimeAutoSleepMethods,
     GpuiSidebarRuntimePreviousSessionMethods,
     GpuiSidebarRuntimeProjectBoardMethods,
+    GpuiSidebarRuntimeConversationJumpMethods,
+    GpuiSidebarRuntimeStashedPromptJumpMethods,
     GpuiSidebarRuntimeAttentionMethods,
     GpuiSidebarRuntimeCloseAfterDoneMethods,
     GpuiSidebarRuntimeTerminalLifecycleMethods,
@@ -1441,6 +1476,8 @@ installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSessionCreateMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAutoSleepMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimePreviousSessionMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeProjectBoardMethods);
+installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeConversationJumpMethods);
+installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeStashedPromptJumpMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAttentionMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeCloseAfterDoneMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeTerminalLifecycleMethods);

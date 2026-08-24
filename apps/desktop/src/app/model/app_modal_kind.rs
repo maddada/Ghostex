@@ -22,6 +22,7 @@ pub(crate) enum GpuiAppModalKind {
     AgentsHub,
     DelayedSend,
     RenameSession,
+    SessionNote,
     ExportTranscriptResult,
     ConfigureAgents,
     ConfigureActions,
@@ -58,6 +59,7 @@ impl GpuiAppModalKind {
             "agentsHub" => Some(Self::AgentsHub),
             "delayedSend" => Some(Self::DelayedSend),
             "renameSession" => Some(Self::RenameSession),
+            "sessionNote" => Some(Self::SessionNote),
             "exportTranscriptResult" => Some(Self::ExportTranscriptResult),
             "configureAgents" => Some(Self::ConfigureAgents),
             "configureActions" => Some(Self::ConfigureActions),
@@ -95,6 +97,7 @@ impl GpuiAppModalKind {
             Self::AgentsHub => "agentsHub",
             Self::DelayedSend => "delayedSend",
             Self::RenameSession => "renameSession",
+            Self::SessionNote => "sessionNote",
             Self::ExportTranscriptResult => "exportTranscriptResult",
             Self::ConfigureAgents => "configureAgents",
             Self::ConfigureActions => "configureActions",
@@ -131,11 +134,12 @@ impl GpuiAppModalKind {
             Self::AgentsHub => "Ghostex Agents Hub",
             Self::DelayedSend => "Ghostex Session Automations",
             Self::RenameSession => "Ghostex Rename Session",
+            Self::SessionNote => "Ghostex Session Note",
             Self::ExportTranscriptResult => "Ghostex Export Transcript",
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
             Self::OpenTargets => "Ghostex Open Targets",
-            Self::FirstLaunchSetup => "Ghostex Tips",
+            Self::FirstLaunchSetup => "Welcome to Ghostex",
             Self::WatchGhostexVideo => "Ghostex Tutorial Video",
             Self::RemoteGxserverInstall => "Ghostex Remote Setup",
             Self::RemoteProjectPicker => "Ghostex Remote Project",
@@ -164,7 +168,13 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_DELAYED_SEND_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_DELAYED_SEND_WINDOW_HEIGHT),
             ),
-            Self::RenameSession => size(
+            /*
+            CDXC:SessionAgentNotes 2026-08-24:
+            The note editor is Rename Session's dialog with a taller text field,
+            so it opens on the same frame and the one-shot fit-height pass sizes
+            the child window down to whatever it actually rendered.
+            */
+            Self::RenameSession | Self::SessionNote => size(
                 px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_HEIGHT),
             ),
@@ -332,6 +342,7 @@ impl GpuiAppModalKind {
             | Self::AgentsHub
             | Self::DelayedSend
             | Self::RenameSession
+            | Self::SessionNote
             | Self::WatchGhostexVideo => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",

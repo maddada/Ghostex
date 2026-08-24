@@ -99,7 +99,19 @@ export type GpuiSidebarHostMessage =
   | Extract<
       SidebarToExtensionMessage,
       {
-        type: 'cancelDelayedSend' | 'removeProject' | 'renameSession' | 'scheduleDelayedSend' | 'toggleCloseAfterDone';
+        /*
+         * CDXC:SessionAgentNotes 2026-08-24:
+         * `setSessionNote` joins this list for the same reason `renameSession`
+         * is on it: the note editor is an app-modal window, so its confirm
+         * arrives through Rust rather than from the sidebar page itself.
+         */
+        type:
+          | 'cancelDelayedSend'
+          | 'removeProject'
+          | 'renameSession'
+          | 'scheduleDelayedSend'
+          | 'setSessionNote'
+          | 'toggleCloseAfterDone';
       }
     >;
 
@@ -140,6 +152,13 @@ export type GhostexGpuiSidebarBridge = {
   onProjectBoardConversationRequest?: (payload: unknown) => void;
   onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
   onSidebarHostMessage?: (message: GpuiSidebarHostMessage) => void;
+  /**
+   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * A Saved Prompts row asked to be taken back to the session it was stashed
+   * from. Rust forwards the row's raw gxserver ids plus the durable provider
+   * conversation id; this runtime resolves the best available target.
+   */
+  onStashedPromptSessionJump?: (payload: unknown) => void;
   onStatusPetActivation?: (payload: unknown) => void;
   onTitlebarGitAction?: (payload: unknown) => void;
   onWorktreeModalCommand?: (payload: unknown) => void;
@@ -170,6 +189,7 @@ export type GhostexGpuiSidebarBridge = {
   pendingNativeAppShots?: unknown[];
   pendingOsIntegrationCommands?: unknown[];
   pendingProjectBoardConversationRequests?: unknown[];
+  pendingStashedPromptSessionJumps?: unknown[];
   pendingStatusPetActivations?: unknown[];
   pendingTitlebarGitActions?: unknown[];
   pendingWorktreeModalCommands?: unknown[];
@@ -498,6 +518,22 @@ export type GpuiGitPreferences = {
 export type GpuiRemoteProjectReference = {
   machineId: string;
   projectId: string;
+};
+
+/*
+CDXC:ExportTranscriptOptions 2026-08-24:
+Which session the open Export Transcript dialog is about, parked in the
+runtime while the user chooses the include-toggles. The dialog is a separate
+child window with no gxserver client, so its export request comes back with
+only the toggles and the runtime resolves everything else from this context.
+*/
+export type GpuiExportTranscriptRequestContext = {
+  /** The session's agent when known upfront (local sessions). */
+  agentId?: string;
+  /** Absent for the local daemon; set for a remote machine's own daemon. */
+  machineId?: string;
+  projectId: string;
+  sessionId: string;
 };
 
 export type GpuiExportedTranscriptResult = {
