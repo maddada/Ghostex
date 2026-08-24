@@ -66,13 +66,13 @@ pub(crate) fn is_uuid(value: &str) -> bool {
 pub(crate) fn trusted_resume_title(session: &Value) -> Option<String> {
     let runtime_settings = object_field(session, "runtimeSettings");
     let title = read_text_value(session, "title")?;
-    if normalize_title_source(
+    let title_source = normalize_title_source(
         read_text_from_map(&runtime_settings, "titleSource")
             .or_else(|| read_text_from_map(&runtime_settings, "restoreTitleSource"))
             .as_deref(),
         &title,
-    ) == "placeholder"
-    {
+    );
+    if title_source == "placeholder" || is_terminal_auto_working_directory_title(session) {
         return None;
     }
     let visible = get_visible_terminal_title(&title)?;
@@ -345,6 +345,50 @@ pub(crate) fn is_path_like_terminal_title(title: &str) -> bool {
         || trimmed.starts_with("\u{2026}\\")
         || trimmed.starts_with(".../")
         || trimmed.starts_with("...\\")
+}
+
+pub(crate) fn is_session_working_directory_title(session: &Value, title: &str) -> bool {
+    /*
+    Linux shells and terminal integrations often publish only the final cwd
+    component as OSC title text. Unlike `/home/me/project` or
+    `me@host: ~/project`, that bare `project` label is not path-shaped, so the
+    generic terminal-title filter cannot identify it. Compare it with the
+    daemon-owned session cwd instead; callers still use title provenance to
+    preserve an explicit user/generated title that happens to match the folder.
+    Splitting on both separators keeps this check correct for native Windows,
+    WSL, Linux, macOS, and remote sessions without host-specific branches.
+    */
+    let Some(normalized_title) = normalize_terminal_title(title) else {
+        return false;
+    };
+    let Some(cwd) = read_text_value(session, "cwd") else {
+        return false;
+    };
+    let trimmed_cwd = cwd.trim().trim_end_matches(['/', '\\']);
+    let Some(directory_name) = trimmed_cwd
+        .rsplit(['/', '\\'])
+        .find(|part| !part.trim().is_empty())
+    else {
+        return false;
+    };
+    normalize_spaces(&normalized_title) == normalize_spaces(directory_name)
+}
+
+pub(crate) fn is_terminal_auto_working_directory_title(session: &Value) -> bool {
+    let runtime_settings = object_field(session, "runtimeSettings");
+    let title_source = normalize_title_source(
+        read_text_from_map(&runtime_settings, "titleSource")
+            .or_else(|| read_text_from_map(&runtime_settings, "restoreTitleSource"))
+            .as_deref(),
+        session
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    title_source == "terminal-auto"
+        && read_text_value(session, "title")
+            .as_deref()
+            .is_some_and(|title| is_session_working_directory_title(session, title))
 }
 
 pub(crate) fn is_shell_location_terminal_title(title: &str) -> bool {

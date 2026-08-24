@@ -87,7 +87,7 @@ pub(crate) fn trusted_resume_title_for_project_status(session: &Value) -> Option
             .as_deref(),
         &title,
     );
-    if title_source == "placeholder" {
+    if title_source == "placeholder" || is_terminal_auto_working_directory_title(session) {
         return None;
     }
     let visible = get_visible_terminal_title(&title)?;
@@ -1169,11 +1169,10 @@ pub(crate) fn decide_first_prompt_auto_title(
     if is_first_prompt_slash_command(raw_prompt, &prompt) {
         return decision(Some(prompt), "slashCommand", false, strategy);
     }
+    let current_title = read_session_text(session, "title");
     if !fork_first_prompt_rearmed
-        && !is_generic_agent_session_title(
-            agent_name.as_deref(),
-            read_session_text(session, "title").as_deref(),
-        )
+        && !is_terminal_auto_working_directory_title(session)
+        && !is_generic_agent_session_title(agent_name.as_deref(), current_title.as_deref())
     {
         return decision(Some(prompt), "nonGenericCurrentTitle", false, strategy);
     }

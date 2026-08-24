@@ -173,7 +173,7 @@ pub(crate) fn apply_transcript_successor_session_identity(
     if result.get("reason").and_then(Value::as_str) == Some("passive-session-identity-conflict") {
         return Ok(false);
     }
-    Ok(read_text_from_map(
+    let applied = read_text_from_map(
         &object_field(
             result.get("session").unwrap_or(&Value::Null),
             "runtimeSettings",
@@ -181,7 +181,14 @@ pub(crate) fn apply_transcript_successor_session_identity(
         "agentSessionId",
     )
     .as_deref()
-        == Some(agent_session_id))
+        == Some(agent_session_id);
+    /*
+    CDXC:SessionAgentNotes 2026-08-24:
+    The session-note re-key for the adopted successor id happens inside
+    `apply_session_state_update` itself, together with every other identity
+    source (agent hooks, live-process scan) — nothing extra to do here.
+    */
+    Ok(applied)
 }
 
 pub(crate) fn apply_created_session_identity(
@@ -482,6 +489,9 @@ pub(crate) fn terminal_title_skip_reason(
             .to_string(),
         );
     };
+    if is_session_working_directory_title(session, visible_title) {
+        return Some("terminal-title-is-working-directory".to_string());
+    }
     if is_ellipsized_terminal_window_title(visible_title) {
         return Some("terminal-title-already-ellipsized".to_string());
     }
