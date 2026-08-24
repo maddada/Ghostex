@@ -50,10 +50,14 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
             || key.trim().eq_ignore_ascii_case("ctrl+shift+g")
             || key.trim().eq_ignore_ascii_case("cmd+alt+g"))
     {
-        default_key
-    } else {
-        key
+        return default_key;
     }
+    // CDXC:AgentHistorySearch 2026-08-24: retired Alt+F default, mirroring
+    // retiredDefaultKeys in packages/shared/ghostex-hotkeys.ts.
+    if action_id == "openFindPrompts" && key.trim().eq_ignore_ascii_case("alt+f") {
+        return default_key;
+    }
+    key
 }
 
 pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str) -> &'a str {
@@ -236,8 +240,8 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("exportTranscript", ""),
     ("toggleAgentActions", ""),
     ("toggleChatView", "alt+g"),
-    // CDXC:AgentHistorySearch 2026-08-20: mirrors packages/shared/ghostex-hotkeys.ts.
-    ("openFindPrompts", "alt+f"),
+    // CDXC:AgentHistorySearch 2026-08-24: mirrors packages/shared/ghostex-hotkeys.ts.
+    ("openFindPrompts", "cmd+shift+f"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
     ("forkSession", "ctrl+shift+f"),

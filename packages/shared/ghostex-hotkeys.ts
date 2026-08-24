@@ -360,7 +360,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'terminalToolbarAction',
       terminalToolbarAction: 'stashPrompt',
     },
-    defaultKey: '',
+    defaultKey: 'alt+s',
     description: 'Stash the current prompt in the focused agent terminal.',
     id: 'stashPrompt',
     title: 'Stash Prompt',
@@ -371,10 +371,11 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'terminalToolbarAction',
       terminalToolbarAction: 'stashedPrompts',
     },
-    defaultKey: 'alt+shift+s',
-    description: 'Open stashed prompts for the focused agent session.',
+    defaultKey: 'cmd+alt+s',
+    description: 'Open saved prompts for the focused agent session.',
     id: 'stashedPrompts',
-    title: 'Stashed Prompts',
+    retiredDefaultKeys: ['alt+shift+s'],
+    title: 'Saved Prompts',
   },
   {
     action: {
@@ -433,10 +434,17 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * list of every prompt this machine has ever sent to an agent. It is
      * dispatched natively like Chat View, so the same id always toggles back
      * out of Find even while the terminal is hidden behind it.
+     *
+     * CDXC:AgentHistorySearch 2026-08-24:
+     * Cmd+Shift+F replaces Alt+F as the default because prompt search is a
+     * search-everywhere habit. The chord deliberately stays off the Code pane:
+     * openFindPrompts is not in the Source-workarea hotkey allowlist, so a
+     * focused code-server editor keeps Cmd+Shift+F for search-in-files.
      */
-    defaultKey: 'alt+f',
+    defaultKey: 'cmd+shift+f',
     description: 'Search every prompt you have sent to an agent, then resume or fork it.',
     id: 'openFindPrompts',
+    retiredDefaultKeys: ['alt+f'],
     title: 'Find Prompts',
   },
   {
